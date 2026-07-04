@@ -5,7 +5,7 @@ import useResponsive from '@shared/hooks/useResponsive';
 import {
   TAREAS_TOOLBAR_CENTER_ROW_HEIGHT,
   TAREAS_TOOLBAR_OPTION_MIN_WIDTH,
-} from './tareasToolbarLayout';
+} from '@shared/navigation/tareasToolbarLayout';
 
 const OPTIONS = [
   { value: 'week', label: 'Semana', minWidth: { xs: '2.65rem', sm: '3.1rem' } },

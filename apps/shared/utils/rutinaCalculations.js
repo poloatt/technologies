@@ -1,5 +1,5 @@
-import { iconConfig, getIconByName } from './iconConfig.js';
-import { isHabitCompletedForHistorial } from './habitCompletionUtils.js';
+import { getHabitSectionItemIds, getHabitSectionKeys } from '../habits/domain/habitSectionIds.js';
+import { isHabitCompletedForHistorial } from '../habits/domain/habitCompletionUtils.js';
 
 /**
  * Calcula los ítems visibles y completados para una rutina
@@ -24,15 +24,17 @@ export const calculateVisibleItems = (rutina, localDataBySection = {}, customHab
 
   const visibleItems = [];
   const completedItems = [];
-  const sectionStats = {
-    bodyCare: { visible: 0, completed: 0 },
-    nutricion: { visible: 0, completed: 0 },
-    ejercicio: { visible: 0, completed: 0 },
-    cleaning: { visible: 0, completed: 0 }
-  };
-
+  const sectionStats = {};
   const hasCustomHabits = customHabits
-    && ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].some((section) => Array.isArray(customHabits[section]));
+    && getHabitSectionKeys(customHabits).some((section) => Array.isArray(customHabits[section]));
+
+  const sectionsToProcess = hasCustomHabits
+    ? getHabitSectionKeys(customHabits)
+    : ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'];
+
+  sectionsToProcess.forEach((section) => {
+    sectionStats[section] = { visible: 0, completed: 0 };
+  });
 
   // Función helper para obtener los IDs de hábitos de una sección
   const getSectionItemIds = (section) => {
@@ -43,14 +45,14 @@ export const calculateVisibleItems = (rutina, localDataBySection = {}, customHab
         .filter(Boolean);
     }
 
-    // Fallback legacy solo si el usuario no tiene customHabits
-    return Object.keys(iconConfig?.[section] || {});
+    // Fallback legacy: IDs por sección sin MUI (Node-safe)
+    return getHabitSectionItemIds(section, null);
   };
 
   // Iterar por todas las secciones
-  ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
+  sectionsToProcess.forEach(section => {
     try {
-      // IMPORTANT: la UI renderiza ítems por hábitos personalizados o `iconConfig`, no por las keys presentes en `rutina[section]`.
+      // La UI renderiza ítems por hábitos personalizados o IDs legacy (habitSectionIds), no por keys en rutina[section].
       // Si usamos `Object.entries(rutina[section])` el % queda mal cuando faltan keys (p.ej. ítems no completados).
       const sectionItemIds = getSectionItemIds(section);
       const sectionConfig = rutina?.config?.[section] || {};

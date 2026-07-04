@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
-import { getHabitId, findHabitIndexInSection, habitIdsMatch } from '../utils/habitSectionIcons';
+import { getHabitId, findHabitIndexInSection, habitIdsMatch } from '@shared/habits';
 
 // Crear el contexto
 const HabitsContext = createContext();
@@ -25,6 +25,7 @@ export const HabitsProvider = ({ children }) => {
     ejercicio: [],
     cleaning: []
   });
+  const [customSections, setCustomSections] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   // Deduplica llamadas concurrentes a fetchHabits (varios componentes la disparan al montar)
@@ -46,14 +47,21 @@ export const HabitsProvider = ({ children }) => {
         setError(null);
 
         const response = await clienteAxios.get('/api/users/habits');
-        setHabits(response.data || {
+        const payload = response.data;
+        const nextHabits = payload?.habits || payload || {
           bodyCare: [],
           nutricion: [],
           ejercicio: [],
           cleaning: []
-        });
+        };
+        const nextCustomSections = Array.isArray(payload?.customSections)
+          ? payload.customSections
+          : [];
 
-        return response.data;
+        setHabits(nextHabits);
+        setCustomSections(nextCustomSections);
+
+        return { habits: nextHabits, customSections: nextCustomSections };
       } catch (error) {
         console.error('[HabitsContext] Error al obtener hábitos:', error);
         const isOffline =
@@ -199,8 +207,6 @@ export const HabitsProvider = ({ children }) => {
       enqueueSnackbar('Hábitos reordenados correctamente', { variant: 'success' });
       return response.data.habits;
     } catch (error) {
-      // #region agent log
-      // #endregion
       console.error('[HabitsContext] Error al reordenar hábitos:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Error al reordenar hábitos';
       const errorDetails = error.response?.data;
@@ -213,16 +219,111 @@ export const HabitsProvider = ({ children }) => {
     }
   }, [enqueueSnackbar]);
 
+  /**
+   * Crear nuevo grupo de hábitos personalizado
+   */
+  const addHabitSection = useCallback(async ({ label, icon }) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await clienteAxios.post('/api/users/habit-sections', {
+        label,
+        icon,
+      });
+
+      const section = response.data?.section;
+      const nextCustomSections = response.data?.customSections || [];
+
+      if (section?.id) {
+        setHabits((prev) => ({
+          ...prev,
+          [section.id]: prev[section.id] || [],
+        }));
+      }
+      setCustomSections(nextCustomSections);
+
+      enqueueSnackbar('Grupo creado correctamente', { variant: 'success' });
+      return section;
+    } catch (error) {
+      console.error('[HabitsContext] Error al crear grupo:', error);
+      const errorMsg = error.response?.data?.error || 'Error al crear grupo';
+      setError(errorMsg);
+      enqueueSnackbar(errorMsg, { variant: 'error' });
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [enqueueSnackbar]);
+
+  const updateHabitSection = useCallback(async (sectionId, { label, icon }) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await clienteAxios.put(`/api/users/habit-sections/${encodeURIComponent(sectionId)}`, {
+        label,
+        icon,
+      });
+
+      const nextCustomSections = response.data?.customSections || [];
+      setCustomSections(nextCustomSections);
+
+      enqueueSnackbar('Grupo actualizado correctamente', { variant: 'success' });
+      return response.data?.section;
+    } catch (error) {
+      console.error('[HabitsContext] Error al actualizar grupo:', error);
+      const errorMsg = error.response?.data?.error || 'Error al actualizar grupo';
+      setError(errorMsg);
+      enqueueSnackbar(errorMsg, { variant: 'error' });
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [enqueueSnackbar]);
+
+  const deleteHabitSection = useCallback(async (sectionId) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await clienteAxios.delete(`/api/users/habit-sections/${encodeURIComponent(sectionId)}`);
+      const nextCustomSections = response.data?.customSections || [];
+      setCustomSections(nextCustomSections);
+      setHabits((prev) => {
+        if (!prev?.[sectionId]) return prev;
+        const next = { ...prev };
+        delete next[sectionId];
+        return next;
+      });
+
+      enqueueSnackbar('Grupo eliminado correctamente', { variant: 'success' });
+      return true;
+    } catch (error) {
+      console.error('[HabitsContext] Error al eliminar grupo:', error);
+      const errorMsg = error.response?.data?.error || 'Error al eliminar grupo';
+      setError(errorMsg);
+      enqueueSnackbar(errorMsg, { variant: 'error' });
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [enqueueSnackbar]);
+
   const value = useMemo(() => ({
     habits,
+    customSections,
     loading,
     error,
     fetchHabits,
     addHabit,
+    addHabitSection,
+    updateHabitSection,
+    deleteHabitSection,
     updateHabit,
     deleteHabit,
     reorderHabits,
-  }), [habits, loading, error, fetchHabits, addHabit, updateHabit, deleteHabit, reorderHabits]);
+  }), [habits, customSections, loading, error, fetchHabits, addHabit, addHabitSection, updateHabitSection, deleteHabitSection, updateHabit, deleteHabit, reorderHabits]);
 
   return (
     <HabitsContext.Provider value={value}>

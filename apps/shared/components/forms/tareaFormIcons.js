@@ -1,5 +1,6 @@
 import {
   AddOutlined,
+  AttachFileOutlined,
   CheckCircleOutlined,
   ChecklistOutlined,
   Close,
@@ -33,5 +34,6 @@ export const TareaFormIcons = {
   add: AddOutlined,
   close: Close,
   completed: CheckCircleOutlined,
+  attach: AttachFileOutlined,
   folder: getIconByKey('folder'),
 };

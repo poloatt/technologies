@@ -44,6 +44,7 @@ export const TASK_FORM_ROW_MIN_HEIGHT = 44;
 export const TASK_FORM_ROW_PY = 1.25;
 export const TASK_FORM_ROW_GAP = 1.5;
 export const TASK_FORM_ROW_ICON_TOP_OFFSET = 0.25;
+export const TASK_FORM_HORIZONTAL_PX = 2;
 export const TASK_FORM_ICON_COLUMN_WIDTH = 24;
 export const TASK_FORM_HEADER_ACTION_GUTTER = 4;
 export const TASK_FORM_HEADER_ACTION_GAP = 0.75;
@@ -98,6 +99,39 @@ export const taskFormInlineAttachmentIconSx = { fontSize: TASK_FORM_INLINE_ATTAC
 export const taskFormPillRowSx = { width: '100%', minHeight: TASK_FORM_PILL_HEIGHT };
 export const taskFormScheduleStackSx = { width: '100%' };
 export const taskFormRowContentIndent = TASK_FORM_ICON_COLUMN_WIDTH / 8 + TASK_FORM_ROW_GAP;
+
+/** Indented body when schedule fields expand under the summary row (no duplicate icon). */
+export const taskFormScheduleExpandedContentSx = {
+  pl: taskFormRowContentIndent,
+  pr: TASK_FORM_HEADER_ACTION_GUTTER,
+  width: '100%',
+  boxSizing: 'border-box',
+};
+
+export const taskFormScheduleControlsRowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  minWidth: 0,
+};
+
+export const taskFormScheduleRecurrenceWrapSx = {
+  width: '100%',
+  minWidth: 0,
+  '& > button': {
+    width: '100%',
+    maxWidth: '100%',
+    justifyContent: 'space-between',
+  },
+};
+
+export const taskFormSubtaskRowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 0.5,
+  py: 0.25,
+  minHeight: TASK_FORM_ROW_MIN_HEIGHT,
+};
 
 export const taskFormTimeSeparatorSx = {
   px: 0.25,
@@ -226,6 +260,28 @@ export const taskFormRowContentGutterSx = {
   pr: TASK_FORM_HEADER_ACTION_GUTTER,
 };
 
+export const taskFormSubtaskListSx = {
+  pl: taskFormRowContentIndent,
+  pr: TASK_FORM_HEADER_ACTION_GUTTER,
+  pb: 0.5,
+};
+
+/** Shared wrapper for objetivo + subtareas rows (visual section group). */
+export const taskFormObjetivoSubtareasSectionSx = {
+  width: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+/** Matching content width for objetivo and subtareas row bodies. */
+export const taskFormObjetivoSubtareasContentSx = {
+  ...taskFormRowContentGutterSx,
+  width: '100%',
+  minWidth: 0,
+  flex: 1,
+  boxSizing: 'border-box',
+};
+
 export const taskFormHeaderIconSpacerSx = {
   width: TASK_FORM_ICON_COLUMN_WIDTH,
   flexShrink: 0,
@@ -273,6 +329,18 @@ export const TASK_FORM_TIPO_EVENTO_TAREA = [
 export const TASK_FORM_TIPO_ALL = [
   ...TASK_FORM_TIPO_EVENTO_TAREA,
   { value: 'HABITO', label: 'Hábito' },
+];
+
+export const TASK_FORM_ESTADO_OPTIONS = [
+  { value: 'PENDIENTE', label: 'Pendiente' },
+  { value: 'EN_PROGRESO', label: 'En Progreso' },
+  { value: 'COMPLETADA', label: 'Completada' },
+];
+
+export const TASK_FORM_OBJETIVO_ESTADO_OPTIONS = [
+  { value: 'PENDIENTE', label: 'Pendiente' },
+  { value: 'EN_PROGRESO', label: 'En Progreso' },
+  { value: 'COMPLETADO', label: 'Completado' },
 ];
 
 const taskFormPillBaseSx = {
@@ -335,6 +403,14 @@ export const taskFormDatePillSx = {
   textAlign: 'center',
 };
 
+/** Date pill: full width on mobile, fixed width on desktop. */
+export const taskFormScheduleDatePillResponsiveSx = {
+  ...taskFormDatePillSx,
+  width: { xs: '100%', sm: TASK_FORM_STANDARD_PILL_WIDTH },
+  minWidth: { xs: 0, sm: TASK_FORM_STANDARD_PILL_WIDTH },
+  maxWidth: { xs: '100%', sm: TASK_FORM_STANDARD_PILL_WIDTH },
+};
+
 export const taskFormDatePillColumnSx = {
   ...taskFormFixedPillSx,
   flexShrink: 0,
@@ -349,12 +425,15 @@ export const taskFormSettingsPillButtonSx = {
   ...taskFormSchedulePillButtonSx,
 };
 
-export const taskFormFixedSelectPillSx = {
-  ...taskFormSettingsPillButtonSx,
+/** Fixed-width settings pill (estado, objetivo): capsule, 32px, 180px, left-aligned. */
+export const taskFormSettingsPillSx = {
+  ...taskFormPillOutlinedSx,
+  ...taskFormFixedPillSx,
   justifyContent: 'flex-start',
   textAlign: 'left',
-  ...taskFormFixedPillSx,
 };
+
+export const taskFormFixedSelectPillSx = taskFormSettingsPillSx;
 
 export const taskFormGrowingSelectPillSx = {
   ...taskFormSettingsPillButtonSx,
@@ -363,6 +442,18 @@ export const taskFormGrowingSelectPillSx = {
   width: 'auto',
   minWidth: TASK_FORM_STANDARD_PILL_WIDTH,
   maxWidth: TASK_FORM_OBJETIVO_PILL_MAX_WIDTH,
+};
+
+/** Full-width objetivo pill inside the objetivo/subtareas group. */
+export const taskFormObjetivoSubtareasPillSelectSx = {
+  width: '100%',
+  maxWidth: '100%',
+  '& .MuiSelect-select': {
+    ...taskFormGrowingSelectPillSx,
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
+  },
 };
 
 export const taskFormPillSelectFieldSx = {
@@ -476,7 +567,16 @@ export { taskFormSubtaskCheckIconSx as tareaFormSubtaskCheckIconSx };
 export { taskFormInlineAttachmentIconSx as tareaFormInlineAttachmentIconSx };
 export { taskFormPillRowSx as tareaFormPillRowSx };
 export { taskFormScheduleStackSx as tareaFormScheduleStackSx };
+export { taskFormScheduleExpandedContentSx as tareaFormScheduleExpandedContentSx };
+export { taskFormScheduleDatePillResponsiveSx as tareaFormScheduleDatePillResponsiveSx };
+export { taskFormScheduleControlsRowSx as tareaFormScheduleControlsRowSx };
+export { taskFormScheduleRecurrenceWrapSx as tareaFormScheduleRecurrenceWrapSx };
 export { taskFormRowContentIndent as tareaFormRowContentIndent };
+export { taskFormSubtaskRowSx as tareaFormSubtaskRowSx };
+export { taskFormSubtaskListSx as tareaFormSubtaskListSx };
+export { taskFormObjetivoSubtareasSectionSx as tareaFormObjetivoSubtareasSectionSx };
+export { taskFormObjetivoSubtareasContentSx as tareaFormObjetivoSubtareasContentSx };
+export { taskFormObjetivoSubtareasPillSelectSx as tareaFormObjetivoSubtareasPillSelectSx };
 export { taskFormTimeSeparatorSx as tareaFormTimeSeparatorSx };
 export { taskFormChipSx as tareaFormChipSx };
 export { taskFormDialogPaperSx as tareaFormDialogPaperSx };
@@ -503,6 +603,7 @@ export { taskFormDatePillSx as tareaFormDatePillSx };
 export { taskFormDatePillColumnSx as tareaFormDatePillColumnSx };
 export { taskFormSchedulePillButtonSx as tareaFormSchedulePillButtonSx };
 export { taskFormSettingsPillButtonSx as tareaFormSettingsPillButtonSx };
+export { taskFormSettingsPillSx as tareaFormSettingsPillSx };
 export { taskFormFixedSelectPillSx as tareaFormFixedSelectPillSx };
 export { taskFormGrowingSelectPillSx as tareaFormGrowingSelectPillSx };
 export { taskFormPillSelectFieldSx as tareaFormPillSelectFieldSx };
@@ -547,6 +648,7 @@ export { TASK_FORM_ROW_MIN_HEIGHT as TAREA_FORM_ROW_MIN_HEIGHT };
 export { TASK_FORM_ROW_PY as TAREA_FORM_ROW_PY };
 export { TASK_FORM_ROW_GAP as TAREA_FORM_ROW_GAP };
 export { TASK_FORM_ROW_ICON_TOP_OFFSET as TAREA_FORM_ROW_ICON_TOP_OFFSET };
+export { TASK_FORM_HORIZONTAL_PX as TAREA_FORM_HORIZONTAL_PX };
 export { TASK_FORM_ICON_COLUMN_WIDTH as TAREA_FORM_ICON_COLUMN_WIDTH };
 export { TASK_FORM_HEADER_ACTION_GUTTER as TAREA_FORM_HEADER_ACTION_GUTTER };
 export { TASK_FORM_HEADER_ACTION_GAP as TAREA_FORM_HEADER_ACTION_GAP };
@@ -554,3 +656,5 @@ export { TASK_FORM_HEADER_ACTION_COLUMN_WIDTH as TAREA_FORM_HEADER_ACTION_COLUMN
 export { TASK_FORM_ACTION_COLUMN_WIDTH as TAREA_FORM_ACTION_COLUMN_WIDTH };
 export { TASK_FORM_TIPO_EVENTO_TAREA as TAREA_FORM_TIPO_EVENTO_TAREA };
 export { TASK_FORM_TIPO_ALL as TAREA_FORM_TIPO_ALL };
+export { TASK_FORM_ESTADO_OPTIONS as TAREA_FORM_ESTADO_OPTIONS };
+export { TASK_FORM_OBJETIVO_ESTADO_OPTIONS as TAREA_FORM_OBJETIVO_ESTADO_OPTIONS };

@@ -151,7 +151,7 @@ function buildApiServicesForScope(scope, routesMap, currentPath) {
   }
 
   if (!apiServices.tarea && entities.includes('tarea')) {
-    const tareaRoute = routesMap['/tareas'] || routesMap['/archivo'] || routesMap['/foco'];
+    const tareaRoute = routesMap['/tareas'] || routesMap['/archivo'];
     if (tareaRoute?.apiService) {
       apiServices.tarea = tareaRoute.apiService;
     }

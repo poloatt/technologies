@@ -1,4 +1,4 @@
-import { shouldShowRutinaItem } from '@shared/utils/rutinaItemVisibility.js';
+import { shouldShowRutinaItem } from '@shared/habits';
 
 function buildRutina(overrides = {}) {
   return {

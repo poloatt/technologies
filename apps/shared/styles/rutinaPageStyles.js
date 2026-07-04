@@ -3,7 +3,6 @@ import {
   HUB_SECTION,
   hubSectionBg,
   hubSectionShellSx,
-  hubSectionHeaderSx,
   hubSectionTitleSx,
   hubHeaderIconSx,
   hubSectionShellBodySx,
@@ -37,7 +36,7 @@ export function getRutinaPageContentShellSx(isMobileOrTablet = false) {
   return {
     width: '100%',
     maxWidth: RUTINA_PAGE_MAX_WIDTH,
-    mx: 0,
+    mx: 'auto',
     px: { xs: 1, sm: 2, md: 3 },
     boxSizing: 'border-box',
   };
@@ -126,7 +125,7 @@ export function rutinaSectionHeaderSx(isExpanded) {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: isExpanded ? 0 : 0.5,
+    gap: isExpanded ? 0 : 0.25,
     overflow: 'hidden',
     borderBottom: isExpanded ? 1 : 0,
     borderColor: 'divider',
@@ -134,24 +133,25 @@ export function rutinaSectionHeaderSx(isExpanded) {
   };
 }
 
-/** Fila superior de sección: cabecera tintada estilo hub + chevron. */
+/** Fila superior de sección: cabecera compacta (solo título + chevron). */
 export const rutinaSectionHeaderTopRowSx = {
-  ...hubSectionHeaderSx,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   width: '100%',
   minWidth: 0,
-  gap: 0.5,
-  borderBottom: 0,
-  py: 0.75,
-  px: 1.25,
+  gap: { xs: 0.5, md: 0.375 },
+  py: { xs: 0.5, md: 0.25 },
+  px: { xs: 1.25, md: 1 },
+  minHeight: { xs: 40, md: 'unset' },
+  bgcolor: (theme) =>
+    alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.04 : 0.03),
 };
 
 export const rutinaSectionTitleRowSx = {
   display: 'flex',
   alignItems: 'center',
-  gap: 0.75,
+  gap: 0.5,
   minWidth: 0,
   flex: 1,
 };
@@ -160,6 +160,8 @@ export const rutinaSectionTitleSx = {
   ...hubSectionTitleSx,
   textTransform: 'none',
   letterSpacing: 0,
+  fontSize: { xs: '0.875rem', md: '0.8125rem' },
+  lineHeight: 1.3,
 };
 
 export const rutinaSectionHeaderIconSx = hubHeaderIconSx;
@@ -187,11 +189,13 @@ export const rutinaSectionEmptySx = {
 
 export const rutinaExpandIconSx = {
   ...taskFormHeaderActionIconSx('text.secondary'),
-  width: 24,
-  height: 24,
-  minWidth: 24,
+  width: { xs: 24, md: 20 },
+  height: { xs: 24, md: 20 },
+  minWidth: { xs: 24, md: 20 },
+  minHeight: { xs: 24, md: 20 },
   opacity: 0.7,
   '&:hover': { opacity: 1 },
+  '& .MuiSvgIcon-root': { fontSize: { xs: '1.1rem', md: '1rem' } },
 };
 
 export const rutinaBackToListIconSx = {
@@ -199,37 +203,50 @@ export const rutinaBackToListIconSx = {
   mr: 0.5,
 };
 
-/** Botón circular de hábito (vista expandida y colapsada). */
-export function getRutinaHabitIconButtonSx({ isCompleted, size = 38, mr = 1 } = {}) {
+/** Botón circular de hábito (lista expandida de rutina). */
+export function getRutinaHabitIconButtonSx({
+  isCompleted,
+  isPartialPending = false,
+  size = 38,
+  mr = 1,
+} = {}) {
+  const showRing = isCompleted || isPartialPending;
+  const isShinyPartial = isPartialPending && !isCompleted;
+
   return {
     width: size,
     height: size,
+    minWidth: size,
+    minHeight: size,
+    p: 0,
+    flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     mr,
     cursor: 'pointer',
-    color: isCompleted ? 'primary.main' : 'text.secondary',
+    color: isCompleted || isShinyPartial ? 'primary.main' : 'text.secondary',
     bgcolor: isCompleted ? 'action.selected' : 'transparent',
     borderRadius: '50%',
+    ...(showRing && {
+      border: '1px solid',
+      borderStyle: isPartialPending ? 'dashed' : 'solid',
+      borderColor: isCompleted || isShinyPartial ? 'primary.main' : 'divider',
+    }),
     transition: 'all 0.2s ease',
+    '& .MuiSvgIcon-root': {
+      fontSize: size <= 32 ? '1.1rem' : '1.2rem',
+    },
     '&:hover': {
-      color: isCompleted ? 'primary.main' : 'text.primary',
+      color: isCompleted || isShinyPartial ? 'primary.main' : 'text.primary',
       bgcolor: isCompleted ? 'action.selected' : 'action.hover',
     },
   };
 }
 
 export const rutinaCollapsedIconsRowSx = {
-  display: 'flex',
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  gap: 0.25,
-  alignItems: 'center',
   width: '100%',
   minWidth: 0,
-  px: 1.25,
-  pb: 0.5,
   bgcolor: hubSectionBg,
 };
 

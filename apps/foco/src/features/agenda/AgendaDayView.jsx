@@ -2,9 +2,9 @@ import React, { useMemo } from 'react';
 
 import { Box } from '@mui/material';
 
-import { ALL_DAY_MAX_VISIBLE, calendarScrollAreaSx } from './calendarLayout';
+import { ALL_DAY_MAX_VISIBLE, calendarScrollAreaSx } from '@shared/utils/calendar/calendarLayout';
 
-import { splitEventsByDay } from './agendaCalendarUtils';
+import { splitEventsByDay } from '@shared/utils/calendar/agendaCalendarUtils';
 
 import AgendaTimeGrid from './AgendaTimeGrid';
 

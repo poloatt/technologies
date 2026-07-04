@@ -6,8 +6,8 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CADENCIA_WEEK_STARTS_ON } from '@shared/utils/cadenciaUtils';
-import { filterTasksInRange } from './agendaCalendarUtils';
+import { CADENCIA_WEEK_STARTS_ON } from '@shared/habits';
+import { filterTasksInRange } from '@shared/utils/calendar/agendaCalendarUtils';
 
 /**
  * Deriva eventos visibles para la vista día o semana.

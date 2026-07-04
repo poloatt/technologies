@@ -1,16 +1,14 @@
 import React, { useMemo, useRef } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { useRutinas, useHabits } from '@shared/context';
-import {
-  buildHabitSectionIconsMap,
-  resolveRutinaForDate,
-} from '@shared/utils/habitSectionIcons';
+import { resolveRutinaForDate } from '@shared/habits';
+import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 import { getNormalizedToday } from '@shared/utils/dateUtils';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import { isSameDay } from 'date-fns';
-import useHorizontalDragScroll from './hooks/useHorizontalDragScroll';
-import useCarouselRutinaBoot from './hooks/useCarouselRutinaBoot';
-import useHabitsPreferences from './hooks/useHabitsPreferences';
+import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
+import useEnsureRutinaForDate from '../daily/useEnsureRutinaForDate';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import useHabitCarouselItems from './useHabitCarouselItems';
 import useHabitCarouselToggle from './useHabitCarouselToggle';
 import HabitCarouselIconRow from './HabitCarouselIconRow';
@@ -28,6 +26,7 @@ export default function HabitCarouselRow({
   interactive = true,
   targetDate,
   showCompletedToggle = false,
+  mobile = false,
 }) {
   const {
     rutina,
@@ -62,7 +61,7 @@ export default function HabitCarouselRow({
     [rutina, rutinas, resolvedTargetDate],
   );
 
-  useCarouselRutinaBoot(resolvedTargetDate);
+  useEnsureRutinaForDate(resolvedTargetDate);
 
   const sectionIconsMap = useMemo(
     () => buildHabitSectionIconsMap(habits),
@@ -129,6 +128,7 @@ export default function HabitCarouselRow({
       isDragging={isDragging}
       bind={bind}
       onToggle={handleToggle}
+      mobile={mobile}
     />
   );
 }

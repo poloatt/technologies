@@ -58,7 +58,7 @@ export const icons = {
   accessTime: AccessTimeOutlined, // reloj — marca app Foco (PWA / switcher)
   eventNote: EventNoteOutlined,
   calendarToday: CalendarTodayOutlined,
-  agenda: CalendarTodayOutlined, // alias Agenda (módulo Tiempo)
+  agenda: CalendarTodayOutlined, // alias calendario (vista agenda en Tareas)
   folder: FolderOutlined,
   objetivo: TrackChangesOutlined, // objetivos / proyectos (diana; fuente única; ver tiempoNavConfig)
   proyecto: TrackChangesOutlined, // alias legacy

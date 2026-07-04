@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import AgendaEventBlock from './AgendaEventBlock';
+import TaskEventBlock from '@shared/components/tasks/TaskEventBlock';
 
 /**
  * Franja “todo el día” estilo Google Calendar: muestra hasta maxVisible y “+N más”.
@@ -34,7 +34,7 @@ export default function AgendaAllDayLane({
       }}
     >
       {visible.map((ev) => (
-        <AgendaEventBlock
+        <TaskEventBlock
           key={String(ev.task._id ?? ev.task.id)}
           event={ev}
           compact={compact}

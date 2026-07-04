@@ -29,7 +29,7 @@ export default function TiempoToolbarRight() {
     if (isMobile || !section) return [];
 
     const targets = getTiempoNavTargets();
-    const activeTargetKey = section === 'hub' ? null : section;
+    const activeTargetKey = section;
 
     const navButton = (key, targetKey) => {
       const target = targets[targetKey];

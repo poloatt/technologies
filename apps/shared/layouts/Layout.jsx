@@ -82,7 +82,7 @@ export function Layout() {
   // Padding superior para el main
   const mainTopPadding = totalTopPadding;
 
-  // Sidebar en desktop salvo rutinas (full-bleed); móvil/tablet usa BottomNavigation
+  // Sidebar en desktop; móvil/tablet usa BottomNavigation
   const shouldRenderSidebar = shouldRenderAppSidebar(isMobileOrTablet, currentPath);
 
   const getMainContentMargin = () => {

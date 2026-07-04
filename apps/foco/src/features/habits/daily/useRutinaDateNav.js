@@ -6,7 +6,7 @@ import {
   getRutinaCompletionStats,
   getRutinaDayMode,
   resolveRutinaNavigateTarget,
-} from '@shared/utils/rutinasPageUtils';
+} from '@shared/habits';
 import { ensureRutinaForDate } from './ensureRutinaForDate';
 
 /**

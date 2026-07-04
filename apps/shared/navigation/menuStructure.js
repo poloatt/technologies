@@ -4,7 +4,7 @@ import { TIEMPO_ICON_KEYS, TIEMPO_MODULE_ICON_KEY } from './tiempoIconKeys.js';
 
 /**
  * Niveles de navegación:
- * - App (Atta/Pulso/Agenda): cambio en sidebar / AppsButton
+ * - App (Atta/Pulso/Foco): cambio en sidebar / AppsButton
  * - Branch (solo Atta): Finanzas — hub único con secciones in-page
  * - Page: destinos hoja (toolbar/bottom nav en la rama activa)
  * - Subpage (opcional): hijos de una page (p. ej. recurrentes bajo Transacciones)
@@ -106,9 +106,9 @@ export const modulos = [
   },
   {
     id: 'tiempo',
-    title: 'Agenda',
+    title: 'Foco',
     icon: TIEMPO_MODULE_ICON_KEY,
-    path: '/foco',
+    path: '/tareas',
     subItems: [
       { id: 'rutinas', title: 'Rutinas', icon: TIEMPO_ICON_KEYS.rutinas, path: '/rutinas', canAdd: true },
       { id: 'objetivos', title: 'Objetivos', icon: TIEMPO_ICON_KEYS.objetivos, path: '/objetivos', canAdd: true },
@@ -150,11 +150,11 @@ export const bottomNavigationItems = [
   {
     id: 'tiempo',
     appKey: 'foco',
-    title: 'Agenda',
+    title: 'Foco',
     icon: TIEMPO_MODULE_ICON_KEY,
-    path: '/foco',
+    path: '/tareas',
     type: 'module',
-    activePaths: ['/foco', '/rutinas', '/objetivos', '/tareas', '/archivo']
+    activePaths: ['/rutinas', '/objetivos', '/tareas', '/archivo']
   }
 ];
 

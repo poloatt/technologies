@@ -1,4 +1,4 @@
-import es from 'date-fns/esm/locale/es/index.js';
+import { es } from 'date-fns/locale';
 
 export { es };
 export default es;

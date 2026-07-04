@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Typography, CircularProgress, Paper, Button } from '@mui/material';
+import { Box, Typography, CircularProgress, Paper } from '@mui/material';
 import RutinaTable from './RutinaTable';
 import { RutinaForm } from './RutinaForm';
 import { HabitsManager } from '../templates/HabitsManager';
+import HabitFormDialog from '@shared/components/HabitFormDialog';
 import HubSectionShell from '@shared/components/hub/HubSectionShell';
 import { useRutinasPageController } from './useRutinasPageController';
 import {
@@ -17,7 +18,6 @@ import { RUTINA_NAVIGATION_BAR_CONFIG } from '@shared/config/uiConstants';
 import {
   CalendarMonthOutlined as DateIcon,
   Info as InfoIcon,
-  Add as AddIcon,
 } from '@mui/icons-material';
 
 const rutinaHubShellBodySx = {
@@ -28,7 +28,7 @@ const rutinaHubShellBodySx = {
   px: 0,
 };
 
-function EmptyStateMessage({ error, onAdd, isFuture = false }) {
+function EmptyStateMessage({ error, isFuture = false }) {
   if (error) {
     return (
       <Paper elevation={0} sx={rutinaErrorStatePaperSx}>
@@ -56,18 +56,8 @@ function EmptyStateMessage({ error, onAdd, isFuture = false }) {
         Aún no hay registro para este día
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        Puedes crear el registro cuando quieras con el botón + de la barra superior.
+        El registro diario se crea automáticamente. Puedes agregar hábitos con el botón + de la barra superior.
       </Typography>
-      <Box mt={2}>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onAdd}
-        >
-          Crear registro
-        </Button>
-      </Box>
     </Paper>
   );
 }
@@ -84,7 +74,8 @@ const RutinasWithContext = () => {
     totalPages,
     habitsManagerOpen,
     setHabitsManagerOpen,
-    handleAddRutina,
+    habitFormOpen,
+    setHabitFormOpen,
     handleCloseForm,
     isViewingFutureWithoutRecord,
     isMobileOrTablet,
@@ -110,7 +101,6 @@ const RutinasWithContext = () => {
             >
               <EmptyStateMessage
                 error={error}
-                onAdd={handleAddRutina}
                 isFuture={isViewingFutureWithoutRecord}
               />
             </HubSectionShell>
@@ -150,6 +140,11 @@ const RutinasWithContext = () => {
       <HabitsManager
         open={habitsManagerOpen}
         onClose={() => setHabitsManagerOpen(false)}
+      />
+
+      <HabitFormDialog
+        open={habitFormOpen}
+        onClose={() => setHabitFormOpen(false)}
       />
     </Box>
   );

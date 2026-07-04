@@ -1,6 +1,5 @@
-/** Rutas del módulo Tiempo (Hub Foco / objetivos / Tareas). */
+/** Rutas del módulo Foco (rutinas / objetivos / tareas). */
 export function matchTiempoSection(path = '') {
-  if (path === '/foco' || path.startsWith('/foco/')) return 'hub';
   if (
     path === '/rutinas'
     || path.startsWith('/rutinas/')
@@ -33,9 +32,4 @@ export function isFocoToolbarPath(path = '') {
     || path.startsWith('/rutinas/')
     || path === '/archivo'
     || path.startsWith('/archivo/');
-}
-
-/** Hub central Foco (Hábitos + previews). */
-export function isFocoHubPath(path = '') {
-  return path === '/foco' || path.startsWith('/foco/');
 }

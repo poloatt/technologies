@@ -8,7 +8,7 @@ import {
   getTaskHorizonCopy,
   TASK_HORIZON_GROUP_ARIA,
 } from '@shared/copy/agendaTerminology';
-import { TAREAS_TOOLBAR_CENTER_ROW_HEIGHT } from './tareasToolbarLayout';
+import { TAREAS_TOOLBAR_CENTER_ROW_HEIGHT } from '@shared/navigation/tareasToolbarLayout';
 
 const OPTIONS = ['ahora', 'luego'].map((value) => ({
   value,
@@ -16,7 +16,7 @@ const OPTIONS = ['ahora', 'luego'].map((value) => ({
 }));
 
 /**
- * Selector "Ahora | Luego" para Hub y Tareas.
+ * Selector "Ahora | Luego" para Tareas.
  * Emite eventos: agendaViewChanged { view }
  */
 export default function AgendaToolbarCenter() {
@@ -25,7 +25,7 @@ export default function AgendaToolbarCenter() {
   const theme = useTheme();
   const { isMobile } = useResponsive();
 
-  if (!['tareas', 'hub'].includes(matchTiempoSection(pathname))) {
+  if (matchTiempoSection(pathname) !== 'tareas') {
     return null;
   }
 

@@ -14,13 +14,13 @@ export const useAppDetection = () => {
     const appName = getAppKeyFromPath(pathname) || getCurrentAppKey() || 'foco';
     
     // Obtener información de la app
-    const appConfig = bottomNavigationItems.find(item => item.id === appName);
+    const appConfig = bottomNavigationItems.find(item => item.appKey === appName);
     
     return {
       appName,
       appTitle: appConfig?.title || 'Foco',
       appIcon: appConfig?.icon || 'accessTime',
-      appPath: appConfig?.path || '/foco',
+      appPath: appConfig?.path || '/tareas',
       currentPort,
       detectedBy: 'path'
     };

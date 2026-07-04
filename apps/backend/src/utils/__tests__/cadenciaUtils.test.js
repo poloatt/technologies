@@ -4,7 +4,7 @@ import {
   isScheduledCadenciaDay,
   contarCompletadosEnPeriodo,
   getCadenciaWeekRange,
-} from '@shared/utils/cadenciaUtils.js';
+} from '@shared/habits';
 
 const mondayConfig = {
   tipo: 'SEMANAL',

@@ -10,31 +10,37 @@ import {
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { addMinutes, endOfDay, setHours, setMinutes, startOfDay } from 'date-fns';
-import { mergeDateAndTimeFromDay as mergeDateAndTime } from '../tasks/form/utils/tareaFormDateUtils';
+import { mergeDateAndTimeFromDay as mergeDateAndTime } from '@shared/utils/tareaFormDateUtils';
+import { useTaskSchedule } from '@shared/hooks/useTaskSchedule';
 import {
   TareaFormRow,
   TareaFormTipoSelector,
   TAREA_FORM_TIPO_ALL,
   TareaFormHeader,
   TareaFormFooter,
-  TareaFormPriorityToggle,
   TareaFormPillSelect,
   tareaFormGooglePaperSx,
   tareaFormTitleFieldSx,
   tareaFormPillTextSx,
   TareaFormHeaderTitleRow,
   HabitFormTitleField,
-  tareaFormRowContentGutterSx,
+  tareaFormObjetivoSubtareasContentSx,
+  tareaFormObjetivoSubtareasPillSelectSx,
   TAREA_FORM_HEADER_ACTION_GUTTER,
+  TASK_FORM_HORIZONTAL_PX,
+  TareaFormAttachmentsSection,
+  useTareaFormAttachments,
 } from '@shared/components/forms/tareaFormUi';
 import { TareaFormIcons } from '@shared/components/forms/tareaFormIcons';
 import TareaFormDescriptionField from '@shared/components/forms/TareaFormDescriptionField';
-import TareaFormScheduleFields from '../tasks/form/fields/TareaFormScheduleFields';
+import TareaFormScheduleSummary from '../tasks/form/fields/TareaFormScheduleSummary';
 import TareaFormAdvancedFields from '../tasks/form/TareaFormAdvancedFields';
-import HabitFormFields from '../habits/templates/HabitFormFields';
+import TareaActions from '../tasks/components/TareaActions';
+import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
+import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
+import { useHabitSectionCreateOption } from '@shared/hooks';
 import { useHabitFormState } from '../habits/templates/useHabitFormState';
 import { useQuickCreateAdvancedAdapter } from './useQuickCreateFormState';
-import { isSameDayAsToday } from '@shared/utils/agendaRules';
 
 const INITIAL_ADVANCED = {
   descripcion: '',
@@ -44,6 +50,7 @@ const INITIAL_ADVANCED = {
   rrule: null,
   objetivo: '',
   subtareas: [],
+  archivos: [],
 };
 
 function defaultStartAt(selectedDate) {
@@ -161,7 +168,9 @@ export default function AgendaQuickCreate({
   const [objetivo, setObjetivo] = useState('');
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [advanced, setAdvanced] = useState(INITIAL_ADVANCED);
+  const { handleFileChange, removeFile } = useTareaFormAttachments(setAdvanced);
   const [errors, setErrors] = useState({});
   const [tipo, setTipo] = useState(() => {
     if (defaultTipo === 'TAREA') return 'TAREA';
@@ -179,6 +188,9 @@ export default function AgendaQuickCreate({
     handleIconChange: handleHabitIconChange,
     resetHabitForm,
   } = useHabitFormState();
+  const { sectionOptions, sectionSelectProps, groupDialogProps } = useHabitSectionCreateOption({
+    onSectionCreated: setHabitSection,
+  });
 
   const resetForm = useCallback(() => {
     const start = initialStart ? new Date(initialStart) : defaultStartAt(selectedDate);
@@ -186,10 +198,11 @@ export default function AgendaQuickCreate({
     setTitulo('');
     setDay(startOfDay(start));
     setTime(start);
-    setAllDay(!hasExplicitTime && !isSameDayAsToday(startOfDay(start)));
+    setAllDay(!hasExplicitTime);
     setDurationMin(60);
     setObjetivo('');
     setExpanded(false);
+    setScheduleExpanded(false);
     setAdvanced(INITIAL_ADVANCED);
     setErrors({});
     resetHabitForm();
@@ -205,22 +218,36 @@ export default function AgendaQuickCreate({
     return () => window.clearTimeout(t);
   }, [open, resetForm]);
 
-  const effectiveAllDay = isSameDayAsToday(day) ? false : allDay;
-
-  const fechaInicio = useMemo(() => {
-    if (effectiveAllDay) return startOfDay(day);
+  const fechaInicioSeed = useMemo(() => {
+    if (allDay) return startOfDay(day);
     return mergeDateAndTime(day, time);
-  }, [day, time, effectiveAllDay]);
+  }, [day, time, allDay]);
 
-  const fechaFin = useMemo(() => {
-    if (effectiveAllDay) return endOfDay(day);
-    return addMinutes(fechaInicio, durationMin);
-  }, [fechaInicio, durationMin, effectiveAllDay, day]);
+  const fechaFinSeed = useMemo(() => {
+    if (allDay) return endOfDay(day);
+    return addMinutes(fechaInicioSeed, durationMin);
+  }, [fechaInicioSeed, durationMin, allDay, day]);
 
-  const fechaVencimiento = useMemo(
-    () => advanced.fechaVencimiento ?? fechaFin,
-    [advanced.fechaVencimiento, fechaFin],
-  );
+  const {
+    scheduleStart: fechaInicio,
+    scheduleEnd: fechaFin,
+    scheduleDay,
+    scheduleDuration,
+    scheduleAllDay,
+    applySchedule,
+  } = useTaskSchedule({
+    fechaInicio: fechaInicioSeed,
+    fechaFin: fechaFinSeed,
+    allDay,
+    onScheduleChange: (update) => {
+      setDay(update.day);
+      setTime(update.time);
+      setAllDay(update.allDay);
+      setDurationMin(update.durationMin);
+    },
+  });
+
+  const fechaVencimiento = advanced.fechaVencimiento ?? null;
 
   const advancedFormData = useMemo(() => ({
     tipo,
@@ -286,13 +313,15 @@ export default function AgendaQuickCreate({
           fechaFin: fechaFin.toISOString(),
           fechaVencimiento: (fechaVencimiento instanceof Date
             ? fechaVencimiento.toISOString()
-            : fechaVencimiento) || fechaFin.toISOString(),
+            : fechaVencimiento) || null,
           objetivo: advancedFormData.objetivo || null,
           descripcion: advancedFormData.descripcion,
           estado: advancedFormData.estado,
           prioridad: advancedFormData.prioridad,
           rrule: advancedFormData.rrule || null,
           subtareas: advancedFormData.subtareas,
+          archivos: advanced.archivos || [],
+          allDay: scheduleAllDay,
         });
       }
       onClose();
@@ -305,15 +334,20 @@ export default function AgendaQuickCreate({
     setExpanded((v) => {
       const next = !v;
       if (next) {
+        setScheduleExpanded(true);
         setAdvanced((prev) => ({
           ...prev,
           objetivo: tipo === 'TAREA' ? (objetivo || prev.objetivo) : prev.objetivo,
-          fechaVencimiento: prev.fechaVencimiento ?? fechaFin,
+          fechaVencimiento: prev.fechaVencimiento,
         }));
+      } else {
+        setScheduleExpanded(false);
       }
       return next;
     });
   };
+
+  const scheduleFieldsExpanded = scheduleExpanded || expanded;
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !expanded) {
@@ -340,6 +374,26 @@ export default function AgendaQuickCreate({
   const formBody = (
     <Box sx={{ pb: 0.5 }}>
       <TareaFormHeader onClose={onClose}>
+        {tipo !== 'HABITO' && (
+          <Box sx={{ mb: 0.5 }}>
+            <TareaActions
+              isCreateMode
+              hideEdit
+              tarea={{
+                tipo,
+                prioridad: advanced.prioridad,
+                completada: false,
+              }}
+              onTogglePriority={() => {
+                setAdvanced((prev) => ({
+                  ...prev,
+                  prioridad: prev.prioridad === 'ALTA' ? 'BAJA' : 'ALTA',
+                }));
+              }}
+              onAttach={handleFileChange}
+            />
+          </Box>
+        )}
         <Box sx={{ mb: 1.5, pr: TAREA_FORM_HEADER_ACTION_GUTTER }}>
           <TareaFormTipoSelector
             value={tipo}
@@ -365,14 +419,7 @@ export default function AgendaQuickCreate({
             iconError={!!errors.icon}
           />
         ) : (
-        <TareaFormHeaderTitleRow
-          action={tipo === 'TAREA' ? (
-            <TareaFormPriorityToggle
-              prioridad={advanced.prioridad}
-              onChange={(value) => setAdvanced((prev) => ({ ...prev, prioridad: value }))}
-            />
-          ) : null}
-        >
+        <TareaFormHeaderTitleRow>
           <TextField
             inputRef={titleRef}
             fullWidth
@@ -387,7 +434,7 @@ export default function AgendaQuickCreate({
         )}
       </TareaFormHeader>
 
-      <Box sx={{ px: 2 }}>
+      <Box sx={{ px: TASK_FORM_HORIZONTAL_PX }}>
       {expanded && tipo !== 'HABITO' && (
         <TareaFormDescriptionField
           value={advanced.descripcion}
@@ -425,33 +472,40 @@ export default function AgendaQuickCreate({
                 showSection
                 showIconPicker={false}
                 showCadence
+                sectionOptions={sectionOptions}
+                onCreateSection={sectionSelectProps.onCreate}
+                createSectionLabel={sectionSelectProps.createLabel}
               />
             </Box>
           </Collapse>
         </>
       ) : (
-        <TareaFormScheduleFields
-          day={day}
-          onDayChange={(v) => setDay(startOfDay(v))}
-          time={time}
-          onTimeChange={setTime}
-          allDay={effectiveAllDay}
-          onAllDayChange={setAllDay}
-          expanded={expanded}
-          showTimeControls={expanded || !effectiveAllDay || isSameDayAsToday(day)}
-          durationMin={durationMin}
-          onDurationChange={setDurationMin}
-          showDuration={expanded}
-          showDeadline={expanded}
+        <TareaFormScheduleSummary
+          day={scheduleDay}
+          onDayChange={(v) => applySchedule({ nextDay: startOfDay(v) })}
+          time={fechaInicio}
+          onTimeChange={(v) => applySchedule({ nextTime: v, nextAllDay: false })}
+          allDay={scheduleAllDay}
+          onAllDayChange={(checked) => applySchedule({ nextAllDay: checked })}
+          fechaInicio={fechaInicio}
+          fechaFin={fechaFin}
+          expanded={scheduleFieldsExpanded}
+          onExpandedChange={setScheduleExpanded}
+          durationMin={scheduleDuration}
+          onDurationChange={(mins) => applySchedule({ nextDuration: mins, nextAllDay: false })}
+          showDeadline={scheduleFieldsExpanded}
           deadline={fechaVencimiento}
           onDeadlineChange={(v) => setAdvanced((prev) => ({ ...prev, fechaVencimiento: v }))}
+          recurrenceRrule={advanced.rrule}
+          onRecurrenceChange={(rr) => setAdvanced((prev) => ({ ...prev, rrule: rr }))}
+          showRecurrence={scheduleFieldsExpanded}
           errors={errors}
         />
       )}
 
       {tipo === 'TAREA' && !expanded && (
         <TareaFormRow icon={TareaFormIcons.objetivo} showDivider={false} align="center">
-          <Box sx={tareaFormRowContentGutterSx}>
+          <Box sx={[tareaFormObjetivoSubtareasContentSx, tareaFormObjetivoSubtareasPillSelectSx]}>
             <TareaFormPillSelect
               value={objetivo}
               onChange={(e) => {
@@ -462,9 +516,17 @@ export default function AgendaQuickCreate({
               emptyLabel="Sin objetivo"
               error={errors.objetivo}
               required
+              pillWidth="grow"
             />
           </Box>
         </TareaFormRow>
+      )}
+
+      {tipo !== 'HABITO' && (
+        <TareaFormAttachmentsSection
+          archivos={advanced.archivos}
+          onRemove={removeFile}
+        />
       )}
 
       {tipo !== 'HABITO' && (
@@ -477,7 +539,8 @@ export default function AgendaQuickCreate({
               errors={errors}
               objetivos={objetivos}
               showSettings={tipo === 'TAREA' ? expanded : true}
-              showObjetivo={false}
+              showRecurrenceInSettings={false}
+              showObjetivo={tipo === 'TAREA'}
               showSubtareas={tipo === 'TAREA'}
             />
           </Box>
@@ -512,6 +575,7 @@ export default function AgendaQuickCreate({
   );
 
   return (
+    <>
     <QuickCreateShell
       isMobile={isMobile}
       open={open}
@@ -521,5 +585,7 @@ export default function AgendaQuickCreate({
     >
       {formBody}
     </QuickCreateShell>
+    <HabitGroupFormDialog {...groupDialogProps} />
+    </>
   );
 }

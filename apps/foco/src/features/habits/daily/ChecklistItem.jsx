@@ -1,12 +1,12 @@
-import React, { memo, useMemo, useCallback } from 'react';
+import React, { memo, useMemo } from 'react';
 import { ListItem, Box, Typography } from '@mui/material';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
-import { HabitCounterBadge, HabitCrudActions } from '@shared/components/common';
+import { HabitCrudActions } from '@shared/components/common';
+import HabitIconButton from '@shared/components/habits/HabitIconButton';
 import { useRutinas } from '@shared/context';
-import { isHabitHorarioCompleted } from '@shared/utils/habitCompletionUtils';
-import { contarCompletadosEnPeriodo, obtenerHistorialCompletados } from '@shared/utils/cadenciaUtils';
+import { isHabitHorarioCompleted } from '@shared/habits';
+import { contarCompletadosEnPeriodo, obtenerHistorialCompletados } from '@shared/habits';
 import {
-  getRutinaHabitIconButtonSx,
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
   rutinaChecklistContentSx,
@@ -16,51 +16,8 @@ import {
   rutinaRowActionsSx,
   rutinaSystemButtonsSx,
 } from '@shared/styles/rutinaPageStyles';
-import { IconButton } from '@mui/material';
 
-// Botón de hábito modularizado para uso en RutinaCard y otros
-export const HabitIconButton = ({
-  isCompleted,
-  Icon,
-  onClick,
-  readOnly,
-  size = 38,
-  iconSize = 'small',
-  mr = 1,
-  config = {},
-  currentTimeOfDay,
-  displayHorario = null,
-  overlap = 'subtle',
-  rutina = null,
-  section = null,
-  itemId = null,
-  ...props
-}) => {
-  const timeOfDay = currentTimeOfDay || getCurrentTimeOfDay();
-
-  return (
-    <HabitCounterBadge
-      config={config}
-      currentTimeOfDay={timeOfDay}
-      displayHorario={displayHorario}
-      size={size <= 32 ? 'small' : 'medium'}
-      overlap={overlap}
-      rutina={rutina}
-      section={section}
-      itemId={itemId}
-    >
-      <IconButton
-        size="small"
-        onClick={onClick}
-        disabled={readOnly}
-        sx={getRutinaHabitIconButtonSx({ isCompleted, size, mr })}
-        {...props}
-      >
-        {Icon && <Icon fontSize={iconSize} />}
-      </IconButton>
-    </HabitCounterBadge>
-  );
-};
+export { default as HabitIconButton } from '@shared/components/habits/HabitIconButton';
 
 const ChecklistItem = ({
   itemId,
@@ -73,7 +30,6 @@ const ChecklistItem = ({
   isCustomHabit = false,
   habitLabel = '',
   onEditHabit,
-  onDeleteHabit,
   localData = null,
   completionValue = undefined,
 }) => {
@@ -85,12 +41,6 @@ const ChecklistItem = ({
       : (completionValue !== undefined ? completionValue : rutina?.[section]?.[itemId]);
     return isHabitHorarioCompleted(itemValue, horario);
   };
-
-  const handleDeleteClick = useCallback(async () => {
-    if (onDeleteHabit) {
-      await onDeleteHabit();
-    }
-  }, [onDeleteHabit]);
 
   const habitCrudItemName = habitLabel || itemId;
 
@@ -173,6 +123,9 @@ const ChecklistItem = ({
 
   const horariosConfig = Array.isArray(config?.horarios) ? config.horarios : [];
   const hasMultipleFranjas = horariosConfig.length > 1;
+  const habitPartiallyComplete = hasMultipleFranjas
+    && horariosConfig.some((horario) => isHorarioCompleted(String(horario).toUpperCase()))
+    && !horariosConfig.every((horario) => isHorarioCompleted(String(horario).toUpperCase()));
   const singleDisplayHorario = horariosConfig.length === 1
     ? String(horariosConfig[0]).toUpperCase()
     : null;
@@ -198,6 +151,7 @@ const ChecklistItem = ({
               <HabitIconButton
                 key={normalizedHorario}
                 isCompleted={franjaCompleted}
+                isPartialPending={habitPartiallyComplete && !franjaCompleted}
                 Icon={Icon}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -258,14 +212,13 @@ const ChecklistItem = ({
             )}
           </Box>
         </Box>
-        {!readOnly && isCustomHabit && (onEditHabit || onDeleteHabit) && (
+        {!readOnly && isCustomHabit && onEditHabit && (
           <Box sx={rutinaRowActionsSx}>
             <HabitCrudActions
               onEdit={onEditHabit}
-              onDelete={handleDeleteClick}
               itemName={habitCrudItemName}
-              showEdit={Boolean(onEditHabit)}
-              showDelete={Boolean(onDeleteHabit)}
+              showEdit
+              showDelete={false}
               size="small"
               gap={0}
               sx={rutinaSystemButtonsSx}

@@ -32,6 +32,8 @@ export default function HabitFormTitleField({
   sectionError,
   showSection = false,
   sectionEmptyLabel = 'Seleccionar grupo',
+  onCreateSection,
+  createSectionLabel = 'Nuevo grupo',
 }) {
   return (
     <Box>
@@ -77,6 +79,8 @@ export default function HabitFormTitleField({
             options={sectionOptions}
             emptyLabel={sectionEmptyLabel}
             error={sectionError}
+            onCreate={onCreateSection}
+            createLabel={createSectionLabel}
           />
         </Box>
       )}

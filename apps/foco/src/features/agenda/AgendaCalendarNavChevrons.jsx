@@ -32,6 +32,7 @@ export default function AgendaCalendarNavChevrons({
   compact = false,
   buttonSx,
   navHandlers = null,
+  middleContent = null,
 }) {
   const calendarNav = useAgendaCalendarNavChevrons(navHandlers ? 'day' : viewMode);
   const onPrevious = navHandlers?.onPrevious ?? calendarNav.onPrevious;
@@ -56,6 +57,7 @@ export default function AgendaCalendarNavChevrons({
           <NavigateBefore fontSize="small" />
         </IconButton>
       </TooltipSpan>
+      {middleContent}
       <TooltipSpan title={nextTooltip}>
         <IconButton
           size="small"

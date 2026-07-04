@@ -2,7 +2,7 @@ import {
   getHabitId,
   habitIdsMatch,
   findHabitIndexInSection,
-} from '@shared/utils/habitSectionIds.js';
+} from '@shared/habits';
 
 describe('habitSectionIcons id helpers', () => {
   it('matches habit by id or _id', () => {

@@ -6,14 +6,14 @@ import {
   getDefaultSelectedSection,
   RUTINA_SECTION_LABELS,
   HABIT_SECTIONS,
-} from '@shared/utils/rutinaDesktopUtils.js';
-import { getHabitDisplayLabel } from '@shared/utils/habitSectionIcons.js';
+  getHabitDisplayLabel,
+} from '@shared/habits';
 import { getNormalizedToday } from '@shared/utils/dateUtils.js';
 
 function makeRutina(overrides = {}) {
   return {
     _id: 'r1',
-    fecha: '2026-06-22T00:00:00.000Z',
+    fecha: '2026-06-22T15:00:00.000Z',
     bodyCare: {},
     nutricion: {},
     ejercicio: {},
@@ -205,7 +205,10 @@ describe('rutinaDesktopUtils', () => {
 
     it('places off-schedule habits in notToday', () => {
       const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
-      const rutina = makeRutina({ fecha: sunday.toISOString() });
+      const rutina = makeRutina({
+        fecha: sunday.toISOString(),
+        historial: { bodyCare: { weekly: { '2026-06-16': true } } },
+      });
       const { notToday, today } = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina,
@@ -248,6 +251,92 @@ describe('rutinaDesktopUtils', () => {
       }).map((h) => h.itemId);
       expect(pendingIds).toEqual(['shower', 'weekly']);
       expect(doneIds).toEqual(pendingIds);
+    });
+
+    it('orders ahora before luego before notToday', () => {
+      const rutina = makeRutina({
+        fecha: '2026-06-22T00:00:00.000Z',
+        config: {
+          bodyCare: {
+            shower: { tipo: 'DIARIO', frecuencia: 1, activo: true, horarios: ['MAÑANA'] },
+            nightly: { tipo: 'DIARIO', frecuencia: 1, activo: true, horarios: ['NOCHE'] },
+            weekly: { tipo: 'SEMANAL', frecuencia: 1, activo: true, diasSemana: [1] },
+            tuesdayOnly: { tipo: 'SEMANAL', frecuencia: 1, activo: true, diasSemana: [2] },
+          },
+          nutricion: { water: { tipo: 'DIARIO', frecuencia: 1, activo: true } },
+        },
+      });
+      const habits = {
+        ...mockHabits,
+        bodyCare: [
+          { id: 'shower', label: 'Mañana', icon: 'Shower', activo: true, orden: 0 },
+          { id: 'nightly', label: 'Noche', icon: 'Bedtime', activo: true, orden: 1 },
+          { id: 'weekly', label: 'Semanal', icon: 'Spa', activo: true, orden: 2 },
+          { id: 'tuesdayOnly', label: 'Martes', icon: 'Event', activo: true, orden: 3 },
+        ],
+      };
+      const items = getSectionCarouselItems({
+        section: 'bodyCare',
+        rutina,
+        habits,
+        currentTimeOfDay: 'MAÑANA',
+      });
+      expect(items.map((h) => h.carouselSlot)).toEqual(['ahora', 'luego', 'luego', 'notToday']);
+      expect(items.map((h) => h.itemId)).toEqual(['shower', 'nightly', 'weekly', 'tuesdayOnly']);
+    });
+
+    it('keeps carousel slot and order when marking cadencia debt complete', () => {
+      const tuesday = new Date(2026, 5, 23, 12, 0, 0, 0);
+      const rutinaPending = makeRutina({
+        fecha: tuesday.toISOString(),
+        historial: { bodyCare: { weekly: {} } },
+      });
+      const rutinaDone = makeRutina({
+        fecha: tuesday.toISOString(),
+        bodyCare: { weekly: true },
+        historial: { bodyCare: { weekly: { '2026-06-23': true } } },
+      });
+      const pending = getSectionCarouselItems({
+        section: 'bodyCare',
+        rutina: rutinaPending,
+        habits: mockHabits,
+      });
+      const done = getSectionCarouselItems({
+        section: 'bodyCare',
+        rutina: rutinaDone,
+        habits: mockHabits,
+      });
+      expect(pending.map((h) => h.itemId)).toEqual(done.map((h) => h.itemId));
+      expect(pending.map((h) => h.carouselSlot)).toEqual(done.map((h) => h.carouselSlot));
+      expect(done.find((h) => h.itemId === 'weekly')?.carouselSlot).toBe('notToday');
+    });
+
+    it('keeps slot when marking a scheduled-day habit complete', () => {
+      const rutinaPending = makeRutina();
+      const rutinaDone = makeRutina({
+        bodyCare: { shower: true, weekly: true },
+        historial: {
+          bodyCare: {
+            shower: { '2026-06-22': true },
+            weekly: { '2026-06-22': true },
+          },
+        },
+      });
+      const pending = getSectionCarouselItems({
+        section: 'bodyCare',
+        rutina: rutinaPending,
+        habits: mockHabits,
+        currentTimeOfDay: 'MAÑANA',
+      });
+      const done = getSectionCarouselItems({
+        section: 'bodyCare',
+        rutina: rutinaDone,
+        habits: mockHabits,
+        currentTimeOfDay: 'MAÑANA',
+      });
+      expect(pending.map((h) => h.itemId)).toEqual(done.map((h) => h.itemId));
+      expect(pending.map((h) => h.carouselSlot)).toEqual(done.map((h) => h.carouselSlot));
+      expect(done.find((h) => h.itemId === 'weekly')?.carouselSlot).not.toBe('notToday');
     });
   });
 

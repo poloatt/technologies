@@ -3,8 +3,8 @@ import { Box, Typography } from '@mui/material';
 import RutinaSectionCarousel from './RutinaSectionCarousel';
 import RutinaDayGroupList from './RutinaDayGroupList';
 import HabitFormDialog from '@shared/components/HabitFormDialog';
-import { useHabits } from '@shared/context';
-import { groupSectionHabitsByDaySchedule } from '@shared/utils/rutinaDesktopUtils';
+import { groupSectionHabitsByDaySchedule } from '@shared/habits';
+import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 
 export default function RutinaSectionDetailPanel({
   section,
@@ -15,12 +15,16 @@ export default function RutinaSectionDetailPanel({
   onItemClick,
   onToggle,
 }) {
-  const { deleteHabit, fetchHabits } = useHabits();
   const [editingHabitDialog, setEditingHabitDialog] = useState({
     open: false,
     habit: null,
     section: null,
   });
+
+  const habitIconsMap = useMemo(
+    () => buildHabitSectionIconsMap(habits).iconsMap,
+    [habits],
+  );
 
   const { today, notToday } = useMemo(
     () => groupSectionHabitsByDaySchedule({
@@ -28,22 +32,14 @@ export default function RutinaSectionDetailPanel({
       rutina,
       habits,
       habitsPreferences,
+      iconsMap: habitIconsMap,
     }),
-    [section, rutina, habits, habitsPreferences],
+    [section, rutina, habits, habitsPreferences, habitIconsMap],
   );
 
   const handleEditHabit = useCallback((habit, habitSection) => {
     setEditingHabitDialog({ open: true, habit, section: habitSection });
   }, []);
-
-  const handleDeleteHabit = useCallback(async (habitId, habitSection) => {
-    try {
-      await deleteHabit(habitId, habitSection);
-      await fetchHabits();
-    } catch (error) {
-      console.error('[RutinaSectionDetailPanel] Error al eliminar hábito:', error);
-    }
-  }, [deleteHabit, fetchHabits]);
 
   const hasAny = today.length > 0 || notToday.length > 0;
 
@@ -96,7 +92,6 @@ export default function RutinaSectionDetailPanel({
           readOnly={readOnly}
           onItemClick={onItemClick}
           onEditHabit={handleEditHabit}
-          onDeleteHabit={handleDeleteHabit}
         />
       </Box>
 

@@ -11,8 +11,8 @@ import {
   HabitFormTitleField,
 } from '@shared/components/forms/tareaFormUi';
 import { DEFAULT_HABIT_ICON } from '@shared/utils/habitIcons';
-import HabitFormFields from './HabitFormFields';
-import { DEFAULT_HABIT_CONFIG, HABIT_SECTION_OPTIONS } from './habitFormDefaults';
+import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
+import { DEFAULT_HABIT_CONFIG, HABIT_SECTION_OPTIONS } from '@shared/habits/form';
 
 function EmptyDetail({ onAddClick }) {
   return (
@@ -46,6 +46,9 @@ export default function HabitsManagerDetail({
   formData,
   errors = {},
   currentSection,
+  sectionOptions = HABIT_SECTION_OPTIONS,
+  onCreateSection,
+  createSectionLabel = 'Nuevo grupo',
   loading,
   saving = false,
   isDirty = false,
@@ -127,8 +130,10 @@ export default function HabitsManagerDetail({
                 onDraftChange?.({ section: newSection });
               }
             }}
-            sectionOptions={HABIT_SECTION_OPTIONS}
+            sectionOptions={sectionOptions}
             sectionError={errors.section}
+            onCreateSection={onCreateSection}
+            createSectionLabel={createSectionLabel}
           />
         </Box>
 
@@ -148,7 +153,6 @@ export default function HabitsManagerDetail({
             showSection={false}
             showIconPicker={false}
             showCadence
-            cadenceMinimal
           />
         </Box>
 

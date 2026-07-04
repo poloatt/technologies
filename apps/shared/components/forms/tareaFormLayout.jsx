@@ -5,9 +5,10 @@ import {
   TASK_FORM_ROW_GAP,
   TASK_FORM_ROW_MIN_HEIGHT,
   TASK_FORM_ROW_PY,
+  TASK_FORM_HORIZONTAL_PX,
+  TASK_FORM_HEADER_ACTION_COLUMN_WIDTH,
   taskFormBodyTextSx,
   taskFormCaptionTextSx,
-  taskFormHeaderActionSpacerSx,
   taskFormHeaderContentRowSx,
   taskFormHeaderIconSpacerSx,
   taskFormPillTextSx,
@@ -87,6 +88,8 @@ export function TareaFormRow({ icon: Icon, children, showDivider = false, align 
 }
 
 export function TareaFormHeaderTitleRow({ children, action, leading, sx }) {
+  const hasAction = action != null;
+
   return (
     <Box
       sx={{
@@ -113,19 +116,36 @@ export function TareaFormHeaderTitleRow({ children, action, leading, sx }) {
       ) : (
         <Box sx={taskFormHeaderIconSpacerSx} aria-hidden />
       )}
-      <Box sx={{ ...taskFormHeaderContentRowSx, flex: 1, minWidth: 0 }}>
-        {children}
-        {action ?? <Box sx={taskFormHeaderActionSpacerSx} aria-hidden />}
+      <Box sx={{
+        ...(hasAction ? taskFormHeaderContentRowSx : { flex: 1, minWidth: 0, width: '100%' }),
+        flex: 1,
+        minWidth: 0,
+      }}>
+        {hasAction ? (
+          <>
+            {children}
+            {action}
+          </>
+        ) : children}
       </Box>
     </Box>
   );
 }
 
 export function TareaFormHeaderContentRow({ children, action, sx }) {
+  const hasAction = action != null;
+
   return (
-    <Box sx={{ ...taskFormHeaderContentRowSx, width: '100%', minWidth: 0, ...sx }}>
-      {children}
-      {action ?? <Box sx={taskFormHeaderActionSpacerSx} aria-hidden />}
+    <Box sx={{
+      ...(hasAction ? taskFormHeaderContentRowSx : { width: '100%', minWidth: 0 }),
+      ...sx,
+    }}>
+      {hasAction ? (
+        <>
+          {children}
+          {action}
+        </>
+      ) : children}
     </Box>
   );
 }
@@ -136,17 +156,34 @@ export function TareaFormHeader({
   children,
   sx,
 }) {
+  const hasClose = Boolean(onClose);
+
   return (
-    <Box sx={{ position: 'relative', px: 2, pt: 1.5, pb: 0.5, ...sx }}>
-      {onClose && (
+    <Box
+      sx={{
+        position: 'relative',
+        pl: TASK_FORM_HORIZONTAL_PX,
+        pr: hasClose
+          ? (theme) => `calc(${theme.spacing(TASK_FORM_HORIZONTAL_PX)} + ${TASK_FORM_HEADER_ACTION_COLUMN_WIDTH}px)`
+          : TASK_FORM_HORIZONTAL_PX,
+        pt: 1.5,
+        pb: 0.5,
+        ...sx,
+      }}
+    >
+      {hasClose && (
         <IconButton
           size="small"
           onClick={onClose}
           aria-label={closeLabel}
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 8,
+            top: (theme) => theme.spacing(1.5),
+            right: (theme) => theme.spacing(TASK_FORM_HORIZONTAL_PX),
+            zIndex: 2,
+            width: TASK_FORM_HEADER_ACTION_COLUMN_WIDTH,
+            height: TASK_FORM_HEADER_ACTION_COLUMN_WIDTH,
+            p: 0,
             color: 'text.secondary',
           }}
         >
@@ -175,7 +212,7 @@ export function TareaFormFooter({
         alignItems: 'center',
         justifyContent: 'flex-end',
         gap: 1,
-        px: 2,
+        px: TASK_FORM_HORIZONTAL_PX,
         py: 1.5,
         mt: 0.5,
       }}

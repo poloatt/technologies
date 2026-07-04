@@ -1,5 +1,5 @@
 // Exportar utilidades
-export * from './cadenciaUtils.js';
+// Hábitos/rutinas: usar `@shared/habits` (no re-exportar dominio legacy aquí)
 export * from './contratoUtils.js';
 export * from './dateUtils.js';
 export * from './fixHelper.js';
@@ -13,15 +13,8 @@ export * from './progressUtils.js';
 export * from './propiedadUtils.js';
 export * from './rutinaCalculations.js';
 export * from './rutinaHistorialUtils.js';
-export * from './rutinaItemVisibility.js';
-export * from './shouldShowItem.js';
 export * from './statusOptimizer.js';
 export * from './timezoneConfig.js';
-export * from './visibilityUtils.js';
 export * from './agendaRules.js';
 export * from './taskListUtils.js';
-export * from './habitCompletionUtils.js';
-export * from './habitTimeLogic.js';
 export * from './habitSectionIcons.js';
-export * from './habitVisibilityEngine.js';
-export * from './habitToggleUtils.js';

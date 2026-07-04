@@ -8,7 +8,7 @@ import {
   isRutinaToday,
   resolveHabitConfigApplyFrom,
   resolveRutinaNavigateTarget,
-} from '@shared/utils/rutinasPageUtils.js';
+} from '@shared/habits';
 
 const mockRutinas = [
   { _id: 'r3', fecha: '2026-06-22T00:00:00.000Z' },

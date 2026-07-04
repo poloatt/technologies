@@ -1,4 +1,6 @@
 // Configuración centralizada según el ambiente
+import { getApiBaseUrl } from './apiBaseUrl.js';
+
 // SSO cross-app: en producción la cookie refreshToken usa Domain=.attadia.com (backend).
 // En dev localhost (puertos distintos) se usa handoff URL; opcionalmente subdominios
 // locales (*.local.attadia.com) + USE_LOCAL_SUBDOMAINS=true en el backend.
@@ -6,7 +8,9 @@ export const config = {
   development: {
     authPrefix: '/api/auth',
     apiPrefix: '/api',
-    baseUrl: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+    baseUrl: typeof window !== 'undefined'
+      ? getApiBaseUrl()
+      : (import.meta.env.VITE_API_URL || 'http://localhost:5000'),
     frontendUrls: {
       atta: import.meta.env.VITE_ATTA_URL || 'http://localhost:5174',
       foco: import.meta.env.VITE_FOCO_URL || 'http://localhost:5173',

@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { useResponsive } from '@shared/hooks';
 import { TareasTable } from '../list';
-import { TareaForm, buildTareaPayload } from '../form';
+import { buildTareaPayload } from '../form';
 import { useSnackbar } from 'notistack';
 import { useNavigate } from 'react-router-dom';
 import { useScopedPageHistory } from '@shared/hooks';
@@ -19,8 +19,6 @@ import {
 export default function ArchivePage() {
   const [tareas, setTareas] = useState([]);
   const { objetivos, refetch: refetchObjetivos } = useObjetivosLight();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTarea, setEditingTarea] = useState(null);
   const [selectedTareas, setSelectedTareas] = useState([]);
   const { enqueueSnackbar } = useSnackbar();
   const { isMobile } = useResponsive();
@@ -39,7 +37,6 @@ export default function ArchivePage() {
   }, [enqueueSnackbar]);
 
   const {
-    createWithHistory,
     updateWithHistory,
     deleteWithHistory,
   } = useScopedPageHistory(
@@ -98,20 +95,13 @@ export default function ArchivePage() {
     };
   }, [navigate, handleDeleteSelected]);
 
-  const handleFormSubmit = async (formData) => {
+  const handleFormSubmit = useCallback(async (formData, tarea) => {
+    if (!tarea) return;
+
     try {
-      const datosAEnviar = buildTareaPayload(formData, { editingTarea, objetivos });
-
-      if (editingTarea) {
-        await updateWithHistory(editingTarea._id, datosAEnviar, editingTarea);
-        enqueueSnackbar('Tarea actualizada exitosamente', { variant: 'success' });
-      } else {
-        await createWithHistory(datosAEnviar);
-        enqueueSnackbar('Tarea creada exitosamente', { variant: 'success' });
-      }
-
-      setIsFormOpen(false);
-      setEditingTarea(null);
+      const datosAEnviar = buildTareaPayload(formData, { editingTarea: tarea, objetivos });
+      await updateWithHistory(tarea._id, datosAEnviar, tarea);
+      enqueueSnackbar('Tarea actualizada exitosamente', { variant: 'success' });
       await refetchObjetivos();
       await fetchTareas();
     } catch (error) {
@@ -121,12 +111,7 @@ export default function ArchivePage() {
         { variant: 'error' },
       );
     }
-  };
-
-  const handleEdit = useCallback((tarea) => {
-    setEditingTarea(tarea);
-    setIsFormOpen(true);
-  }, []);
+  }, [objetivos, updateWithHistory, enqueueSnackbar, refetchObjetivos, fetchTareas]);
 
   const handleDelete = useCallback(async (id) => {
     try {
@@ -145,9 +130,6 @@ export default function ArchivePage() {
         (tarea._id === tareaActualizada._id ? tareaActualizada : tarea),
       ),
     );
-    if (editingTarea && editingTarea._id === tareaActualizada._id) {
-      setEditingTarea(tareaActualizada);
-    }
   };
 
   const handleSelectTarea = (tareaId) => {
@@ -191,7 +173,8 @@ export default function ArchivePage() {
         >
           <TareasTable
             tareas={tareas}
-            onEdit={handleEdit}
+            onSubmit={handleFormSubmit}
+            onObjetivosUpdate={refetchObjetivos}
             onDelete={handleDelete}
             onUpdateEstado={handleUpdateEstado}
             isArchive
@@ -204,21 +187,6 @@ export default function ArchivePage() {
             objetivos={objetivos}
           />
         </Box>
-
-        {isFormOpen && (
-          <TareaForm
-            open={isFormOpen}
-            onClose={() => {
-              setIsFormOpen(false);
-              setEditingTarea(null);
-            }}
-            onSubmit={handleFormSubmit}
-            initialData={editingTarea}
-            isEditing={!!editingTarea}
-            objetivos={objetivos}
-            onObjetivosUpdate={refetchObjetivos}
-          />
-        )}
 
         {selectedTareas.length > 0 && (
           <Box

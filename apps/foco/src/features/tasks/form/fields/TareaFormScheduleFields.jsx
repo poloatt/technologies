@@ -9,22 +9,23 @@ import { es } from 'date-fns/locale';
 import { isSameDayAsToday } from '@shared/utils/agendaRules';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { mergeDateAndTime, formatDatePill, formatTimePill } from '../utils/tareaFormDateUtils';
+import { mergeDateAndTime, formatDatePill, formatTimePill } from '@shared/utils/tareaFormDateUtils';
 import {
   TareaFormRow,
   TareaFormAllDaySwitch,
   TareaFormPillButton,
-  tareaFormDatePillSx,
   tareaFormPillRowSx,
   tareaFormScheduleStackSx,
+  tareaFormScheduleExpandedContentSx,
+  tareaFormScheduleDatePillResponsiveSx,
+  tareaFormScheduleControlsRowSx,
+  tareaFormScheduleRecurrenceWrapSx,
   tareaFormTimeSeparatorSx,
-  tareaFormRowWithActionSx,
-  tareaFormRowContentGutterSx,
-  tareaFormHeaderActionSpacerSx,
   TAREA_FORM_PILL_GAP,
 } from '@shared/components/forms/tareaFormUi';
 import { TareaFormIcons } from '@shared/components/forms/tareaFormIcons';
-import { TareaFormDeadlineClearButton, TareaFormDeadlinePill } from './TareaFormDeadlineField';
+import { TareaFormDeadlineClearButton, TareaFormDeadlineRow } from '@shared/components/forms/TareaFormDeadlineField';
+import TareaFormRecurrencePicker from '@shared/components/forms/TareaFormRecurrencePicker';
 import { PickerPopover, PopoverInlineDatePicker, PopoverInlineTimePicker } from '@shared/components/forms/tareaFormPickers';
 
 /**
@@ -46,7 +47,11 @@ export default function TareaFormScheduleFields({
   deadline = null,
   onDeadlineChange,
   deadlinePlaceholder = 'Agregar fecha límite',
+  showRecurrence = false,
+  recurrenceRrule = null,
+  onRecurrenceChange,
   errors = {},
+  embeddedInSummary = false,
 }) {
   const datePillRef = useRef(null);
   const startPillRef = useRef(null);
@@ -65,9 +70,10 @@ export default function TareaFormScheduleFields({
     [startAt, durationMin],
   );
 
-  const showDeadlineRow = showDeadline && !allDay;
+  const showDeadlineRow = showDeadline;
   const endTimeBesideDeadline = showDeadlineRow && Boolean(deadline);
   const showEndTimeOnRow1 = showTimePills && !endTimeBesideDeadline;
+  const showRecurrencePicker = showRecurrence && Boolean(onRecurrenceChange);
 
   const endTimeAt = useMemo(() => {
     if (!deadline) return endAt;
@@ -105,17 +111,10 @@ export default function TareaFormScheduleFields({
     }
   };
 
-  const enableTimedScheduleIfToday = (date) => {
-    if (date && isSameDayAsToday(date) && allDay && onAllDayChange) {
-      onAllDayChange(false);
-    }
-  };
-
   const handleDayChange = (v) => {
     if (!v) return;
     const nextDay = startOfDay(v);
     onDayChange(nextDay);
-    enableTimedScheduleIfToday(nextDay);
     setDateOpen(false);
   };
 
@@ -126,107 +125,133 @@ export default function TareaFormScheduleFields({
     }
     const preservedTime = deadline || endAt;
     onDeadlineChange?.(mergeDateAndTime(startOfDay(v), preservedTime));
-    enableTimedScheduleIfToday(v);
   };
+
+  const scheduleContent = (
+    <Stack
+      spacing={TAREA_FORM_PILL_GAP}
+      sx={{
+        ...tareaFormScheduleStackSx,
+        ...(embeddedInSummary ? taskFormScheduleExpandedContentSx : { width: '100%', minWidth: 0 }),
+      }}
+    >
+      <Stack
+        direction="row"
+        flexWrap="wrap"
+        alignItems="center"
+        gap={TAREA_FORM_PILL_GAP}
+        useFlexGap
+        sx={tareaFormPillRowSx}
+      >
+        <TareaFormPillButton
+          ref={datePillRef}
+          variant="schedule"
+          onClick={() => setDateOpen(true)}
+          aria-label="Cambiar fecha"
+          sx={taskFormScheduleDatePillResponsiveSx}
+        >
+          {formatDatePill(day)}
+        </TareaFormPillButton>
+      </Stack>
+
+      {showTimePills && (
+        <Stack
+          direction="row"
+          flexWrap="wrap"
+          alignItems="center"
+          gap={TAREA_FORM_PILL_GAP}
+          useFlexGap
+          sx={tareaFormPillRowSx}
+        >
+          <TareaFormPillButton
+            ref={startPillRef}
+            variant="schedule"
+            onClick={() => setStartOpen(true)}
+            aria-label="Hora de inicio"
+          >
+            {formatTimePill(time)}
+          </TareaFormPillButton>
+
+          {showEndTimeOnRow1 && (
+            <>
+              <Typography
+                component="span"
+                variant="body2"
+                sx={tareaFormTimeSeparatorSx}
+              >
+                –
+              </Typography>
+              <TareaFormPillButton
+                ref={endPillRef}
+                variant="schedule"
+                onClick={() => setEndOpen(true)}
+                aria-label="Hora de fin"
+              >
+                {formatTimePill(endAt)}
+              </TareaFormPillButton>
+            </>
+          )}
+        </Stack>
+      )}
+
+      {onAllDayChange && (
+        <Box sx={taskFormScheduleControlsRowSx}>
+          <TareaFormAllDaySwitch
+            checked={allDay}
+            onChange={handleAllDayChange}
+            sx={{
+              width: '100%',
+              m: 0,
+              justifyContent: 'space-between',
+            }}
+          />
+        </Box>
+      )}
+
+      {showRecurrencePicker && (
+        <Box sx={taskFormScheduleRecurrenceWrapSx}>
+          <TareaFormRecurrencePicker
+            variant="schedule"
+            value={recurrenceRrule}
+            onChange={onRecurrenceChange}
+          />
+        </Box>
+      )}
+    </Stack>
+  );
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
-      <TareaFormRow icon={TareaFormIcons.schedule} showDivider={false} align="flex-start">
-        <Stack spacing={TAREA_FORM_PILL_GAP} sx={tareaFormScheduleStackSx}>
-          <Box sx={tareaFormRowWithActionSx}>
-            <Stack
-              direction="row"
-              flexWrap="wrap"
-              alignItems="center"
-              gap={TAREA_FORM_PILL_GAP}
-              useFlexGap
-              sx={{ flex: 1, minWidth: 0, ...tareaFormPillRowSx, width: 'auto' }}
-            >
+      {embeddedInSummary ? (
+        scheduleContent
+      ) : (
+        <TareaFormRow icon={TareaFormIcons.schedule} showDivider={false} align="flex-start">
+          {scheduleContent}
+        </TareaFormRow>
+      )}
+
+      {showDeadlineRow && (
+        <TareaFormDeadlineRow
+          embeddedInSummary={embeddedInSummary}
+          value={deadline}
+          onChange={handleDeadlineChange}
+          placeholder={deadlinePlaceholder ? `${deadlinePlaceholder}...` : 'Agregar fecha límite...'}
+          showClear={!endTimeBesideDeadline}
+          endTimeSlot={endTimeBesideDeadline ? (
+            <>
               <TareaFormPillButton
-                ref={datePillRef}
+                ref={endPillRef}
                 variant="schedule"
-                onClick={() => setDateOpen(true)}
-                aria-label="Cambiar fecha"
-                sx={tareaFormDatePillSx}
+                onClick={() => setEndOpen(true)}
+                aria-label="Hora de fin"
               >
-                {formatDatePill(day)}
+                {formatTimePill(endTimeAt)}
               </TareaFormPillButton>
-
-              {showTimePills && (
-                <TareaFormPillButton
-                  ref={startPillRef}
-                  variant="schedule"
-                  onClick={() => setStartOpen(true)}
-                  aria-label="Hora de inicio"
-                >
-                  {formatTimePill(time)}
-                </TareaFormPillButton>
-              )}
-
-              {showEndTimeOnRow1 && (
-                <>
-                  <Typography
-                    component="span"
-                    variant="body2"
-                    sx={tareaFormTimeSeparatorSx}
-                  >
-                    –
-                  </Typography>
-                  <TareaFormPillButton
-                    ref={endPillRef}
-                    variant="schedule"
-                    onClick={() => setEndOpen(true)}
-                    aria-label="Hora de fin"
-                  >
-                    {formatTimePill(endAt)}
-                  </TareaFormPillButton>
-                </>
-              )}
-            </Stack>
-
-            {onAllDayChange ? (
-              <TareaFormAllDaySwitch
-                checked={allDay}
-                onChange={handleAllDayChange}
-                disabled={isSameDayAsToday(day)}
-              />
-            ) : (
-              <Box sx={tareaFormHeaderActionSpacerSx} aria-hidden />
-            )}
-          </Box>
-
-          {showDeadlineRow && (
-            <Stack
-              direction="row"
-              flexWrap="wrap"
-              alignItems="center"
-              gap={TAREA_FORM_PILL_GAP}
-              useFlexGap
-              sx={{ ...tareaFormPillRowSx, ...tareaFormRowContentGutterSx }}
-            >
-              <TareaFormDeadlinePill
-                value={deadline}
-                onChange={handleDeadlineChange}
-                placeholder={deadlinePlaceholder}
-                showClear={!endTimeBesideDeadline}
-              />
-              {endTimeBesideDeadline && (
-                <>
-                  <TareaFormPillButton
-                    ref={endPillRef}
-                    variant="schedule"
-                    onClick={() => setEndOpen(true)}
-                    aria-label="Hora de fin"
-                  >
-                    {formatTimePill(endTimeAt)}
-                  </TareaFormPillButton>
-                  <TareaFormDeadlineClearButton onClear={() => handleDeadlineChange(null)} />
-                </>
-              )}
-            </Stack>
-          )}
-        </Stack>
-      </TareaFormRow>
+              <TareaFormDeadlineClearButton onClear={() => handleDeadlineChange(null)} />
+            </>
+          ) : null}
+        />
+      )}
 
       <PickerPopover
         open={dateOpen}

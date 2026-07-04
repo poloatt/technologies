@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import clienteAxios from '../config/axios';
 import currentConfig, { getCurrentAppUrl } from '../config/envConfig';
+import { isBackendUnavailableError, retryWhileBackendWakes } from '../config/backendUnavailable.js';
 import { isStandalonePwa } from '../hooks/usePwaInstall';
 import { useAppConfig } from '../hooks/useAppDetection.js';
 
@@ -15,8 +16,7 @@ const useAuth = () => {
   return context;
 };
 
-// Configurar axios con la URL base y credenciales
-clienteAxios.defaults.baseURL = currentConfig.baseUrl;
+// Axios ya define baseURL vía getApiBaseUrl() (proxy Vite en dev local).
 clienteAxios.defaults.withCredentials = true;
 
 // Cache del usuario en localStorage para render optimista (evita el gate serial de /check)
@@ -83,17 +83,14 @@ function clearLocalAuthState() {
 }
 
 /** Despierta el backend (p. ej. Render tras inactividad) antes de OAuth. */
-async function waitForBackendReady(maxAttempts = 4) {
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      await clienteAxios.get('/api/health', { timeout: 12_000 });
-      return;
-    } catch {
-      if (attempt === maxAttempts - 1) {
-        throw new Error('El servidor no responde. Espera unos segundos e intenta de nuevo.');
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
-    }
+async function waitForBackendReady(maxAttempts = 8) {
+  try {
+    await retryWhileBackendWakes(
+      () => clienteAxios.get('/api/health', { timeout: 12_000 }),
+      { maxAttempts, baseDelayMs: 2000 },
+    );
+  } catch {
+    throw new Error('El servidor no responde. Espera unos segundos e intenta de nuevo.');
   }
 }
 
@@ -477,13 +474,10 @@ export function AuthProvider({ children }) {
               clienteAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
               
               // Timeout estándar (no aumentamos porque no soluciona el problema de fondo)
-              const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout: Verificación inicial tardó demasiado')), 5000)
+              const { data } = await retryWhileBackendWakes(
+                () => clienteAxios.get(`${currentConfig.authPrefix}/check`, { timeout: 8000 }),
+                { maxAttempts: 8, baseDelayMs: 1500 },
               );
-              
-              const requestPromise = clienteAxios.get(`${currentConfig.authPrefix}/check`);
-              
-              const { data } = await Promise.race([requestPromise, timeoutPromise]);
               
               if (data.authenticated && data.user) {
                 setUser(data.user);
@@ -503,7 +497,8 @@ export function AuthProvider({ children }) {
             } catch (error) {
               console.log('Error en inicialización de auth:', error.message);
               
-              const isNetworkError = error.message?.includes('Timeout') || 
+              const isNetworkError = isBackendUnavailableError(error) ||
+                                    error.message?.includes('Timeout') || 
                                     error.message?.includes('Network') ||
                                     error.message?.includes('ERR_') ||
                                     !error.response;

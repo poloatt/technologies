@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { getTaskHorizonCopy } from '@shared/copy/agendaTerminology';
+import { hubSectionTitleSx } from '@shared/styles/hubSectionStyles';
 import AgendaCalendarPage from '../../agenda/AgendaCalendarPage';
 import TareasTable from './TareasTable';
 import { useTareasPageController } from './useTareasPageController';
@@ -11,7 +12,7 @@ function TaskHorizonColumnHeader({ view }) {
   const copy = getTaskHorizonCopy(view);
   return (
     <Box sx={{ mb: 1, px: { xs: 0.5, sm: 0 } }}>
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+      <Typography variant="subtitle2" sx={{ ...hubSectionTitleSx, mb: 0 }}>
         {copy.label}
       </Typography>
     </Box>

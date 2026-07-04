@@ -1,35 +1,7 @@
 import axios from 'axios';
+import { getApiBaseUrl } from './apiBaseUrl.js';
 
-// Determinar la URL base según el ambiente
-const getBaseUrl = () => {
-  const mode = import.meta.env.MODE;
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const hostname = window.location.hostname;
-  
-  // Si el desarrollador definió explícitamente VITE_API_URL, respetarla SIEMPRE
-  if (apiUrl && typeof apiUrl === 'string') {
-    return apiUrl;
-  }
-
-  const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
-
-  // En localhost, usar producción por defecto (no desarrollo local)
-  if (isLocalHost) {
-    return 'http://localhost:5000';
-  } 
-
-  // Detección por hostname únicamente (evita confusiones por variables de entorno)
-  if (hostname === 'atta.attadia.com' || 
-      hostname === 'foco.attadia.com' || 
-      hostname === 'pulso.attadia.com') {
-    return 'https://api.attadia.com';
-  }
-
-  // Fallback a producción
-  return 'https://api.attadia.com';
-};
-
-const baseURL = getBaseUrl();
+const baseURL = getApiBaseUrl();
 // console.log('URL base de Axios:', baseURL);
 
 const clienteAxios = axios.create({

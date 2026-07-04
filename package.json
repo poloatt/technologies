@@ -10,6 +10,7 @@
     "dev:atta": "npm run dev --workspace=apps/atta",
     "dev:pulso": "npm run dev --workspace=apps/pulso",
     "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:foco+backend": "concurrently -n backend,foco -c blue,green \"npm run dev --workspace=apps/backend\" \"npm run dev --workspace=apps/foco\"",
     "build": "turbo run build",
     "build:legacy": "npm run build:shared && npm run build:apps",
     "build:shared": "npm run build --workspace=apps/shared || echo 'Shared build skipped - no build script'",

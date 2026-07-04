@@ -1,137 +1,28 @@
 import React, { useEffect, useRef, useCallback, memo, useState, useMemo } from 'react';
 import { Box, CircularProgress, Collapse, IconButton, Tooltip } from '@mui/material';
 import { useTheme, alpha } from '@mui/material/styles';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
-import { resolveCarouselItemConfig } from '@shared/utils/habitVisibilityEngine';
+import TuneOutlined from '@mui/icons-material/TuneOutlined';
+import { resolveCarouselItemConfig } from '@shared/habits';
 import { getHabitSlotCopy } from '@shared/copy/agendaTerminology';
 import HabitCarouselEmptyState from './HabitCarouselEmptyState';
-import HabitCarouselIconButton from './HabitCarouselIconButton';
-import { getHabitCarouselSurface } from './habitCarouselSurface';
-import useHorizontalDragScroll from './hooks/useHorizontalDragScroll';
+import HabitCarouselIconButton from '@shared/components/habits/HabitCarouselIconButton';
+import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScrollTrack';
+import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
+import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 
 const MotionBox = motion.create(Box);
 
-export { HabitCarouselIconButton };
-
-function HabitCarouselScrollTrack({
-  itemCount,
-  fadeColor,
-  theme,
-  scrollTrackSx,
-  enableDragScroll = true,
-  bind = {},
-  mergeScrollRef,
-  observeKey = '',
-  centerWhenFits = false,
-  children,
-}) {
-  const edgeFadeRef = useRef(null);
-  const [edgeState, setEdgeState] = useState({
-    hasOverflow: false,
-    atStart: true,
-    atEnd: true,
-    hintLeft: false,
-    hintRight: false,
-  });
-
-  const updateEdgeState = useCallback(() => {
-    const node = edgeFadeRef.current;
-    if (!node) return;
-    const { scrollLeft, scrollWidth, clientWidth } = node;
-    const hasOverflow = scrollWidth > clientWidth + 2;
-    const atStart = scrollLeft <= 4;
-    const atEnd = scrollLeft >= scrollWidth - clientWidth - 4;
-    setEdgeState({
-      hasOverflow,
-      atStart,
-      atEnd,
-      hintLeft: hasOverflow && !atStart,
-      hintRight: hasOverflow && !atEnd,
-    });
-  }, []);
-
-  useEffect(() => {
-    const node = edgeFadeRef.current;
-    if (!node) return undefined;
-    updateEdgeState();
-    node.addEventListener('scroll', updateEdgeState, { passive: true });
-    const ro = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(() => updateEdgeState())
-      : null;
-    ro?.observe(node);
-    return () => {
-      node.removeEventListener('scroll', updateEdgeState);
-      ro?.disconnect();
-    };
-  }, [itemCount, observeKey, updateEdgeState]);
-
-  const showStartCap = edgeState.hasOverflow && edgeState.atStart;
-  const showEndCap = edgeState.hasOverflow && edgeState.atEnd;
-
-  const trackSx = useMemo(() => ({
-    ...scrollTrackSx,
-    justifyContent: centerWhenFits && !edgeState.hasOverflow ? 'center' : 'flex-start',
-  }), [scrollTrackSx, centerWhenFits, edgeState.hasOverflow]);
-
-  return (
-    <Box
-      sx={{
-        position: 'relative',
-        flex: 1,
-        minWidth: 0,
-        borderLeft: showStartCap ? `2px solid ${alpha(theme.palette.primary.main, 0.45)}` : 'none',
-        borderRight: showEndCap ? `2px solid ${alpha(theme.palette.text.disabled, 0.35)}` : 'none',
-        borderRadius: (showStartCap || showEndCap) ? 0.5 : 0,
-        pl: showStartCap ? 0.5 : 0,
-        pr: showEndCap ? 0.5 : 0,
-        transition: 'border-color 0.15s ease, padding 0.15s ease',
-      }}
-    >
-      {edgeState.hintLeft && (
-        <Box
-          aria-hidden
-          sx={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 20,
-            zIndex: 2,
-            pointerEvents: 'none',
-            background: `linear-gradient(to right, ${fadeColor}, transparent)`,
-          }}
-        />
-      )}
-      {edgeState.hintRight && (
-        <Box
-          aria-hidden
-          sx={{
-            position: 'absolute',
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 20,
-            zIndex: 2,
-            pointerEvents: 'none',
-            background: `linear-gradient(to left, ${fadeColor}, transparent)`,
-          }}
-        />
-      )}
-      <Box
-        sx={trackSx}
-        ref={(node) => {
-          edgeFadeRef.current = node;
-          mergeScrollRef?.(node);
-        }}
-        {...(enableDragScroll ? bind : {})}
-      >
-        {children}
-      </Box>
-    </Box>
-  );
-}
+const carouselActionIconSx = (theme, { active = false } = {}) => ({
+  flexShrink: 0,
+  color: active ? 'primary.main' : 'text.secondary',
+  '&:hover': {
+    bgcolor: alpha(theme.palette.text.primary, 0.06),
+  },
+});
 
 function renderCarouselIcon({
   entry,
@@ -148,6 +39,7 @@ function renderCarouselIcon({
   hoverBg,
   rail,
   size,
+  iconFontSize,
   onToggle,
   keySuffix = '',
 }) {
@@ -193,6 +85,7 @@ function renderCarouselIcon({
         hoverBg={hoverBg}
         rail={rail}
         size={size}
+        iconFontSize={iconFontSize}
         onToggle={onToggle}
       />
     </MotionBox>
@@ -228,12 +121,17 @@ function HabitCarouselIconRow({
   bind,
   onToggle,
   onConfigure,
+  mobile = false,
 }) {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [showCompletedPanel, setShowCompletedPanel] = useState(false);
   const completedDrag = useHorizontalDragScroll({ enabled: enableDragScroll });
 
-  const { size, bg, hoverBg, rail, dividerColor } = getHabitCarouselSurface(theme, { dense });
+  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getHabitCarouselSurface(theme, {
+    dense: dense && !mobile,
+    mobile,
+  });
   const panelBg = theme.palette.background.default;
   const fadeColor = panelBg;
 
@@ -262,7 +160,7 @@ function HabitCarouselIconRow({
     flexWrap: 'nowrap',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: dense ? 0.25 : 0.5,
+    gap: mobile ? 0.5 : (dense ? 0.25 : 0.5),
     overflowX: 'auto',
     overflowY: 'hidden',
     touchAction: 'pan-x',
@@ -272,8 +170,9 @@ function HabitCarouselIconRow({
     userSelect: enableDragScroll ? 'none' : 'auto',
     scrollbarWidth: 'none',
     msOverflowStyle: 'none',
+    minHeight: size + 4,
     '&::-webkit-scrollbar': { display: 'none' },
-  }), [dense, enableDragScroll, isDragging]);
+  }), [dense, enableDragScroll, isDragging, mobile, size]);
 
   const completedScrollTrackSx = useMemo(() => ({
     ...scrollTrackSx,
@@ -310,6 +209,8 @@ function HabitCarouselIconRow({
     return <HabitCarouselEmptyState variant="allDone" mode={mode} />;
   }
 
+  const iconDense = dense && !mobile;
+
   const renderIconsRow = (items, { keySuffix, completionState, rowInteractive, rowOnToggle } = {}) => (
     <AnimatePresence mode="popLayout">
       {items.map((entry, index) => renderCarouselIcon({
@@ -320,13 +221,14 @@ function HabitCarouselIconRow({
         habitsPreferences,
         currentTimeOfDay,
         mode,
-        dense,
+        dense: iconDense,
         interactive: rowInteractive ?? interactive,
         showCompletionState: completionState ?? showCompletionState,
         bg,
         hoverBg,
         rail,
         size,
+        iconFontSize,
         onToggle: rowOnToggle ?? onToggle,
         keySuffix,
       }))}
@@ -341,6 +243,7 @@ function HabitCarouselIconRow({
         display: 'flex',
         flexDirection: 'column',
         gap: 0.25,
+        width: '100%',
         pt: dense ? 0.25 : 0.5,
         pb: dense ? 0.25 : 0,
         ...(showDividers && {
@@ -349,7 +252,14 @@ function HabitCarouselIconRow({
         }),
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 0.5, minWidth: 0 }}>
+      <Box
+        sx={{
+          position: 'relative',
+          width: '100%',
+          minWidth: 0,
+          pr: showToggle ? 4.5 : 0,
+        }}
+      >
         {hasPending ? (
           <HabitCarouselScrollTrack
             itemCount={pendingItems.length}
@@ -369,10 +279,11 @@ function HabitCarouselIconRow({
         ) : (
           <Box
             sx={{
-              flex: 1,
+              width: '100%',
               minWidth: 0,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               minHeight: size + 4,
               px: 0.5,
               color: 'text.secondary',
@@ -391,12 +302,11 @@ function HabitCarouselIconRow({
               aria-expanded={showCompletedPanel}
               aria-label={showCompletedPanel ? 'Ocultar hábitos completados hoy' : 'Mostrar hábitos completados hoy'}
               sx={{
-                alignSelf: 'center',
-                flexShrink: 0,
-                color: showCompletedPanel ? 'primary.main' : 'text.secondary',
-                '&:hover': {
-                  bgcolor: alpha(theme.palette.text.primary, 0.06),
-                },
+                position: 'absolute',
+                right: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                ...carouselActionIconSx(theme, { active: showCompletedPanel }),
               }}
             >
               {showCompletedPanel ? (
@@ -412,9 +322,11 @@ function HabitCarouselIconRow({
       <Collapse in={showCompletedPanel && hasCompleted} unmountOnExit>
         <Box
           sx={{
+            position: 'relative',
             borderTop: `1px solid ${rail}`,
             pt: 0.5,
             pb: 0.25,
+            pr: 4.5,
           }}
         >
           <HabitCarouselScrollTrack
@@ -424,6 +336,7 @@ function HabitCarouselIconRow({
             theme={theme}
             scrollTrackSx={completedScrollTrackSx}
             enableDragScroll={enableDragScroll}
+            centerWhenFits
             bind={completedDrag.bind}
             mergeScrollRef={(node) => {
               completedDrag.scrollRef.current = node;
@@ -435,6 +348,22 @@ function HabitCarouselIconRow({
               rowOnToggle: handleCompletedToggle,
             })}
           </HabitCarouselScrollTrack>
+          <Tooltip title="Ir a Rutinas">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/rutinas')}
+              aria-label="Ir a Rutinas"
+              sx={{
+                position: 'absolute',
+                right: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                ...carouselActionIconSx(theme),
+              }}
+            >
+              <TuneOutlined sx={{ fontSize: '1.1rem' }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Collapse>
     </Box>

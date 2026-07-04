@@ -376,8 +376,7 @@ export default function Toolbar({
               (currentPath.startsWith('/tiempo/objetivos') || 
                currentPath.startsWith('/tiempo/tareas') || 
                currentPath.startsWith('/objetivos') || 
-               currentPath.startsWith('/tareas') ||
-               currentPath.startsWith('/foco'))
+               currentPath.startsWith('/tareas'))
             ) {
               
               const getSmartAddButton = () => {
@@ -387,13 +386,8 @@ export default function Toolbar({
                   } else if (
                     currentPath === '/tiempo/tareas'
                     || currentPath === '/tareas'
-                    || currentPath.startsWith('/foco')
                   ) {
-                    window.dispatchEvent(new CustomEvent('addTask', {
-                      detail: currentPath.startsWith('/foco')
-                        ? { anchorEl: e?.currentTarget }
-                        : {},
-                    }));
+                    window.dispatchEvent(new CustomEvent('addTask', { detail: {} }));
                   }
                 };
 
@@ -402,11 +396,8 @@ export default function Toolbar({
                   if (
                     currentPath === '/tiempo/tareas'
                     || currentPath === '/tareas'
-                    || currentPath.startsWith('/foco')
                   ) {
-                    return currentPath.startsWith('/foco')
-                      ? 'Crear evento, tarea o hábito'
-                      : 'Nueva Tarea';
+                    return 'Nueva Tarea';
                   }
                   return 'Agregar';
                 };

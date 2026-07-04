@@ -11,7 +11,7 @@ describe('undoScopeConfig', () => {
     expect(resolveUndoScope('/tareas')).toBe('tareas');
     expect(resolveUndoScope('/objetivos')).toBe('objetivos');
     expect(resolveUndoScope('/rutinas')).toBe('rutinas');
-    expect(resolveUndoScope('/foco')).toBe('hub');
+    expect(resolveUndoScope('/foco')).toBeNull();
     expect(resolveUndoScope('/archivo')).toBe('archivo');
     expect(resolveUndoScope('/unknown')).toBeNull();
   });

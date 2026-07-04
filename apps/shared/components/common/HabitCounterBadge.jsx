@@ -3,9 +3,8 @@ import { Badge } from '@mui/material';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import WbTwilightIcon from '@mui/icons-material/WbTwilight';
 import NightlightIcon from '@mui/icons-material/Nightlight';
-import { contarCompletadosEnPeriodo } from '@shared/utils/cadenciaUtils';
-import { isHabitCompletedForHistorial, isHabitHorarioCompleted } from '@shared/utils/habitCompletionUtils';
-import { isFlexiblePeriodic } from '@shared/utils/habitVisibilityEngine';
+import { contarCompletadosEnPeriodo, isFlexiblePeriodic, isHabitPartiallyCompletedToday } from '@shared/habits';
+import { isHabitCompletedForHistorial, isHabitHorarioCompleted } from '@shared/habits';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 
 /**
@@ -19,6 +18,7 @@ import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
  * @param {Object} props.rutina - Rutina actual (opcional, para calcular progreso del período)
  * @param {string} props.section - Sección del hábito (opcional, para calcular progreso)
  * @param {string} props.itemId - ID del ítem (opcional, para calcular progreso)
+ * @param {boolean} [props.reserveBadgeSpace] — mantiene el hueco del badge aunque no haya contenido (carrusel)
  * @param {React.ReactNode} props.children - Elemento hijo (generalmente un IconButton)
  */
 export const HabitCounterBadge = ({ 
@@ -30,6 +30,7 @@ export const HabitCounterBadge = ({
   rutina = null,
   section = null,
   itemId = null,
+  reserveBadgeSpace = false,
   children 
 }) => {
   const tipo = (config?.tipo || 'DIARIO').toUpperCase();
@@ -102,7 +103,8 @@ export const HabitCounterBadge = ({
   // Determinar qué mostrar en el badge
   let badgeContent = null;
   let showBadge = false;
-  let isNumber = false; // Flag para saber si es número o icono
+  let isNumber = false;
+  let resolvedHorario = null;
 
   // Periódicos flexibles: siempre badge de cadencia (0, 1, 2…), nunca sol/luna
   if (flexiblePeriodic) {
@@ -157,6 +159,7 @@ export const HabitCounterBadge = ({
       
       // Mostrar icono del horario determinado
       if (horarioAMostrar) {
+        resolvedHorario = horarioAMostrar;
         switch (horarioAMostrar) {
           case 'MAÑANA':
             badgeContent = <WbSunnyIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
@@ -182,10 +185,13 @@ export const HabitCounterBadge = ({
     // (El badge solo muestra horarios, no frecuencia para diarios)
   }
 
-  // Si no hay nada que mostrar, renderizar sin badge
-  if (!showBadge) {
+  // Si no hay nada que mostrar, renderizar sin badge (salvo reserva de espacio en carrusel)
+  if (!showBadge && !reserveBadgeSpace) {
     return <>{children}</>;
   }
+
+  const badgeVisible = showBadge;
+  const renderedBadgeContent = badgeVisible ? badgeContent : '\u00a0';
 
   // Calcular transform según el tipo de superposición
   const getTransform = () => {
@@ -199,9 +205,17 @@ export const HabitCounterBadge = ({
     return 'translate(25%, 25%) scale(1)';
   };
 
+  const itemValue = rutina?.[section]?.[itemId];
+  const isPartialHabit = !isNumber && isHabitPartiallyCompletedToday(itemValue, horarios);
+  const badgeAccent = isNumber
+    ? 'primary.main'
+    : (resolvedHorario && (isHabitHorarioCompleted(itemValue, resolvedHorario) || isPartialHabit)
+      ? 'primary.main'
+      : 'text.disabled');
+
   return (
     <Badge
-      badgeContent={badgeContent}
+      badgeContent={renderedBadgeContent}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       overlap={overlap === 'circular' ? 'circular' : 'rectangular'}
       sx={{
@@ -213,18 +227,22 @@ export const HabitCounterBadge = ({
           fontSize: size === 'small' ? '0.6rem' : '0.65rem',
           padding: size === 'small' ? '1px 3px' : '2px 4px',
           bgcolor: 'transparent',
-          color: 'primary.main',
+          color: badgeAccent,
           border: 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           transform: getTransform(),
           zIndex: 1,
+          ...(!badgeVisible && {
+            opacity: 0,
+            visibility: 'hidden',
+          }),
           '& svg': {
             fontSize: size === 'small' ? '0.65rem' : '0.7rem',
-            color: 'primary.main'
-          }
-        }
+            color: badgeAccent,
+          },
+        },
       }}
     >
       {children}

@@ -2,29 +2,51 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
 import { useHabits, useRutinas } from '@shared/context';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
-import { getDefaultSelectedSection } from '@shared/utils/rutinaDesktopUtils';
-import { computeRutinaToggleValue } from '@shared/domain/habits';
+import { getDefaultSelectedSection } from '@shared/habits';
+import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
 import useHabitCarouselToggle from '@foco/features/habits/carousel/useHabitCarouselToggle';
-import useHabitsPreferences from '@foco/features/habits/carousel/hooks/useHabitsPreferences';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
+import useRutinaItemToggle from '@foco/features/habits/hooks/useRutinaItemToggle';
 import RutinaSectionNav from './RutinaSectionNav';
 import RutinaSectionDetailPanel from './RutinaSectionDetailPanel';
+import useHabitGroupActions from './useHabitGroupActions';
 
-/**
- * Layout master-detail para rutinas en desktop (md+).
- */
+/** Layout master-detail para rutinas en desktop (md+). */
 export default function RutinaDesktopLayout({
   rutina,
   readOnly = false,
-  onMarkComplete,
 }) {
-  const { habits } = useHabits();
+  const { habits, customSections } = useHabits();
   const { habitsPreferences, prefsReady } = useHabitsPreferences();
   const { markItemComplete, patchRutinaSection } = useRutinas();
   const dragRef = useRef({ moved: false });
   const prefs = prefsReady ? (habitsPreferences || {}) : {};
+
   const [selectedSection, setSelectedSection] = useState(() =>
     getDefaultSelectedSection(rutina, habits, prefs),
   );
+
+  const {
+    groupDialogOpen,
+    setGroupDialogOpen,
+    groupDialogMode,
+    editingSection,
+    isSavingGroup,
+    openCreateGroupDialog,
+    openEditGroupDialog,
+    handleSaveGroup,
+    handleDeleteGroup,
+  } = useHabitGroupActions({
+    customSections,
+    selectedSection,
+    onSelectSection: setSelectedSection,
+  });
+
+  useEffect(() => {
+    const onOpenAddHabitGroup = () => openCreateGroupDialog();
+    window.addEventListener('openAddHabitGroup', onOpenAddHabitGroup);
+    return () => window.removeEventListener('openAddHabitGroup', onOpenAddHabitGroup);
+  }, [openCreateGroupDialog]);
 
   useEffect(() => {
     if (!prefsReady) return;
@@ -42,35 +64,17 @@ export default function RutinaDesktopLayout({
     habitsPreferences: prefs,
   });
 
-  const handleItemClick = useCallback((itemId, _event, horario = null) => {
-    if (readOnly || !rutina?._id) return;
+  const toggleItem = useRutinaItemToggle({
+    rutina,
+    habitsPreferences: prefs,
+    markItemComplete,
+    patchRutinaSection,
+    readOnly,
+  });
 
-    const section = selectedSection;
-    const prevSection = rutina[section] || {};
-    const previousValue = prevSection[itemId];
-    const newValue = computeRutinaToggleValue({
-      section,
-      itemId,
-      rutina,
-      habitsPreferences: prefs,
-      horario,
-      currentTimeOfDay: getCurrentTimeOfDay(),
-    });
-
-    const itemData = { [itemId]: newValue };
-    if (patchRutinaSection) {
-      patchRutinaSection(rutina._id, section, itemData);
-    }
-
-    const persist = onMarkComplete(rutina._id, section, itemData);
-    if (persist?.catch) {
-      persist.catch(() => {
-        if (patchRutinaSection) {
-          patchRutinaSection(rutina._id, section, { [itemId]: previousValue });
-        }
-      });
-    }
-  }, [readOnly, rutina, selectedSection, onMarkComplete, patchRutinaSection, prefs]);
+  const handleItemClick = useCallback((itemId, event, horario = null) => {
+    toggleItem(selectedSection, itemId, horario, event);
+  }, [toggleItem, selectedSection]);
 
   return (
     <Box
@@ -86,8 +90,13 @@ export default function RutinaDesktopLayout({
         rutina={rutina}
         habits={habits}
         habitsPreferences={prefs}
+        customSections={customSections}
         selectedSection={selectedSection}
         onSelectSection={setSelectedSection}
+        onAddGroup={openCreateGroupDialog}
+        onEditGroup={openEditGroupDialog}
+        onDeleteGroup={handleDeleteGroup}
+        readOnly={readOnly}
       />
       <RutinaSectionDetailPanel
         section={selectedSection}
@@ -97,6 +106,14 @@ export default function RutinaDesktopLayout({
         readOnly={readOnly}
         onItemClick={handleItemClick}
         onToggle={handleToggle}
+      />
+      <HabitGroupFormDialog
+        open={groupDialogOpen}
+        onClose={() => setGroupDialogOpen(false)}
+        onSave={handleSaveGroup}
+        saving={isSavingGroup}
+        mode={groupDialogMode}
+        initialSection={editingSection}
       />
     </Box>
   );

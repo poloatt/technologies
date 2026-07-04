@@ -5,7 +5,7 @@ import { startOfDay } from 'date-fns';
 import { useResponsive } from '@shared/hooks';
 import { useHabits, useRutinas } from '@shared/context';
 import { usePageWithHistory } from '@shared/hooks';
-import { applyTimedMoveToTask } from './dnd/calendarDragUtils';
+import { applyTimedMoveToTask } from '@shared/utils/calendar/calendarDragUtils';
 import { isTaskCompleted } from '@shared/utils/agendaRules';
 import { TareaForm, buildTareaPayload, syncTareaToGoogleInBackground } from '../tasks/form';
 import GoogleTasksConfig from '../tasks/google/GoogleTasksConfig';
@@ -20,7 +20,7 @@ import AgendaDayView from './AgendaDayView';
 import AgendaWeekView from './AgendaWeekView';
 import { useAgendaCalendar } from './useAgendaCalendar';
 import AgendaQuickCreate from './AgendaQuickCreate';
-import { saveHabitFromForm } from '../habits/templates/saveHabitFromForm';
+import { saveHabitFromForm } from '@shared/habits/form';
 
 export default function AgendaCalendarPage() {
   const { isMobile } = useResponsive();

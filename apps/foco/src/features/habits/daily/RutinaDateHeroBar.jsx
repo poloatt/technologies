@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import { useResponsive } from '@shared/hooks';
-import { DATE_HEADER_MIN_HEIGHT } from '../../agenda/calendarLayout';
+import { DATE_HEADER_MIN_HEIGHT } from '@shared/utils/calendar/calendarLayout';
 import AgendaCalendarDateHeader from '../../agenda/AgendaCalendarDateHeader';
 import { useRutinaDateNav } from './useRutinaDateNav';
 

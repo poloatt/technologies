@@ -4,13 +4,13 @@ import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
 import { startOfDay } from 'date-fns';
 import { getNormalizedToday, toISODateString, parseAPIDate, formatDateForAPI } from '../utils/dateUtils';
-import { resolveHabitConfigApplyFrom } from '../utils/rutinasPageUtils';
+import { resolveHabitConfigApplyFrom } from '@shared/habits';
 import rutinasService from '../services/rutinasService';
 import { UISettingsContext } from './UISettingsContext';
 import { calculateCompletionPercentage } from '../utils/rutinaCalculations';
-import { isHabitCompletedForHistorial } from '../utils/habitCompletionUtils';
+import { isHabitCompletedForHistorial } from '../habits/domain/habitCompletionUtils.js';
 import { normalizeTimeOfDay } from '../utils/timeOfDayUtils';
-import { invalidateHabitsPreferencesCache } from '@foco/features/habits/carousel/hooks/useHabitsPreferences';
+import { invalidateHabitsPreferencesCache } from '../hooks/useHabitsPreferences.js';
 import { resolveUndoScope } from '../config/undoScopeConfig';
 import { useScopedActionHistory } from '../hooks/useScopedUndo';
 import { ACTION_TYPES } from './ActionHistoryContext';
@@ -21,19 +21,51 @@ import {
   recordRutinaSectionDiff,
 } from '../undo/undoRecordingUtils';
 
-const SCOPES_WITH_SECTION_UNDO = new Set(['tareas', 'hub', 'rutinas']);
+const SCOPES_WITH_SECTION_UNDO = new Set(['tareas', 'rutinas']);
+
+import { HABIT_SECTIONS } from '@shared/habits';
+
+const RUTINA_HISTORIAL_SKIP_KEYS = new Set([
+  '_id',
+  'id',
+  'fecha',
+  'config',
+  'completitud',
+  'completitudPorSeccion',
+  'usuario',
+  'metadata',
+  'orden',
+  'createdAt',
+  'updatedAt',
+  'nombre',
+  'notas',
+  'tipo',
+  'historial',
+  'completacionesSemana',
+  '_expandedSections',
+  '_page',
+  '_totalPages',
+]);
+
+function collectRutinaHistorialSections(rutina = {}) {
+  const keys = new Set(HABIT_SECTIONS);
+  Object.keys(rutina.config || {}).forEach((section) => {
+    if (section !== '_metadata') keys.add(section);
+  });
+  Object.keys(rutina).forEach((key) => {
+    if (RUTINA_HISTORIAL_SKIP_KEYS.has(key)) return;
+    if (rutina[key] && typeof rutina[key] === 'object' && !Array.isArray(rutina[key])) {
+      keys.add(key);
+    }
+  });
+  return [...keys];
+}
 
 // Construye historial de completaciones por sección/ítem a partir del logger por día
 // Forma: historial[section][itemId][YYYY-MM-DD] = true
 const buildHistorialFromRutinas = (rutinasList = []) => {
-  const historial = {
-    bodyCare: {},
-    nutricion: {},
-    ejercicio: {},
-    cleaning: {}
-  };
+  const historial = {};
 
-  const sections = ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'];
   rutinasList.forEach(r => {
     let dateStr = null;
     try {
@@ -43,9 +75,10 @@ const buildHistorialFromRutinas = (rutinasList = []) => {
     }
     if (!dateStr) return;
 
-    sections.forEach(section => {
+    collectRutinaHistorialSections(r).forEach((section) => {
       const sec = r?.[section];
       if (!sec || typeof sec !== 'object') return;
+      if (!historial[section]) historial[section] = {};
       Object.entries(sec).forEach(([itemId, completed]) => {
         if (!isHabitCompletedForHistorial(completed)) return;
         if (!historial[section][itemId]) historial[section][itemId] = {};
@@ -491,19 +524,12 @@ export const RutinasProvider = ({ children }) => {
   // Parche local de config para un ítem (refresca SOLO lo necesario sin recargar toda la página)
   const patchRutinaItemConfig = useCallback((rutinaId, section, itemId, nextConfig) => {
     if (!rutinaId || !section || !itemId || !nextConfig) {
-      // #region agent log
-      // #endregion
       return;
     }
-
-    // #region agent log
-    // #endregion
 
     // 1) Rutina seleccionada - CRÍTICO: Crear nuevo objeto para forzar re-render
     setRutina(prev => {
       if (!prev || prev._id !== rutinaId) {
-        // #region agent log
-        // #endregion
         return prev;
       }
       const prevConfig = prev.config || {};
@@ -521,8 +547,6 @@ export const RutinasProvider = ({ children }) => {
           }
         }
       };
-      // #region agent log
-      // #endregion
       return updated;
     });
 
@@ -584,25 +608,12 @@ export const RutinasProvider = ({ children }) => {
 
       invalidateHabitsPreferencesCache();
 
-      // #region agent log
-      // #endregion
-
-      // Si hay una rutina actual y se solicita aplicar a la rutina actual, actualizarla también
       if (applyToCurrentRutina && rutina?._id) {
-        // #region agent log
-        // #endregion
-        // CRÍTICO: Actualizar la rutina en el contexto para que RutinaTable y RutinaCard se actualicen automáticamente
         patchRutinaItemConfig(rutina._id, section, itemId, normalizedConfig);
-        // #region agent log
-        // #endregion
       }
 
-      // #region agent log
-      // #endregion
       return { updated: true, config: normalizedConfig };
     } catch (error) {
-      // #region agent log
-      // #endregion
       console.error('[RutinasContext] Error al actualizar preferencia de hábito:', error);
       enqueueSnackbar('Error al actualizar preferencia', { variant: 'error' });
       return { updated: false, error: error.message };
@@ -611,21 +622,15 @@ export const RutinasProvider = ({ children }) => {
 
   // Actualizar configuración de ítems
   const updateItemConfiguration = useCallback(async (section, itemId, config, options = {}) => {
-    // #region agent log
-    // #endregion
     const { isGlobal = autoUpdateHabitPreferences, rutinaId = null, applyFromDate = null } = options;
     
     if (!section || !itemId || !config) {
-      // #region agent log
-      // #endregion
       handleError(new Error('Datos incompletos para actualizar configuración'), 'updateItemConfiguration', 'Datos incompletos');
       return { updated: false, error: "Datos incompletos" };
     }
 
     const targetRutinaId = rutinaId || rutina?._id;
     if (!targetRutinaId) {
-      // #region agent log
-      // #endregion
       handleError(new Error('No hay rutina para actualizar'), 'updateItemConfiguration', 'No hay rutina actual');
       return { updated: false, error: "No hay rutina actual" };
     }
@@ -652,17 +657,11 @@ export const RutinasProvider = ({ children }) => {
         ultimaActualizacion: new Date().toISOString()
       };
 
-      // #region agent log
-      // #endregion
-
       // Actualizar preferencias globales si es necesario
       // NOTA: updateUserHabitPreference ya actualiza la rutina actual, así que no necesitamos hacerlo dos veces
       // Pero aquí solo actualizamos preferencias, la rutina se actualiza después
       if (isGlobal) {
         try {
-          // #region agent log
-          // #endregion
-          // Usar la función del contexto que actualiza preferencias y rutina actual
           const prefResult = await updateUserHabitPreference(
             section,
             itemId,
@@ -670,45 +669,28 @@ export const RutinasProvider = ({ children }) => {
             true,
             effectiveApplyFrom,
           );
-          // #region agent log
-          // #endregion
           if (!prefResult || !prefResult.updated) {
             console.warn(`[RutinasContext] updateUserHabitPreference no completó correctamente para ${section}.${itemId}`);
           }
         } catch (prefError) {
-          // #region agent log
-          // #endregion
           console.error(`[RutinasContext] Error al actualizar preferencia global:`, prefError);
         }
       }
 
-      // Enviar al servidor - IMPORTANTE: Solo si NO es global o si necesitamos actualizar la rutina específica
-      // Si isGlobal es true, updateUserHabitPreference ya actualizó las preferencias y la rutina actual
-      // Pero aún necesitamos actualizar la rutina específica en el backend para persistencia
       const currentSectionConfig = (rutina?.config?.[section]) || {};
       const mergedSectionConfig = {
         ...currentSectionConfig,
-        [itemId]: normalizedConfig
+        [itemId]: normalizedConfig,
       };
 
       const updateData = {
         _id: targetRutinaId,
         config: {
-          [section]: mergedSectionConfig
-        }
+          [section]: mergedSectionConfig,
+        },
       };
 
-      // #region agent log
-      // #endregion
-
       await clienteAxios.put(`/api/rutinas/${targetRutinaId}`, updateData);
-      
-      // #region agent log
-      // #endregion
-      
-      // Reflejar inmediatamente el cambio en UI (sin refresh completo)
-      // NOTA: Si isGlobal es true, patchRutinaItemConfig ya fue llamado por updateUserHabitPreference
-      // Pero lo llamamos de nuevo para asegurar que la UI se actualiza
       patchRutinaItemConfig(targetRutinaId, section, itemId, normalizedConfig);
 
       if (undoScope === 'rutinas') {

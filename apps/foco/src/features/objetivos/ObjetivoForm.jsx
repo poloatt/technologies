@@ -14,7 +14,6 @@ import { getEstadoColor } from '@shared/components/common/StatusSystem';
 import {
   TareaFormHeader,
   TareaFormFooter,
-  TareaFormPriorityToggle,
   TareaFormRow,
   TareaFormPillSelect,
   TareaFormSectionLabel,
@@ -25,23 +24,23 @@ import {
   tareaFormRowContentIndent,
   tareaFormActionIconSx,
   tareaFormErrorTextSx,
+  tareaFormPillRowSx,
+  tareaFormRowContentGutterSx,
+  TAREA_FORM_OBJETIVO_ESTADO_OPTIONS,
   TareaFormHeaderTitleRow,
 } from '@shared/components/forms/tareaFormUi';
 import TareaFormDescriptionField from '@shared/components/forms/TareaFormDescriptionField';
-import TareaFormSettingsRow from '../tasks/form/fields/TareaFormSettingsRow';
 import { TareaFormIcons } from '@shared/components/forms/tareaFormIcons';
-import { TareaFormDeadlinePill } from '../tasks/form/fields/TareaFormDeadlineField';
-import TareaFormDialogShell from '../tasks/form/components/TareaFormDialogShell';
-import TareaFormAttachmentsSection from '../tasks/form/components/TareaFormAttachmentsSection';
-import { useTareaFormAttachments } from '../tasks/form/components/useTareaFormAttachments';
+import TareaActions from '../tasks/components/TareaActions';
+import {
+  TareaFormSettingsRow,
+  TareaFormDeadlinePill,
+  TareaFormDialogShell,
+  TareaFormAttachmentsSection,
+  useTareaFormAttachments,
+} from '@shared/components/forms/tareaFormUi';
 
 const TareaForm = React.lazy(() => import('../tasks/form/TareaForm'));
-
-const OBJETIVO_ESTADO_OPTIONS = [
-  { value: 'PENDIENTE', label: 'Pendiente' },
-  { value: 'EN_PROGRESO', label: 'En Progreso' },
-  { value: 'COMPLETADO', label: 'Completado' },
-];
 
 const ObjetivoForm = ({ open, onClose, onSubmit, initialData = null, isEditing, createWithHistory, updateWithHistory }) => {
   const { isMobile } = useResponsive();
@@ -166,14 +165,20 @@ const ObjetivoForm = ({ open, onClose, onSubmit, initialData = null, isEditing, 
   return (
     <TareaFormDialogShell open={open} onClose={onClose} isMobile={isMobile}>
         <TareaFormHeader onClose={onClose}>
-          <TareaFormHeaderTitleRow
-            action={(
-              <TareaFormPriorityToggle
-                prioridad={formData.prioridad === 'ALTA' ? 'ALTA' : 'BAJA'}
-                onChange={(value) => setFormData((prev) => ({ ...prev, prioridad: value }))}
-              />
-            )}
-          >
+          <Box sx={{ mb: 0.5 }}>
+            <TareaActions
+              variant="form"
+              tarea={{ tipo: 'TAREA', prioridad: formData.prioridad === 'ALTA' ? 'ALTA' : 'BAJA' }}
+              onTogglePriority={() => {
+                setFormData((prev) => ({
+                  ...prev,
+                  prioridad: prev.prioridad === 'ALTA' ? 'BAJA' : 'ALTA',
+                }));
+              }}
+              onAttach={handleFileChange}
+            />
+          </Box>
+          <TareaFormHeaderTitleRow>
             <TextField
               variant="standard"
               fullWidth
@@ -193,7 +198,6 @@ const ObjetivoForm = ({ open, onClose, onSubmit, initialData = null, isEditing, 
           <TareaFormDescriptionField
             value={formData.descripcion}
             onChange={handleChange('descripcion')}
-            onAttach={handleFileChange}
             placeholder="Agregar descripción..."
           />
 
@@ -203,11 +207,19 @@ const ObjetivoForm = ({ open, onClose, onSubmit, initialData = null, isEditing, 
             showPrioridad={false}
             showRecurrence={false}
             errors={errors}
-            estadoOptions={OBJETIVO_ESTADO_OPTIONS}
+            estadoOptions={TAREA_FORM_OBJETIVO_ESTADO_OPTIONS}
+            entityType="OBJETIVO"
           />
 
           <TareaFormRow icon={TareaFormIcons.schedule} showDivider={false} align="center">
-            <Stack direction="row" flexWrap="wrap" alignItems="center" gap={0.75} useFlexGap>
+            <Stack
+              direction="row"
+              flexWrap="wrap"
+              alignItems="center"
+              gap={0.75}
+              useFlexGap
+              sx={{ ...tareaFormPillRowSx, ...tareaFormRowContentGutterSx }}
+            >
               <TareaFormDeadlinePill
                 value={formData.fechaInicio}
                 onChange={handleDateChange('fechaInicio')}

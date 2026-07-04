@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 import {
 
@@ -10,6 +10,8 @@ import {
 
   Typography,
 
+  Button,
+
 } from '@mui/material';
 
 import { useHabits, useRutinas } from '@shared/context';
@@ -18,7 +20,8 @@ import clienteAxios from '@shared/config/axios';
 
 import { DEFAULT_HABIT_ICON } from '@shared/utils/habitIcons';
 
-import { useResponsive } from '@shared/hooks';
+import { useResponsive, useHabitSectionCreateOption } from '@shared/hooks';
+import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
 
 import {
 
@@ -30,15 +33,15 @@ import {
 
   HabitFormTitleField,
 
+  TASK_FORM_HORIZONTAL_PX,
+
 } from '@shared/components/forms/tareaFormUi';
 
-import HabitFormFields from '@foco/features/habits/templates/HabitFormFields';
+import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
 
-import { DEFAULT_HABIT_CONFIG, normalizeHabitConfig } from '@foco/features/habits/templates/habitFormDefaults';
+import { DEFAULT_HABIT_CONFIG, normalizeHabitConfig, saveHabitFromForm } from '@shared/habits/form';
 
 import { normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
-
-import { saveHabitFromForm } from '@foco/features/habits/templates/saveHabitFromForm';
 
 
 
@@ -50,7 +53,10 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
   const { isMobile } = useResponsive();
 
-  const { habits, addHabit, updateHabit, fetchHabits } = useHabits();
+  const { habits, customSections, addHabit, updateHabit, deleteHabit, fetchHabits } = useHabits();
+  const { sectionOptions, sectionSelectProps, groupDialogProps } = useHabitSectionCreateOption({
+    onSectionCreated: (sectionId) => setFormData((prev) => ({ ...prev, section: sectionId })),
+  });
 
   const { updateUserHabitPreference, rutina } = useRutinas();
 
@@ -100,31 +106,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
       const habitConfig = habitId ? rutina?.config?.[editingSection]?.[habitId] : null;
 
-      if (habitConfig) {
-
-        setConfig({
-
-          tipo: habitConfig.tipo || 'DIARIO',
-
-          frecuencia: Number(habitConfig.frecuencia || 1),
-
-          activo: habitConfig.activo !== false,
-
-          periodo: habitConfig.periodo || 'CADA_DIA',
-
-          diasSemana: Array.isArray(habitConfig.diasSemana) ? [...habitConfig.diasSemana] : [],
-
-          diasMes: Array.isArray(habitConfig.diasMes) ? [...habitConfig.diasMes] : [],
-
-          horarios: Array.isArray(habitConfig.horarios) ? [...habitConfig.horarios] : [],
-
-        });
-
-      } else {
-
-        setConfig({ ...DEFAULT_HABIT_CONFIG });
-
-      }
+      setConfig(normalizeHabitConfig(habitConfig || DEFAULT_HABIT_CONFIG));
 
     } else {
 
@@ -144,7 +126,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
     setErrors({});
 
-  }, [open, editingHabit, editingSection, initialDraft, rutina?.config]);
+  }, [open, editingHabit, editingSection, initialDraft, rutina]);
 
 
 
@@ -326,9 +308,38 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
   }, []);
 
+  const isEditing = Boolean(editingHabit && editingSection);
+  const sectionHabitCount = (habits[editingSection] || []).length;
+  const canDelete = isEditing && sectionHabitCount > 1;
+
+  const handleDelete = async () => {
+    if (!isEditing) return;
+
+    const habitId = editingHabit.id || editingHabit._id;
+    const habitLabel = (formData.label || editingHabit.label || 'este hábito').trim();
+
+    if (!window.confirm(`¿Eliminar el hábito "${habitLabel}"?`)) return;
+
+    setIsSaving(true);
+    try {
+      await deleteHabit(habitId, editingSection);
+      await fetchHabits();
+      onClose();
+    } catch (error) {
+      console.error('[HabitFormDialog] Error al eliminar hábito:', error);
+      setErrors({
+        submit: error.response?.data?.error || error.message || 'Error al eliminar el hábito',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
 
   return (
+
+    <>
 
     <Dialog
 
@@ -362,33 +373,51 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
         <TareaFormHeader onClose={onClose}>
 
-          <HabitFormTitleField
+          <Box sx={{ px: TASK_FORM_HORIZONTAL_PX, pt: 0.5, pb: 0.5 }}>
 
-            value={formData.label}
+            <HabitFormTitleField
 
-            onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
+              value={formData.label}
 
-            icon={formData.icon}
+              onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
 
-            onIconChange={(icon) => setFormData((prev) => ({ ...prev, icon }))}
+              icon={formData.icon}
 
-            placeholder="Nombre del hábito"
+              onIconChange={(icon) => setFormData((prev) => ({ ...prev, icon }))}
 
-            error={!!errors.label}
+              placeholder="Nombre del hábito"
 
-            iconError={!!errors.icon}
+              error={!!errors.label}
 
-            helperText={errors.label}
+              iconError={!!errors.icon}
 
-            autoFocus
+              helperText={errors.label}
 
-          />
+              autoFocus
+
+              showSection
+
+              section={formData.section}
+
+              onSectionChange={(section) => setFormData((prev) => ({ ...prev, section }))}
+
+              sectionOptions={sectionOptions}
+
+              sectionError={errors.section}
+
+              onCreateSection={sectionSelectProps.onCreate}
+
+              createSectionLabel={sectionSelectProps.createLabel}
+
+            />
+
+          </Box>
 
         </TareaFormHeader>
 
 
 
-        <Box sx={{ px: 2 }}>
+        <Box sx={{ px: TASK_FORM_HORIZONTAL_PX, pb: 1 }}>
 
           <HabitFormFields
 
@@ -406,11 +435,17 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
             errors={errors}
 
-            showSection
+            showSection={false}
 
             showIconPicker={false}
 
             showCadence
+
+            sectionOptions={sectionOptions}
+
+            onCreateSection={sectionSelectProps.onCreate}
+
+            createSectionLabel={sectionSelectProps.createLabel}
 
           />
 
@@ -436,13 +471,29 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
           saving={isSaving}
 
-          saveLabel={isSaving ? 'Guardando...' : 'Guardar'}
+          saveLabel={isSaving ? 'Guardando...' : (isEditing ? 'Guardar cambios' : 'Agregar hábito')}
+
+          leftAction={isEditing ? (
+            <Button
+              color="error"
+              size="small"
+              onClick={handleDelete}
+              disabled={!canDelete || isSaving}
+              sx={{ textTransform: 'none' }}
+            >
+              Eliminar hábito
+            </Button>
+          ) : null}
 
         />
 
       </DialogContent>
 
     </Dialog>
+
+    <HabitGroupFormDialog {...groupDialogProps} />
+
+    </>
 
   );
 

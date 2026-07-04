@@ -24,6 +24,3 @@ export { ToolbarAddButton, TOOLBAR_ICON_BUTTON_SX } from './ToolbarAddButton.jsx
 export * from './snackbarUtils.jsx';
 export * from './StatusSystem.js';
 export * from './CommonFormStyles.jsx';
-
-// Alias para CustomSnackbarProvider (probablemente está en snackbarUtils)
-export { default as CustomSnackbarProvider } from './snackbarUtils.jsx';

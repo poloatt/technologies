@@ -13,9 +13,8 @@ import {
   resolveToolbarRightByPath,
 } from './toolbarModules';
 import { getAgendaBarSlot } from './toolbarRegistry';
-import { resolveAttaBranchHubPath, resolveFocoBranchHubPath } from './appNavResolver';
+import { resolveAttaBranchHubPath } from './appNavResolver';
 import { isAttaToolbarPath, isPulsoToolbarPath } from './unifiedBarPaths';
-import { isFocoHubPath } from './tiempoToolbarPaths';
 
 /**
  * Barra superior unificada (Foco / Atta / Pulso):
@@ -47,11 +46,10 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   }, []);
 
   const showRightNav = !isMobile || showEntityToolbarNavigation;
-  const isHubPath = isFocoHubPath(path);
   const isAttaPath = isAttaToolbarPath(path);
   const isPulsoPath = isPulsoToolbarPath(path);
   const showRutinasActions = isRutinasPath(path);
-  const useCenterActionsOverlay = isHubPath || isAttaPath || isPulsoPath || showRutinasActions;
+  const useCenterActionsOverlay = isAttaPath || isPulsoPath || showRutinasActions;
   const hideGridCenter = useCenterActionsOverlay;
   const showAttaBranchSwitcher = isAttaPath && !isMobile && RightComp;
 
@@ -62,9 +60,8 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   const gridColumns = showRightGridColumn ? '1fr auto' : '1fr';
 
   const showAttaBranchBack = isAttaPath && !!resolveAttaBranchHubPath(path);
-  const showFocoBranchBack = !!resolveFocoBranchHubPath(path);
   const TOOLBAR_BACK_SLOT_WIDTH = 34;
-  const showBranchBack = (showAttaBranchBack || showFocoBranchBack) && !isMobile;
+  const showBranchBack = showAttaBranchBack && !isMobile;
   const MOBILE_LEFT_INSET = 0;
   const rutinasFullBleedLeft = showRutinasActions && isMobileOrTablet;
   const baseCenterInsetLeft = rutinasFullBleedLeft
@@ -108,7 +105,6 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
             '& > *': { pointerEvents: 'auto' },
           }}
         >
-          {isHubPath && FocoCenterActions && <FocoCenterActions section="hub" dense />}
           {showRutinasActions && FocoCenterActions && (
             <Box
               sx={{

@@ -172,7 +172,7 @@ export function getBreadcrumbInfo(currentPath) {
 
 const ATTA_PATHS = ['/finanzas', '/propiedades'];
 const PULSO_PATHS = ['/datacorporal', '/dieta', '/lab'];
-const FOCO_PATHS = ['/foco', '/rutinas', '/objetivos', '/tareas', '/archivo', '/configuracion'];
+const FOCO_PATHS = ['/rutinas', '/objetivos', '/tareas', '/archivo', '/configuracion'];
 
 const PORT_APP_MAPPING = {
   '5174': 'atta',

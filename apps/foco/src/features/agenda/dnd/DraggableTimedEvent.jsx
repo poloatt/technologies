@@ -3,8 +3,8 @@ import { Box } from '@mui/material';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { isTaskCompleted } from '@shared/utils/agendaRules';
-import AgendaEventBlock from '../AgendaEventBlock';
-import { getEventDragId } from './calendarDragUtils';
+import TaskEventBlock from '@shared/components/tasks/TaskEventBlock';
+import { getEventDragId } from '@shared/utils/calendar/calendarDragUtils';
 
 export default function DraggableTimedEvent({
   event,
@@ -50,7 +50,7 @@ export default function DraggableTimedEvent({
       }}
       {...(disabled ? {} : { ...listeners, ...attributes })}
     >
-      <AgendaEventBlock
+      <TaskEventBlock
         event={event}
         timedCompact
         onClick={onEventClick}

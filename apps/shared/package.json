@@ -8,11 +8,19 @@
     ".": {
       "import": "./index.js"
     },
+    "./components/tasks": {
+      "import": "./components/tasks/index.js"
+    },
+    "./components/tasks/*": "./components/tasks/*",
     "./components/*": "./components/*",
     "./context/*": "./context/*",
     "./hooks/*": "./hooks/*",
     "./services/*": "./services/*",
     "./utils/*": "./utils/*",
+    "./habits": {
+      "import": "./habits/index.js"
+    },
+    "./habits/*": "./habits/*",
     "./styles/*": "./styles/*",
     "./layouts/*": "./layouts/*",
     "./navigation/*": "./navigation/*",
@@ -36,7 +44,7 @@
     "@mui/material": "^5.15.10",
     "@mui/x-date-pickers": "^5.0.20",
     "axios": "^1.6.7",
-    "date-fns": "^2.30.0",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.4.6",
     "notistack": "^3.0.1",
     "react-hot-toast": "^2.4.1"

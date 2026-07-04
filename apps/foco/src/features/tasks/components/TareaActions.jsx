@@ -5,12 +5,18 @@ import {
   DeleteOutlined as DeleteIcon,
   CalendarTodayOutlined as PushIcon,
   PersonOutlined as DelegateIcon,
-  PriorityHighOutlined as PriorityIcon,
   CheckCircleOutlined as CompleteIcon,
   RefreshOutlined as ReactivateIcon,
-  CancelOutlined as CancelIcon
+  CancelOutlined as CancelIcon,
+  Google as GoogleIcon,
+  Sync as SyncIcon,
 } from '@mui/icons-material';
 import { SystemButtons } from '@shared/components/common/SystemButtons';
+import {
+  TAREA_FORM_CHEVRON_ICON_SIZE,
+  TareaFormPriorityToggle,
+  TareaFormAttachButton,
+} from '@shared/components/forms/tareaFormUi';
 
 const TareaActions = ({
   tarea,
@@ -19,57 +25,92 @@ const TareaActions = ({
   onPush,
   onDelegate,
   onTogglePriority,
+  onAttach,
   onComplete,
   onReactivate,
-  onCancel
+  onCancel,
+  onGoogleSync,
+  syncingToGoogle = false,
+  googleTasksSync,
+  hideEdit = false,
+  variant = 'full',
+  isCreateMode = false,
 }) => {
   const actions = [];
+  const isEvento = tarea?.tipo === 'EVENTO';
+  const isHighPriority = tarea?.prioridad === 'ALTA';
 
-  if (!tarea.completada) {
+  const guardCreate = (action) => (
+    isCreateMode ? { ...action, disabled: true } : action
+  );
+
+  const attachAction = onAttach ? {
+    key: 'attach',
+    icon: <TareaFormAttachButton onChange={onAttach} />,
+    label: 'Adjuntar',
+    tooltip: 'Adjuntar',
+  } : null;
+
+  const priorityAction = !isEvento && onTogglePriority ? {
+    key: 'priority',
+    icon: (
+      <TareaFormPriorityToggle
+        prioridad={tarea.prioridad}
+        onChange={() => onTogglePriority(tarea)}
+      />
+    ),
+    label: isHighPriority ? 'Prioridad baja' : 'Prioridad alta',
+    tooltip: isHighPriority ? 'Cambiar a prioridad baja' : 'Cambiar a prioridad alta',
+  } : null;
+
+  if (variant === 'form') {
+    if (attachAction) actions.push(attachAction);
+    if (priorityAction) actions.push(priorityAction);
+  } else if (!tarea.completada) {
     actions.push(
-      {
+      guardCreate({
         key: 'push',
         icon: <PushIcon />,
         label: 'Empujar',
-        tooltip: 'Empujar',
-        onClick: () => onPush(tarea)
-      },
-      {
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Empujar',
+        onClick: () => onPush?.(tarea),
+      }),
+      guardCreate({
         key: 'delegate',
         icon: <DelegateIcon />,
         label: 'Delegar',
-        tooltip: 'Delegar',
-        onClick: () => onDelegate(tarea)
-      },
-      {
-        key: 'priority',
-        icon: <PriorityIcon />,
-        label: tarea.prioridad === 'ALTA' ? 'Prioridad baja' : 'Prioridad alta',
-        tooltip: tarea.prioridad === 'ALTA' ? 'Cambiar a prioridad baja' : 'Cambiar a prioridad alta',
-        onClick: () => onTogglePriority(tarea)
-      },
-      {
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Delegar',
+        onClick: () => onDelegate?.(tarea),
+      }),
+    );
+    if (attachAction) actions.push(attachAction);
+    if (priorityAction) actions.push(priorityAction);
+    actions.push(
+      guardCreate({
         key: 'cancel',
         icon: <CancelIcon />,
         label: 'Cancelar',
-        tooltip: 'Cancelar',
-        onClick: () => onCancel(tarea)
-      },
-      {
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Cancelar',
+        onClick: () => onCancel?.(tarea),
+      }),
+      guardCreate({
         key: 'complete',
         icon: <CompleteIcon />,
         label: 'Completar todo',
-        tooltip: 'Completar todo',
-        onClick: () => onComplete(tarea)
-      },
-      {
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Completar todo',
+        onClick: () => onComplete?.(tarea),
+      }),
+    );
+
+    if (!hideEdit) {
+      actions.push(guardCreate({
         key: 'edit',
         icon: <EditIcon />,
         label: 'Editar',
-        tooltip: 'Editar',
-        onClick: () => onEdit && onEdit(tarea)
-      }
-    );
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Editar',
+        onClick: () => onEdit?.(tarea),
+      }));
+    }
   } else {
     actions.push({
       key: 'reactivate',
@@ -78,17 +119,37 @@ const TareaActions = ({
       tooltip: 'Reactivar',
       onClick: () => onReactivate(tarea)
     });
+    if (attachAction) actions.push(attachAction);
+    if (priorityAction) actions.push(priorityAction);
   }
 
-  actions.push({
-    key: 'delete',
-    icon: <DeleteIcon />,
-    label: 'Eliminar',
-    tooltip: 'Eliminar',
-    onClick: () => onDelete(tarea._id),
-    confirm: true,
-    confirmText: 'la tarea'
-  });
+  if (onGoogleSync || isCreateMode) {
+    const isSynced = Boolean(googleTasksSync?.googleTaskId);
+    actions.push({
+      key: 'googleSync',
+      icon: syncingToGoogle
+        ? <SyncIcon className="animate-spin" sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />
+        : <GoogleIcon sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />,
+      label: isSynced ? 'Sincronizado con Google Tasks' : 'Sincronizar con Google Tasks',
+      tooltip: isCreateMode ? 'Guarda la tarea primero' : (isSynced ? 'Sincronizado con Google Tasks' : 'Sincronizar con Google Tasks'),
+      color: isSynced ? 'success.main' : 'text.secondary',
+      hoverColor: isSynced ? 'success.main' : 'text.primary',
+      disabled: syncingToGoogle || isCreateMode,
+      onClick: onGoogleSync,
+    });
+  }
+
+  if (variant !== 'form') {
+    actions.push(guardCreate({
+      key: 'delete',
+      icon: <DeleteIcon />,
+      label: 'Eliminar',
+      tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Eliminar',
+      onClick: () => onDelete?.(tarea._id),
+      confirm: !isCreateMode,
+      confirmText: 'la tarea',
+    }));
+  }
 
   return (
     <Box>

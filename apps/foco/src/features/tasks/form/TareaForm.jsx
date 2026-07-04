@@ -19,10 +19,13 @@ import {
   TareaFormHeaderTitleRow,
   HabitFormTitleField,
   TAREA_FORM_HEADER_ACTION_GUTTER,
+  TareaFormDialogShell,
+  TareaFormAttachmentsSection,
+  useTareaFormAttachments,
 } from '@shared/components/forms/tareaFormUi';
 import TareaFormAdvancedFields from './TareaFormAdvancedFields';
-import HabitFormFields from '../../habits/templates/HabitFormFields';
-import { saveHabitFromForm } from '../../habits/templates/saveHabitFromForm';
+import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
+import { saveHabitFromForm } from '@shared/habits/form';
 import { useHabitFormState } from '../../habits/templates/useHabitFormState';
 import { useResponsive } from '@shared/hooks';
 import { useHabits, useRutinas } from '@shared/context';
@@ -30,9 +33,6 @@ import {
   Google as GoogleIcon,
   Sync as SyncIcon,
 } from '@mui/icons-material';
-import TareaFormDialogShell from './components/TareaFormDialogShell';
-import TareaFormAttachmentsSection from './components/TareaFormAttachmentsSection';
-import { useTareaFormAttachments } from './components/useTareaFormAttachments';
 import { useSnackbar } from 'notistack';
 import clienteAxios from '@shared/config/axios';
 import {

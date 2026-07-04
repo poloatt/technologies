@@ -20,10 +20,10 @@ import {
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { getIconByName } from '@shared/utils/iconConfig';
-import { getFrecuenciaLabel } from '@shared/utils/cadenciaUtils';
+import { getFrecuenciaLabel } from '@shared/habits';
 import { getTimeOfDayLabels } from '@shared/utils/timeOfDayUtils';
 import { getHubSubsectionSx } from '@shared/styles/hubSectionStyles';
-import { getHabitConfig } from './habitsManagerUtils';
+import { getHabitConfig } from '@shared/habits/form/habitsManagerUtils';
 
 function CompactSelectedHabit({ habit, habitConfig, onToggleList }) {
   const Icon = getIconByName(habit?.icon);

@@ -3,6 +3,15 @@ import { Rutinas } from '../models/Rutinas.js';
 import { Users } from '../models/index.js';
 import { applyCustomHabitsToRutinaConfig } from '../constants/defaultCustomHabits.js';
 import { timezoneUtils } from '../models/BaseSchema.js';
+import { getValidHabitSections } from '../utils/habitSectionsUtils.js';
+import {
+  collectRutinaUpdateSectionKeys,
+  buildRutinaUpdatePatches,
+} from '../utils/rutinaUpdatePatches.js';
+import {
+  buildRutinaUpdateSetOps,
+  calculateRutinaCompletitud,
+} from '../utils/rutinaCompletitudUtils.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 
@@ -130,7 +139,10 @@ class RutinasController extends BaseController {
       }
       
       // --- Construir configuración completa (evitar config vacío/incompleto) ---
-      const seccionesValidas = ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'];
+      const usuarioConfig = await Users.findById(req.user.id)
+        .select('customHabits preferences.rutinasConfig preferences.customHabitSections')
+        .lean();
+      const seccionesValidas = getValidHabitSections(usuarioConfig);
       // Función helper para normalizar horarios
       const normalizeHorarios = (horarios) => {
         if (!horarios) return [];
@@ -175,13 +187,9 @@ class RutinasController extends BaseController {
         });
 
         try {
-          const usuario = await Users.findById(req.user.id)
-            .select('customHabits preferences.rutinasConfig')
-            .lean();
-
           applyCustomHabitsToRutinaConfig(
-            usuario?.customHabits,
-            usuario?.preferences?.rutinasConfig,
+            usuarioConfig?.customHabits,
+            usuarioConfig?.preferences?.rutinasConfig,
             seccionesValidas,
             normalizeItemConfig,
             full,
@@ -195,19 +203,17 @@ class RutinasController extends BaseController {
 
       const mergeConfigInto = (target, source) => {
         if (!source || typeof source !== 'object') return target;
-        seccionesValidas.forEach(section => {
-          if (!source[section] || typeof source[section] !== 'object') return;
+        Object.keys(source).forEach((section) => {
+          if (section === '_metadata' || !source[section] || typeof source[section] !== 'object') return;
           if (!target[section]) target[section] = {};
           Object.entries(source[section]).forEach(([itemId, cfg]) => {
             if (!target[section][itemId]) {
-              // IMPORTANTE: Ya no validar contra el esquema base porque las secciones son Mixed
-              // Permitir cualquier itemId (incluyendo hábitos personalizados)
               target[section][itemId] = normalizeItemConfig(cfg);
               return;
             }
             target[section][itemId] = {
               ...target[section][itemId],
-              ...normalizeItemConfig(cfg, target[section][itemId]?.tipo || 'DIARIO')
+              ...normalizeItemConfig(cfg, target[section][itemId]?.tipo || 'DIARIO'),
             };
           });
         });
@@ -361,13 +367,7 @@ class RutinasController extends BaseController {
       const { id } = req.params;
       
       logger.info('Rutina update start', { id });
-      logger.data('rutina.update.request', req.body);
       
-      // Verificar si se debe preservar cambios locales
-      const preserveLocalChanges = req.body._preserve_local_changes === true;
-      logger.dev('Preserve local changes', { preserveLocalChanges });
-      
-      // Obtener la rutina actual
       const currentRutina = await this.Model.findOne({ 
         _id: id, 
         usuario: req.user.id 
@@ -401,214 +401,34 @@ class RutinasController extends BaseController {
         }
       }
 
-      // Preparar los datos actualizados preservando los campos existentes
-      // IMPORTANTE: Convertir secciones Mixed a objetos planos para merge correcto
-      const currentBodyCare = currentRutina.bodyCare && typeof currentRutina.bodyCare.toObject === 'function'
-        ? currentRutina.bodyCare.toObject()
-        : (currentRutina.bodyCare || {});
-      const currentNutricion = currentRutina.nutricion && typeof currentRutina.nutricion.toObject === 'function'
-        ? currentRutina.nutricion.toObject()
-        : (currentRutina.nutricion || {});
-      const currentEjercicio = currentRutina.ejercicio && typeof currentRutina.ejercicio.toObject === 'function'
-        ? currentRutina.ejercicio.toObject()
-        : (currentRutina.ejercicio || {});
-      const currentCleaning = currentRutina.cleaning && typeof currentRutina.cleaning.toObject === 'function'
-        ? currentRutina.cleaning.toObject()
-        : (currentRutina.cleaning || {});
+      const sectionKeys = collectRutinaUpdateSectionKeys(currentRutina, req.body);
+      const patches = buildRutinaUpdatePatches(currentRutina, req.body, sectionKeys);
+      const updateOps = buildRutinaUpdateSetOps(patches, req.body, currentRutina);
 
-      const updateData = {
-        ...currentRutina.toObject(),
-        ...req.body,
-        bodyCare: {
-          ...currentBodyCare,
-          ...(req.body.bodyCare || {})
-        },
-        nutricion: {
-          ...currentNutricion,
-          ...(req.body.nutricion || {})
-        },
-        ejercicio: {
-          ...currentEjercicio,
-          ...(req.body.ejercicio || {})
-        },
-        cleaning: {
-          ...currentCleaning,
-          ...(req.body.cleaning || {})
-        },
-      };
+      let updatedRutina = await this.Model.findOneAndUpdate(
+        { _id: id, usuario: req.user.id },
+        { $set: updateOps },
+        { new: true },
+      );
 
-      // Manejar actualizaciones de configuración con mayor detalle
-      if (req.body.config) {
-        logger.data('rutina.update.config.in', req.body.config);
-        
-        // Si no existía config, inicializarla
-        if (!updateData.config) {
-          updateData.config = {};
-        }
-        
-        // Solo procesar secciones válidas
-        const seccionesValidas = ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'];
-        Object.keys(req.body.config).forEach(seccion => {
-          if (!seccionesValidas.includes(seccion)) return; // Ignora claves no válidas
-          if (!updateData.config[seccion]) {
-            updateData.config[seccion] = {};
-          }
-          // Actualizar items de configuración mencionados en la solicitud
-          Object.keys(req.body.config[seccion]).forEach(item => {
-            const newItemConfig = req.body.config[seccion][item];
-            // Logs detallados para depuración
-            logger.dev(`Config recibida ${seccion}.${item}`, newItemConfig);
-            // Preservar la configuración existente no mencionada en la solicitud
-            updateData.config[seccion][item] = {
-              ...updateData.config[seccion][item],
-              ...newItemConfig,
-              // Asegurar que la frecuencia se guarde como número
-              frecuencia: Number(newItemConfig.frecuencia || 1)
-            };
-            logger.dev(`Config actualizada ${seccion}.${item}`, updateData.config[seccion][item]);
-          });
-        });
-      }
-
-      // Si se está actualizando un campo de completitud, actualizar la última completación
-      // Soporta dos formatos:
-      // 1. Legacy (boolean): { itemId: true/false }
-      // 2. Nuevo formato (objeto por horario): { itemId: { MAÑANA: true, NOCHE: false } }
-      ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
-        if (req.body[section]) {
-          Object.entries(req.body[section]).forEach(([key, value]) => {
-            // Verificar que existe la sección y el ítem en config
-            if (!updateData.config[section]) {
-              logger.dev(`Inicializando config[${section}]`);
-              updateData.config[section] = {};
-            }
-            
-            // Verificar que existe el ítem en la sección
-            if (!updateData.config[section][key]) {
-              logger.dev(`Inicializando config[${section}][${key}]`);
-              updateData.config[section][key] = {
-                tipo: 'DIARIO',
-                diasSemana: [],
-                diasMes: [],
-                frecuencia: 1,
-                activo: true
-              };
-            }
-            
-            // Detectar si el valor es un objeto (nuevo formato) o boolean (legacy)
-            const isObjectFormat = typeof value === 'object' && value !== null && !Array.isArray(value);
-            const isBooleanFormat = typeof value === 'boolean';
-            
-            if (isObjectFormat) {
-              // Nuevo formato: objeto con horarios { MAÑANA: true, NOCHE: false }
-              // Verificar si algún horario se está marcando como completado por primera vez
-              const currentValue = currentRutina[section]?.[key];
-              const currentIsObject = typeof currentValue === 'object' && currentValue !== null && !Array.isArray(currentValue);
-              
-              // Si hay algún horario que se marca como true y antes no estaba marcado
-              const hasNewCompletion = Object.entries(value).some(([horario, completado]) => {
-                if (completado === true) {
-                  if (currentIsObject) {
-                    return !currentValue[horario];
-                  } else {
-                    // Si antes era boolean false o no existía, es una nueva completación
-                    return !currentValue;
-                  }
-                }
-                return false;
-              });
-              
-              if (hasNewCompletion) {
-                updateData.config[section][key].ultimaCompletacion = new Date();
-                logger.dev(`UltimaCompletacion actualizada (formato objeto)`, { item: `${section}.${key}`, horarios: value });
-              }
-            } else if (isBooleanFormat) {
-              // Formato legacy: boolean simple
-              if (value === true && (!currentRutina[section][key] || currentRutina[section][key] === false)) {
-                updateData.config[section][key].ultimaCompletacion = new Date();
-                logger.dev(`UltimaCompletacion actualizada (formato legacy)`, { item: `${section}.${key}` });
-              }
-            }
-          });
-        }
-      });
-
-      // Eliminar campos que no queremos actualizar
-      delete updateData._id;
-      delete updateData.id;
-      delete updateData.__v;
-      delete updateData.createdAt;
-      delete updateData.updatedAt;
-
-      logger.data('rutina.update.mongo.payload', { config: updateData.config, fecha: updateData.fecha });
-
-      // CRÍTICO: Usar findOne + save en lugar de findOneAndUpdate para poder usar markModified
-      // Esto es necesario porque las secciones ahora son Schema.Types.Mixed y necesitan markModified
-      const rutinaToUpdate = await this.Model.findOne({ _id: id, usuario: req.user.id });
-      
-      if (!rutinaToUpdate) {
+      if (!updatedRutina) {
         return res.status(404).json({ error: 'Rutina no encontrada' });
       }
 
-      // Aplicar los cambios
-      Object.assign(rutinaToUpdate, updateData);
-      
-      // Marcar secciones como modificadas si tienen cambios (necesario para Schema.Types.Mixed)
-      ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
-        if (updateData[section] && Object.keys(updateData[section]).length > 0) {
-          rutinaToUpdate.markModified(section);
-          // Marcar cada campo dentro de la sección para asegurar que se guarde
-          Object.keys(updateData[section]).forEach(field => {
-            rutinaToUpdate.markModified(`${section}.${field}`);
-          });
-        }
-      });
-      
-      // Guardar con validación
-      const updatedRutina = await rutinaToUpdate.save();
+      const completitudFields = calculateRutinaCompletitud(updatedRutina);
+      updatedRutina = await this.Model.findOneAndUpdate(
+        { _id: id, usuario: req.user.id },
+        { $set: completitudFields },
+        { new: true },
+      );
 
       logger.info('Rutina actualizada', { id: updatedRutina._id });
 
-      // Verificar si hay alguna configuración que debería haberse actualizado
-      if (req.body.config) {
-        for (const section of ['bodyCare', 'nutricion', 'ejercicio', 'cleaning']) {
-          if (req.body.config[section]) {
-            for (const [itemId, itemConfig] of Object.entries(req.body.config[section])) {
-              // Verificar si hay discrepancias entre lo que se envió y lo que se guardó
-              if (itemConfig && typeof itemConfig === 'object') {
-                const savedConfig = updatedRutina.config?.[section]?.[itemId];
-                if (savedConfig) {
-                  logger.dev(`Comparando configuración para ${section}.${itemId}`);
-                  if (itemConfig.frecuencia !== undefined) {
-                    // Convertir a número ambos valores para comparación justa
-                    const sentFreq = Number(itemConfig.frecuencia);
-                    const savedFreq = Number(savedConfig.frecuencia);
-                    logger.dev('Freq comparada', { section, itemId, sentFreq, savedFreq, iguales: sentFreq === savedFreq });
-                  }
-                  if (itemConfig.tipo !== undefined) {
-                    const sentTipo = (itemConfig.tipo || '').toUpperCase();
-                    const savedTipo = (savedConfig.tipo || '').toUpperCase();
-                    logger.dev('Tipo comparado', { section, itemId, sentTipo, savedTipo, iguales: sentTipo === savedTipo });
-                  }
-                  if (itemConfig.periodo !== undefined) {
-                    logger.dev('Periodo comparado', { section, itemId, enviado: itemConfig.periodo, guardado: savedConfig.periodo, iguales: itemConfig.periodo === savedConfig.periodo });
-                  }
-                } else {
-                  logger.dev(`No se encontró configuración guardada`, { section, itemId });
-                }
-              }
-            }
-          }
-        }
+      const responseObj = await this.Model.findById(updatedRutina._id).lean();
+      if (!responseObj) {
+        return res.status(404).json({ error: 'Rutina no encontrada' });
       }
-
-      logger.dev('Verificación final OK', { id: updatedRutina._id });
-
-      // Convertir cualquier ObjectId a string para garantizar compatibilidad
-      const responseObj = updatedRutina.toObject();
       responseObj._id = responseObj._id.toString();
-      
-      // Logs de tipos de datos eliminados para producción
 
       res.json(responseObj);
     } catch (error) {
@@ -790,17 +610,15 @@ class RutinasController extends BaseController {
           // Función helper para fusionar configuración
           const mergeConfigInto = (target, source) => {
             if (!source || typeof source !== 'object') return target;
-            const seccionesValidas = ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'];
-            seccionesValidas.forEach(section => {
-              if (!source[section] || typeof source[section] !== 'object') return;
+            Object.keys(source).forEach((section) => {
+              if (section === '_metadata' || !source[section] || typeof source[section] !== 'object') return;
               if (!target.config) target.config = {};
               if (!target.config[section]) target.config[section] = {};
               Object.entries(source[section]).forEach(([itemId, cfg]) => {
                 if (cfg && typeof cfg === 'object') {
-                  // Fusionar: preferencias globales sobre config de rutina
                   target.config[section][itemId] = {
                     ...(target.config[section][itemId] || {}),
-                    ...cfg
+                    ...cfg,
                   };
                 }
               });

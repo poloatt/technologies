@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import {
   getCarouselCompletedTodayItems,
   getCarouselItemsForMode,
-} from '@shared/utils/habitVisibilityEngine';
+} from '@shared/habits';
 
 /**
  * Filtra items del carrusel según modo Ahora/Luego.

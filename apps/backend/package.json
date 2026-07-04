@@ -8,8 +8,8 @@
     "prestart": "node -e \"const fs=require('fs');const content=fs.readFileSync('src/services/googleTasksService.js','utf8');const hasMerge=/(<<<<<<< HEAD|=======|>>>>>>> )/m.test(content);if(hasMerge){console.error('ERROR: Marcadores de merge detectados en googleTasksService.js');process.exit(1);}console.log('✓ googleTasksService.js sin marcadores de merge');\" || true",
     "start": "node src/index.js",
     "start-simple": "node src/index-simple.js",
-    "dev": "set NODE_ENV=development && nodemon src/index.js",
-    "prod": "set NODE_ENV=production && node src/index.js",
+    "dev": "nodemon src/index.js",
+    "prod": "node src/index.js",
     "lint": "eslint src",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
     "test:prod": "set NODE_ENV=production && node --experimental-vm-modules ../../node_modules/jest/bin/jest.js",
@@ -21,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@attadia/shared": "*",
     "@faker-js/faker": "^9.9.0",
     "@mui/icons-material": "^6.4.4",
     "bcryptjs": "^2.4.3",
@@ -51,6 +52,7 @@
   "devDependencies": {
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.0.0"
   }
 }

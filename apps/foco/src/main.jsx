@@ -19,8 +19,8 @@ const routerConfig = {
 
 // Configuración específica para Foco
 const AppConfig = {
-  name: 'Agenda',
-  title: 'Agenda',
+  name: 'Foco',
+  title: 'Foco',
   theme: 'blue',
   primaryColor: '#1976d2'
 }
@@ -64,15 +64,6 @@ const focoRoutesMap = {
       update: (id, data) => clienteAxios.put(`/api/rutinas/${id}`, data).then(res => res.data),
       delete: (id) => clienteAxios.delete(`/api/rutinas/${id}`).then(res => res.data),
       getById: (id) => clienteAxios.get(`/api/rutinas/${id}`).then(res => res.data)
-    }
-  },
-  '/foco': {
-    entity: 'tarea',
-    apiService: {
-      create: (data) => clienteAxios.post('/api/tareas', data).then(res => res.data),
-      update: (id, data) => clienteAxios.put(`/api/tareas/${id}`, data).then(res => res.data),
-      delete: (id) => clienteAxios.delete(`/api/tareas/${id}`).then(res => res.data),
-      getById: (id) => clienteAxios.get(`/api/tareas/${id}`).then(res => res.data)
     }
   }
 }

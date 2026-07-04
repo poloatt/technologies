@@ -342,42 +342,6 @@ export function resolveAttaBranchHubLabel(pathname) {
   return 'Volver';
 }
 
-const FOCO_HUB_PATH = '/foco';
-
-/**
- * Hub Foco para botón «atrás» en subpáginas (Tareas, Hábitos, etc.).
- * En /foco no hay destino de vuelta.
- */
-export function resolveFocoBranchHubPath(pathname) {
-  if (!pathname || pathname === FOCO_HUB_PATH || pathname.startsWith(`${FOCO_HUB_PATH}/`)) {
-    return null;
-  }
-
-  const focoSubPrefixes = [
-    '/tareas',
-    '/objetivos',
-    '/rutinas',
-    '/archivo',
-    '/proyectos',
-    '/tiempo/objetivos',
-    '/tiempo/tareas',
-    '/tiempo/rutinas',
-    '/tiempo/proyectos',
-  ];
-
-  if (focoSubPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
-    return FOCO_HUB_PATH;
-  }
-
-  return null;
-}
-
-/** Etiqueta del hub Foco (tooltip del botón atrás). */
-export function resolveFocoBranchHubLabel(pathname) {
-  if (!resolveFocoBranchHubPath(pathname)) return null;
-  return 'Foco';
-}
-
 export function isAttaBranchActive(pathname, branch) {
   if (!branch) return false;
   if (branch.id === 'finanzas') {

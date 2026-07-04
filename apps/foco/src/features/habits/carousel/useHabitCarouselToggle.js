@@ -1,8 +1,11 @@
 import { useCallback } from 'react';
-import { getHorarioForCarousel } from '@shared/utils/habitTimeLogic';
-import { computeCarouselToggleValue } from '@shared/utils/habitToggleUtils';
-import { computeRutinaToggleValue } from '@shared/domain/habits';
-import { resolveCarouselItemConfig } from '@shared/utils/habitVisibilityEngine';
+import {
+  getHorarioForCarousel,
+  computeRutinaToggleValue,
+  resolveCarouselItemConfig,
+  computeCarouselToggleValue,
+  persistRutinaItemToggle,
+} from '@shared/habits';
 
 /**
  * Toggle de completado con soporte multi-horario y UI optimista.
@@ -24,7 +27,7 @@ export default function useHabitCarouselToggle({
     if (!interactive) return;
     if (dragRef.current.moved) return;
     if (!rutinaHoy?._id) return;
-    if (!markItemComplete || typeof markItemComplete !== 'function') {
+    if (!markItemComplete) {
       console.warn(`${logPrefix} markItemComplete no disponible en contexto`);
       return;
     }
@@ -65,22 +68,17 @@ export default function useHabitCarouselToggle({
         normalizedHorario,
       });
 
-    const itemData = { [itemId]: newValue };
-    const previousValue = itemValue;
-
-    if (patchRutinaSection) {
-      patchRutinaSection(rutinaHoy._id, section, itemData);
-    }
-
     try {
-      await markItemComplete(rutinaHoy._id, section, itemData);
+      await persistRutinaItemToggle({
+        rutinaId: rutinaHoy._id,
+        section,
+        itemId,
+        newValue,
+        previousValue: itemValue,
+        markItemComplete,
+        patchRutinaSection,
+      });
     } catch {
-      if (patchRutinaSection) {
-        const rollbackData = previousValue === undefined
-          ? { [itemId]: undefined }
-          : { [itemId]: previousValue };
-        patchRutinaSection(rutinaHoy._id, section, rollbackData);
-      }
       console.warn(`${logPrefix} No se pudo togglear`, { section, itemId });
     }
   }, [

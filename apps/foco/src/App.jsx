@@ -28,8 +28,6 @@ const Objetivos = React.lazy(() =>
   import('./pages/Objetivos').then((m) => ({ default: m.Objetivos }))
 );
 const Archivo = React.lazy(() => import('./pages/Archivo'));
-const Foco = React.lazy(() => import('./pages/Foco'));
-const Agenda = React.lazy(() => import('./pages/Agenda'));
 const Perfil = React.lazy(() => import('@shared/pages/Perfil'));
 const Configuracion = React.lazy(() => import('@shared/pages/Configuracion'));
 const Preferencias = React.lazy(() => import('@shared/pages/Preferencias'));
@@ -48,18 +46,18 @@ function AppContent() {
   return (
     <Suspense fallback={<AppLoadingScreen />}>
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/foco" replace /> : <Login />} />
+      <Route path="/login" element={user ? <Navigate to="/tareas" replace /> : <Login />} />
       <Route path="/registro" element={<Register />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/auth/callback/*" element={<AuthCallback />} />
       <Route path="/auth/error" element={<AuthError />} />
 
-      <Route path="/" element={<Navigate to="/foco" replace />} />
+      <Route path="/" element={<Navigate to="/tareas" replace />} />
 
       <Route element={<PrivateRoute />}>
         <Route element={<Layout />}>
-          <Route path="/foco" element={<Foco />} />
-          <Route path="/agenda" element={<Agenda />} />
+          <Route path="/foco" element={<Navigate to="/tareas" replace />} />
+          <Route path="/agenda" element={<Navigate to="/tareas" replace />} />
           <Route path="/rutinas" element={<Rutinas />} />
           <Route path="/objetivos" element={<Objetivos />} />
           <Route path="/proyectos" element={<Navigate to="/objetivos" replace />} />
@@ -74,7 +72,7 @@ function AppContent() {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/foco" replace />} />
+      <Route path="*" element={<Navigate to="/tareas" replace />} />
     </Routes>
     </Suspense>
   );

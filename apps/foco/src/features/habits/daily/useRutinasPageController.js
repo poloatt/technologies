@@ -10,7 +10,7 @@ import {
   isRutinaHistorical,
   isRutinaToday,
   resolveRutinaNavigateTarget,
-} from '@shared/utils/rutinasPageUtils';
+} from '@shared/habits';
 import { ensureRutinaForDate } from './ensureRutinaForDate';
 import useEnsureRutinaForDate from './useEnsureRutinaForDate';
 
@@ -64,6 +64,7 @@ export function useRutinasPageController() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [habitsManagerOpen, setHabitsManagerOpen] = useState(false);
+  const [habitFormOpen, setHabitFormOpen] = useState(false);
   const initialFetchDone = useRef(false);
 
   useEffect(() => {
@@ -83,11 +84,6 @@ export function useRutinasPageController() {
       fetchHabits().catch(() => {});
     }
   }, [fetchRutinas, fetchHabits]);
-
-  const handleAddRutina = useCallback(() => {
-    setRutinaToEdit(null);
-    setEditMode(true);
-  }, []);
 
   const handleCloseForm = useCallback(() => {
     setEditMode(false);
@@ -140,22 +136,22 @@ export function useRutinasPageController() {
   }, [applyNavigateTarget, rutina?._id, rutinas, viewDate]);
 
   useEffect(() => {
-    const onAddRutina = () => handleAddRutina();
+    const onOpenAddHabit = () => setHabitFormOpen(true);
     const onOpenHabitsManager = () => setHabitsManagerOpen(true);
     const onEditRutina = () => handleEditRutina();
 
-    window.addEventListener('addRutina', onAddRutina);
+    window.addEventListener('openAddHabit', onOpenAddHabit);
     window.addEventListener('openHabitTemplates', onOpenHabitsManager);
     window.addEventListener('editRutina', onEditRutina);
     window.addEventListener('navigate', handleNavigateEvent);
 
     return () => {
-      window.removeEventListener('addRutina', onAddRutina);
+      window.removeEventListener('openAddHabit', onOpenAddHabit);
       window.removeEventListener('openHabitTemplates', onOpenHabitsManager);
       window.removeEventListener('editRutina', onEditRutina);
       window.removeEventListener('navigate', handleNavigateEvent);
     };
-  }, [handleAddRutina, handleEditRutina, handleNavigateEvent]);
+  }, [handleEditRutina, handleNavigateEvent]);
 
   const activeFecha = rutina?.fecha ?? viewDate;
 
@@ -185,7 +181,8 @@ export function useRutinasPageController() {
     totalPages,
     habitsManagerOpen,
     setHabitsManagerOpen,
-    handleAddRutina,
+    habitFormOpen,
+    setHabitFormOpen,
     handleCloseForm,
     handleEditRutina,
     completionStats,

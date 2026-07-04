@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
-import { computeNextHabitValue } from '@shared/utils/habitToggleUtils';
-import { isHabitCompletedForHistorial } from '@shared/utils/habitCompletionUtils';
+import { computeNextHabitValue, isHabitCompletedForHistorial } from '@shared/habits';
 
 /**
  * Hook para calcular el siguiente valor al togglear un hábito en el tracker.

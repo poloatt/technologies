@@ -9,7 +9,7 @@ import {
 } from '@shared/utils/focoNavigationUtils';
 import CalendarDatePickerPopover from './CalendarDatePickerPopover';
 import { useAgendaCalendarDatePicker } from './useAgendaCalendarDatePicker';
-import { DATE_HEADER_MIN_HEIGHT } from './calendarLayout';
+import { DATE_HEADER_MIN_HEIGHT } from '@shared/utils/calendar/calendarLayout';
 
 const weekNavColumnSx = {
   display: 'flex',

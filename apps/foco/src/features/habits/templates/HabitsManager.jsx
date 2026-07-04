@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Dialog, DialogContent, Typography, Box, Button } from '@mui/material';
-import { useResponsive } from '@shared/hooks';
+import { useResponsive, useHabitSectionCreateOption } from '@shared/hooks';
+import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
 import { useHabits, useRutinas } from '@shared/context';
 import clienteAxios from '@shared/config/axios';
 import {
   tareaFormDialogPaperSx,
   TareaFormHeader,
 } from '@shared/components/forms/tareaFormUi';
-import { generateHabitId } from './saveHabitFromForm';
-import { invalidateHabitsPreferencesCache } from '@foco/features/habits/carousel/hooks/useHabitsPreferences';
-import { DEFAULT_HABIT_CONFIG } from './habitFormDefaults';
+import { generateHabitId } from '@shared/habits/form';
+import { invalidateHabitsPreferencesCache } from '@shared/hooks/useHabitsPreferences';
+import { DEFAULT_HABIT_CONFIG } from '@shared/habits/form';
 import { DEFAULT_HABIT_ICON } from '@shared/utils/habitIcons';
 import {
-  SECTIONS,
   getDefaultHabitConfig,
   getHabitConfig,
   normalizeManagerConfig,
-} from './habitsManagerUtils';
+} from '@shared/habits/form/habitsManagerUtils';
 import HabitsManagerSectionTabs from './HabitsManagerSectionTabs';
 import HabitsManagerList from './HabitsManagerList';
 import HabitsManagerDetail from './HabitsManagerDetail';
@@ -57,13 +57,23 @@ export const HabitsManager = ({ open, onClose }) => {
     habitsRef.current = habits;
   }, [habits]);
 
+  const handleSectionCreated = useCallback((sectionId) => {
+    setCurrentSection(sectionId);
+    setFormData((prev) => ({ ...prev, section: sectionId }));
+    setEditDraft((prev) => (prev ? { ...prev, section: sectionId } : prev));
+  }, []);
+
+  const { sectionOptions: sections, sectionSelectProps, groupDialogProps } = useHabitSectionCreateOption({
+    onSectionCreated: handleSectionCreated,
+  });
+
   const currentHabits = habits[currentSection] || [];
   const sortedHabits = useMemo(
     () => [...currentHabits].sort((a, b) => (a.orden || 0) - (b.orden || 0)),
     [currentHabits],
   );
 
-  const sectionLabel = SECTIONS.find((s) => s.value === currentSection)?.label || currentSection;
+  const sectionLabel = sections.find((s) => s.value === currentSection)?.label || currentSection;
   const selectedHabit = sortedHabits.find((h) => h.id === selectedHabitId) || null;
 
   const fetchHabitsConfig = useCallback(async () => {
@@ -389,6 +399,7 @@ export const HabitsManager = ({ open, onClose }) => {
   const detailMode = showAddForm ? 'create' : (selectedHabit ? 'edit' : 'empty');
 
   return (
+    <>
     <Dialog
       open={open}
       onClose={onClose}
@@ -411,6 +422,7 @@ export const HabitsManager = ({ open, onClose }) => {
       </TareaFormHeader>
 
       <HabitsManagerSectionTabs
+        sections={sections}
         currentSection={currentSection}
         onSectionChange={handleSectionChange}
         showAddForm={showAddForm}
@@ -425,7 +437,7 @@ export const HabitsManager = ({ open, onClose }) => {
           minHeight: 0,
           p: 0,
           overflow: 'hidden',
-          bgcolor: 'background.paper',
+          bgcolor: 'background.default',
         }}
       >
         <Box
@@ -504,6 +516,9 @@ export const HabitsManager = ({ open, onClose }) => {
               errors={errors}
               habitsConfig={habitsConfig}
               currentSection={currentSection}
+              sectionOptions={sections}
+              onCreateSection={sectionSelectProps.onCreate}
+              createSectionLabel={sectionSelectProps.createLabel}
               loading={loading}
               saving={isSavingEdit}
               isDirty={isEditDirty}
@@ -537,7 +552,7 @@ export const HabitsManager = ({ open, onClose }) => {
           justifyContent: 'flex-end',
           borderTop: 1,
           borderColor: 'divider',
-          bgcolor: 'background.paper',
+          bgcolor: 'background.default',
           flexShrink: 0,
         }}
       >
@@ -546,5 +561,7 @@ export const HabitsManager = ({ open, onClose }) => {
         </Button>
       </Box>
     </Dialog>
+    <HabitGroupFormDialog {...groupDialogProps} />
+    </>
   );
 };

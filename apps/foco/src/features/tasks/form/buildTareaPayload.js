@@ -86,10 +86,7 @@ export function buildTareaPayload(formData, { editingTarea = null, objetivos = [
 
   const tipo = formData.tipo === 'EVENTO' ? 'EVENTO' : 'TAREA';
   const fechaFin = toISOString(formData.fechaFin, null);
-  const fechaVencimiento = toISOString(
-    formData.fechaVencimiento,
-    fechaFin,
-  );
+  const fechaVencimiento = toISOString(formData.fechaVencimiento, null);
 
   const payload = {
     titulo: formData.titulo,

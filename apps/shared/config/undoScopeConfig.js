@@ -13,10 +13,6 @@ export const UNDO_SCOPES = {
     entities: ['tarea', 'rutina_section'],
     paths: ['/tareas'],
   },
-  hub: {
-    entities: ['tarea', 'rutina_section'],
-    paths: ['/foco'],
-  },
   rutinas: {
     entities: ['rutina', 'rutina_section', 'rutina_config', 'habit'],
     paths: ['/rutinas'],

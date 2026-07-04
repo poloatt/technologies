@@ -11,6 +11,8 @@ import {
   getRutinaPageContentShellSx,
 } from '../styles/rutinaPageStyles';
 import useResponsive from '../hooks/useResponsive';
+import { useUISettings } from '../context/UISettingsContext';
+import { useSidebar } from '../context/SidebarContext';
 
 /**
  * Barra fija bajo AgendaUnifiedBar: date hero de navegación diaria en /rutinas.
@@ -18,6 +20,9 @@ import useResponsive from '../hooks/useResponsive';
 export default function RutinaPageNavigationBar() {
   const { pathname } = useLocation();
   const { isMobileOrTablet } = useResponsive();
+  const { showSidebarCollapsed } = useUISettings();
+  const { getMainMargin } = useSidebar();
+  const mainMargin = getMainMargin(isMobileOrTablet, showSidebarCollapsed);
 
   if (!isRutinasPath(pathname)) return null;
 
@@ -29,7 +34,7 @@ export default function RutinaPageNavigationBar() {
       sx={{
         position: 'fixed',
         top: AGENDA_UNIFIED_BAR_CONFIG.height,
-        left: 0,
+        left: isMobileOrTablet ? 0 : mainMargin,
         right: 0,
         height: RUTINA_NAVIGATION_BAR_CONFIG.height,
         zIndex: RUTINA_NAVIGATION_BAR_CONFIG.zIndex,
@@ -37,6 +42,7 @@ export default function RutinaPageNavigationBar() {
         flexDirection: 'column',
         alignItems: 'stretch',
         bgcolor: 'background.default',
+        transition: 'left 0.3s',
       }}
     >
       <Box

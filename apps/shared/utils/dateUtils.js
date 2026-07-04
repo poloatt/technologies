@@ -2,7 +2,7 @@ import { format, parseISO, startOfDay, endOfDay, isToday,
   startOfMonth, endOfMonth,
   isSameDay, isSameWeek, isSameMonth, addDays, subDays } from 'date-fns';
 import { es } from './localeEs.js';
-import { getCadenciaWeekRange } from './cadenciaUtils.js';
+import { getCadenciaWeekRange } from '../habits/utils/cadenciaUtils.js';
 
 // Obtener el timezone del usuario desde el contexto de autenticación
 // Este valor se actualizará dinámicamente cuando el usuario configure su timezone

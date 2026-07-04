@@ -12,7 +12,7 @@ import { ensureRutinaForDate } from '../../habits/daily/ensureRutinaForDate';
 import { buildTareaPayload, syncTareaToGoogleInBackground } from '../form';
 
 /**
- * Estado, handlers y toolbar compartidos entre Hub Foco y la página Tareas.
+ * Estado, handlers y toolbar compartidos de la página Tareas.
  */
 export function useTareasPageController() {
   const { fetchRutinas, getRutinaById } = useRutinas();
@@ -162,10 +162,6 @@ export function useTareasPageController() {
     }
   }, [selectedTareas, deleteWithHistory, enqueueSnackbar, fetchDataStable]);
 
-  const handleEdit = useCallback((tarea) => {
-    setEditingTarea(tarea);
-    setIsFormOpen(true);
-  }, []);
 
   const handleDelete = useCallback(async (id) => {
     try {
@@ -195,14 +191,18 @@ export function useTareasPageController() {
     );
   }, [setTareas]);
 
-  const handleFormSubmit = useCallback(async (formData) => {
+  const handleFormSubmit = useCallback(async (formData, tareaOverride = null) => {
+    const editing = tareaOverride || editingTarea;
     try {
-      const datosAEnviar = buildTareaPayload(formData, { editingTarea, objetivos });
+      const datosAEnviar = buildTareaPayload(formData, { editingTarea: editing, objetivos });
       let saved;
 
-      if (editingTarea) {
-        saved = await updateWithHistory(editingTarea._id, datosAEnviar, editingTarea);
+      if (editing) {
+        saved = await updateWithHistory(editing._id, datosAEnviar, editing);
         enqueueSnackbar('Tarea actualizada exitosamente', { variant: 'success' });
+        if (tareaOverride) {
+          handleUpdateEstado(saved);
+        }
       } else {
         saved = await createWithHistory(datosAEnviar);
         enqueueSnackbar('Tarea creada exitosamente', { variant: 'success' });
@@ -219,8 +219,10 @@ export function useTareasPageController() {
         },
       });
 
-      setIsFormOpen(false);
-      setEditingTarea(null);
+      if (!tareaOverride) {
+        setIsFormOpen(false);
+        setEditingTarea(null);
+      }
       await fetchDataStable();
     } catch (error) {
       console.error('Error al guardar tarea:', error.response?.data || error.message);
@@ -236,6 +238,7 @@ export function useTareasPageController() {
     createWithHistory,
     enqueueSnackbar,
     fetchDataStable,
+    handleUpdateEstado,
   ]);
 
   useEffect(() => {
@@ -307,7 +310,8 @@ export function useTareasPageController() {
     showHabitCarousel: true,
     showCompleted,
     groupingEnabled: true,
-    onEdit: handleEdit,
+    onSubmit: handleFormSubmit,
+    onObjetivosUpdate: refetchObjetivos,
     onDelete: handleDelete,
     onUpdateEstado: handleUpdateEstado,
     isArchive: false,

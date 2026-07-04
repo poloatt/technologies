@@ -14,6 +14,7 @@ import {
   KeyboardArrowDown as ChevronDownIcon,
 } from '@mui/icons-material';
 import { TareaFormIcons } from './tareaFormIcons';
+import { getEstadoColor } from '../common/StatusSystem';
 import {
   TASK_FORM_ICON_SIZE,
   TASK_FORM_PILL_BORDER_WIDTH,
@@ -21,13 +22,15 @@ import {
   TASK_FORM_PILL_HEIGHT,
   TASK_FORM_PILL_OUTLINE_BORDER,
   TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+  TASK_FORM_PILL_OUTLINED_BG,
   TASK_FORM_PILL_OUTLINED_BG_HOVER,
   TASK_FORM_PILL_BORDER_RADIUS,
+  TASK_FORM_ESTADO_OPTIONS,
   TASK_FORM_TIPO_ALL,
   TASK_FORM_TIPO_EVENTO_TAREA,
   taskFormChipSx,
-  taskFormFixedSelectPillSx,
   taskFormGrowingSelectPillSx,
+  taskFormSettingsPillSx,
   taskFormHeaderActionColumnSx,
   taskFormHeaderActionIconSx,
   taskFormPillIconSx,
@@ -135,6 +138,9 @@ export function TareaFormAttachButton({ onChange, disabled = false, sx }) {
   );
 }
 
+TareaFormPriorityToggle.isButtonComponent = true;
+TareaFormAttachButton.isButtonComponent = true;
+
 export function TareaFormPillSelect({
   value,
   onChange,
@@ -147,10 +153,11 @@ export function TareaFormPillSelect({
   onCreate,
   createLabel = 'Nuevo objetivo',
   pillWidth = 'fixed',
+  showEmptyOption = true,
 }) {
   const selectPillSx = pillWidth === 'grow'
     ? taskFormGrowingSelectPillSx
-    : taskFormFixedSelectPillSx;
+    : taskFormSettingsPillSx;
 
   const handleChange = (event) => {
     if (event.target.value === TASK_FORM_CREATE_OPTION) {
@@ -186,9 +193,11 @@ export function TareaFormPillSelect({
         },
       ]}
     >
-      <MenuItem value="">
-        <em>{emptyLabel}</em>
-      </MenuItem>
+      {showEmptyOption ? (
+        <MenuItem value="">
+          <em>{emptyLabel}</em>
+        </MenuItem>
+      ) : null}
       {options.map((opt) => (
         <MenuItem key={opt.value} value={opt.value}>
           {opt.label}
@@ -285,6 +294,78 @@ export function TareaFormTipoSelector({
             }}
           >
             {segment.label}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+export function TaskFormEstadoRow({
+  value,
+  onChange,
+  options = TASK_FORM_ESTADO_OPTIONS,
+  entityType = 'TAREA',
+  readOnly = false,
+  disabled = false,
+  sx,
+}) {
+  const isInteractive = !readOnly && !disabled && typeof onChange === 'function';
+  const currentValue = value || options[0]?.value || 'PENDIENTE';
+
+  return (
+    <Box
+      role="group"
+      aria-label="Estado"
+      sx={{
+        display: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        alignItems: 'center',
+        gap: TASK_FORM_PILL_GAP,
+        width: '100%',
+        minWidth: 0,
+        ...(readOnly || disabled ? { pointerEvents: 'none', opacity: readOnly ? 0.92 : 0.45 } : null),
+        ...sx,
+      }}
+    >
+      {options.map((opt) => {
+        const selected = currentValue === opt.value;
+        const estadoBorderColor = getEstadoColor(opt.value, entityType);
+
+        return (
+          <Box
+            key={opt.value}
+            component={isInteractive ? 'button' : 'span'}
+            type={isInteractive ? 'button' : undefined}
+            onClick={isInteractive ? () => onChange(opt.value) : undefined}
+            aria-label={opt.label}
+            aria-pressed={selected}
+            sx={{
+              ...taskFormSettingsPillSx,
+              flex: '1 1 0',
+              minWidth: 0,
+              width: 'auto',
+              maxWidth: 'none',
+              justifyContent: 'center',
+              textAlign: 'center',
+              px: 1,
+              fontWeight: selected ? 500 : 400,
+              bgcolor: selected ? 'action.selected' : TASK_FORM_PILL_OUTLINED_BG,
+              color: selected ? 'text.primary' : 'text.secondary',
+              borderColor: selected ? estadoBorderColor : TASK_FORM_PILL_OUTLINE_BORDER,
+              cursor: isInteractive ? 'pointer' : 'default',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              '&:hover': isInteractive
+                ? {
+                  bgcolor: selected ? 'action.selected' : TASK_FORM_PILL_OUTLINED_BG_HOVER,
+                  borderColor: selected ? estadoBorderColor : TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+                }
+                : undefined,
+            }}
+          >
+            {opt.label}
           </Box>
         );
       })}
@@ -406,5 +487,3 @@ export function TareaFormAllDaySwitch({
     />
   );
 }
-
-export { TASK_FORM_TIPO_EVENTO_TAREA, TASK_FORM_TIPO_ALL };

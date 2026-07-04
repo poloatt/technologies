@@ -25,7 +25,7 @@ export async function fetchTasksForList({
 }
 
 /**
- * Calendario /foco: solo rango visible.
+ * Calendario /tareas: solo rango visible.
  */
 export async function fetchTasksForAgendaRange({ from, to, includeCompleted = false, signal } = {}) {
   const response = await clienteAxios.get('/api/tareas/agenda', {

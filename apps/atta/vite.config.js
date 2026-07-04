@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { createAppManualChunks } from '../shared/vite/manualChunks.js'
+import { createDevApiProxy } from '../shared/vite/devProxy.js'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -19,6 +20,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@shared': path.resolve(__dirname, '../shared'),
+        '@shared/habits': path.resolve(__dirname, '../shared/habits'),
         '@foco': path.resolve(__dirname, '../foco/src'),
         '@': path.resolve(__dirname, './src'),
         '@atta/hub': path.resolve(__dirname, './src/hub'),
@@ -48,14 +50,7 @@ export default defineConfig(({ mode }) => {
           '**/.vite/**'
         ]
       },
-      proxy: {
-        '/api': {
-          target: appEnv.VITE_API_URL || (mode === 'development' ? 'http://localhost:5000' : 'https://api.attadia.com'),
-          changeOrigin: true,
-          secure: mode !== 'development',
-          ws: true
-        }
-      }
+      proxy: createDevApiProxy(mode),
     },
     cacheDir: process.env.VITE_CACHE_DIR || 'node_modules/.vite',
     optimizeDeps: {

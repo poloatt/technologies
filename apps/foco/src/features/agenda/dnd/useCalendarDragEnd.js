@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { computeEventMove, parseDayDropId } from './calendarDragUtils';
+import { computeEventMove, parseDayDropId } from '@shared/utils/calendar/calendarDragUtils';
 
 export function useCalendarDragEnd(onEventMove) {
   return useCallback((event) => {

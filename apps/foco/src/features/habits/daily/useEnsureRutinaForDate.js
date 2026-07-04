@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useRutinas, useHabits } from '@shared/context';
 import { formatDateForAPI, parseAPIDate } from '@shared/utils/dateUtils';
-import { findRutinaByDateStr } from '@shared/utils/rutinasPageUtils';
+import { findRutinaByDateStr } from '@shared/habits';
 import { ensureRutinaForDate } from './ensureRutinaForDate';
 
 const ensuredDates = new Set();

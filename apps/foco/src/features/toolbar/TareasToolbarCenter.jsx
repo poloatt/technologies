@@ -8,7 +8,7 @@ import TiempoToolbarActions from './TiempoToolbarActions';
 import {
   TAREAS_TOOLBAR_CENTER_ROW_HEIGHT,
   TAREAS_TOOLBAR_MOBILE_TOGGLES_WIDTH,
-} from './tareasToolbarLayout';
+} from '@shared/navigation/tareasToolbarLayout';
 
 const rightSlotSx = {
   position: 'relative',

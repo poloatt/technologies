@@ -8,13 +8,15 @@ import {
 } from '@mui/icons-material';
 import { SystemButtons } from '@shared/components/common/SystemButtons';
 import { ToolbarAddButton } from '@shared/components/common/ToolbarAddButton';
+import RutinaToolbarAddButton from './RutinaToolbarAddButton';
 import { useActionHistory } from '@shared/context/ActionHistoryContext';
 import { useUndoScope } from '@shared/hooks/useScopedUndo';
 import { getIconByKey } from '@shared/navigation/menuIcons';
 import { matchTiempoSection } from '@shared/navigation/tiempoToolbarPaths';
 import { TIEMPO_ICON_KEYS } from '@shared/navigation/tiempoIconKeys';
 import { toggleTareasPageView, useTareasPageView } from '../tasks/list/useTareasPageView';
-import FocoUndoButton from './FocoUndoButton';
+
+const ScopedUndoButton = SystemButtons.ScopedUndoButton;
 
 const TareasMenuIcon = getIconByKey(TIEMPO_ICON_KEYS.tareas);
 
@@ -26,6 +28,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
   const { pathname } = useLocation();
   const section = sectionProp || matchTiempoSection(pathname);
   const [hasSelectedItems, setHasSelectedItems] = useState(false);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const tareasPageView = useTareasPageView();
   const isTareasAgendaView = section === 'tareas' && tareasPageView === 'agenda';
   const undoScope = useUndoScope();
@@ -33,14 +36,20 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
   const undoCount = undoScope ? getUndoCountForScope(undoScope) : 0;
   const showUndo = undoCount > 0;
 
-  const isQuickCreateSection = section === 'hub' || section === 'foco';
-
   useEffect(() => {
     const handleSelectionChange = (event) => {
       setHasSelectedItems(!!event.detail?.hasSelections);
     };
     window.addEventListener('selectionChanged', handleSelectionChange);
     return () => window.removeEventListener('selectionChanged', handleSelectionChange);
+  }, []);
+
+  useEffect(() => {
+    const handleTaskDetailOpenChanged = (event) => {
+      setIsTaskDetailOpen(!!event.detail?.open);
+    };
+    window.addEventListener('taskDetailOpenChanged', handleTaskDetailOpenChanged);
+    return () => window.removeEventListener('taskDetailOpenChanged', handleTaskDetailOpenChanged);
   }, []);
 
   const commonButtonSx = useMemo(() => ({
@@ -61,7 +70,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
 
   const undoAction = useMemo(() => (showUndo ? {
     key: 'undo',
-    icon: <FocoUndoButton buttonSx={commonButtonSx} scope={undoScope} />,
+    icon: <ScopedUndoButton buttonSx={commonButtonSx} scope={undoScope} />,
     label: 'Deshacer última acción',
     tooltip: `Deshacer última acción (${undoCount})`,
   } : null), [commonButtonSx, showUndo, undoCount, undoScope]);
@@ -84,28 +93,22 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
         },
         {
           key: 'add',
-          icon: (
-            <ToolbarAddButton
-              buttonSx={commonButtonSx}
-              aria-label="Agregar rutina"
-              onClick={() => window.dispatchEvent(new CustomEvent('addRutina'))}
-            />
-          ),
-          label: 'Agregar rutina',
+          icon: <RutinaToolbarAddButton buttonSx={commonButtonSx} />,
+          label: 'Agregar hábito',
         },
       ];
     }
 
     const list = [
       ...(undoAction ? [undoAction] : []),
-      {
+      ...(!isTaskDetailOpen ? [{
         key: 'googleTasks',
         icon: <GoogleIcon />,
         label: 'Google Tasks',
         tooltip: 'Google Tasks',
         buttonSx: commonButtonSx,
         onClick: () => window.dispatchEvent(new CustomEvent('openGoogleTasksConfig')),
-      },
+      }] : []),
       ...(section === 'tareas' ? [{
         key: 'toggleAgendaView',
         icon: isTareasAgendaView ? <TareasMenuIcon /> : <CalendarTodayOutlined />,
@@ -143,9 +146,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
 
     const addTooltip = section === 'objetivos'
       ? 'Nuevo objetivo'
-      : isQuickCreateSection
-        ? 'Crear evento, tarea o hábito'
-        : 'Nueva tarea';
+      : 'Nueva tarea';
 
     list.push({
       key: 'add',
@@ -153,13 +154,11 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
         <ToolbarAddButton
           buttonSx={commonButtonSx}
           aria-label={addTooltip}
-          onClick={(e) => {
+          onClick={() => {
             if (section === 'objetivos') {
               window.dispatchEvent(new CustomEvent('addObjetivo'));
             } else {
-              window.dispatchEvent(new CustomEvent('addTask', {
-                detail: isQuickCreateSection ? { anchorEl: e?.currentTarget } : {},
-              }));
+              window.dispatchEvent(new CustomEvent('addTask'));
             }
           }}
         />
@@ -168,7 +167,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     });
 
     return list;
-  }, [actionHistory, commonButtonSx, hasSelectedItems, isQuickCreateSection, isTareasAgendaView, section, tareasPageView, undoAction]);
+  }, [actionHistory, commonButtonSx, hasSelectedItems, isTaskDetailOpen, isTareasAgendaView, section, tareasPageView, undoAction]);
 
   if (!section) return null;
   if (actions.length === 0) return null;

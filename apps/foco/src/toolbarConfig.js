@@ -22,15 +22,9 @@ import {
 
   TiempoToolbarActions,
 
-  FocoToolbarLeft,
-
 } from './features/toolbar';
 
 import RutinaDateHeroBar from './features/habits/daily/RutinaDateHeroBar.jsx';
-
-
-
-const focoLeft = { left: FocoToolbarLeft };
 
 
 
@@ -38,27 +32,9 @@ registerToolbarModules([
 
   {
 
-    id: 'hub',
-
-    match: (path) => matchTiempoSection(path) === 'hub',
-
-    ...focoLeft,
-
-    center: TareasToolbarCenter,
-
-    centerDesktop: true,
-
-    right: TiempoToolbarRight,
-
-  },
-
-  {
-
     id: 'objetivos',
 
     match: (path) => matchTiempoSection(path) === 'objetivos',
-
-    ...focoLeft,
 
     center: ObjetivosToolbarCenter,
 
@@ -74,8 +50,6 @@ registerToolbarModules([
 
     match: (path) => matchTiempoSection(path) === 'tareas',
 
-    ...focoLeft,
-
     center: TareasToolbarCenter,
 
     centerDesktop: true,
@@ -89,8 +63,6 @@ registerToolbarModules([
     id: 'rutinas',
 
     match: (path) => path === '/rutinas' || path.startsWith('/rutinas/'),
-
-    ...focoLeft,
 
     // Navegación diaria (date hero) vive en RutinaPageNavigationBar vía registerRutinaDateHeroBar.
     center: null,
@@ -106,8 +78,6 @@ registerToolbarModules([
     id: 'archivo',
 
     match: (path) => path === '/archivo' || path.startsWith('/archivo/'),
-
-    ...focoLeft,
 
     center: null,
 

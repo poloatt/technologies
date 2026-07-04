@@ -1,5 +1,4 @@
-import { getRutinaFranjaItems } from '@shared/domain/habits/getRutinaFranjaItems.js';
-import { computeRutinaToggleValue } from '@shared/domain/habits/toggleHabitCompletion.js';
+import { getRutinaFranjaItems, computeRutinaToggleValue } from '@shared/habits';
 
 describe('getRutinaFranjaItems', () => {
   const rutina = {

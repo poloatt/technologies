@@ -7,7 +7,7 @@ import {
   getPeriodicCarouselMode,
   resolveCarouselItemConfig,
   resolveRutinaItemConfig,
-} from '@shared/utils/habitVisibilityEngine.js';
+} from '@shared/habits';
 import { startOfWeek, addDays } from 'date-fns';
 
 const sectionIconsMap = {

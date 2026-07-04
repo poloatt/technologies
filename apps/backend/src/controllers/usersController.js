@@ -2,7 +2,13 @@ import { Users, Rutinas } from '../models/index.js';
 import bcrypt from 'bcryptjs';
 import { timezoneUtils } from '../models/BaseSchema.js';
 import { ensureCustomHabits } from '../constants/defaultCustomHabits.js';
-import { findHabitIndexInSection, getHabitId } from '../../../shared/utils/habitSectionIds.js';
+import {
+  getCustomHabitSections,
+  getValidHabitSections,
+  isValidHabitSection,
+  markCustomHabitsSectionModified,
+} from '../utils/habitSectionsUtils.js';
+import { findHabitIndexInSection, getHabitId, generateHabitId } from '@attadia/shared/habits';
 
 export const usersController = {
   getProfile: async (req, res) => {
@@ -804,12 +810,238 @@ export const usersController = {
         await user.save();
       }
 
-      res.json(user.customHabits);
+      const customSections = getCustomHabitSections(user);
+      ensureCustomHabits(user, { seedDefaults: false });
+      customSections.forEach((section) => {
+        if (section?.id && !Array.isArray(user.customHabits[section.id])) {
+          user.customHabits[section.id] = [];
+        }
+      });
+
+      res.json({
+        habits: user.customHabits,
+        customSections,
+      });
     } catch (error) {
       console.error('[usersController] Error al obtener hábitos:', error);
       res.status(500).json({ 
         error: 'Error al obtener hábitos',
         message: error.message
+      });
+    }
+  },
+
+  /**
+   * Crear nuevo grupo de hábitos personalizado
+   * POST /api/users/habit-sections
+   * Body: { label, icon }
+   */
+  addHabitSection: async (req, res) => {
+    try {
+      const { label, icon } = req.body;
+      const trimmedLabel = (label || '').trim();
+
+      if (!trimmedLabel) {
+        return res.status(400).json({ error: 'El nombre del grupo es requerido' });
+      }
+
+      if (!icon) {
+        return res.status(400).json({ error: 'Debe seleccionar un icono' });
+      }
+
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      ensureCustomHabits(user, { seedDefaults: false });
+
+      if (!user.preferences) {
+        user.preferences = {};
+      }
+
+      const existingSections = getCustomHabitSections(user);
+      const existingIds = new Set(getValidHabitSections(user));
+      const existingLabels = new Set(
+        existingSections.map((section) => (section.label || '').trim().toLowerCase()),
+      );
+
+      if (existingLabels.has(trimmedLabel.toLowerCase())) {
+        return res.status(409).json({ error: 'Ya existe un grupo con ese nombre' });
+      }
+
+      let sectionId = generateHabitId(trimmedLabel);
+      if (!sectionId) {
+        return res.status(400).json({ error: 'Nombre de grupo no válido' });
+      }
+
+      let counter = 1;
+      const baseId = sectionId;
+      while (existingIds.has(sectionId)) {
+        sectionId = `${baseId}${counter}`;
+        counter += 1;
+      }
+
+      const newSection = {
+        id: sectionId,
+        label: trimmedLabel,
+        icon,
+        orden: existingSections.length,
+      };
+
+      user.preferences.customHabitSections = [...existingSections, newSection];
+      user.customHabits[sectionId] = [];
+      if (!user.preferences.rutinasConfig) {
+        user.preferences.rutinasConfig = {};
+      }
+      if (!user.preferences.rutinasConfig[sectionId]) {
+        user.preferences.rutinasConfig[sectionId] = {};
+      }
+
+      user.markModified('preferences');
+      user.markModified('preferences.customHabitSections');
+      user.markModified('preferences.rutinasConfig');
+      user.markModified('customHabits');
+      user.markModified(`customHabits.${sectionId}`);
+
+      await user.save();
+
+      res.json({
+        message: 'Grupo creado correctamente',
+        section: newSection,
+        customSections: getCustomHabitSections(user),
+      });
+    } catch (error) {
+      console.error('[usersController] Error al crear grupo de hábitos:', error);
+      res.status(500).json({
+        error: 'Error al crear grupo de hábitos',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * Actualizar grupo de hábitos personalizado
+   * PUT /api/users/habit-sections/:sectionId
+   * Body: { label, icon }
+   */
+  updateHabitSection: async (req, res) => {
+    try {
+      const { sectionId } = req.params;
+      const { label, icon } = req.body;
+      const trimmedLabel = (label || '').trim();
+
+      if (!trimmedLabel) {
+        return res.status(400).json({ error: 'El nombre del grupo es requerido' });
+      }
+      if (!icon) {
+        return res.status(400).json({ error: 'Debe seleccionar un icono' });
+      }
+
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!isValidHabitSection(user, sectionId) || !getCustomHabitSections(user).some((s) => s.id === sectionId)) {
+        return res.status(400).json({ error: 'Solo se pueden editar grupos personalizados' });
+      }
+
+      const existingSections = getCustomHabitSections(user);
+      const sectionIndex = existingSections.findIndex((s) => s.id === sectionId);
+      if (sectionIndex === -1) {
+        return res.status(404).json({ error: 'Grupo no encontrado' });
+      }
+
+      const duplicateLabel = existingSections.some(
+        (section, index) => index !== sectionIndex
+          && (section.label || '').trim().toLowerCase() === trimmedLabel.toLowerCase(),
+      );
+      if (duplicateLabel) {
+        return res.status(409).json({ error: 'Ya existe un grupo con ese nombre' });
+      }
+
+      const updatedSection = {
+        ...existingSections[sectionIndex],
+        label: trimmedLabel,
+        icon,
+      };
+      const nextSections = [...existingSections];
+      nextSections[sectionIndex] = updatedSection;
+
+      user.preferences.customHabitSections = nextSections;
+      user.markModified('preferences');
+      user.markModified('preferences.customHabitSections');
+
+      await user.save();
+
+      res.json({
+        message: 'Grupo actualizado correctamente',
+        section: updatedSection,
+        customSections: getCustomHabitSections(user),
+      });
+    } catch (error) {
+      console.error('[usersController] Error al actualizar grupo de hábitos:', error);
+      res.status(500).json({
+        error: 'Error al actualizar grupo de hábitos',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * Eliminar grupo de hábitos personalizado
+   * DELETE /api/users/habit-sections/:sectionId
+   */
+  deleteHabitSection: async (req, res) => {
+    try {
+      const { sectionId } = req.params;
+
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!getCustomHabitSections(user).some((s) => s.id === sectionId)) {
+        return res.status(404).json({ error: 'Grupo no encontrado' });
+      }
+
+      ensureCustomHabits(user, { seedDefaults: false });
+      const habitCount = Array.isArray(user.customHabits?.[sectionId])
+        ? user.customHabits[sectionId].length
+        : 0;
+      if (habitCount > 0) {
+        return res.status(400).json({
+          error: 'Elimina o mueve los hábitos antes de eliminar el grupo',
+        });
+      }
+
+      user.preferences.customHabitSections = getCustomHabitSections(user)
+        .filter((section) => section.id !== sectionId);
+
+      if (user.customHabits?.[sectionId]) {
+        delete user.customHabits[sectionId];
+        markCustomHabitsSectionModified(user, sectionId);
+      }
+      if (user.preferences?.rutinasConfig?.[sectionId]) {
+        delete user.preferences.rutinasConfig[sectionId];
+        user.markModified('preferences.rutinasConfig');
+      }
+
+      user.markModified('preferences');
+      user.markModified('preferences.customHabitSections');
+
+      await user.save();
+
+      res.json({
+        message: 'Grupo eliminado correctamente',
+        customSections: getCustomHabitSections(user),
+      });
+    } catch (error) {
+      console.error('[usersController] Error al eliminar grupo de hábitos:', error);
+      res.status(500).json({
+        error: 'Error al eliminar grupo de hábitos',
+        message: error.message,
       });
     }
   },
@@ -823,7 +1055,12 @@ export const usersController = {
     try {
       const { section, habit } = req.body;
 
-      if (!section || !['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].includes(section)) {
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!isValidHabitSection(user, section)) {
         return res.status(400).json({ error: 'Sección inválida' });
       }
 
@@ -831,12 +1068,12 @@ export const usersController = {
         return res.status(400).json({ error: 'Datos de hábito incompletos (requiere: id, label, icon)' });
       }
 
-      const user = await Users.findById(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: 'Usuario no encontrado' });
-      }
-
       ensureCustomHabits(user, { seedDefaults: false });
+
+      if (!Array.isArray(user.customHabits[section])) {
+        user.customHabits[section] = [];
+        user.markModified(`customHabits.${section}`);
+      }
 
       // Verificar que el ID no exista ya en la sección
       if (user.customHabits[section].some(h => h.id === habit.id)) {
@@ -853,6 +1090,7 @@ export const usersController = {
       };
 
       user.customHabits[section].push(newHabit);
+      markCustomHabitsSectionModified(user, section);
       await user.save();
 
       res.json({ message: 'Hábito creado correctamente', habit: newHabit });
@@ -875,17 +1113,17 @@ export const usersController = {
       const { habitId } = req.params;
       const { section, habit } = req.body;
 
-      if (!section || !['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].includes(section)) {
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!isValidHabitSection(user, section)) {
         return res.status(400).json({ error: 'Sección inválida' });
       }
 
       if (!habit || Object.keys(habit).length === 0) {
         return res.status(400).json({ error: 'No se proporcionaron datos para actualizar' });
-      }
-
-      const user = await Users.findById(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
       if (!user.customHabits || !user.customHabits[section]) {
@@ -903,6 +1141,7 @@ export const usersController = {
       if (habit.activo !== undefined) user.customHabits[section][habitIndex].activo = habit.activo;
       if (habit.orden !== undefined) user.customHabits[section][habitIndex].orden = habit.orden;
 
+      markCustomHabitsSectionModified(user, section);
       await user.save();
 
       res.json({ 
@@ -928,13 +1167,13 @@ export const usersController = {
       const { habitId } = req.params;
       const { section } = req.body;
 
-      if (!section || !['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].includes(section)) {
-        return res.status(400).json({ error: 'Sección inválida' });
-      }
-
       const user = await Users.findById(req.user.id);
       if (!user) {
         return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!isValidHabitSection(user, section)) {
+        return res.status(400).json({ error: 'Sección inválida' });
       }
 
       if (!user.customHabits || !user.customHabits[section]) {
@@ -955,6 +1194,7 @@ export const usersController = {
       }
 
       user.customHabits[section].splice(habitIndex, 1);
+      markCustomHabitsSectionModified(user, section);
 
       if (user.preferences?.rutinasConfig?.[section]?.[canonicalId]) {
         delete user.preferences.rutinasConfig[section][canonicalId];
@@ -994,10 +1234,15 @@ export const usersController = {
         console.error('[usersController.reorderHabits] Sección faltante');
         return res.status(400).json({ error: 'Sección inválida', received: section });
       }
-      
-      if (!['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].includes(section)) {
+
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!isValidHabitSection(user, section)) {
         console.error('[usersController.reorderHabits] Sección no válida:', section);
-        return res.status(400).json({ error: 'Sección inválida', received: section, validSections: ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'] });
+        return res.status(400).json({ error: 'Sección inválida', received: section });
       }
 
       // Validar habitIds
@@ -1014,11 +1259,6 @@ export const usersController = {
       if (habitIds.length === 0) {
         console.error('[usersController.reorderHabits] habitIds está vacío');
         return res.status(400).json({ error: 'Se requiere al menos un ID de hábito', received: habitIds });
-      }
-
-      const user = await Users.findById(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
       ensureCustomHabits(user, { seedDefaults: false });
@@ -1130,6 +1370,7 @@ export const usersController = {
       });
 
       user.customHabits[section] = reorderedHabits;
+      markCustomHabitsSectionModified(user, section);
       await user.save();
 
       console.log('[usersController.reorderHabits] Hábitos reordenados correctamente');

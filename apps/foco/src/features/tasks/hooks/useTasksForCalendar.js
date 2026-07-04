@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, addWeeks, endOfDay, endOfWeek, startOfDay, startOfWeek } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CADENCIA_WEEK_STARTS_ON } from '@shared/utils/cadenciaUtils';
+import { CADENCIA_WEEK_STARTS_ON } from '@shared/habits';
 import { useSnackbar } from 'notistack';
 import { normalizeTaskList } from '@shared/utils/taskListUtils';
 import { fetchTasksForAgendaRange } from '../api/tasksApi';

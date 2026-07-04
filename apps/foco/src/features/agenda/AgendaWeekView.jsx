@@ -28,9 +28,9 @@ import {
 
   SLOT_HEIGHT_PX,
 
-} from './calendarLayout';
+} from '@shared/utils/calendar/calendarLayout';
 
-import { formatHourLabel, splitEventsByDay } from './agendaCalendarUtils';
+import { formatHourLabel, splitEventsByDay } from '@shared/utils/calendar/agendaCalendarUtils';
 
 import AgendaTimeGrid from './AgendaTimeGrid';
 

@@ -16,7 +16,7 @@ import { formatDateForAPI, getNormalizedToday } from '@shared/utils/dateUtils';
 import CalendarDatePickerPopover from './CalendarDatePickerPopover';
 import AgendaCalendarNavChevrons from './AgendaCalendarNavChevrons';
 import { useAgendaCalendarDatePicker } from './useAgendaCalendarDatePicker';
-import { DATE_HEADER_MIN_HEIGHT } from './calendarLayout';
+import { DATE_HEADER_MIN_HEIGHT } from '@shared/utils/calendar/calendarLayout';
 
 /** Iconos de la fila de acciones del encabezado (alineados a 26px). */
 const dateHeaderIconButtonSx = {
@@ -124,12 +124,51 @@ export default function AgendaCalendarDateHeader({
 
   const showProgress = isRutina && typeof completionPercentage === 'number';
   const progressValue = showProgress ? Math.min(100, Math.max(0, completionPercentage)) : 0;
-  const isRutinaNarrow = isRutina && isMobile;
   const rutinaPctLabel = showProgress ? `${completionPercentage}%` : '—';
 
   const rutinaModeLabel = isRutina && dayMode && dayMode !== 'today'
     ? DAY_MODE_LABEL[dayMode]
     : null;
+
+  const rutinaHoyButton = (
+    <Tooltip title={viewingToday ? 'Ya estás en hoy' : 'Ir a hoy'}>
+      <span style={{ display: 'inline-flex' }}>
+        <Button
+          size="small"
+          variant="text"
+          onClick={goToToday}
+          disabled={loading || viewingToday}
+          sx={{
+            ...dateHeaderHoyButtonSx,
+            color: viewingToday ? 'text.disabled' : 'text.secondary',
+            '&.Mui-disabled': { color: 'text.disabled' },
+          }}
+        >
+          Hoy
+        </Button>
+      </span>
+    </Tooltip>
+  );
+
+  const rutinaNavControls = (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: { xs: 0.125, sm: 0.25 },
+        flexShrink: 0,
+        height: 26,
+      }}
+    >
+      <AgendaCalendarNavChevrons
+        viewMode={viewMode}
+        buttonSx={dateHeaderIconButtonSx}
+        compact={false}
+        navHandlers={navHandlers}
+        middleContent={rutinaHoyButton}
+      />
+    </Box>
+  );
 
   return (
     <Box
@@ -141,7 +180,7 @@ export default function AgendaCalendarDateHeader({
         flexDirection: 'column',
         justifyContent: 'center',
         px: 0,
-        py: isRutina ? (isRutinaNarrow ? 0.5 : 0.75) : 1,
+        py: isRutina ? 0.75 : 1,
         width: '100%',
         bgcolor: 'background.default',
         borderBottom: hideOuterBorder ? 0 : (today || viewingToday ? 2 : 1),
@@ -151,13 +190,13 @@ export default function AgendaCalendarDateHeader({
       <Box
         sx={{
           position: 'relative',
-          display: 'flex',
-          flexDirection: isRutinaNarrow ? 'column' : 'row',
-          alignItems: isRutinaNarrow ? 'stretch' : 'center',
+          display: isRutina ? 'grid' : 'flex',
+          gridTemplateColumns: isRutina ? 'minmax(0, 1fr) auto minmax(0, 1fr)' : undefined,
+          flexDirection: isRutina ? undefined : 'row',
+          alignItems: isRutina ? 'end' : 'center',
           gap: isRutina ? { xs: 0.25, sm: 0.375 } : 0.5,
           width: '100%',
           minWidth: 0,
-          overflow: isRutinaNarrow ? 'visible' : (isRutina ? 'hidden' : 'visible'),
         }}
       >
         {rutinaModeLabel ? (
@@ -181,10 +220,10 @@ export default function AgendaCalendarDateHeader({
           <span
             style={{
               display: 'inline-flex',
-              flex: isRutinaNarrow ? undefined : '0 1 auto',
+              flex: isRutina ? undefined : '0 1 auto',
               minWidth: 0,
-              width: isRutinaNarrow ? '100%' : undefined,
-              paddingRight: rutinaModeLabel ? 52 : undefined,
+              justifySelf: isRutina ? 'start' : undefined,
+              paddingRight: isRutina && rutinaModeLabel ? 52 : undefined,
             }}
           >
             <ButtonBase
@@ -196,8 +235,6 @@ export default function AgendaCalendarDateHeader({
                 px: isRutina ? 0 : 1,
                 py: isRutina ? 0 : 0.5,
                 textAlign: 'left',
-                flex: isRutinaNarrow ? 1 : undefined,
-                width: isRutinaNarrow ? '100%' : undefined,
                 justifyContent: 'flex-start',
                 '&:hover': { bgcolor: loading && isRutina ? 'transparent' : 'action.hover' },
               }}
@@ -215,105 +252,90 @@ export default function AgendaCalendarDateHeader({
             </ButtonBase>
           </span>
         </Tooltip>
-        {showPickerActions && (
+        {isRutina && (
+          <Box
+            sx={{
+              justifySelf: 'center',
+              alignSelf: 'center',
+              zIndex: 1,
+              pointerEvents: showProgress ? 'auto' : 'none',
+            }}
+          >
+            {showProgress ? (
+              <Tooltip title={completionTooltip}>
+                <span style={{ display: 'inline-flex' }}>
+                  <RutinaCompletionPctChip
+                    label={rutinaPctLabel}
+                    subtle
+                  />
+                </span>
+              </Tooltip>
+            ) : null}
+          </Box>
+        )}
+        {isRutina ? (
+          <Box
+            sx={{
+              justifySelf: 'end',
+              alignSelf: 'end',
+              display: 'flex',
+              alignItems: 'flex-end',
+              minWidth: 0,
+              pb: 0.125,
+            }}
+          >
+            {rutinaNavControls}
+          </Box>
+        ) : null}
+        {!isRutina && showPickerActions && (
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: isRutinaNarrow ? 'flex-end' : 'flex-end',
+              justifyContent: 'flex-end',
               gap: { xs: 0.125, sm: 0.25 },
               flexShrink: 0,
               height: 26,
-              width: isRutinaNarrow ? '100%' : undefined,
               minWidth: 0,
-              ml: isRutina && !isRutinaNarrow ? 'auto' : undefined,
-              pr: isRutina ? 0 : undefined,
             }}
           >
-            {isRutina ? (
-              <>
-                <Box
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: { xs: 0.25, sm: 0.25 },
-                    flexShrink: 0,
-                  }}
-                >
-                {isRutinaNarrow && showProgress && (
-                  <Tooltip title={completionTooltip}>
-                    <span style={{ display: 'inline-flex', flexShrink: 0, marginRight: 2 }}>
-                      <RutinaCompletionPctChip
-                        label={rutinaPctLabel}
-                        subtle
-                      />
-                    </span>
-                  </Tooltip>
-                )}
-                <Tooltip title={viewingToday ? 'Ya estás en hoy' : 'Ir a hoy'}>
-                  <span style={{ display: 'inline-flex' }}>
-                    <Button
-                      size="small"
-                      variant="text"
-                      onClick={goToToday}
-                      disabled={loading || viewingToday}
-                      sx={{
-                        ...dateHeaderHoyButtonSx,
-                        color: viewingToday ? 'text.disabled' : 'text.secondary',
-                        '&.Mui-disabled': { color: 'text.disabled' },
-                      }}
-                    >
-                      Hoy
-                    </Button>
-                  </span>
-                </Tooltip>
-                <AgendaCalendarNavChevrons
-                  viewMode={viewMode}
-                  buttonSx={dateHeaderIconButtonSx}
-                  compact={false}
-                  navHandlers={navHandlers}
-                />
-                </Box>
-              </>
-            ) : (
-              <>
-                <AgendaCalendarNavChevrons
-                  viewMode={viewMode}
-                  compact
-                  navHandlers={null}
-                />
-                <Tooltip title="Elegir fecha">
-                  <span style={{ display: 'inline-flex' }}>
-                    <IconButton
-                      size="small"
-                      onClick={onDateClick ?? openPicker}
-                      disabled={loading}
-                      sx={dateHeaderIconButtonSx}
-                      aria-label="Elegir fecha"
-                    >
-                      <CalendarMonthOutlined fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-                <Tooltip title={viewingToday ? 'Ya estás en hoy' : 'Ir a hoy'}>
-                  <span style={{ display: 'inline-flex' }}>
-                    <Button
-                      size="small"
-                      variant="text"
-                      onClick={goToToday}
-                      disabled={loading || viewingToday}
-                      sx={{
-                        ...dateHeaderHoyButtonSx,
-                        color: viewingToday ? 'text.disabled' : 'text.secondary',
-                        '&.Mui-disabled': { color: 'text.disabled' },
-                      }}
-                    >
-                      Hoy
-                    </Button>
-                  </span>
-                </Tooltip>
-              </>
-            )}
+            <>
+              <AgendaCalendarNavChevrons
+                viewMode={viewMode}
+                compact
+                navHandlers={null}
+              />
+              <Tooltip title="Elegir fecha">
+                <span style={{ display: 'inline-flex' }}>
+                  <IconButton
+                    size="small"
+                    onClick={onDateClick ?? openPicker}
+                    disabled={loading}
+                    sx={dateHeaderIconButtonSx}
+                    aria-label="Elegir fecha"
+                  >
+                    <CalendarMonthOutlined fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={viewingToday ? 'Ya estás en hoy' : 'Ir a hoy'}>
+                <span style={{ display: 'inline-flex' }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={goToToday}
+                    disabled={loading || viewingToday}
+                    sx={{
+                      ...dateHeaderHoyButtonSx,
+                      color: viewingToday ? 'text.disabled' : 'text.secondary',
+                      '&.Mui-disabled': { color: 'text.disabled' },
+                    }}
+                  >
+                    Hoy
+                  </Button>
+                </span>
+              </Tooltip>
+            </>
             {trailingActions}
           </Box>
         )}

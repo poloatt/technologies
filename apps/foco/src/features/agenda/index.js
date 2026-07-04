@@ -4,5 +4,5 @@ export { default as CalendarDatePickerPopover } from './CalendarDatePickerPopove
 export { useAgendaCalendar } from './useAgendaCalendar';
 export { useAgendaFilter } from './hooks/useAgendaFilter';
 export { useCalendarTaskFilter } from './hooks/useCalendarTaskFilter';
-export * from './agendaCalendarUtils';
-export * from './calendarLayout';
+export * from '@shared/utils/calendar/agendaCalendarUtils';
+export * from '@shared/utils/calendar/calendarLayout';

@@ -21,6 +21,9 @@ router.put('/preferences/habits', checkAuth, usersController.updateHabitPreferen
 // IMPORTANTE: Las rutas específicas (reorder) deben ir ANTES de las rutas con parámetros (:habitId)
 // para que Express las evalúe correctamente
 router.get('/habits', checkAuth, usersController.getHabits);
+router.post('/habit-sections', checkAuth, usersController.addHabitSection);
+router.put('/habit-sections/:sectionId', checkAuth, usersController.updateHabitSection);
+router.delete('/habit-sections/:sectionId', checkAuth, usersController.deleteHabitSection);
 router.post('/habits', checkAuth, usersController.addHabit);
 router.put('/habits/reorder', checkAuth, usersController.reorderHabits);
 router.put('/habits/:habitId', checkAuth, usersController.updateHabit);

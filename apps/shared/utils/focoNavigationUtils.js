@@ -8,7 +8,7 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { es } from './localeEs.js';
-import { CADENCIA_WEEK_STARTS_ON } from './cadenciaUtils.js';
+import { CADENCIA_WEEK_STARTS_ON } from '../habits/utils/cadenciaUtils.js';
 
 export function shiftCalendarDate(date, navigationMode, direction) {
   const base = startOfDay(date || new Date());

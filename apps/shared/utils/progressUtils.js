@@ -1,7 +1,7 @@
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { parseAPIDate } from './dateUtils.js';
-import { isHabitCompletedForHistorial, isHabitFullyCompletedToday } from './habitCompletionUtils.js';
-import { CADENCIA_WEEK_STARTS_ON } from './cadenciaUtils.js';
+import { isHabitCompletedForHistorial, isHabitFullyCompletedToday } from '../habits/domain/habitCompletionUtils.js';
+import { CADENCIA_WEEK_STARTS_ON } from '../habits/utils/cadenciaUtils.js';
 
 export const getPeriodBounds = (tipo, refDate) => {
   const date = refDate instanceof Date ? refDate : (parseAPIDate(refDate) || new Date());

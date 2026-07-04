@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Box } from '@mui/material';
-import { dayDropId } from './calendarDragUtils';
+import { dayDropId } from '@shared/utils/calendar/calendarDragUtils';
 
 export default function DroppableDayColumn({ day, children, sx }) {
   const { setNodeRef, isOver } = useDroppable({

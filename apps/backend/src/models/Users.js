@@ -189,40 +189,21 @@ const userSchema = new mongoose.Schema({
         };
         return defaultConfig;
       }
-    }
-  },
-  // Hábitos personalizados del usuario
-  customHabits: {
-    type: {
-      bodyCare: [{
-        id: { type: String, required: true },
-        label: { type: String, required: true },
-        icon: { type: String, required: true },
-        activo: { type: Boolean, default: true },
-        orden: { type: Number, default: 0 }
-      }],
-      nutricion: [{
-        id: { type: String, required: true },
-        label: { type: String, required: true },
-        icon: { type: String, required: true },
-        activo: { type: Boolean, default: true },
-        orden: { type: Number, default: 0 }
-      }],
-      ejercicio: [{
-        id: { type: String, required: true },
-        label: { type: String, required: true },
-        icon: { type: String, required: true },
-        activo: { type: Boolean, default: true },
-        orden: { type: Number, default: 0 }
-      }],
-      cleaning: [{
-        id: { type: String, required: true },
-        label: { type: String, required: true },
-        icon: { type: String, required: true },
-        activo: { type: Boolean, default: true },
-        orden: { type: Number, default: 0 }
-      }]
     },
+    // Grupos de hábitos personalizados creados por el usuario
+    customHabitSections: {
+      type: [{
+        id: { type: String, required: true },
+        label: { type: String, required: true },
+        icon: { type: String, required: true },
+        orden: { type: Number, default: 0 },
+      }],
+      default: [],
+    },
+  },
+  // Hábitos personalizados del usuario (Mixed permite secciones dinámicas)
+  customHabits: {
+    type: Schema.Types.Mixed,
     default: () => cloneDefaultCustomHabits()
   },
   role: {

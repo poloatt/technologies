@@ -1,9 +1,9 @@
 import React from 'react';
 import { Box, Tabs, Tab, Tooltip, IconButton } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import { SECTIONS } from './habitsManagerUtils';
 
 export default function HabitsManagerSectionTabs({
+  sections = [],
   currentSection,
   onSectionChange,
   showAddForm,
@@ -39,7 +39,7 @@ export default function HabitsManagerSectionTabs({
           },
         }}
       >
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <Tab key={section.value} label={section.label} value={section.value} />
         ))}
       </Tabs>

@@ -1,5 +1,9 @@
 import mongoose from 'mongoose';
 import { createSchema, commonFields, timezoneUtils } from './BaseSchema.js';
+import { getRutinaPeriodStart, getRutinaPeriodEnd } from '@attadia/shared/habits';
+import { collectRutinaSectionKeys } from '../utils/habitSectionsUtils.js';
+import { repairRutinaItemConfig } from '../utils/rutinaDocumentUtils.js';
+import { calculateRutinaCompletitud } from '../utils/rutinaCompletitudUtils.js';
 
 // Definir el esquema de configuración de cadencia
 const cadenciaSchema = {
@@ -135,10 +139,13 @@ const rutinaSchema = createSchema({
     max: 1
   },
   completitudPorSeccion: {
-    bodyCare: { type: Number, default: 0, min: 0, max: 1 },
-    nutricion: { type: Number, default: 0, min: 0, max: 1 },
-    ejercicio: { type: Number, default: 0, min: 0, max: 1 },
-    cleaning: { type: Number, default: 0, min: 0, max: 1 }
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      bodyCare: 0,
+      nutricion: 0,
+      ejercicio: 0,
+      cleaning: 0,
+    }),
   },
   usuario: {
     type: mongoose.Schema.Types.ObjectId,
@@ -146,7 +153,7 @@ const rutinaSchema = createSchema({
     required: true
   },
   ...commonFields
-});
+}, { strict: false });
 
 // Crear un índice compuesto único para fecha y usuario
 rutinaSchema.index({ 
@@ -157,43 +164,6 @@ rutinaSchema.index({
   name: 'usuario_fecha_unique',
   partialFilterExpression: { fecha: { $exists: true } }
 });
-
-// Función auxiliar para verificar si un ítem debe mostrarse según su cadencia
-rutinaSchema.methods.shouldShowItem = function(section, item) {
-  const config = this.config?.[section]?.[item];
-  if (!config) return true;
-  if (config.activo === false) return false;
-
-  const tipo = (config.tipo || 'DIARIO').toUpperCase();
-  const frecuencia = Number(config.frecuencia || 1);
-  const progresoActual = Number(config.progresoActual || 0);
-
-  if (progresoActual >= frecuencia) {
-    return false;
-  }
-
-  const fieldValue = this[section]?.[item];
-  const isObjectFormat = typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue);
-
-  if (tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && (config.periodo || 'CADA_DIA') === 'CADA_DIA')) {
-    if (isObjectFormat) {
-      const horarios = Array.isArray(config.horarios) && config.horarios.length > 0
-        ? config.horarios
-        : Object.keys(fieldValue);
-      if (horarios.length > 0) {
-        const allDone = horarios.every((h) => fieldValue[h] === true);
-        return !allDone;
-      }
-      return !Object.values(fieldValue).some(Boolean);
-    }
-    if (fieldValue === true) {
-      return false;
-    }
-    return true;
-  }
-
-  return true;
-};
 
 // Middleware para normalizar la fecha antes de guardar
 rutinaSchema.pre('save', async function(next) {
@@ -286,146 +256,117 @@ rutinaSchema.pre('save', async function(next) {
 
 // Middleware para actualizar completitud
 rutinaSchema.pre('save', function(next) {
-  // CRÍTICO: Marcar secciones como modificadas para que Mongoose guarde campos dinámicos en Schema.Types.Mixed
-  ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
-    if (this.isModified(section) || (this[section] && typeof this[section] === 'object')) {
-      this.markModified(section);
-      // Marcar cada campo dentro de la sección
-      if (this[section] && typeof this[section] === 'object') {
-        Object.keys(this[section]).forEach(field => {
+  const sections = collectRutinaSectionKeys(this);
+
+  sections.forEach((section) => {
+    if (!this.isModified(section)) return;
+
+    this.markModified(section);
+    if (this[section] && typeof this[section] === 'object') {
+      Object.keys(this[section]).forEach((field) => {
+        if (this.isModified(`${section}.${field}`)) {
           this.markModified(`${section}.${field}`);
-        });
-      }
+        }
+      });
     }
   });
 
-  let totalTasks = 0;
-  let completedTasks = 0;
+  sections.forEach((section) => {
+    const sectionData = this[section] && typeof this[section] === 'object'
+      ? this[section]
+      : {};
 
-  ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
-    // Convertir a objeto si es necesario (para Mixed types)
-    const sectionData = this[section] && typeof this[section].toObject === 'function' 
-      ? this[section].toObject() 
-      : (this[section] || {});
-    const sectionFields = Object.keys(sectionData);
-    let sectionTotal = 0;
-    let sectionCompleted = 0;
-    
-    sectionFields.forEach(field => {
-      // Asegurar que existe estructura mínima en config para evitar TypeError
+    Object.keys(sectionData).forEach((field) => {
       if (!this.config) this.config = {};
       if (!this.config[section]) this.config[section] = {};
-      if (!this.config[section][field]) {
-        this.config[section][field] = {
-          tipo: 'DIARIO',
-          diasSemana: [],
-          diasMes: [],
-          frecuencia: 1,
-          activo: true,
-          periodo: 'CADA_DIA'
-        };
+
+      const currentItemConfig = this.config[section][field];
+      if (!currentItemConfig || typeof currentItemConfig !== 'object' || Array.isArray(currentItemConfig)) {
+        this.config[section][field] = repairRutinaItemConfig(currentItemConfig);
+        this.markModified(`config.${section}.${field}`);
       }
-      // Solo contar los campos que deben mostrarse según su cadencia
-      if (this.shouldShowItem(section, field)) {
-        const fieldValue = sectionData[field];
-        const isObjectFormat = typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue);
-        const isBooleanFormat = typeof fieldValue === 'boolean';
-        
-        if (isObjectFormat) {
-          // Nuevo formato: objeto con horarios { MAÑANA: true, NOCHE: false }
-          // Contar cada horario como una tarea separada
-          const horariosCompletados = Object.values(fieldValue).filter(Boolean).length;
-          const totalHorarios = Object.keys(fieldValue).length;
-          sectionTotal += totalHorarios;
-          sectionCompleted += horariosCompletados;
-        } else if (isBooleanFormat) {
-          // Formato legacy: boolean simple
-          sectionTotal++;
-          if (fieldValue === true) {
-            sectionCompleted++;
-          }
-        } else {
-          // Formato desconocido, tratar como no completado
-          sectionTotal++;
-        }
-        
-        // Actualizar última completación si se modificó
-        if (this.isModified(`${section}.${field}`)) {
-          if (isObjectFormat) {
-            // Si hay algún horario completado, actualizar última completación
-            const hasAnyCompleted = Object.values(fieldValue).some(Boolean);
-            if (hasAnyCompleted) {
-              this.config[section][field].ultimaCompletacion = new Date();
-            }
-          } else if (isBooleanFormat && fieldValue === true) {
-            this.config[section][field].ultimaCompletacion = new Date();
-          }
-        }
+
+      if (!this.isModified(`${section}.${field}`)) return;
+
+      const fieldValue = sectionData[field];
+      const isObjectFormat = typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue);
+      const isBooleanFormat = typeof fieldValue === 'boolean';
+
+      if (isObjectFormat && Object.values(fieldValue).some(Boolean)) {
+        this.config[section][field].ultimaCompletacion = new Date();
+        this.markModified(`config.${section}.${field}`);
+      } else if (isBooleanFormat && fieldValue === true) {
+        this.config[section][field].ultimaCompletacion = new Date();
+        this.markModified(`config.${section}.${field}`);
       }
     });
-
-    this.completitudPorSeccion[section] = sectionTotal > 0 ? sectionCompleted / sectionTotal : 0;
-    totalTasks += sectionTotal;
-    completedTasks += sectionCompleted;
   });
 
-  this.completitud = totalTasks > 0 ? completedTasks / totalTasks : 0;
+  const completitudFields = calculateRutinaCompletitud(this);
+  this.completitud = completitudFields.completitud;
+  this.completitudPorSeccion = completitudFields.completitudPorSeccion;
+  this.markModified('completitudPorSeccion');
   next();
 });
 
 // Pre-save hook para garantizar que las frecuencias sean números
 rutinaSchema.pre('save', function(next) {
-  // CRÍTICO: Marcar config como modificado para que Mongoose guarde campos dinámicos en Schema.Types.Mixed
-  if (this.isModified('config') || (this.config && typeof this.config === 'object')) {
-    this.markModified('config');
-    // Marcar cada sección también
-    ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
-      if (this.config[section]) {
-        this.markModified(`config.${section}`);
-        // Marcar cada item dentro de la sección
-        Object.keys(this.config[section]).forEach(item => {
-          this.markModified(`config.${section}.${item}`);
-        });
-      }
-    });
-  }
-  
   if (this.config) {
-    ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'].forEach(section => {
-      if (this.config[section]) {
-        Object.keys(this.config[section]).forEach(item => {
-          if (this.config[section][item]) {
-            // Asegurar que la frecuencia es un número
-            const frecuencia = this.config[section][item].frecuencia;
-            const parsedFrec = parseInt(frecuencia, 10);
-            if (isNaN(parsedFrec)) {
-              this.config[section][item].frecuencia = 1;
-            } else {
-              this.config[section][item].frecuencia = Math.max(1, parsedFrec);
-            }
-            
-            // Normalizar el tipo a mayúsculas pero no cambiar el valor
-            if (this.config[section][item].tipo) {
-              this.config[section][item].tipo = this.config[section][item].tipo.toUpperCase();
-              
-              // Solo asignar un periodo por defecto si no tiene uno ya definido
-              if (!this.config[section][item].periodo) {
-                const tipo = this.config[section][item].tipo;
-                if (tipo === 'DIARIO') {
-                  this.config[section][item].periodo = 'CADA_DIA';
-                } else if (tipo === 'SEMANAL') {
-                  this.config[section][item].periodo = 'CADA_SEMANA';
-                } else if (tipo === 'MENSUAL') {
-                  this.config[section][item].periodo = 'CADA_MES';
-                } else {
-                  this.config[section][item].periodo = 'CADA_DIA';
-                }
-              }
-            }
+    collectRutinaSectionKeys(this).forEach((section) => {
+      if (!this.config[section]) return;
+
+      Object.keys(this.config[section]).forEach((item) => {
+        let itemConfig = this.config[section][item];
+        let repaired = false;
+
+        if (!itemConfig || typeof itemConfig !== 'object' || Array.isArray(itemConfig)) {
+          itemConfig = repairRutinaItemConfig(itemConfig);
+          this.config[section][item] = itemConfig;
+          repaired = true;
+        }
+
+        const frecuencia = itemConfig.frecuencia;
+        const parsedFrec = parseInt(frecuencia, 10);
+        const nextFrecuencia = isNaN(parsedFrec) ? 1 : Math.max(1, parsedFrec);
+        if (itemConfig.frecuencia !== nextFrecuencia) {
+          itemConfig.frecuencia = nextFrecuencia;
+          repaired = true;
+        }
+
+        if (itemConfig.tipo) {
+          const upperTipo = itemConfig.tipo.toUpperCase();
+          if (itemConfig.tipo !== upperTipo) {
+            itemConfig.tipo = upperTipo;
+            repaired = true;
           }
-        });
+
+          if (!itemConfig.periodo) {
+            if (upperTipo === 'DIARIO') {
+              itemConfig.periodo = 'CADA_DIA';
+            } else if (upperTipo === 'SEMANAL') {
+              itemConfig.periodo = 'CADA_SEMANA';
+            } else if (upperTipo === 'MENSUAL') {
+              itemConfig.periodo = 'CADA_MES';
+            } else {
+              itemConfig.periodo = 'CADA_DIA';
+            }
+            repaired = true;
+          }
+        }
+
+        if (repaired || this.isModified(`config.${section}.${item}`)) {
+          this.markModified(`config.${section}.${item}`);
+        }
+      });
+
+      if (this.isModified(`config.${section}`)) {
+        this.markModified(`config.${section}`);
       }
     });
+
+    if (this.isModified('config')) {
+      this.markModified('config');
+    }
   }
   next();
 });
@@ -452,8 +393,8 @@ rutinaSchema.methods.actualizarProgreso = function(section, item, fecha = new Da
     this.resetearProgresoPeriodo(section, item);
     // Actualizar período
     config.ultimoPeriodo = {
-      inicio: this.obtenerInicioPeriodo(config, ahora),
-      fin: this.obtenerFinPeriodo(config, ahora)
+      inicio: getRutinaPeriodStart(config, ahora),
+      fin: getRutinaPeriodEnd(config, ahora)
     };
   }
 
@@ -468,43 +409,16 @@ rutinaSchema.methods.actualizarProgreso = function(section, item, fecha = new Da
 rutinaSchema.methods.necesitaResetearProgreso = function(config, fecha) {
   if (!config.ultimoPeriodo?.inicio) return true;
 
-  const inicioPeriodoActual = this.obtenerInicioPeriodo(config, fecha);
+  const inicioPeriodoActual = getRutinaPeriodStart(config, fecha);
   return new Date(config.ultimoPeriodo.inicio) < inicioPeriodoActual;
 };
 
 rutinaSchema.methods.obtenerInicioPeriodo = function(config, fecha) {
-  const fechaBase = new Date(fecha);
-  
-  switch (config.tipo) {
-    case 'SEMANAL':
-      fechaBase.setDate(fechaBase.getDate() - fechaBase.getDay());
-      break;
-    case 'MENSUAL':
-      fechaBase.setDate(1);
-      break;
-    default:
-      fechaBase.setHours(0, 0, 0, 0);
-  }
-  
-  return fechaBase;
+  return getRutinaPeriodStart(config, fecha);
 };
 
 rutinaSchema.methods.obtenerFinPeriodo = function(config, fecha) {
-  const fechaBase = new Date(fecha);
-  
-  switch (config.tipo) {
-    case 'SEMANAL':
-      fechaBase.setDate(fechaBase.getDate() - fechaBase.getDay() + 6);
-      break;
-    case 'MENSUAL':
-      fechaBase.setMonth(fechaBase.getMonth() + 1);
-      fechaBase.setDate(0);
-      break;
-    default:
-      fechaBase.setHours(23, 59, 59, 999);
-  }
-  
-  return fechaBase;
+  return getRutinaPeriodEnd(config, fecha);
 };
 
 export const Rutinas = mongoose.model('Rutinas', rutinaSchema); 

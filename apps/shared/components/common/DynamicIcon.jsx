@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { icons, getIconByKey } from '../../navigation/menuIcons';
+import { getIconByName } from '../../utils/iconConfig';
 import { ICON_SIZES, TRANSITIONS } from '../../config/uiConstants';
 
 /**
@@ -28,9 +29,9 @@ export function DynamicIcon({
   component,
   ...otherProps 
 }) {
-  // Obtener el componente del icono
-  const IconComponent = typeof iconKey === 'string' 
-    ? (icons[iconKey] || getIconByKey(iconKey))
+  // Obtener el componente del icono (menuIcons camelCase o habitIcons PascalCase)
+  const IconComponent = typeof iconKey === 'string'
+    ? (icons[iconKey] || getIconByName(iconKey) || getIconByKey(iconKey))
     : null;
 
   if (!IconComponent) {

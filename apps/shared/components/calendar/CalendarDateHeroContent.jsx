@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Chip, Typography, useMediaQuery } from '@mui/material';
+import { Box, Chip, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { startOfDay } from 'date-fns';
 import { formatCalendarDayHeader } from '../../utils/focoNavigationUtils';
@@ -85,102 +85,74 @@ export default function CalendarDateHeroContent({
   onGoToToday,
   loading = false,
 }) {
-  const theme = useTheme();
-  const isNarrow = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true });
   const normalized = startOfDay(date || new Date());
   const { weekday, dayNumber, monthYear } = formatCalendarDayHeader(normalized);
   const isRutina = variant === 'rutina';
-  const showInlineCompletion = isRutina && typeof completionPercentage === 'number' && !isNarrow;
-
-  const pctLabel = typeof completionPercentage === 'number'
-    ? `${completionPercentage}%`
-    : '—';
 
   if (isRutina) {
     return (
-      <Box sx={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: { xs: 0.5, sm: 0.75 },
+          minWidth: 0,
+        }}
+      >
         <Typography
-          variant="caption"
-          color="text.secondary"
+          component="span"
           sx={{
-            textTransform: 'capitalize',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            display: 'block',
-            lineHeight: 1.2,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            fontSize: { xs: '1.5rem', sm: '2rem' },
+            fontWeight: 400,
+            lineHeight: 1,
+            color: 'text.primary',
+            flexShrink: 0,
           }}
         >
-          {weekday}
+          {dayNumber}
         </Typography>
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
-            gap: { xs: 0.375, sm: 0.5 },
-            width: '100%',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
             minWidth: 0,
-            overflow: 'hidden',
-            flexWrap: 'nowrap',
+            pb: 0.125,
           }}
         >
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: { xs: 0.375, sm: 0.5 },
-              minWidth: 0,
-              flexShrink: 1,
-              overflow: 'hidden',
-            }}
-          >
-            <Typography
-              component="span"
-              sx={{
-                fontSize: { xs: '1.5rem', sm: '2rem' },
-                fontWeight: 400,
-                lineHeight: 1,
-                color: 'text.primary',
-                flexShrink: 0,
-              }}
-            >
-              {dayNumber}
-            </Typography>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{
-                textTransform: 'capitalize',
-                fontWeight: 500,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {monthYear}
-            </Typography>
-          </Box>
-          {showInlineCompletion && (
-            <RutinaCompletionPctChip
-              label={pctLabel}
-              color={completionColor}
-              tooltip={completionTooltip}
-              subtle={variant === 'rutina'}
-            />
-          )}
-        </Box>
-        {subtitle ? (
           <Typography
             variant="caption"
-            color="text.disabled"
-            sx={{ display: 'block', lineHeight: 1.2, mt: 0.25 }}
+            color="text.secondary"
+            sx={{
+              textTransform: 'capitalize',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              display: 'block',
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '100%',
+            }}
           >
-            {subtitle}
+            {weekday}
           </Typography>
-        ) : null}
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            sx={{
+              textTransform: 'capitalize',
+              fontWeight: 500,
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '100%',
+            }}
+          >
+            {monthYear}
+          </Typography>
+        </Box>
       </Box>
     );
   }
