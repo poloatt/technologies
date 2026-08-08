@@ -7,6 +7,7 @@ import { useHabits, useRutinas } from '@shared/context';
 import { usePageWithHistory } from '@shared/hooks';
 import { applyTimedMoveToTask } from '@shared/utils/calendar/calendarDragUtils';
 import { isTaskCompleted } from '@shared/utils/agendaRules';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 import { TareaForm, buildTareaPayload, syncTareaToGoogleInBackground } from '../tasks/form';
 import GoogleTasksConfig from '../tasks/google/GoogleTasksConfig';
 import { useCalendarTaskFilter } from './hooks/useCalendarTaskFilter';
@@ -28,7 +29,7 @@ export default function AgendaCalendarPage() {
   const { rutinas, fetchRutinas, getRutinaById, updateUserHabitPreference } = useRutinas();
   const { habits, addHabit, fetchHabits } = useHabits();
 
-  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(getNormalizedToday()));
   const [viewMode, setViewMode] = useState(() => (isMobile ? 'day' : 'week'));
   const { objetivos, refetch: refetchObjetivos } = useObjetivosLight();
   const {

@@ -5,78 +5,7 @@ import { collectRutinaSectionKeys } from '../utils/habitSectionsUtils.js';
 import { repairRutinaItemConfig } from '../utils/rutinaDocumentUtils.js';
 import { calculateRutinaCompletitud } from '../utils/rutinaCompletitudUtils.js';
 
-// Definir el esquema de configuración de cadencia
-const cadenciaSchema = {
-  tipo: {
-    type: String,
-    enum: ['DIARIO', 'SEMANAL', 'MENSUAL', 'PERSONALIZADO'],
-    default: 'DIARIO'
-  },
-  periodo: {
-    type: String,
-    enum: ['CADA_DIA', 'CADA_SEMANA', 'CADA_MES'],
-    default: function() {
-      // Asignar el periodo predeterminado según el tipo
-      if (this.tipo === 'SEMANAL') return 'CADA_SEMANA';
-      if (this.tipo === 'MENSUAL') return 'CADA_MES';
-      return 'CADA_DIA';
-    }
-  },
-  diasSemana: [{
-    type: Number,
-    min: 0,
-    max: 6
-  }],
-  diasMes: [{
-    type: Number,
-    min: 1,
-    max: 31
-  }],
-  frecuencia: {
-    type: Number,
-    min: 1,
-    default: 1,
-    get: v => Math.round(v),
-    set: v => {
-      // Asegurar que siempre se guarde como número
-      if (typeof v === 'string') {
-        const parsed = parseInt(v, 10);
-        return isNaN(parsed) ? 1 : Math.max(1, parsed);
-      }
-      return typeof v === 'number' ? Math.max(1, v) : 1;
-    }
-  },
-  progresoActual: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  ultimoPeriodo: {
-    inicio: Date,
-    fin: Date
-  },
-  completacionesPeriodo: [{
-    fecha: Date,
-    valor: Number
-  }],
-  ultimaCompletacion: {
-    type: Date
-  },
-  activo: {
-    type: Boolean,
-    default: true
-  }
-};
-
-// Crear esquemas de configuración para cada sección
-// IMPORTANTE: Usar Schema.Types.Mixed para permitir hábitos personalizados dinámicos
-// Esto permite que los usuarios agreguen nuevos hábitos sin modificar el esquema
-const configSchema = {
-  bodyCare: { type: mongoose.Schema.Types.Mixed, default: {} },
-  nutricion: { type: mongoose.Schema.Types.Mixed, default: {} },
-  ejercicio: { type: mongoose.Schema.Types.Mixed, default: {} },
-  cleaning: { type: mongoose.Schema.Types.Mixed, default: {} }
-};
+const emptySectionMap = () => ({});
 
 const rutinaSchema = createSchema({
   fecha: {
@@ -84,53 +13,33 @@ const rutinaSchema = createSchema({
     default: Date.now,
     required: true
   },
-  // IMPORTANTE: Usar Schema.Types.Mixed para permitir hábitos personalizados dinámicos
-  // Esto permite que los usuarios agreguen nuevos hábitos sin modificar el esquema
+  // Completions: Mixed vacío; create rellena desde customHabits (no defaults legacy).
   bodyCare: {
     type: mongoose.Schema.Types.Mixed,
-    default: () => ({
-      bath: false,
-      skinCareDay: false,
-      skinCareNight: false,
-      bodyCream: false
-    })
+    default: emptySectionMap
   },
   nutricion: {
     type: mongoose.Schema.Types.Mixed,
-    default: () => ({
-      cocinar: false,
-      agua: false,
-      protein: false,
-      meds: false
-    })
+    default: emptySectionMap
   },
   ejercicio: {
     type: mongoose.Schema.Types.Mixed,
-    default: () => ({
-      meditate: false,
-      stretching: false,
-      gym: false,
-      cardio: false
-    })
+    default: emptySectionMap
   },
   cleaning: {
     type: mongoose.Schema.Types.Mixed,
-    default: () => ({
-      bed: false,
-      platos: false,
-      piso: false,
-      ropa: false
-    })
+    default: emptySectionMap
   },
+  // Mixed (no nested subdoc): nested schemas auto-add `_id` (ObjectId), and corrupted
+  // preference payloads with a `buffer` key make Mongoose cast config as ObjectId.
   config: {
-    type: configSchema,
+    type: mongoose.Schema.Types.Mixed,
     default: () => ({
       bodyCare: {},
       nutricion: {},
       ejercicio: {},
       cleaning: {}
-    }),
-    strict: false // Permitir campos dinámicos (hábitos personalizados)
+    })
   },
   completitud: {
     type: Number,

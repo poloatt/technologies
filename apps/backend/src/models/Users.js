@@ -252,10 +252,13 @@ userSchema.pre('save', function(next) {
     const { rutinasConfig } = this.preferences;
     
     // Recorrer cada sección e ítem para normalizar sus valores
+    const CONFIG_SECTION_SKIP = new Set(['_metadata', '_id', 'buffer']);
     Object.keys(rutinasConfig).forEach(section => {
-      if (rutinasConfig[section] && typeof rutinasConfig[section] === 'object') {
+      if (CONFIG_SECTION_SKIP.has(section)) return;
+      if (rutinasConfig[section] && typeof rutinasConfig[section] === 'object' && !Array.isArray(rutinasConfig[section])) {
         Object.keys(rutinasConfig[section]).forEach(itemId => {
-          if (rutinasConfig[section][itemId]) {
+          if (CONFIG_SECTION_SKIP.has(itemId)) return;
+          if (rutinasConfig[section][itemId] && typeof rutinasConfig[section][itemId] === 'object') {
             // Asegurar que la frecuencia siempre sea un número
             if (rutinasConfig[section][itemId].frecuencia !== undefined) {
               const frecuencia = rutinasConfig[section][itemId].frecuencia;

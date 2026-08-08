@@ -6,6 +6,7 @@ import NightlightIcon from '@mui/icons-material/Nightlight';
 import { contarCompletadosEnPeriodo, isFlexiblePeriodic, isHabitPartiallyCompletedToday } from '@shared/habits';
 import { isHabitCompletedForHistorial, isHabitHorarioCompleted } from '@shared/habits';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
+import { getNormalizedToday, parseAPIDate, toISODateString } from '@shared/utils/dateUtils';
 
 /**
  * Componente Badge que muestra la frecuencia o el icono de horario de un hábito
@@ -68,22 +69,19 @@ export const HabitCounterBadge = ({
             });
         } else if (Array.isArray(historialItem)) {
           // Fallback: si viene como array de fechas
-          historialCompletado = historialItem.map(fecha => new Date(fecha));
+          historialCompletado = historialItem.map((fecha) => parseAPIDate(fecha) || new Date(fecha));
         }
       }
 
-      // Calcular completados del período actual
-      const hoy = new Date();
+      // Calcular completados del período actual (día de la rutina o hoy prefs)
+      const hoy = rutina?.fecha ? (parseAPIDate(rutina.fecha) || getNormalizedToday()) : getNormalizedToday();
       let completados = contarCompletadosEnPeriodo(hoy, tipo, periodo || 'CADA_DIA', historialCompletado);
       
       // Verificar si el hábito está completado hoy y agregarlo si no está en el historial
       const completadoHoy = isHabitCompletedForHistorial(rutina?.[section]?.[itemId]);
       if (completadoHoy) {
-        const hoyStr = hoy.toISOString().split('T')[0];
-        const yaEstaEnHistorial = historialCompletado.some(fecha => {
-          const fechaStr = fecha.toISOString().split('T')[0];
-          return fechaStr === hoyStr;
-        });
+        const hoyStr = toISODateString(hoy);
+        const yaEstaEnHistorial = historialCompletado.some((fecha) => toISODateString(fecha) === hoyStr);
         
         // Si no está en el historial, agregarlo al conteo
         if (!yaEstaEnHistorial) {

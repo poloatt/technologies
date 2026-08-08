@@ -72,4 +72,22 @@ describe('cadenciaUtils carry-over', () => {
     expect(start.getDate()).toBe(22);
     expect(end.getDate()).toBe(28);
   });
+
+  it('isScheduledCadenciaDay returns true for DIARIO', () => {
+    expect(isScheduledCadenciaDay(monday, { tipo: 'DIARIO', frecuencia: 1, activo: true })).toBe(true);
+  });
+
+  it('PERSONALIZADO with diasSemana uses fixed schedule (not interval)', () => {
+    const personalizadoLunes = {
+      tipo: 'PERSONALIZADO',
+      periodo: 'CADA_SEMANA',
+      frecuencia: 1,
+      activo: true,
+      diasSemana: [1],
+    };
+    expect(isScheduledCadenciaDay(monday, personalizadoLunes)).toBe(true);
+    expect(isScheduledCadenciaDay(tuesday, personalizadoLunes)).toBe(false);
+    expect(debesMostrarHabitoEnFecha(tuesday, personalizadoLunes, [])).toBe(true);
+    expect(debesMostrarHabitoEnFecha(tuesday, personalizadoLunes, [tuesday])).toBe(false);
+  });
 });

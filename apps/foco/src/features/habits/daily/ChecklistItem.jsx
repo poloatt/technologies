@@ -6,6 +6,7 @@ import HabitIconButton from '@shared/components/habits/HabitIconButton';
 import { useRutinas } from '@shared/context';
 import { isHabitHorarioCompleted } from '@shared/habits';
 import { contarCompletadosEnPeriodo, obtenerHistorialCompletados } from '@shared/habits';
+import { parseAPIDate, toISODateString } from '@shared/utils/dateUtils';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
@@ -71,14 +72,17 @@ const ChecklistItem = ({
                (tipo === 'PERSONALIZADO' && periodo !== 'CADA_DIA')) {
       if (rutina) {
         const historial = obtenerHistorialCompletados(itemId, section, rutina);
-        const hoy = new Date();
-        completados = contarCompletadosEnPeriodo(hoy, tipo, periodo, historial);
+        const refDate = rutina.fecha ? parseAPIDate(rutina.fecha) : new Date();
+        completados = contarCompletadosEnPeriodo(refDate, tipo, periodo, historial);
 
         if (isCompleted) {
-          const hoyStr = hoy.toISOString().split('T')[0];
+          const refStr = toISODateString(refDate);
           const yaEstaEnHistorial = historial.some((fecha) => {
-            const fechaStr = fecha.toISOString().split('T')[0];
-            return fechaStr === hoyStr;
+            try {
+              return toISODateString(fecha) === refStr;
+            } catch {
+              return false;
+            }
           });
 
           if (!yaEstaEnHistorial) {

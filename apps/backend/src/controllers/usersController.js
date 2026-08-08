@@ -322,79 +322,75 @@ export const usersController = {
   },
   
   /** 
-   * Actualiza la configuración global de rutinas para el usuario
+   * Actualiza la plantilla global de cadencia (`preferences.rutinasConfig`).
    */
   updateDefaultRutinaConfig: async (req, res) => {
     try {
-      // Verificar que hay un usuario autenticado
       const userId = req.user.id;
       if (!userId) {
         return res.status(401).json({ msg: 'Usuario no autenticado' });
       }
 
-      // Obtener el usuario actual
       const user = await Users.findById(userId);
       if (!user) {
         return res.status(404).json({ msg: 'Usuario no encontrado' });
       }
 
-      console.log('[usersController] Actualizando configuración de rutinas:', JSON.stringify(req.body));
-
-      // Inicializar configuración de rutinas si no existe
-      if (!user.rutinasConfig) {
-        user.rutinasConfig = {
-          _metadata: {
-            lastUpdated: new Date(),
-            version: 1
-          }
+      if (!user.preferences) user.preferences = {};
+      if (!user.preferences.rutinasConfig || typeof user.preferences.rutinasConfig !== 'object') {
+        user.preferences.rutinasConfig = {
+          bodyCare: {},
+          nutricion: {},
+          ejercicio: {},
+          cleaning: {},
+          _metadata: { lastUpdated: new Date(), version: 1 },
         };
       }
 
-      // Para cada sección en el cuerpo de la solicitud
-      for (const [seccionKey, seccionData] of Object.entries(req.body)) {
-        // Secciones especiales que no son parte de la configuración
-        if (seccionKey === '_metadata') continue;
+      const CONFIG_SECTION_SKIP = new Set(['_metadata', '_id', 'buffer']);
 
-        // Inicializar la sección si no existe
-        if (!user.rutinasConfig[seccionKey]) {
-          user.rutinasConfig[seccionKey] = {};
+      for (const [seccionKey, seccionData] of Object.entries(req.body || {})) {
+        if (CONFIG_SECTION_SKIP.has(seccionKey)) continue;
+        if (!seccionData || typeof seccionData !== 'object') continue;
+
+        if (!user.preferences.rutinasConfig[seccionKey]) {
+          user.preferences.rutinasConfig[seccionKey] = {};
         }
 
-        // Para cada ítem en la sección
         for (const [itemKey, itemConfig] of Object.entries(seccionData)) {
-          // Normalizar la configuración para garantizar todos los campos necesarios
-          const normalizedConfig = {
-            activado: typeof itemConfig.activado === 'boolean' ? itemConfig.activado : true,
-            frecuencia: {
-              valor: parseInt(itemConfig.frecuencia?.valor) || 1,
-              tipo: itemConfig.frecuencia?.tipo || 'dias',
-              periodo: itemConfig.frecuencia?.periodo || 'cada'
-            },
-            recordatorio: {
-              activado: typeof itemConfig.recordatorio?.activado === 'boolean' 
-                ? itemConfig.recordatorio.activado 
-                : false,
-              hora: itemConfig.recordatorio?.hora || "08:00"
-            }
-          };
+          if (CONFIG_SECTION_SKIP.has(itemKey) || !itemConfig || typeof itemConfig !== 'object') continue;
 
-          // Actualizar la configuración del ítem
-          user.rutinasConfig[seccionKey][itemKey] = normalizedConfig;
+          const tipo = String(itemConfig.tipo || 'DIARIO').toUpperCase();
+          const frecuenciaRaw = itemConfig.frecuencia?.valor ?? itemConfig.frecuencia ?? 1;
+          const frecuencia = Math.max(1, parseInt(frecuenciaRaw, 10) || 1);
+          const periodo = itemConfig.periodo
+            || itemConfig.frecuencia?.periodo
+            || (tipo === 'SEMANAL' ? 'CADA_SEMANA' : tipo === 'MENSUAL' ? 'CADA_MES' : 'CADA_DIA');
+
+          user.preferences.rutinasConfig[seccionKey][itemKey] = {
+            tipo,
+            frecuencia,
+            periodo,
+            diasSemana: Array.isArray(itemConfig.diasSemana) ? itemConfig.diasSemana : [],
+            diasMes: Array.isArray(itemConfig.diasMes) ? itemConfig.diasMes : [],
+            horarios: Array.isArray(itemConfig.horarios) ? itemConfig.horarios : [],
+            activo: itemConfig.activo !== false && itemConfig.activado !== false,
+          };
         }
       }
 
-      // Actualizar metadata
-      user.rutinasConfig._metadata = {
+      user.preferences.rutinasConfig._metadata = {
+        ...(user.preferences.rutinasConfig._metadata || {}),
         lastUpdated: new Date(),
-        version: (user.rutinasConfig._metadata?.version || 0) + 1
+        version: (user.preferences.rutinasConfig._metadata?.version || 0) + 1,
       };
 
-      // Guardar los cambios
+      user.markModified('preferences.rutinasConfig');
       await user.save();
 
       res.json({
         msg: 'Configuración de rutinas actualizada correctamente',
-        rutinasConfig: user.rutinasConfig
+        rutinasConfig: user.preferences.rutinasConfig,
       });
     } catch (error) {
       console.error('[usersController] Error al actualizar configuración de rutinas:', error);
@@ -714,12 +710,17 @@ export const usersController = {
         });
       });
 
-      // --- Aplicar cambios a rutinas existentes desde una fecha (sin tocar el pasado anterior) ---
-      // Se activa vía query/body: applyFrom=today | applyFrom=YYYY-MM-DD
+      // --- Aplicar cambios a rutinas existentes ---
+      // applyFrom=today | YYYY-MM-DD
+      // applyScope=forward (default) | day | none
       const applyFromRaw = (req.query?.applyFrom || req.body?.applyFrom || '').toString().trim();
+      const applyScopeRaw = (req.query?.applyScope || req.body?.applyScope || 'forward')
+        .toString()
+        .trim()
+        .toLowerCase();
       let appliedToRutinas = null;
 
-      if (applyFromRaw) {
+      if (applyFromRaw && applyScopeRaw !== 'none') {
         try {
           const timezone = timezoneUtils.getUserTimezone(user);
           const isYMD = /^\d{4}-\d{2}-\d{2}$/.test(applyFromRaw);
@@ -747,18 +748,28 @@ export const usersController = {
             });
 
             if (Object.keys(setOps).length > 0) {
+              const fechaFilter = applyScopeRaw === 'day'
+                ? applyFromStart
+                : { $gte: applyFromStart };
               const result = await Rutinas.updateMany(
-                { usuario: req.user.id, fecha: { $gte: applyFromStart } },
+                { usuario: req.user.id, fecha: fechaFilter },
                 { $set: setOps }
               );
               appliedToRutinas = {
                 from: applyFromStart.toISOString(),
                 applyFrom: applyFromRaw,
+                applyScope: applyScopeRaw === 'day' ? 'day' : 'forward',
                 matched: result.matchedCount ?? result.n ?? 0,
                 modified: result.modifiedCount ?? result.nModified ?? 0
               };
             } else {
-              appliedToRutinas = { from: applyFromStart.toISOString(), applyFrom: applyFromRaw, matched: 0, modified: 0 };
+              appliedToRutinas = {
+                from: applyFromStart.toISOString(),
+                applyFrom: applyFromRaw,
+                applyScope: applyScopeRaw === 'day' ? 'day' : 'forward',
+                matched: 0,
+                modified: 0
+              };
             }
           }
         } catch (e) {

@@ -1,7 +1,7 @@
 import { BaseController } from './BaseController.js';
 import { Rutinas } from '../models/Rutinas.js';
 import { Users } from '../models/index.js';
-import { applyCustomHabitsToRutinaConfig } from '../constants/defaultCustomHabits.js';
+import { applyCustomHabitsToRutinaConfig, buildEmptyCompletionSections } from '../constants/defaultCustomHabits.js';
 import { timezoneUtils } from '../models/BaseSchema.js';
 import { getValidHabitSections } from '../utils/habitSectionsUtils.js';
 import {
@@ -115,8 +115,6 @@ class RutinasController extends BaseController {
       }
       
       // Verificar duplicados antes de crear
-      const fechaFin = timezoneUtils.normalizeToEndOfDay(fechaNormalizada, timezone);
-      
       logger.dev('[rutinasController] Verificando duplicados al crear', {
         fecha: fechaNormalizada.toISOString(),
         timezone,
@@ -201,12 +199,16 @@ class RutinasController extends BaseController {
         return full;
       };
 
+      // Skip ObjectId-shaped / metadata keys that can appear in corrupted rutinasConfig
+      const CONFIG_SECTION_SKIP = new Set(['_metadata', '_id', 'buffer']);
+
       const mergeConfigInto = (target, source) => {
         if (!source || typeof source !== 'object') return target;
         Object.keys(source).forEach((section) => {
-          if (section === '_metadata' || !source[section] || typeof source[section] !== 'object') return;
+          if (CONFIG_SECTION_SKIP.has(section) || !source[section] || typeof source[section] !== 'object' || Array.isArray(source[section])) return;
           if (!target[section]) target[section] = {};
           Object.entries(source[section]).forEach(([itemId, cfg]) => {
+            if (CONFIG_SECTION_SKIP.has(itemId) || !cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return;
             if (!target[section][itemId]) {
               target[section][itemId] = normalizeItemConfig(cfg);
               return;
@@ -231,58 +233,44 @@ class RutinasController extends BaseController {
         cleaningCount: Object.keys(configCompleta.cleaning || {}).length
       });
 
-      // 1) Si el frontend envía config explícita (RutinaForm), usarla como fuente principal
+      // 1) Si el frontend envía config explícita (RutinaForm), mergearla sobre la base
       const reqConfig = req.body?.config;
       const hasReqConfig = reqConfig && typeof reqConfig === 'object' && Object.keys(reqConfig).length > 0;
-      
-      // Fuente de config (prioridad): config enviada por cliente > plantilla usuario > defaults
+
       if (hasReqConfig) {
         logger.dev('[rutinasController] Usando config enviada por el cliente al crear rutina');
         mergeConfigInto(configCompleta, reqConfig);
       }
 
-      // Si se solicita usar la configuración del usuario, mergearla (sobre defaults y/o request)
-      // NOTA: buildDefaultFullConfig ya incluye las configuraciones globales, pero aquí las re-mergeamos
-      // para asegurar que cualquier actualización reciente se aplique
-      if (useGlobalConfig) {
-        logger.dev('[rutinasController] Re-mergeando configuración de usuario (si existe) para nueva rutina');
-        
-        try {
-          const usuario = await Users.findById(req.user.id)
-            .select('preferences.rutinasConfig')
-            .lean();
-            
-          if (usuario && usuario.preferences && usuario.preferences.rutinasConfig) {
-            logger.dev('[rutinasController] Configuración global encontrada para re-merge');
-            
-            // Transformar la configuración global al formato de config de la rutina
-            const globalConfig = usuario.preferences.rutinasConfig;
-            const configVersion = globalConfig._metadata?.version || 1;
-            
-            logger.dev(`[rutinasController] Re-aplicando configuración global versión ${configVersion}`);
-            
-            // Merge de plantilla del usuario sobre defaults completos
-            mergeConfigInto(configCompleta, globalConfig);
-            // Nota: guardamos versión solo en logs (schema Rutinas.config no define _metadata)
-            logger.dev('[rutinasController] Config re-aplicada desde plantilla usuario', { version: configVersion });
-          } else {
-            logger.dev('[rutinasController] No se encontró configuración global para re-merge, usando valores ya incluidos');
-          }
-        } catch (error) {
-          logger.warn('[rutinasController] Error al re-obtener configuración global', error);
-          // Continuar con configuración por defecto en caso de error
+      // 2) Re-aplicar plantilla global solo si se pide y no vino config del cliente
+      //    (buildDefaultFullConfig ya incluye prefs; evita pisar overrides del request)
+      if (useGlobalConfig && !hasReqConfig) {
+        const globalConfig = usuarioConfig?.preferences?.rutinasConfig;
+        if (globalConfig) {
+          logger.dev('[rutinasController] Re-aplicando configuración global a nueva rutina');
+          mergeConfigInto(configCompleta, globalConfig);
         }
-      } else {
-        logger.dev('[rutinasController] No se solicitó usar configuración global, usando valores predeterminados');
       }
-      
-      // Crear nueva rutina con la configuración inicial
+
+      // Strip keys that break Mongoose ObjectId casting if they leaked into config
+      if (configCompleta && typeof configCompleta === 'object') {
+        delete configCompleta._id;
+        delete configCompleta.buffer;
+        delete configCompleta._metadata;
+      }
+
+      const completionSections = buildEmptyCompletionSections(
+        usuarioConfig?.customHabits,
+        seccionesValidas,
+      );
+
       const nuevaRutina = new this.Model({
         nombre: nombre || 'Mi Rutina',
         // Guardar SIEMPRE la fecha normalizada al inicio del día del usuario
         fecha: fechaNormalizada,
         usuario: req.user.id,
-        config: configCompleta
+        config: configCompleta,
+        ...completionSections,
       });
 
       await nuevaRutina.save();
@@ -377,28 +365,30 @@ class RutinasController extends BaseController {
         return res.status(404).json({ error: 'Rutina no encontrada' });
       }
 
-      // Si se está actualizando la fecha, verificar duplicados
+      // Si se está actualizando la fecha, verificar duplicados (timezone del usuario)
       if (req.body.fecha && req.body.fecha !== currentRutina.fecha.toISOString()) {
-        const fechaInicio = new Date(req.body.fecha);
-        fechaInicio.setHours(0, 0, 0, 0);
-        
-        const fechaFin = new Date(req.body.fecha);
-        fechaFin.setHours(23, 59, 59, 999);
+        const user = await Users.findById(req.user.id).select('preferences.timezone');
+        const timezone = timezoneUtils.getUserTimezone(user);
+        const fechaInput = req.body.fecha;
+        const isYMD = typeof fechaInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fechaInput);
+        const fechaRutina = isYMD ? fechaInput : new Date(fechaInput);
+        const fechaNormalizada = timezoneUtils.normalizeToStartOfDay(fechaRutina, timezone);
 
-        const existingRutina = await this.Model.findOne({
-          _id: { $ne: id },
-          fecha: {
-            $gte: fechaInicio,
-            $lte: fechaFin
-          },
-          usuario: req.user.id
-        });
+        const existingRutina = fechaNormalizada
+          ? await this.Model.findOne({
+              _id: { $ne: id },
+              fecha: fechaNormalizada,
+              usuario: req.user.id
+            })
+          : null;
 
         if (existingRutina) {
           return res.status(409).json({
             error: 'Ya existe una rutina para esta fecha'
           });
         }
+
+        req.body.fecha = fechaNormalizada;
       }
 
       const sectionKeys = collectRutinaUpdateSectionKeys(currentRutina, req.body);
@@ -588,8 +578,10 @@ class RutinasController extends BaseController {
         return res.status(404).json({ error: 'Rutina no encontrada' });
       }
       
-      // Formatear el documento para mantener consistencia
-      let formattedDoc = {
+      // Formatear el documento para mantener consistencia.
+      // No fusionar prefs globales aquí: el snapshot del día debe preservarse.
+      // Hoy/futuro se overlayan en el cliente vía resolveRutinaItemConfig.
+      const formattedDoc = {
         _id: doc._id.toString(),
         ...doc,
         bodyCare: { ...doc.bodyCare },
@@ -597,44 +589,7 @@ class RutinasController extends BaseController {
         ejercicio: { ...doc.ejercicio },
         cleaning: { ...doc.cleaning }
       };
-      
-      // Fusionar con preferencias globales del usuario si existen
-      try {
-        const usuario = await Users.findById(req.user.id)
-          .select('preferences.rutinasConfig')
-          .lean();
-          
-        if (usuario && usuario.preferences && usuario.preferences.rutinasConfig) {
-          logger.dev('[rutinasController] Fusionando configuración global al cargar rutina');
-          
-          // Función helper para fusionar configuración
-          const mergeConfigInto = (target, source) => {
-            if (!source || typeof source !== 'object') return target;
-            Object.keys(source).forEach((section) => {
-              if (section === '_metadata' || !source[section] || typeof source[section] !== 'object') return;
-              if (!target.config) target.config = {};
-              if (!target.config[section]) target.config[section] = {};
-              Object.entries(source[section]).forEach(([itemId, cfg]) => {
-                if (cfg && typeof cfg === 'object') {
-                  target.config[section][itemId] = {
-                    ...(target.config[section][itemId] || {}),
-                    ...cfg,
-                  };
-                }
-              });
-            });
-            return target;
-          };
-          
-          const globalConfig = usuario.preferences.rutinasConfig;
-          formattedDoc = mergeConfigInto(formattedDoc, globalConfig);
-          logger.dev('[rutinasController] Configuración global fusionada correctamente');
-        }
-      } catch (prefError) {
-        logger.warn('[rutinasController] Error al fusionar preferencias globales', prefError);
-        // Continuar sin fusionar en caso de error
-      }
-      
+
       res.json(formattedDoc);
     } catch (error) {
       console.error('Error al obtener rutina por ID:', error);
@@ -670,82 +625,19 @@ class RutinasController extends BaseController {
   }
 
   /**
-   * Actualiza la configuración específica de un ítem en una rutina
+   * Actualiza la configuración de un ítem (body: seccion, itemId, config).
+   * Delega a la ruta por path; escribe en rutina.config (no en campos de completado).
    */
   async updateItemConfig(req, res) {
-    try {
-      const { id } = req.params;
-      const { seccion, itemId, config } = req.body;
-      
-      // Validar datos recibidos
-      if (!seccion || !itemId || !config) {
-        return res.status(400).json({ 
-          msg: 'Datos incompletos, se requieren sección, itemId y configuración' 
-        });
-      }
-      
-      // Normalizar la configuración
-      const normalizedConfig = {
-        activado: typeof config.activado === 'boolean' ? config.activado : true,
-        frecuencia: {
-          valor: parseInt(config.frecuencia?.valor) || 1,
-          tipo: config.frecuencia?.tipo || 'dias',
-          periodo: config.frecuencia?.periodo || 'cada'
-        },
-        recordatorio: {
-          activado: typeof config.recordatorio?.activado === 'boolean' 
-            ? config.recordatorio.activado 
-            : false,
-          hora: config.recordatorio?.hora || "08:00"
-        },
-        // Marcar como configuración local/personalizada
-        _source: 'LOCAL'
-      };
-      
-      // Buscar la rutina
-      const rutina = await Rutinas.findById(id);
-      
-      if (!rutina) {
-        return res.status(404).json({ msg: 'Rutina no encontrada' });
-      }
-      
-      // Verificar que el usuario es el creador de la rutina
-      if (rutina.usuario.toString() !== req.user.id) {
-        return res.status(401).json({ msg: 'No autorizado para modificar esta rutina' });
-      }
-      
-      // Inicializar la sección si no existe
-      if (!rutina[seccion]) {
-        rutina[seccion] = {};
-      }
-      
-      // Actualizar la configuración del ítem
-      rutina[seccion][itemId] = {
-        ...rutina[seccion][itemId],
-        ...normalizedConfig
-      };
-      
-      // Actualizar también el metadata para indicar que la rutina ha sido modificada
-      rutina.metadata = {
-        ...rutina.metadata || {},
-        lastUpdated: new Date(),
-        version: (rutina.metadata?.version || 0) + 1
-      };
-      
-      // Guardar los cambios
-      await rutina.save();
-      
-      res.json({ 
-        msg: 'Configuración actualizada correctamente',
-        rutina
-      });
-    } catch (error) {
-      console.error('[rutinasController] Error al actualizar configuración de ítem:', error);
-      res.status(500).json({ 
-        msg: 'Error al actualizar la configuración del ítem',
-        error: error.message 
+    const { seccion, itemId, config } = req.body || {};
+    if (!seccion || !itemId || !config) {
+      return res.status(400).json({
+        msg: 'Datos incompletos, se requieren sección, itemId y configuración'
       });
     }
+    req.params = { ...req.params, seccion, itemId };
+    req.body = config;
+    return this.updateItemConfigByPath(req, res);
   }
 
   /**
@@ -832,54 +724,31 @@ class RutinasController extends BaseController {
         });
       }
       
-      // Detectar y manejar años futuros
-      const añoActual = new Date().getFullYear();
-      const añoMax = 2024; // El año máximo permitido (modificar según necesidades)
-      
-      // Manejo defensivo para fechas inválidas
+      // Manejo defensivo para fechas inválidas (sin clampear a un año hardcodeado)
       let inicio, fin;
       try {
-        // Convertir a objetos Date y normalizar (inicio del día y fin del día)
         inicio = new Date(fechaInicio);
         fin = new Date(fechaFin);
-        
-        // Verificar si las fechas son válidas
+
         if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) {
           console.error(`[rutinasController] Fechas inválidas: inicio=${fechaInicio}, fin=${fechaFin}`);
-          return res.status(400).json({ 
-            error: 'Fechas inválidas', 
+          return res.status(400).json({
+            error: 'Fechas inválidas',
             details: 'Las fechas proporcionadas no son válidas'
           });
         }
-        
-        // Corregir años futuros si es necesario
-        let requiereCorreccion = false;
-        
-        if (inicio.getFullYear() > añoMax) {
-          const añoOriginal = inicio.getFullYear();
-          inicio.setFullYear(añoMax);
-          requiereCorreccion = true;
-          console.log(`[rutinasController] ⚠️ Corrigiendo fecha inicio de año futuro ${añoOriginal} a ${añoMax}`);
-        }
-        
-        if (fin.getFullYear() > añoMax) {
-          const añoOriginal = fin.getFullYear();
-          fin.setFullYear(añoMax);
-          requiereCorreccion = true;
-          console.log(`[rutinasController] ⚠️ Corrigiendo fecha fin de año futuro ${añoOriginal} a ${añoMax}`);
-        }
-        
-        // Normalizar horas
-        inicio.setUTCHours(0, 0, 0, 0);
-        fin.setUTCHours(23, 59, 59, 999);
-        
-        // Log avanzado si se hizo alguna corrección
-        if (requiereCorreccion) {
-          console.log(`[rutinasController] 🔄 Fechas corregidas:`, {
-            fechasOriginales: { inicio: fechaInicio, fin: fechaFin },
-            fechasCorregidas: { inicio: inicio.toISOString(), fin: fin.toISOString() }
+
+        // Rechazar rangos absurdamente futuros (typos), no reescribir a un año fijo
+        const añoMaxPermitido = new Date().getFullYear() + 1;
+        if (inicio.getFullYear() > añoMaxPermitido || fin.getFullYear() > añoMaxPermitido) {
+          return res.status(400).json({
+            error: 'Fechas fuera de rango',
+            details: `El año no puede ser posterior a ${añoMaxPermitido}`
           });
         }
+
+        inicio.setUTCHours(0, 0, 0, 0);
+        fin.setUTCHours(23, 59, 59, 999);
       } catch (fechaError) {
         console.error(`[rutinasController] Error al procesar fechas:`, fechaError);
         return res.status(400).json({ 
@@ -1070,20 +939,33 @@ class RutinasController extends BaseController {
       const completaciones = [];
       
       // Función auxiliar para añadir completación evitando duplicados
+      const toLogicalDayKey = (fecha) => {
+        if (fecha == null) return null;
+        if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}/.test(fecha)) {
+          return fecha.slice(0, 10);
+        }
+        const d = fecha instanceof Date ? fecha : new Date(fecha);
+        if (Number.isNaN(d.getTime())) return null;
+        const isUtcMidnight =
+          d.getUTCHours() === 0
+          && d.getUTCMinutes() === 0
+          && d.getUTCSeconds() === 0
+          && d.getUTCMilliseconds() === 0;
+        if (isUtcMidnight) {
+          return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        }
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      };
+
       const agregarCompletacion = (fecha, rutinaId, fuente) => {
-        // Normalizar la fecha a formato YYYY-MM-DD
-        const fechaObj = new Date(fecha);
-        const fechaStr = fechaObj.toISOString().split('T')[0];
-        
-        // Comprobar si ya existe una completación para esta fecha
-        const yaExiste = completaciones.some(comp => {
-          const compFechaStr = new Date(comp.fecha).toISOString().split('T')[0];
-          return compFechaStr === fechaStr;
-        });
-        
+        const fechaStr = toLogicalDayKey(fecha);
+        if (!fechaStr) return;
+
+        const yaExiste = completaciones.some((comp) => toLogicalDayKey(comp.fecha) === fechaStr);
+
         if (!yaExiste) {
           completaciones.push({
-            fecha: fechaObj,
+            fecha: new Date(`${fechaStr}T00:00:00.000Z`),
             rutinaId: rutinaId.toString(),
             completado: true,
             fuente: fuente || 'rutina'
@@ -1140,21 +1022,6 @@ class RutinasController extends BaseController {
         }
       });
       
-      // Caso especial para 27 y 28 de marzo
-      const esFechaEspecifica = (fecha) => {
-        const d = new Date(fecha);
-        return (d.getMonth() === 2 && (d.getDate() === 27 || d.getDate() === 28));
-      };
-      
-      const fechasEspeciales = completaciones.filter(comp => esFechaEspecifica(comp.fecha));
-      if (fechasEspeciales.length > 0) {
-        console.log(`[rutinasController] 🔍 DEBUGGEO ESPECIAL - Fechas 27 y 28 de marzo:`);
-        fechasEspeciales.forEach(comp => {
-          const fecha = new Date(comp.fecha);
-          console.log(`[rutinasController]   - ${fecha.toISOString().split('T')[0]} (${comp.fuente})`);
-        });
-      }
-      
       // Ordenar las completaciones por fecha
       completaciones.sort((a, b) => {
         const fechaA = new Date(a.fecha);
@@ -1164,33 +1031,29 @@ class RutinasController extends BaseController {
       
       console.log(`[rutinasController] Encontradas ${completaciones.length} completaciones para ${section}.${itemId}`);
       
-      // Agrupar completaciones por semana para facilitar el procesamiento en el frontend
+      // Agrupar completaciones por semana (lun–dom) y mes
       const completacionesPorSemana = {};
       const completacionesPorMes = {};
       
-      completaciones.forEach(comp => {
-        const fecha = new Date(comp.fecha);
-        
-        // Obtener año y número de semana
-        const año = fecha.getFullYear();
-        
-        // Para semanas
-        // Obtener el inicio de la semana para usarlo como clave
-        const inicioSemana = new Date(fecha);
-        inicioSemana.setDate(fecha.getDate() - fecha.getDay());
-        inicioSemana.setHours(0, 0, 0, 0);
-        // Corregir el formato de clave para evitar la duplicación del año
-        const claveSemana = inicioSemana.toISOString().split('T')[0];
-        
+      completaciones.forEach((comp) => {
+        const dayKey = toLogicalDayKey(comp.fecha);
+        if (!dayKey) return;
+        const [y, m, d] = dayKey.split('-').map(Number);
+        const dayUtc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
+
+        // Lunes = inicio de semana (alineado con CADENCIA_WEEK_STARTS_ON)
+        const dayOfWeek = dayUtc.getUTCDay(); // 0=dom … 6=sáb
+        const daysFromMonday = (dayOfWeek + 6) % 7;
+        const monday = new Date(dayUtc);
+        monday.setUTCDate(dayUtc.getUTCDate() - daysFromMonday);
+        const claveSemana = `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
+
         if (!completacionesPorSemana[claveSemana]) {
           completacionesPorSemana[claveSemana] = [];
         }
         completacionesPorSemana[claveSemana].push(comp);
-        
-        // Para meses
-        const mes = fecha.getMonth() + 1; // +1 porque getMonth() devuelve 0-11
-        const claveMes = `${año}-${mes.toString().padStart(2, '0')}`;
-        
+
+        const claveMes = `${y}-${String(m).padStart(2, '0')}`;
         if (!completacionesPorMes[claveMes]) {
           completacionesPorMes[claveMes] = [];
         }

@@ -1,41 +1,36 @@
 /**
  * Inicio/fin de período para progreso en schema Rutinas (Mongoose).
- * Semana domingo–sábado (legacy del schema; no cambiar sin migración de datos).
- *
- * Para UI/cadencia/agenda usar cadenciaUtils (`CADENCIA_WEEK_STARTS_ON`, lun–dom).
+ * Semana lunes–domingo (`weekStartsOn: 1`), alineado con cadenciaUtils / agenda.
  */
+
+import { endOfMonth, endOfWeek, startOfMonth, startOfWeek } from 'date-fns';
+
+const WEEK_OPTS = { weekStartsOn: 1 };
 
 export function getRutinaPeriodStart(config, fecha) {
   const fechaBase = new Date(fecha);
 
-  switch (config.tipo) {
+  switch (config?.tipo) {
     case 'SEMANAL':
-      fechaBase.setDate(fechaBase.getDate() - fechaBase.getDay());
-      break;
+      return startOfWeek(fechaBase, WEEK_OPTS);
     case 'MENSUAL':
-      fechaBase.setDate(1);
-      break;
+      return startOfMonth(fechaBase);
     default:
       fechaBase.setHours(0, 0, 0, 0);
+      return fechaBase;
   }
-
-  return fechaBase;
 }
 
 export function getRutinaPeriodEnd(config, fecha) {
   const fechaBase = new Date(fecha);
 
-  switch (config.tipo) {
+  switch (config?.tipo) {
     case 'SEMANAL':
-      fechaBase.setDate(fechaBase.getDate() - fechaBase.getDay() + 6);
-      break;
+      return endOfWeek(fechaBase, WEEK_OPTS);
     case 'MENSUAL':
-      fechaBase.setMonth(fechaBase.getMonth() + 1);
-      fechaBase.setDate(0);
-      break;
+      return endOfMonth(fechaBase);
     default:
       fechaBase.setHours(23, 59, 59, 999);
+      return fechaBase;
   }
-
-  return fechaBase;
 }

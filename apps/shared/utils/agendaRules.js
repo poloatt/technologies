@@ -14,8 +14,11 @@ import {
   parseTaskDate,
   normalizeDateOnlyDue,
 } from './taskDateUtils.js';
+import { CADENCIA_WEEK_STARTS_ON } from '../habits/utils/cadenciaUtils.js';
 
 export { isDateOnlyDueRaw, isDateOnlyDueInstant, parseTaskDate, normalizeDateOnlyDue };
+
+const WEEK_OPTS = { weekStartsOn: CADENCIA_WEEK_STARTS_ON };
 
 /**
  * Reglas de agenda (AHORA/LUEGO) basadas en best practices:
@@ -112,7 +115,7 @@ export const getBucketAhora = (task, now = new Date()) => {
   if (anchor < startOfToday) return 'HOY';
   if (isToday(anchor)) return 'HOY';
   if (isTomorrow(anchor)) return 'MAÑANA';
-  if (isThisWeek(anchor)) return 'ESTA SEMANA';
+  if (isThisWeek(anchor, WEEK_OPTS)) return 'ESTA SEMANA';
   if (isThisMonth(anchor)) return 'ESTE MES';
   // Nota: "próximo trimestre" = ventana móvil de ~3 meses hacia adelante
   if (anchor < addMonths(now, 3)) return 'PRÓXIMO TRIMESTRE';
@@ -124,7 +127,7 @@ export const getBucketLuego = (task, now = new Date()) => {
   const anchor = getAnchorDate(task);
   if (!anchor) return 'SIN FECHA';
 
-  if (isThisWeek(anchor)) return 'ESTA SEMANA';
+  if (isThisWeek(anchor, WEEK_OPTS)) return 'ESTA SEMANA';
   if (isThisMonth(anchor)) return 'ESTE MES';
   // Mes siguiente (calendario) como bucket propio
   if (isSameMonth(anchor, addMonths(now, 1))) return 'PRÓXIMO MES';

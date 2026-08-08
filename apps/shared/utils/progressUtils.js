@@ -1,5 +1,5 @@
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
-import { parseAPIDate } from './dateUtils.js';
+import { parseAPIDate, toISODateString } from './dateUtils.js';
 import { isHabitCompletedForHistorial, isHabitFullyCompletedToday } from '../habits/domain/habitCompletionUtils.js';
 import { CADENCIA_WEEK_STARTS_ON } from '../habits/utils/cadenciaUtils.js';
 
@@ -36,8 +36,8 @@ export const computeItemProgressFromRecords = (rutinas, section, itemId, refDate
       if (d >= inicio && d <= fin) {
         const itemValue = r?.[section]?.[itemId];
         if (isHabitCompletedForHistorial(itemValue)) {
-          const key = d.toISOString().split('T')[0];
-          uniques.add(key);
+          const key = toISODateString(d);
+          if (key) uniques.add(key);
         }
       }
     });

@@ -73,3 +73,23 @@ export function applyCustomHabitsToRutinaConfig(customHabits, rutinasConfig, sec
   });
   return full;
 }
+
+/**
+ * Mapas de completado vacíos (false) alineados a customHabits activos.
+ * Evita defaults legacy (bath/agua/gym…) en documentos nuevos.
+ */
+export function buildEmptyCompletionSections(customHabits, sections = HABIT_SECTION_KEYS) {
+  const out = {};
+  sections.forEach((section) => {
+    out[section] = {};
+    const sectionHabits = customHabits?.[section] || [];
+    sectionHabits
+      .filter((h) => h?.activo !== false)
+      .forEach((habit) => {
+        const habitId = habit.id || habit._id;
+        if (!habitId) return;
+        out[section][habitId] = false;
+      });
+  });
+  return out;
+}

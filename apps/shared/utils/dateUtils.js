@@ -1,4 +1,4 @@
-import { format, parseISO, startOfDay, endOfDay, isToday, 
+import { format, parseISO, startOfDay, endOfDay, 
   startOfMonth, endOfMonth,
   isSameDay, isSameWeek, isSameMonth, addDays, subDays } from 'date-fns';
 import { es } from './localeEs.js';
@@ -15,7 +15,6 @@ let userTimezone = 'America/Santiago'; // Timezone por defecto
 export const setUserTimezone = (timezone) => {
   if (timezone) {
     userTimezone = timezone;
-    console.log('[dateUtils] Timezone configurado:', timezone);
   }
 };
 
@@ -41,7 +40,6 @@ export const formatDateForAPI = (date) => {
     if (typeof date === 'string') {
       // Si ya es formato YYYY-MM-DD, devolverlo tal como está
       if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        console.debug('[dateUtils] formatDateForAPI - String en formato YYYY-MM-DD:', date);
         return date;
       }
       inputDate = new Date(date);
@@ -59,22 +57,29 @@ export const formatDateForAPI = (date) => {
     }
     
     // Cuando el usuario selecciona una fecha en el date picker, queremos usar exactamente
-    // los componentes de fecha (año, mes, día) que el usuario vio y seleccionó
-    const year = inputDate.getFullYear();
-    const month = String(inputDate.getMonth() + 1).padStart(2, '0'); // Mes 1-12
-    const day = String(inputDate.getDate()).padStart(2, '0');
-    
+    // los componentes de fecha (año, mes, día) que el usuario vio. Si browser ≠ prefs TZ,
+    // preferimos el día del timezone del usuario para Date/ISO ya persistidos.
+    let year;
+    let month;
+    let day;
+    if (typeof date === 'string' && date.includes('T')) {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+      const parts = formatter.formatToParts(inputDate);
+      year = parts.find((p) => p.type === 'year').value;
+      month = parts.find((p) => p.type === 'month').value;
+      day = parts.find((p) => p.type === 'day').value;
+    } else {
+      year = String(inputDate.getFullYear());
+      month = String(inputDate.getMonth() + 1).padStart(2, '0');
+      day = String(inputDate.getDate()).padStart(2, '0');
+    }
+
     const formatted = `${year}-${month}-${day}`;
-    
-    console.debug('[dateUtils] formatDateForAPI:', {
-      input: date,
-      inputType: typeof date,
-      inputDate: inputDate.toISOString(),
-      localComponents: { year, month, day },
-      result: formatted,
-      timezone: userTimezone
-    });
-    
     return formatted;
   } catch (error) {
     console.error('[dateUtils] Error en formatDateForAPI:', error);
@@ -105,14 +110,6 @@ export const getNormalizedToday = () => {
     
     // Crear fecha normalizada al inicio del día
     const normalized = new Date(year, month, day, 0, 0, 0, 0);
-    
-    console.debug('[dateUtils] getNormalizedToday:', {
-      original: now.toISOString(),
-      normalized: normalized.toISOString(),
-      timezone: userTimezone,
-      components: { year, month, day }
-    });
-    
     return normalized;
   } catch (error) {
     console.error('[dateUtils] Error en getNormalizedToday:', error);
@@ -204,7 +201,8 @@ export const formatDateDisplay = (date) => {
   if (!date) return 'Sin fecha';
   try {
     const d = parseAPIDate(typeof date === 'string' ? date : formatDateForAPI(date));
-    if (isToday(d)) return 'Hoy';
+    if (!d) return 'Fecha inválida';
+    if (areSameDay(d, getNormalizedToday())) return 'Hoy';
     return format(d, "d 'de' MMMM yyyy", { locale: es });
   } catch (error) {
     console.error('Error al formatear fecha:', error);
@@ -272,11 +270,43 @@ export const normalizeDate = (date) => {
 };
 
 /**
- * Convierte una fecha a formato ISO sin tiempo
- * @param {Date|string} date - Fecha a convertir
- * @returns {string} Fecha en formato YYYY-MM-DD
+ * Convierte una fecha a YYYY-MM-DD sin pasar por toISOString() (evita correr el día en TZ west of UTC).
+ * - YYYY-MM-DD / ISO date-part: se usa el día lógico del string
+ * - Date en medianoche UTC: día lógico vía getUTC* (storage de Rutinas)
+ * - Date local (picker / getNormalizedToday / noon): getFullYear/Month/Date
+ * @param {Date|string} date
+ * @returns {string|null}
  */
 export const toISODateString = (date) => {
-  const normalized = normalizeDate(date);
-  return normalized.toISOString().split('T')[0];
+  if (!date) return null;
+
+  if (typeof date === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+    if (date.includes('T')) {
+      const datePart = date.split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+    }
+  }
+
+  if (date instanceof Date && !Number.isNaN(date.getTime())) {
+    const isUtcMidnight =
+      date.getUTCHours() === 0
+      && date.getUTCMinutes() === 0
+      && date.getUTCSeconds() === 0
+      && date.getUTCMilliseconds() === 0;
+
+    if (isUtcMidnight) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return formatDateForAPI(date);
 }; 

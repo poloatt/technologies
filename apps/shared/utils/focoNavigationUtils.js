@@ -9,23 +9,25 @@ import {
 } from 'date-fns';
 import { es } from './localeEs.js';
 import { CADENCIA_WEEK_STARTS_ON } from '../habits/utils/cadenciaUtils.js';
+import { getNormalizedToday } from './dateUtils.js';
 
 export function shiftCalendarDate(date, navigationMode, direction) {
-  const base = startOfDay(date || new Date());
+  const base = startOfDay(date || getNormalizedToday());
   const delta = navigationMode === 'week'
     ? (direction === 'prev' ? -7 : 7)
     : (direction === 'prev' ? -1 : 1);
   return addDays(base, delta);
 }
 
+/** Hoy de calendario = timezone de prefs (no browser). */
 export function getTodayCalendarDate() {
-  return startOfDay(new Date());
+  return startOfDay(getNormalizedToday());
 }
 
 /** true si la vista día/semana actual ya incluye hoy. */
 export function isViewingTodayInCalendar(date, viewMode = 'day') {
   if (!date) return false;
-  const today = startOfDay(new Date());
+  const today = getTodayCalendarDate();
   if (viewMode === 'day') {
     return startOfDay(date).getTime() === today.getTime();
   }

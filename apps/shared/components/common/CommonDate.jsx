@@ -10,6 +10,7 @@ import { startOfDay, parseISO, format, setMonth, setYear, lastDayOfMonth, addMon
 import TodayIcon from '@mui/icons-material/Today';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 
 const StyledTextField = styled(TextField)(({ theme }) => ({
   '& .MuiOutlinedInput-root': {
@@ -47,7 +48,7 @@ const EntityDateSelect = ({
   ...props
 }) => {
   // Obtener la fecha actual al inicio del día
-  const today = useMemo(() => startOfDay(new Date()), []);
+  const today = useMemo(() => startOfDay(getNormalizedToday()), []);
 
   // Función para formatear fecha a YYYY-MM-DD
   const formatToAPI = useCallback((date) => {

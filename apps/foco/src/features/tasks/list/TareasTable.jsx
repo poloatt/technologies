@@ -17,12 +17,15 @@ import {
   isTaskCompleted,
   parseTaskDate,
 } from '@shared/utils/agendaRules';
+import { CADENCIA_WEEK_STARTS_ON } from '@shared/habits';
 import { normalizeTaskList } from '@shared/utils/taskListUtils';
 import { TaskRow, TaskGroupSection } from '@shared/components/tasks';
 import {
   getTaskSurfaceTokens,
   getTaskListStackSx,
 } from '@shared/styles/taskListStyles';
+
+const WEEK_OPTS = { weekStartsOn: CADENCIA_WEEK_STARTS_ON };
 
 const getPeriodo = (tarea, isArchive = false, agendaView = 'ahora') => {
   if (isArchive) {
@@ -37,7 +40,7 @@ const getPeriodo = (tarea, isArchive = false, agendaView = 'ahora') => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    if (isBefore(fechaReferencia, today) && isThisWeek(fechaReferencia)) return 'ESTA SEMANA';
+    if (isBefore(fechaReferencia, today) && isThisWeek(fechaReferencia, WEEK_OPTS)) return 'ESTA SEMANA';
     if (isBefore(fechaReferencia, today) && isThisMonth(fechaReferencia)) return 'ESTE MES';
     if (isBefore(fechaReferencia, addMonths(today, -3))) return 'ÚLTIMO TRIMESTRE';
     if (isBefore(fechaReferencia, addMonths(today, -12))) return 'ÚLTIMO AÑO';

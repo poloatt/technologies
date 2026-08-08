@@ -4,7 +4,7 @@ import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
 import { startOfDay } from 'date-fns';
 import { getNormalizedToday, toISODateString, parseAPIDate, formatDateForAPI } from '../utils/dateUtils';
-import { resolveHabitConfigApplyFrom } from '@shared/habits';
+import { resolveHabitConfigApplyFrom, getRutinaDayMode } from '@shared/habits';
 import rutinasService from '../services/rutinasService';
 import { UISettingsContext } from './UISettingsContext';
 import { calculateCompletionPercentage } from '../utils/rutinaCalculations';
@@ -131,7 +131,6 @@ export const RutinasProvider = ({ children }) => {
 
   // Mantener una referencia estable al array de rutinas para evitar dependencias reactivas
   const rutinasRef = React.useRef([]);
-  const ensureTodayAttemptedRef = React.useRef(false);
   // Deduplica llamadas concurrentes a fetchRutinas (AgendaCalendarPage + HabitCarouselStrip la disparan al montar)
   const fetchRutinasInFlightRef = React.useRef(null);
   useEffect(() => {
@@ -176,64 +175,12 @@ export const RutinasProvider = ({ children }) => {
       const totalRutinas = rutinasWithHist.length;
       setTotalPages(totalRutinas);
       setRutinas(rutinasWithHist);
-      
-      // Auto-crear rutina de hoy si no existe (una vez por sesión, para evitar loops)
+
+      // Seleccionar rutina de hoy o la más reciente.
+      // La creación del log de hoy la hace useEnsureRutinaForDate / ensureRutinaForDate
+      // (una sola ruta; evita race con POST duplicado).
       const todayStr = toISODateString(getNormalizedToday());
-      const hasToday = rutinasWithHist.some(r => {
-        try {
-          return toISODateString(parseAPIDate(r.fecha)) === todayStr;
-        } catch {
-          return false;
-        }
-      });
 
-      if (!hasToday && !ensureTodayAttemptedRef.current) {
-        try {
-          // Verificar primero si la rutina de hoy ya existe en el servidor. Evita
-          // un POST que devolvería 409 cuando `hasToday` falla por desfase de
-          // fecha/zona horaria entre el cliente y el backend.
-          try {
-            const verify = await clienteAxios.get(
-              `/api/rutinas/verify?fecha=${encodeURIComponent(todayStr)}`,
-            );
-            if (verify.data?.exists && verify.data?.rutinaId) {
-              await getRutinaById(verify.data.rutinaId);
-              ensureTodayAttemptedRef.current = true;
-              return;
-            }
-          } catch {
-            // Si verify falla, continuar con la creación (el POST maneja el 409).
-          }
-
-          const created = await rutinasService.createRutina({ fecha: todayStr, useGlobalConfig: true });
-          // Refrescar lista y seleccionar la rutina creada
-          const merged = [created, ...rutinasWithHist];
-          const { historial: newHist, rutinasWithHist: mergedWithHist } = attachHistorial(merged);
-          setRutinas(mergedWithHist);
-          setTotalPages(mergedWithHist.length);
-          setRutina({
-            ...created,
-            historial: newHist,
-            _page: 1,
-            _totalPages: mergedWithHist.length
-          });
-          setCurrentPage(1);
-          ensureTodayAttemptedRef.current = true;
-          return; // ya seleccionamos hoy
-        } catch (e) {
-          const status = e?.response?.status;
-          const rutinaId = e?.response?.data?.rutinaId;
-          if (status === 409 && rutinaId) {
-            // Ya existe: cargarla y seleccionarla
-            await getRutinaById(rutinaId);
-            ensureTodayAttemptedRef.current = true;
-            return;
-          }
-          // Si falla, no bloquear reintento en la próxima fetchRutinas
-        }
-      }
-
-      // Seleccionar rutina de hoy o la más reciente
       if (rutinasWithHist.length > 0) {
         const indexToday = rutinasWithHist.findIndex(r => {
           try {
@@ -582,8 +529,10 @@ export const RutinasProvider = ({ children }) => {
     config,
     applyToCurrentRutina = true,
     applyFromDate = null,
+    applyScope = 'forward',
   ) => {
     const applyFrom = applyFromDate || formatDateForAPI(getNormalizedToday());
+    const scope = (applyScope || 'forward').toString().toLowerCase();
     try {
       const normalizedConfig = {
         tipo: (config.tipo || 'DIARIO').toUpperCase(),
@@ -604,7 +553,8 @@ export const RutinasProvider = ({ children }) => {
           }
         },
         applyFrom,
-      }, { params: { applyFrom } });
+        applyScope: scope,
+      }, { params: { applyFrom, applyScope: scope } });
 
       invalidateHabitsPreferencesCache();
 
@@ -612,7 +562,7 @@ export const RutinasProvider = ({ children }) => {
         patchRutinaItemConfig(rutina._id, section, itemId, normalizedConfig);
       }
 
-      return { updated: true, config: normalizedConfig };
+      return { updated: true, config: normalizedConfig, applyScope: scope };
     } catch (error) {
       console.error('[RutinasContext] Error al actualizar preferencia de hábito:', error);
       enqueueSnackbar('Error al actualizar preferencia', { variant: 'error' });
@@ -622,7 +572,12 @@ export const RutinasProvider = ({ children }) => {
 
   // Actualizar configuración de ítems
   const updateItemConfiguration = useCallback(async (section, itemId, config, options = {}) => {
-    const { isGlobal = autoUpdateHabitPreferences, rutinaId = null, applyFromDate = null } = options;
+    const {
+      isGlobal = autoUpdateHabitPreferences,
+      rutinaId = null,
+      applyFromDate = null,
+      applyScope: applyScopeOption = null,
+    } = options;
     
     if (!section || !itemId || !config) {
       handleError(new Error('Datos incompletos para actualizar configuración'), 'updateItemConfiguration', 'Datos incompletos');
@@ -638,6 +593,10 @@ export const RutinasProvider = ({ children }) => {
     const targetRutinaRecord = rutinas.find((r) => r._id === targetRutinaId)
       || (rutina?._id === targetRutinaId ? rutina : null);
     const effectiveApplyFrom = applyFromDate || resolveHabitConfigApplyFrom(targetRutinaRecord?.fecha || rutina?.fecha);
+    const dayMode = getRutinaDayMode(targetRutinaRecord?.fecha || rutina?.fecha);
+    // Histórico: solo ese día. Hoy/futuro: forward (default). Override vía options.applyScope.
+    const effectiveApplyScope = applyScopeOption
+      || (dayMode === 'historical' ? 'day' : 'forward');
 
     try {
       const originalConfig = rutina?.config?.[section]?.[itemId]
@@ -658,8 +617,6 @@ export const RutinasProvider = ({ children }) => {
       };
 
       // Actualizar preferencias globales si es necesario
-      // NOTA: updateUserHabitPreference ya actualiza la rutina actual, así que no necesitamos hacerlo dos veces
-      // Pero aquí solo actualizamos preferencias, la rutina se actualiza después
       if (isGlobal) {
         try {
           const prefResult = await updateUserHabitPreference(
@@ -668,6 +625,7 @@ export const RutinasProvider = ({ children }) => {
             normalizedConfig,
             true,
             effectiveApplyFrom,
+            effectiveApplyScope,
           );
           if (!prefResult || !prefResult.updated) {
             console.warn(`[RutinasContext] updateUserHabitPreference no completó correctamente para ${section}.${itemId}`);
@@ -705,12 +663,19 @@ export const RutinasProvider = ({ children }) => {
       }
       
       enqueueSnackbar(
-        effectiveApplyFrom === formatDateForAPI(getNormalizedToday())
-          ? 'Configuración guardada'
-          : `Configuración aplicada desde ${effectiveApplyFrom}`,
+        effectiveApplyScope === 'day'
+          ? 'Configuración guardada (solo este día)'
+          : effectiveApplyFrom === formatDateForAPI(getNormalizedToday())
+            ? 'Configuración guardada'
+            : `Configuración aplicada desde ${effectiveApplyFrom}`,
         { variant: 'success' },
       );
-      return { updated: true, config: normalizedConfig, applyFrom: effectiveApplyFrom };
+      return {
+        updated: true,
+        config: normalizedConfig,
+        applyFrom: effectiveApplyFrom,
+        applyScope: effectiveApplyScope,
+      };
         
     } catch (error) {
       handleError(error, 'updateItemConfiguration', 'Error inesperado al actualizar configuración');

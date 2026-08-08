@@ -1,15 +1,15 @@
 /**
  * Utilidades para el manejo de cadencia en rutinas.
  *
- * Semana: lun–dom (`CADENCIA_WEEK_STARTS_ON = 1`), alineado con progressUtils y agenda.
- * Distinto de `@shared/habits` `getRutinaPeriodStart/End` (dom–sáb, legacy schema Rutinas).
+ * Semana: lun–dom (`CADENCIA_WEEK_STARTS_ON = 1`), alineado con progressUtils,
+ * agenda y `getRutinaPeriodStart/End` en rutinaPeriodBounds.
  */
 
 import { addDays, isSameDay, isWithinInterval, getDay, getDate, setDate, 
          startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, 
          differenceInDays, isBefore, parseISO, endOfWeek } from 'date-fns';
 
-/** Semana lun–dom; ver rutinaPeriodBounds.js para dom–sáb (schema Rutinas). */
+/** Semana lun–dom; alineado con rutinaPeriodBounds.js. */
 export const CADENCIA_WEEK_STARTS_ON = 1;
 
 /**
@@ -105,6 +105,10 @@ export function isScheduledCadenciaDay(fechaObjetivo, cadenciaConfig) {
   const diasSemana = Array.isArray(cadenciaConfig.diasSemana) ? cadenciaConfig.diasSemana : [];
   const diasMes = Array.isArray(cadenciaConfig.diasMes) ? cadenciaConfig.diasMes : [];
   const fecha = normalizeCadenciaDate(fechaObjetivo);
+
+  if (tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA')) {
+    return true;
+  }
 
   if (tipo === 'SEMANAL' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_SEMANA')) {
     if (diasSemana.length === 0) return true;
@@ -232,14 +236,23 @@ export const debesMostrarHabitoEnFecha = (targetDate, cadenciaConfig, historialC
       return true;
 
     case 'PERSONALIZADO': {
+      // Con días fijos (diasSemana/diasMes): misma semántica que SEMANAL/MENSUAL.
+      const fixed = resolveFixedPeriodicCadence(cadenciaConfig);
+      if (fixed) {
+        const dayVal = fixed.dayMatcher(fechaObjetivo);
+        if (fixed.scheduledDays.includes(dayVal)) return true;
+        return hasCadenciaDebt(fechaObjetivo, cadenciaConfig, historialCompletado);
+      }
+
+      // Sin días fijos: intervalo desde la última completación.
       const ultimaCompletacion = obtenerUltimaCompletacion(historialCompletado);
-      
+
       if (!ultimaCompletacion) {
         return true;
       }
-      
+
       let diasIntervalo = frecuencia;
-      
+
       switch (periodo) {
         case 'CADA_SEMANA':
           diasIntervalo = frecuencia * 7;
@@ -257,12 +270,12 @@ export const debesMostrarHabitoEnFecha = (targetDate, cadenciaConfig, historialC
           diasIntervalo = frecuencia * 365;
           break;
       }
-      
+
       const diasDesdeUltimaCompletacion = differenceInDays(
         fechaObjetivo,
         ultimaCompletacion
       );
-      
+
       return diasDesdeUltimaCompletacion >= diasIntervalo;
     }
 

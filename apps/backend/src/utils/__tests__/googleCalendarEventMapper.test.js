@@ -8,12 +8,12 @@ import {
 
 describe('googleCalendarEventMapper', () => {
   describe('parseLocalDateOnly', () => {
-    it('parses YYYY-MM-DD as local midnight', () => {
+    it('parses YYYY-MM-DD as UTC noon (timezone-safe day)', () => {
       const d = parseLocalDateOnly('2026-06-21');
-      expect(d.getFullYear()).toBe(2026);
-      expect(d.getMonth()).toBe(5);
-      expect(d.getDate()).toBe(21);
-      expect(d.getHours()).toBe(0);
+      expect(d.getUTCFullYear()).toBe(2026);
+      expect(d.getUTCMonth()).toBe(5);
+      expect(d.getUTCDate()).toBe(21);
+      expect(d.getUTCHours()).toBe(12);
     });
   });
 
@@ -34,10 +34,11 @@ describe('googleCalendarEventMapper', () => {
         end: { date: '2026-06-22' },
       });
       expect(result.allDay).toBe(true);
-      expect(result.fechaInicio.getDate()).toBe(21);
-      expect(result.fechaFin.getDate()).toBe(21);
-      expect(result.fechaFin.getHours()).toBe(23);
-      expect(result.fechaFin.getMinutes()).toBe(59);
+      expect(result.fechaInicio.getUTCDate()).toBe(21);
+      expect(result.fechaInicio.getUTCHours()).toBe(12);
+      expect(result.fechaFin.getUTCDate()).toBe(21);
+      expect(result.fechaFin.getUTCHours()).toBe(23);
+      expect(result.fechaFin.getUTCMinutes()).toBe(59);
     });
   });
 

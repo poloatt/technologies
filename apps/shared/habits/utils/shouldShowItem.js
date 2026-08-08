@@ -84,11 +84,11 @@ export default function shouldShowItem(section, itemId, rutina, additionalData =
     } else if (itemHist && typeof itemHist === 'object') {
       historial = Object.entries(itemHist)
         .filter(([, completed]) => completed === true)
-        .map(([dateStr]) => new Date(dateStr));
+        .map(([dateStr]) => parseAPIDate(dateStr) || new Date(dateStr));
     } else if (sectionHist && typeof sectionHist === 'object') {
       historial = Object.entries(sectionHist)
         .filter(([, items]) => items && items[itemId] === true)
-        .map(([dateStr]) => new Date(dateStr));
+        .map(([dateStr]) => parseAPIDate(dateStr) || new Date(dateStr));
     }
     const itemValue = rutina?.[section]?.[itemId];
     if (isHabitCompletedForHistorial(itemValue)) {
