@@ -14,6 +14,7 @@ import {
 } from '../utils/rutinaCompletitudUtils.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import { toLogicalDayUtcStart, toLogicalDayUtcEnd } from '@attadia/shared/utils/dateUtils.js';
 
 class RutinasController extends BaseController {
   constructor() {
@@ -30,7 +31,6 @@ class RutinasController extends BaseController {
     this.getAll = this.getAll.bind(this);
     this.verifyDate = this.verifyDate.bind(this);
     this.getById = this.getById.bind(this);
-    this.getAllFechas = this.getAllFechas.bind(this);
     this.updateItemConfig = this.updateItemConfig.bind(this);
     this.updateItemConfigByPath = this.updateItemConfigByPath.bind(this);
     this.getHistorial = this.getHistorial.bind(this);
@@ -600,30 +600,6 @@ class RutinasController extends BaseController {
     }
   }
 
-  async getAllFechas(req, res) {
-    try {
-      // Obtener todas las fechas de rutinas del usuario
-      const rutinas = await this.Model.find(
-        { usuario: req.user.id },
-        { fecha: 1 }
-      ).lean();
-      
-      // Extraer solo las fechas y formatearlas
-      const fechas = rutinas.map(rutina => rutina.fecha);
-      
-      return res.json({
-        fechas,
-        total: fechas.length
-      });
-    } catch (error) {
-      console.error('Error al obtener fechas con rutinas:', error);
-      res.status(500).json({ 
-        error: 'Error al obtener fechas con rutinas',
-        details: error.message 
-      });
-    }
-  }
-
   /**
    * Actualiza la configuración de un ítem (body: seccion, itemId, config).
    * Delega a la ruta por path; escribe en rutina.config (no en campos de completado).
@@ -724,13 +700,13 @@ class RutinasController extends BaseController {
         });
       }
       
-      // Manejo defensivo para fechas inválidas (sin clampear a un año hardcodeado)
+      // Día lógico → UTC (YYYY-MM-DD / ISO date-part); no usar new Date(ymd) + setUTCHours
       let inicio, fin;
       try {
-        inicio = new Date(fechaInicio);
-        fin = new Date(fechaFin);
+        inicio = toLogicalDayUtcStart(fechaInicio);
+        fin = toLogicalDayUtcEnd(fechaFin);
 
-        if (isNaN(inicio.getTime()) || isNaN(fin.getTime())) {
+        if (!inicio || !fin || isNaN(inicio.getTime()) || isNaN(fin.getTime())) {
           console.error(`[rutinasController] Fechas inválidas: inicio=${fechaInicio}, fin=${fechaFin}`);
           return res.status(400).json({
             error: 'Fechas inválidas',
@@ -740,15 +716,12 @@ class RutinasController extends BaseController {
 
         // Rechazar rangos absurdamente futuros (typos), no reescribir a un año fijo
         const añoMaxPermitido = new Date().getFullYear() + 1;
-        if (inicio.getFullYear() > añoMaxPermitido || fin.getFullYear() > añoMaxPermitido) {
+        if (inicio.getUTCFullYear() > añoMaxPermitido || fin.getUTCFullYear() > añoMaxPermitido) {
           return res.status(400).json({
             error: 'Fechas fuera de rango',
             details: `El año no puede ser posterior a ${añoMaxPermitido}`
           });
         }
-
-        inicio.setUTCHours(0, 0, 0, 0);
-        fin.setUTCHours(23, 59, 59, 999);
       } catch (fechaError) {
         console.error(`[rutinasController] Error al procesar fechas:`, fechaError);
         return res.status(400).json({ 
@@ -756,8 +729,6 @@ class RutinasController extends BaseController {
           details: fechaError.message
         });
       }
-      
-      console.log(`[rutinasController] Buscando rutinas entre ${inicio.toISOString()} y ${fin.toISOString()}`);
       
       // Verificar que el usuario esté disponible
       if (!req.user || !req.user.id) {
@@ -782,10 +753,9 @@ class RutinasController extends BaseController {
       if (rangoDias > maxDias) {
         console.warn(`[rutinasController] Rango de días (${rangoDias}) excede el máximo permitido (${maxDias})`);
         // Ajustar fin para que el rango no exceda maxDias
-        fin = new Date(inicio);
-        fin.setDate(inicio.getDate() + maxDias);
-        fin.setUTCHours(23, 59, 59, 999);
-        console.log(`[rutinasController] Ajustando fecha fin a ${fin.toISOString()}`);
+        const capped = new Date(inicio);
+        capped.setUTCDate(inicio.getUTCDate() + maxDias);
+        fin = toLogicalDayUtcEnd(capped.toISOString().slice(0, 10));
       }
       
       // Consultar las rutinas en el rango de fechas usando agregación para asegurar buena performance
@@ -804,7 +774,6 @@ class RutinasController extends BaseController {
       
       try {
         const rutinas = await this.Model.aggregate(pipeline);
-        console.log(`[rutinasController] Encontradas ${rutinas.length} rutinas en el rango`);
         
         // Asegurar que las rutinas tengan formato correcto para el frontend
         const rutinasFormateadas = rutinas.map(rutina => {
@@ -843,11 +812,6 @@ class RutinasController extends BaseController {
       const { section, itemId } = req.params;
       const { fechaInicio, fechaFin } = req.query;
       
-      console.log(`[rutinasController] Buscando historial de completaciones para ${section}.${itemId}`, {
-        fechaInicio,
-        fechaFin
-      });
-      
       // Validar parámetros
       if (!section || !itemId) {
         return res.status(400).json({ 
@@ -864,15 +828,13 @@ class RutinasController extends BaseController {
         });
       }
 
-      // Procesar y normalizar fechas con manejo de errores mejorado
+      // Día lógico → UTC (evita day-shift con new Date('YYYY-MM-DD') en TZ west of UTC)
       let inicio, fin;
       try {
-        // Intentar crear objetos Date
-        inicio = new Date(fechaInicio);
-        fin = new Date(fechaFin);
+        inicio = toLogicalDayUtcStart(fechaInicio);
+        fin = toLogicalDayUtcEnd(fechaFin);
         
-        // Verificar si las fechas son válidas
-        if (isNaN(inicio.getTime())) {
+        if (!inicio || isNaN(inicio.getTime())) {
           console.error(`[rutinasController] Fecha inicio inválida: ${fechaInicio}`);
           return res.status(400).json({ 
             error: 'Fecha de inicio inválida',
@@ -880,7 +842,7 @@ class RutinasController extends BaseController {
           });
         }
         
-        if (isNaN(fin.getTime())) {
+        if (!fin || isNaN(fin.getTime())) {
           console.error(`[rutinasController] Fecha fin inválida: ${fechaFin}`);
           return res.status(400).json({ 
             error: 'Fecha de fin inválida',
@@ -888,11 +850,6 @@ class RutinasController extends BaseController {
           });
         }
         
-        // Normalizar horas
-        inicio.setUTCHours(0, 0, 0, 0);
-        fin.setUTCHours(23, 59, 59, 999);
-        
-        // Verificar que inicio no sea posterior a fin
         if (inicio > fin) {
           return res.status(400).json({
             error: 'Rango de fechas inválido',
@@ -900,12 +857,6 @@ class RutinasController extends BaseController {
             fechas: { inicio: inicio.toISOString(), fin: fin.toISOString() }
           });
         }
-        
-        // Log de fechas normalizadas
-        console.log('[rutinasController] Fechas normalizadas:', {
-          inicio: inicio.toISOString(),
-          fin: fin.toISOString()
-        });
         
       } catch (fechaError) {
         console.error(`[rutinasController] Error al procesar fechas:`, fechaError);
@@ -915,8 +866,6 @@ class RutinasController extends BaseController {
           fechasRecibidas: { fechaInicio, fechaFin }
         });
       }
-      
-      console.log(`[rutinasController] Buscando completaciones entre ${inicio.toISOString()} y ${fin.toISOString()}`);
       
       // Verificar que el usuario esté disponible
       if (!req.user || !req.user.id) {
@@ -932,8 +881,6 @@ class RutinasController extends BaseController {
           $lte: fin
         }
       }).lean();
-      
-      console.log(`[rutinasController] Encontradas ${rutinas.length} rutinas en el rango de fechas`);
       
       // Extraer las completaciones del ítem específico
       const completaciones = [];
@@ -970,9 +917,6 @@ class RutinasController extends BaseController {
             completado: true,
             fuente: fuente || 'rutina'
           });
-          console.log(`[rutinasController] ✅ Añadida completación: ${fechaStr} (fuente: ${fuente || 'rutina'})`);
-        } else {
-          console.log(`[rutinasController] ⚠️ Completación duplicada omitida: ${fechaStr}`);
         }
       };
       
@@ -1028,8 +972,6 @@ class RutinasController extends BaseController {
         const fechaB = new Date(b.fecha);
         return fechaA - fechaB;
       });
-      
-      console.log(`[rutinasController] Encontradas ${completaciones.length} completaciones para ${section}.${itemId}`);
       
       // Agrupar completaciones por semana (lun–dom) y mes
       const completacionesPorSemana = {};

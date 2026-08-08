@@ -1,6 +1,6 @@
 import clienteAxios from '../config/axios';
 import axios from 'axios';
-import { getNormalizedToday, toISODateString, normalizeDate } from '../utils/dateUtils';
+import { getNormalizedToday, toISODateString, normalizeDate, toLogicalDayUtcStart, toLogicalDayUtcEnd } from '../utils/dateUtils';
 import { formatDateForAPI, getWeekRange, getMonthRange, parseAPIDate } from '../utils/dateUtils';
 
 const MAX_RETRIES = 3;
@@ -336,7 +336,6 @@ class RutinasService {
         this.invalidateCache(section, itemId);
         
         // Log simplificado: solo tick o cross
-        console.log(`${isCompleted ? '✅' : '❌'} ${section}.${itemId}`);
         return response.data;
       }
 
@@ -381,27 +380,6 @@ class RutinasService {
     this.cache.set(key, data);
   }
 
-  async obtenerHistorial(dias = 7) {
-    try {
-      const ahora = getNormalizedToday();
-      const inicio = new Date(ahora);
-      inicio.setDate(inicio.getDate() - dias);
-      inicio.setHours(0, 0, 0, 0);
-
-      const response = await clienteAxios.get('/api/rutinas/historial', {
-        params: {
-          inicio: toISODateString(inicio),
-          fin: toISODateString(ahora)
-        }
-      });
-
-      return response.data;
-    } catch (error) {
-      console.error('[rutinasService] Error al obtener historial:', error);
-      throw error;
-    }
-  }
-
   async registrarCompletacion(rutinaId, seccion, itemId, completado = true) {
     try {
       const response = await clienteAxios.post(`/api/rutinas/${rutinaId}/completar`, {
@@ -423,19 +401,13 @@ class RutinasService {
       if (!section || !itemId) {
         throw new Error('section e itemId son requeridos');
       }
-      
-      // CORRECCIÓN: Usar UTC puro en lugar de formatDateForAPI
-      // Normalizar fechas y crear rangos UTC
-      const inicio = fechaInicio ? new Date(fechaInicio) : new Date();
-      const fin = fechaFin ? new Date(fechaFin) : new Date();
-      
-      // Crear fechas UTC para el rango completo del día
-      const fechaInicioUTC = new Date(Date.UTC(inicio.getFullYear(), inicio.getMonth(), inicio.getDate(), 0, 0, 0, 0));
-      const fechaFinUTC = new Date(Date.UTC(fin.getFullYear(), fin.getMonth(), fin.getDate(), 23, 59, 59, 999));
-      
 
-      
-      // Construir URL con parámetros
+      const fechaInicioUTC = toLogicalDayUtcStart(fechaInicio || getNormalizedToday());
+      const fechaFinUTC = toLogicalDayUtcEnd(fechaFin || getNormalizedToday());
+      if (!fechaInicioUTC || !fechaFinUTC) {
+        throw new Error('Fechas de historial inválidas');
+      }
+
       const params = new URLSearchParams({
         fechaInicio: fechaInicioUTC.toISOString(),
         fechaFin: fechaFinUTC.toISOString()
@@ -452,23 +424,20 @@ class RutinasService {
 
   async getRutinasHistoricas(days = 30) {
     try {
-
-      
-      // Calcular rango de fechas
-      const fechaFin = new Date();
+      const fechaFin = getNormalizedToday();
       const fechaInicio = new Date(fechaFin);
       fechaInicio.setDate(fechaFin.getDate() - days);
-      
-      // CORRECCIÓN: Usar UTC puro en lugar de formatDateForAPI
-      // Crear fechas UTC para el rango completo del día
-      const fechaInicioUTC = new Date(Date.UTC(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate(), 0, 0, 0, 0));
-      const fechaFinUTC = new Date(Date.UTC(fechaFin.getFullYear(), fechaFin.getMonth(), fechaFin.getDate(), 23, 59, 59, 999));
-      
-      // Formatear fechas para la API
+
+      const fechaInicioUTC = toLogicalDayUtcStart(fechaInicio);
+      const fechaFinUTC = toLogicalDayUtcEnd(fechaFin);
+      if (!fechaInicioUTC || !fechaFinUTC) {
+        throw new Error('Fechas de historial inválidas');
+      }
+
       const params = new URLSearchParams({
         fechaInicio: fechaInicioUTC.toISOString(),
         fechaFin: fechaFinUTC.toISOString(),
-        _t: Date.now() // Evitar caché
+        _t: Date.now()
       });
       
       const response = await clienteAxios.get(`/api/rutinas?${params}`, {
@@ -478,7 +447,6 @@ class RutinasService {
         }
       });
 
-      // Parsear fechas en la respuesta
       return response.data.map(rutina => ({
         ...rutina,
         fecha: parseAPIDate(rutina.fecha)

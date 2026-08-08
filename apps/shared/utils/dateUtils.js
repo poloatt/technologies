@@ -254,6 +254,12 @@ export const areSameDay = (date1, date2) => {
   const d1 = parseAPIDate(typeof date1 === 'string' ? date1 : formatDateForAPI(date1));
   const d2 = parseAPIDate(typeof date2 === 'string' ? date2 : formatDateForAPI(date2));
   return isSameDay(d1, d2);
+};
+
+/** True si `date` es el día de calendario de prefs (`getNormalizedToday`). */
+export const isCalendarToday = (date) => {
+  if (!date) return false;
+  return areSameDay(date, getNormalizedToday());
 }; 
 
 // --- FUNCIONES CENTRALIZADAS DE RUTINADATEUTILS ---
@@ -309,4 +315,28 @@ export const toISODateString = (date) => {
   }
 
   return formatDateForAPI(date);
+};
+
+/**
+ * Inicio UTC del día lógico (YYYY-MM-DD / rutina). Evita `new Date(ymd)` + getFullYear local.
+ * @param {Date|string} [date]
+ * @returns {Date|null}
+ */
+export const toLogicalDayUtcStart = (date) => {
+  const ymd = toISODateString(date ?? getNormalizedToday());
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+};
+
+/**
+ * Fin UTC del día lógico (23:59:59.999Z).
+ * @param {Date|string} [date]
+ * @returns {Date|null}
+ */
+export const toLogicalDayUtcEnd = (date) => {
+  const ymd = toISODateString(date ?? getNormalizedToday());
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
 }; 

@@ -1,9 +1,10 @@
 import { format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { isDateOnlyDueInstant, isDateOnlyDueRaw, parseTaskDate } from './taskDateUtils.js';
+import { getNormalizedToday } from './dateUtils.js';
 
-/** Compara una fecha de tarea con el día local actual. */
-export function isSameDayAsToday(date, now = new Date()) {
+/** Compara una fecha de tarea con el día de calendario de prefs. */
+export function isSameDayAsToday(date, now = getNormalizedToday()) {
   const parsed = date instanceof Date ? date : parseTaskDate(date);
   if (!parsed || Number.isNaN(parsed.getTime())) return false;
   return isSameDay(parsed, now);
@@ -47,7 +48,7 @@ export function getTaskCardScheduleEnd(task) {
 }
 
 /** Ocultar fecha fin/límite en tarjetas cuando cae en el día de hoy. */
-export function shouldShowEndDateOnCard(date, now = new Date()) {
+export function shouldShowEndDateOnCard(date, now = getNormalizedToday()) {
   const parsed = date instanceof Date ? date : parseTaskDate(date);
   if (!parsed || Number.isNaN(parsed.getTime())) return false;
   return !isSameDayAsToday(parsed, now);
@@ -109,7 +110,7 @@ function applyCase(value, uppercase) {
  */
 export function formatTaskCardSchedule(
   task,
-  { isMobile = false, uppercase = true, now = new Date() } = {},
+  { isMobile = false, uppercase = true, now = getNormalizedToday() } = {},
 ) {
   const start = getTaskStart(task);
   const end = getTaskCardScheduleEnd(task);

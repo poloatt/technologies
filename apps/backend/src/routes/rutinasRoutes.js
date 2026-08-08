@@ -14,9 +14,6 @@ router.use(checkAuth);
 // Ruta para verificar si existe una rutina para una fecha específica
 router.get('/verify', rutinasController.verifyDate);
 
-// Ruta para obtener todas las fechas con rutinas
-router.get('/fechas', rutinasController.getAllFechas);
-
 // Rutas administrativas
 router.get('/admin/all', [checkRole([ROLES.ADMIN])], rutinasController.getAllAdmin);
 router.get('/admin/stats', [checkRole([ROLES.ADMIN])], rutinasController.getAdminStats);

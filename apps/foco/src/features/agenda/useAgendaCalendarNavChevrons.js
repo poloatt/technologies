@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { shiftCalendarDate } from '@shared/utils/focoNavigationUtils';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 
 /** Sincroniza con `agendaCalendarState` y navega vía evento `navigate` (mismo contrato que RutinaNavigation). */
 export function useAgendaCalendarNavChevrons(viewModeOverride) {
-  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [calendarDate, setCalendarDate] = useState(() => getNormalizedToday());
   const [viewMode, setViewMode] = useState(() => (
     viewModeOverride === 'week' ? 'week' : 'day'
   ));
@@ -30,7 +31,7 @@ export function useAgendaCalendarNavChevrons(viewModeOverride) {
     window.dispatchEvent(new CustomEvent('navigate', {
       detail: {
         direction,
-        date: (date || new Date()).toISOString(),
+        date: (date || getNormalizedToday()).toISOString(),
       },
     }));
   }, []);

@@ -8,13 +8,14 @@ import {
 import { es } from 'date-fns/locale';
 import { CADENCIA_WEEK_STARTS_ON } from '@shared/habits';
 import { filterTasksInRange } from '@shared/utils/calendar/agendaCalendarUtils';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 
 /**
  * Deriva eventos visibles para la vista día o semana.
  */
 export function useAgendaCalendar(tasks, selectedDate, viewMode = 'day', objetivos = [], agendaView = 'ahora') {
   const range = useMemo(() => {
-    const base = selectedDate || new Date();
+    const base = selectedDate || getNormalizedToday();
     if (viewMode === 'week') {
       const start = startOfWeek(base, { weekStartsOn: CADENCIA_WEEK_STARTS_ON, locale: es });
       const end = endOfWeek(base, { weekStartsOn: CADENCIA_WEEK_STARTS_ON, locale: es });
@@ -30,7 +31,7 @@ export function useAgendaCalendar(tasks, selectedDate, viewMode = 'day', objetiv
 
   const weekDays = useMemo(() => {
     if (viewMode !== 'week') return [];
-    const start = startOfWeek(selectedDate || new Date(), { weekStartsOn: CADENCIA_WEEK_STARTS_ON, locale: es });
+    const start = startOfWeek(selectedDate || getNormalizedToday(), { weekStartsOn: CADENCIA_WEEK_STARTS_ON, locale: es });
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start);
       d.setDate(start.getDate() + i);

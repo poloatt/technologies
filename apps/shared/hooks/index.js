@@ -20,6 +20,5 @@ export { default as useHorizontalDragScroll } from './useHorizontalDragScroll.js
 export { default as useHabitGroupContextMenu } from './useHabitGroupContextMenu.js';
 export { useHabitSectionCreateOption, HABIT_SECTION_CREATE_LABEL } from './useHabitSectionCreateOption.js';
 export { default as usePwaInstall, isStandalonePwa, isPwaInstallDismissed, dismissPwaInstall } from './usePwaInstall.js';
-export * from './useRutinasCRUD.js';
 export * from './useStatusOptimizer.js';
 export * from './useTimezone.js';

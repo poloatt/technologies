@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { Box, Button, ButtonBase, IconButton, LinearProgress, Tooltip, Typography } from '@mui/material';
 import { CalendarMonthOutlined } from '@mui/icons-material';
-import { isToday, startOfDay } from 'date-fns';
+import { startOfDay } from 'date-fns';
 import { useResponsive } from '@shared/hooks';
 import CalendarDateHeroContent, {
   RutinaCompletionPctChip,
@@ -12,7 +12,7 @@ import { useTheme } from '@mui/material/styles';
 import {
   isViewingTodayInCalendar,
 } from '@shared/utils/focoNavigationUtils';
-import { formatDateForAPI, getNormalizedToday } from '@shared/utils/dateUtils';
+import { formatDateForAPI, getNormalizedToday, isCalendarToday } from '@shared/utils/dateUtils';
 import CalendarDatePickerPopover from './CalendarDatePickerPopover';
 import AgendaCalendarNavChevrons from './AgendaCalendarNavChevrons';
 import { useAgendaCalendarDatePicker } from './useAgendaCalendarDatePicker';
@@ -87,8 +87,8 @@ export default function AgendaCalendarDateHeader({
   const closePickerHandler = onPickerClose ?? closePicker;
   const handleDatePickedHandler = onDateChange ?? handleDatePicked;
 
-  const normalized = startOfDay(date || new Date());
-  const today = isToday(normalized);
+  const normalized = startOfDay(date || getNormalizedToday());
+  const today = isCalendarToday(normalized);
   const viewingToday = viewingTodayProp ?? isViewingTodayInCalendar(normalized, viewMode);
 
   const goToToday = useCallback(() => {

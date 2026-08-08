@@ -4,11 +4,13 @@ import { Box, ButtonBase, Typography } from '@mui/material';
 
 import { alpha, useTheme } from '@mui/material/styles';
 
-import { format, isSameDay, isToday } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 
 import { es } from 'date-fns/locale';
 
 import { getTodayCalendarDate } from '@shared/utils/focoNavigationUtils';
+
+import { isCalendarToday } from '@shared/utils/dateUtils';
 
 import AgendaWeekHeaderNavColumn from './AgendaWeekHeaderNavColumn';
 
@@ -142,7 +144,7 @@ export default function AgendaWeekView({
 
           const active = selectedDate && isSameDay(day, selectedDate);
 
-          const today = isToday(day);
+          const today = isCalendarToday(day);
 
           return (
 
@@ -396,7 +398,7 @@ export default function AgendaWeekView({
 
                   minWidth: 0,
 
-                  bgcolor: isToday(day)
+                  bgcolor: isCalendarToday(day)
 
                     ? alpha(theme.palette.primary.main, 0.03)
 
@@ -418,7 +420,7 @@ export default function AgendaWeekView({
 
                   onToggleComplete={onToggleComplete}
 
-                  showNowIndicator={isToday(day)}
+                  showNowIndicator={isCalendarToday(day)}
 
                   showTimeColumn={false}
 

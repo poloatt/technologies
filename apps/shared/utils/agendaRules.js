@@ -1,11 +1,10 @@
 import {
   addMonths,
+  isSameDay,
   isSameMonth,
   isThisMonth,
   isThisWeek,
   isThisYear,
-  isToday,
-  isTomorrow,
 } from 'date-fns';
 // Funciones de fecha sin date-fns (compartidas con el backend vía googleTasksScheduleNotes.js)
 import {
@@ -15,6 +14,7 @@ import {
   normalizeDateOnlyDue,
 } from './taskDateUtils.js';
 import { CADENCIA_WEEK_STARTS_ON } from '../habits/utils/cadenciaUtils.js';
+import { getNormalizedToday } from './dateUtils.js';
 
 export { isDateOnlyDueRaw, isDateOnlyDueInstant, parseTaskDate, normalizeDateOnlyDue };
 
@@ -55,10 +55,11 @@ export const getTaskDue = (t) => {
   return null;
 };
 
-export const getStartOfToday = (now = new Date()) =>
+/** Inicio del día de calendario (prefs TZ por defecto; `now` inyectable en tests). */
+export const getStartOfToday = (now = getNormalizedToday()) =>
   new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
-export const getEndOfTomorrow = (now = new Date()) => {
+export const getEndOfTomorrow = (now = getNormalizedToday()) => {
   const startOfToday = getStartOfToday(now);
   const endOfTomorrow = new Date(startOfToday);
   endOfTomorrow.setDate(startOfToday.getDate() + 1);
@@ -79,7 +80,7 @@ export const getAnchorDate = (task) => {
   return start || null;
 };
 
-export const isInAhora = (task, now = new Date()) => {
+export const isInAhora = (task, now = getNormalizedToday()) => {
   const due = getTaskDue(task);
   const start = getTaskStart(task);
   const endOfTomorrow = getEndOfTomorrow(now);
@@ -92,7 +93,7 @@ export const isInAhora = (task, now = new Date()) => {
   return start <= endOfTomorrow;
 };
 
-export const isInLuego = (task, now = new Date()) => {
+export const isInLuego = (task, now = getNormalizedToday()) => {
   const due = getTaskDue(task);
   const start = getTaskStart(task);
   const endOfTomorrow = getEndOfTomorrow(now);
@@ -105,38 +106,42 @@ export const isInLuego = (task, now = new Date()) => {
   return start > endOfTomorrow;
 };
 
-export const getBucketAhora = (task, now = new Date()) => {
+export const getBucketAhora = (task, now = getNormalizedToday()) => {
+  const anchor = getAnchorDate(task);
+  if (!anchor) return 'SIN FECHA';
+
+  const startOfToday = getStartOfToday(now);
+  const tomorrow = new Date(startOfToday);
+  tomorrow.setDate(startOfToday.getDate() + 1);
+
+  // Overdue: se agrupa en HOY (sin bucket separado)
+  if (anchor < startOfToday) return 'HOY';
+  if (isSameDay(anchor, startOfToday)) return 'HOY';
+  if (isSameDay(anchor, tomorrow)) return 'MAÑANA';
+  if (isThisWeek(anchor, WEEK_OPTS)) return 'ESTA SEMANA';
+  if (isThisMonth(anchor)) return 'ESTE MES';
+  // Nota: "próximo trimestre" = ventana móvil de ~3 meses hacia adelante
+  if (anchor < addMonths(startOfToday, 3)) return 'PRÓXIMO TRIMESTRE';
+  if (isThisYear(anchor)) return 'ESTE AÑO';
+  return 'MÁS ADELANTE';
+};
+
+export const getBucketLuego = (task, now = getNormalizedToday()) => {
   const anchor = getAnchorDate(task);
   if (!anchor) return 'SIN FECHA';
 
   const startOfToday = getStartOfToday(now);
 
-  // Overdue: se agrupa en HOY (sin bucket separado)
-  if (anchor < startOfToday) return 'HOY';
-  if (isToday(anchor)) return 'HOY';
-  if (isTomorrow(anchor)) return 'MAÑANA';
-  if (isThisWeek(anchor, WEEK_OPTS)) return 'ESTA SEMANA';
-  if (isThisMonth(anchor)) return 'ESTE MES';
-  // Nota: "próximo trimestre" = ventana móvil de ~3 meses hacia adelante
-  if (anchor < addMonths(now, 3)) return 'PRÓXIMO TRIMESTRE';
-  if (isThisYear(anchor)) return 'ESTE AÑO';
-  return 'MÁS ADELANTE';
-};
-
-export const getBucketLuego = (task, now = new Date()) => {
-  const anchor = getAnchorDate(task);
-  if (!anchor) return 'SIN FECHA';
-
   if (isThisWeek(anchor, WEEK_OPTS)) return 'ESTA SEMANA';
   if (isThisMonth(anchor)) return 'ESTE MES';
   // Mes siguiente (calendario) como bucket propio
-  if (isSameMonth(anchor, addMonths(now, 1))) return 'PRÓXIMO MES';
-  if (anchor < addMonths(now, 3)) return 'PRÓXIMO TRIMESTRE';
+  if (isSameMonth(anchor, addMonths(startOfToday, 1))) return 'PRÓXIMO MES';
+  if (anchor < addMonths(startOfToday, 3)) return 'PRÓXIMO TRIMESTRE';
   if (isThisYear(anchor)) return 'ESTE AÑO';
   return 'MÁS ADELANTE';
 };
 
-export const getAgendaBucket = (task, agendaView = 'ahora', now = new Date()) => {
+export const getAgendaBucket = (task, agendaView = 'ahora', now = getNormalizedToday()) => {
   if (agendaView === 'luego') return getBucketLuego(task, now);
   return getBucketAhora(task, now);
 };

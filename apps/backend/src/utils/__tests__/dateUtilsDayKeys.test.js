@@ -4,6 +4,8 @@ import {
   parseAPIDate,
   setUserTimezone,
   getNormalizedToday,
+  toLogicalDayUtcStart,
+  toLogicalDayUtcEnd,
 } from '@shared/utils/dateUtils.js';
 
 describe('dateUtils day keys', () => {
@@ -40,5 +42,12 @@ describe('dateUtils day keys', () => {
     const today = getNormalizedToday();
     expect(today.getHours()).toBe(0);
     expect(toISODateString(today)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('toLogicalDayUtcStart/End use YMD without local day-shift', () => {
+    const start = toLogicalDayUtcStart('2026-08-08');
+    const end = toLogicalDayUtcEnd('2026-08-08');
+    expect(start.toISOString()).toBe('2026-08-08T00:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-08-08T23:59:59.999Z');
   });
 });

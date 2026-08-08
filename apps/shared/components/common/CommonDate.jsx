@@ -47,8 +47,8 @@ const EntityDateSelect = ({
   embedded = false,
   ...props
 }) => {
-  // Obtener la fecha actual al inicio del día
-  const today = useMemo(() => startOfDay(getNormalizedToday()), []);
+  // Día de calendario de prefs (no congelar en mount: cruza medianoche / cambia TZ)
+  const today = startOfDay(getNormalizedToday());
 
   // Función para formatear fecha a YYYY-MM-DD
   const formatToAPI = useCallback((date) => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { shiftCalendarDate } from '@shared/utils/focoNavigationUtils';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 
 const SWIPE_THRESHOLD_PX = 50;
 /** Cancel swipe when vertical drift exceeds horizontal × this ratio. */
@@ -12,7 +13,7 @@ const AXIS_LOCK_PX = 8;
  */
 export function useAgendaSwipeNavigate(viewModeOverride) {
   const elementRef = useRef(null);
-  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [calendarDate, setCalendarDate] = useState(() => getNormalizedToday());
   const [viewMode, setViewMode] = useState(() => (
     viewModeOverride === 'week' ? 'week' : 'day'
   ));

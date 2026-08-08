@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import { isSameDay, isToday } from 'date-fns';
+import { isSameDay } from 'date-fns';
+import { isCalendarToday } from '@shared/utils/dateUtils';
 import {
   DAY_END_HOUR,
   DAY_START_HOUR,
@@ -66,7 +67,7 @@ export default function AgendaTimeGrid({
 }) {
   const theme = useTheme();
   const gridHeight = getGridHeightPx();
-  const isDayToday = isToday(day);
+  const isDayToday = isCalendarToday(day);
 
   const dayTimed = timedEvents
     .filter((ev) => !ev.allDay)

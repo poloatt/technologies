@@ -7,6 +7,7 @@ import {
   getTodayCalendarDate,
   isViewingTodayInCalendar,
 } from '@shared/utils/focoNavigationUtils';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 import CalendarDatePickerPopover from './CalendarDatePickerPopover';
 import { useAgendaCalendarDatePicker } from './useAgendaCalendarDatePicker';
 import { DATE_HEADER_MIN_HEIGHT } from '@shared/utils/calendar/calendarLayout';
@@ -35,7 +36,7 @@ export default function AgendaWeekHeaderNavColumn({ selectedDate }) {
     closePicker,
     handleDatePicked,
   } = useAgendaCalendarDatePicker();
-  const normalized = startOfDay(selectedDate || new Date());
+  const normalized = startOfDay(selectedDate || getNormalizedToday());
   const viewingToday = isViewingTodayInCalendar(normalized, 'week');
 
   const goToToday = useCallback(() => {
