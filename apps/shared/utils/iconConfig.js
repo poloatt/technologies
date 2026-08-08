@@ -2,7 +2,7 @@
 import { format } from 'date-fns';
 import { es } from './localeEs.js';
 import { iconMap } from './habitIcons.js';
-import { formatDateForAPI, getNormalizedToday, parseAPIDate, areSameDay, toISODateString } from './dateUtils.js';
+import { formatDateForAPI, getNormalizedToday, parseAPIDate, areSameDay } from './dateUtils.js';
 
 export {
   iconMap,
