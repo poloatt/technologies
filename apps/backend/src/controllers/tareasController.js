@@ -15,6 +15,10 @@ class TareasController extends BaseController {
           path: 'serieId',
           select: 'rrule activa dtstart',
         },
+        {
+          path: 'owners',
+          select: 'nombre email',
+        },
       ],
     });
 
@@ -29,6 +33,43 @@ class TareasController extends BaseController {
     this.updateEstado = this.updateEstado.bind(this);
     this.getAgenda = this.getAgenda.bind(this);
     this.getList = this.getList.bind(this);
+    this.delete = this.delete.bind(this);
+  }
+
+  /**
+   * DELETE /api/tareas/:id — borra en Mongo y, si está linkeada, en Google Tasks.
+   * El fallo de Google no revierte el delete local (evita tareas fantasma en Attadia).
+   */
+  async delete(req, res) {
+    try {
+      const item = await Tareas.findById(req.params.id);
+      if (!item) {
+        return res.status(404).json({ message: 'Recurso no encontrado' });
+      }
+
+      const googleTaskId = item.googleTasksSync?.googleTaskId;
+      const taskListId = item.googleTasksSync?.googleTaskListId;
+      const userId = item.usuario?._id || item.usuario;
+
+      await Tareas.findByIdAndDelete(req.params.id);
+
+      if (googleTaskId && userId) {
+        try {
+          const googleTasksService = (await import('../services/googleTasksService.js')).default;
+          await googleTasksService.deleteGoogleTask(String(userId), taskListId, googleTaskId);
+        } catch (googleErr) {
+          console.warn(
+            `Tarea ${req.params.id} eliminada localmente; Google Tasks falló:`,
+            googleErr?.message || googleErr,
+          );
+        }
+      }
+
+      return res.json({ message: 'Recurso eliminado correctamente' });
+    } catch (error) {
+      console.error('Error en delete tarea:', error);
+      return res.status(500).json({ error: error.message });
+    }
   }
 
   // GET /api/tareas/list — lista Ahora/Luego acotada (sin paginar todo el universo)
@@ -131,7 +172,10 @@ class TareasController extends BaseController {
 
       const query = { 
         objetivo: objetivoId,
-        usuario: req.user.id 
+        $or: [
+          { usuario: req.user.id },
+          { owners: req.user.id },
+        ],
       };
 
       if (estado) query.estado = estado;
@@ -296,6 +340,14 @@ class TareasController extends BaseController {
         ...tareaBody,
         tipo: normalizedTipo,
         usuario: req.user.id,
+        owners: (() => {
+          const incoming = Array.isArray(tareaBody.owners) ? tareaBody.owners : [];
+          const ids = incoming
+            .map((o) => String(o?._id ?? o?.id ?? o))
+            .filter(Boolean);
+          if (!ids.includes(String(req.user.id))) ids.unshift(String(req.user.id));
+          return [...new Set(ids)];
+        })(),
       });
 
       await tarea.save();
@@ -483,14 +535,17 @@ class TareasController extends BaseController {
     try {
       const { estado } = req.body;
 
-      if (!['PENDIENTE', 'EN_PROGRESO', 'COMPLETADA'].includes(estado)) {
+      if (!['PENDIENTE', 'EN_PROGRESO', 'COMPLETADA', 'CANCELADA'].includes(estado)) {
         return res.status(400).json({ error: 'Estado no válido' });
       }
 
       const update = { estado, completada: estado === 'COMPLETADA' };
 
       const tarea = await this.Model.findOneAndUpdate(
-        { _id: req.params.id, usuario: req.user.id },
+        {
+          _id: req.params.id,
+          $or: [{ usuario: req.user.id }, { owners: req.user.id }],
+        },
         update,
         { new: true, runValidators: true },
       );
@@ -528,11 +583,22 @@ class TareasController extends BaseController {
         tipo,
       } = req.query;
 
-      const query = { usuario: req.user.id };
+      const query = {
+        $or: [
+          { usuario: req.user.id },
+          { owners: req.user.id },
+        ],
+      };
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      if (estado) query.estado = estado;
+      if (estado) {
+        const parts = String(estado)
+          .split(',')
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean);
+        query.estado = parts.length > 1 ? { $in: parts } : parts[0];
+      }
       if (objetivo) query.objetivo = objetivo;
       if (tipo && ['TAREA', 'EVENTO'].includes(String(tipo).toUpperCase())) {
         query.tipo = String(tipo).toUpperCase();
@@ -578,6 +644,10 @@ class TareasController extends BaseController {
           {
             path: 'objetivo',
             select: 'nombre estado',
+          },
+          {
+            path: 'owners',
+            select: 'nombre email',
           },
         ],
         lean: true,

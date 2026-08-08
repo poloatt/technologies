@@ -1,3 +1,7 @@
 export { default as TareaForm } from './TareaForm';
 export { buildTareaPayload } from './buildTareaPayload';
-export { syncTareaToGoogleAfterSave, syncTareaToGoogleInBackground } from './tareaGoogleSync';
+export {
+  syncTareaToGoogleAfterSave,
+  syncTareaToGoogleInBackground,
+  syncTareaStatusToGoogleInBackground,
+} from './tareaGoogleSync';

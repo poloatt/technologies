@@ -5,9 +5,8 @@ import {
   tareaFormStandardFieldSx,
   tareaFormFieldInputSx,
 } from './tareaFormUi';
-import { TareaFormIcons } from './tareaFormIcons';
 
-/** Descripción en fila con icono (estilo Google Calendar). */
+/** Descripción alineada con el título (sin icono a la izquierda). */
 export default function TareaFormDescriptionField({
   value,
   onChange,
@@ -15,7 +14,7 @@ export default function TareaFormDescriptionField({
   showDivider = false,
 }) {
   return (
-    <TareaFormRow icon={TareaFormIcons.description} showDivider={showDivider}>
+    <TareaFormRow showDivider={showDivider}>
       <TextField
         variant="standard"
         fullWidth

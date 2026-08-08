@@ -28,7 +28,6 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
   const { pathname } = useLocation();
   const section = sectionProp || matchTiempoSection(pathname);
   const [hasSelectedItems, setHasSelectedItems] = useState(false);
-  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const tareasPageView = useTareasPageView();
   const isTareasAgendaView = section === 'tareas' && tareasPageView === 'agenda';
   const undoScope = useUndoScope();
@@ -42,14 +41,6 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     };
     window.addEventListener('selectionChanged', handleSelectionChange);
     return () => window.removeEventListener('selectionChanged', handleSelectionChange);
-  }, []);
-
-  useEffect(() => {
-    const handleTaskDetailOpenChanged = (event) => {
-      setIsTaskDetailOpen(!!event.detail?.open);
-    };
-    window.addEventListener('taskDetailOpenChanged', handleTaskDetailOpenChanged);
-    return () => window.removeEventListener('taskDetailOpenChanged', handleTaskDetailOpenChanged);
   }, []);
 
   const commonButtonSx = useMemo(() => ({
@@ -101,12 +92,26 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
 
     const list = [
       ...(undoAction ? [undoAction] : []),
-      ...(!isTaskDetailOpen ? [{
+      ...((section === 'tareas' || section === 'objetivos') ? [{
         key: 'googleTasks',
-        icon: <GoogleIcon />,
-        label: 'Google Tasks',
-        tooltip: 'Google Tasks',
-        buttonSx: commonButtonSx,
+        icon: <GoogleIcon sx={{ color: '#fff' }} />,
+        label: 'Google Sync',
+        tooltip: 'Google Sync',
+        color: '#fff',
+        hoverColor: '#fff',
+        buttonSx: {
+          ...commonButtonSx,
+          color: '#fff',
+          '& .MuiSvgIcon-root': {
+            ...(commonButtonSx['& .MuiSvgIcon-root'] || {}),
+            color: '#fff',
+          },
+          '&:hover': {
+            backgroundColor: 'action.hover',
+            color: '#fff',
+            '& .MuiSvgIcon-root': { color: '#fff' },
+          },
+        },
         onClick: () => window.dispatchEvent(new CustomEvent('openGoogleTasksConfig')),
       }] : []),
       ...(section === 'tareas' ? [{
@@ -167,7 +172,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     });
 
     return list;
-  }, [actionHistory, commonButtonSx, hasSelectedItems, isTaskDetailOpen, isTareasAgendaView, section, tareasPageView, undoAction]);
+  }, [actionHistory, commonButtonSx, hasSelectedItems, isTareasAgendaView, section, tareasPageView, undoAction]);
 
   if (!section) return null;
   if (actions.length === 0) return null;

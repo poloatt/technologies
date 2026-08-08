@@ -102,6 +102,9 @@ export function buildTareaPayload(formData, { editingTarea = null, objetivos = [
     subtareas: formData.subtareas || [],
     archivos: formData.archivos || [],
     rrule: formData.rrule || null,
+    owners: Array.isArray(formData.owners)
+      ? formData.owners.map((o) => o?._id || o?.id || o).filter(Boolean)
+      : undefined,
     googleTasksSync: mergeGoogleTasksSyncForSave(formData, { editingTarea, objetivos }),
   };
 

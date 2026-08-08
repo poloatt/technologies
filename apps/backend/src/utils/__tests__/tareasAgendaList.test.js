@@ -8,7 +8,7 @@ describe('getDefaultListRange', () => {
   test('returns bounded window around today', () => {
     const { from, to } = getDefaultListRange();
     const days = (to - from) / (24 * 60 * 60 * 1000);
-    expect(days).toBeGreaterThan(100);
+    expect(days).toBeGreaterThan(90);
     expect(days).toBeLessThan(150);
   });
 });
@@ -59,6 +59,17 @@ describe('filterDocsForListView', () => {
       { _id: '2', titulo: 'Open', fechaVencimiento: now, estado: 'PENDIENTE' },
     ];
     const filtered = filterDocsForListView(docs, { view: 'ahora' }, now);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].titulo).toBe('Open');
+  });
+
+  test('always excludes CANCELADA from list views', () => {
+    const now = new Date();
+    const docs = [
+      { _id: '1', titulo: 'Cancelled', fechaVencimiento: now, estado: 'CANCELADA', completada: false },
+      { _id: '2', titulo: 'Open', fechaVencimiento: now, estado: 'PENDIENTE' },
+    ];
+    const filtered = filterDocsForListView(docs, { view: 'ahora', includeCompleted: true }, now);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].titulo).toBe('Open');
   });

@@ -1,6 +1,7 @@
 import express from 'express';
 import * as googleTasksController from '../controllers/googleTasksController.js';
 import { checkAuth } from '../middleware/auth.js';
+import { checkRole, ROLES } from '../middleware/checkRole.js';
 
 const router = express.Router();
 
@@ -31,11 +32,11 @@ router.get('/task-lists', googleTasksController.getTaskLists);
 router.post('/audit-project', googleTasksController.auditProject);
 router.post('/cleanup-project', googleTasksController.cleanupProject);
 
-// Rutas de sincronización automática
+// Auto-sync: status para todos; mutaciones solo admin (cron es global al proceso)
 router.get('/auto-sync/status', googleTasksController.getAutoSyncStatus);
-router.post('/auto-sync/start', googleTasksController.startAutoSync);
-router.post('/auto-sync/stop', googleTasksController.stopAutoSync);
-router.put('/auto-sync/interval', googleTasksController.setAutoSyncInterval);
-router.post('/auto-sync/force', googleTasksController.forceAutoSync);
+router.post('/auto-sync/start', checkRole([ROLES.ADMIN]), googleTasksController.startAutoSync);
+router.post('/auto-sync/stop', checkRole([ROLES.ADMIN]), googleTasksController.stopAutoSync);
+router.put('/auto-sync/interval', checkRole([ROLES.ADMIN]), googleTasksController.setAutoSyncInterval);
+router.post('/auto-sync/force', checkRole([ROLES.ADMIN]), googleTasksController.forceAutoSync);
 
 export default router;

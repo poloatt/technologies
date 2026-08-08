@@ -42,10 +42,18 @@ export async function fetchTasksForAgendaRange({ from, to, includeCompleted = fa
 
 export async function fetchCompletedTasks({ page = 1, limit = 100, signal } = {}) {
   const response = await clienteAxios.get('/api/tareas', {
-    params: { estado: 'COMPLETADA', page, limit },
+    params: { estado: 'COMPLETADA,CANCELADA', page, limit },
     signal,
   });
   return response.data;
+}
+
+export async function searchUsersForDelegate(q, { signal } = {}) {
+  const response = await clienteAxios.get('/api/users/search', {
+    params: { q },
+    signal,
+  });
+  return response.data?.docs || [];
 }
 
 export async function fetchObjetivosLight({ signal } = {}) {

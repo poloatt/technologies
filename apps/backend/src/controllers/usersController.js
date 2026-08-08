@@ -82,6 +82,38 @@ export const usersController = {
   },
 
   // Métodos CRUD para administración de usuarios
+  searchPublic: async (req, res) => {
+    try {
+      const q = String(req.query.q || req.query.search || '').trim();
+      if (q.length < 2) {
+        return res.json({ docs: [] });
+      }
+
+      const query = {
+        _id: { $ne: req.user.id },
+        $or: [
+          { nombre: { $regex: q, $options: 'i' } },
+          { email: { $regex: q, $options: 'i' } },
+        ],
+      };
+
+      const docs = await Users.find(query)
+        .select('nombre email')
+        .limit(10)
+        .lean();
+
+      res.json({
+        docs: docs.map((u) => ({
+          ...u,
+          id: String(u._id),
+        })),
+      });
+    } catch (error) {
+      console.error('Error al buscar usuarios:', error);
+      res.status(500).json({ error: 'Error al buscar usuarios' });
+    }
+  },
+
   getAll: async (req, res) => {
     try {
       const { page = 1, limit = 10, sort = '-createdAt', search } = req.query;

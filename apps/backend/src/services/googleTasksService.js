@@ -977,6 +977,7 @@ class GoogleTasksService {
         skippedTaskLists: 0,
         skippedTasks: 0,
         deletedLocalNotInGoogle: 0,
+        unlinkedLocalNotInGoogle: 0,
         dedupLocalGroups: 0,
         dedupLocalRemoved: 0,
         series: { seriesCreated: 0, seriesUpdated: 0, instancesLinked: 0 },
@@ -1063,12 +1064,16 @@ class GoogleTasksService {
               let tarea = existingByGoogleId.get(googleTask.id);
 
               if (tarea) {
+                const localPending = this.hasLocalPendingGoogleSync(tarea);
                 const shouldImport = this.shouldImportFromGoogle(tarea, googleTask);
                 if (shouldImport) {
                   this.applyNotesFromGoogle(tarea, googleTask);
                   tarea.titulo = this.cleanTitle(tarea.titulo || googleTask.title);
                 }
-                this.applyGoogleStatusAndDue(tarea, googleTask);
+                // Pending local wins: never overwrite status/due or clear needsSync mid-edit/export
+                if (!localPending) {
+                  this.applyGoogleStatusAndDue(tarea, googleTask);
+                }
                 if (shouldImport) {
                   await tarea.save();
                   syncResults.updated++;
@@ -1106,9 +1111,8 @@ class GoogleTasksService {
             }
           }
 
-          // Limpieza pesada solo en import completo (incremental evita re-escaneo total)
+          // Soft-unlink: no borrar locales si desaparecieron en Google (evita pérdida de datos)
           if (isFullImport) {
-          // Limpieza: eliminar en BD tareas que ya no existen en Google (huérfanas por borrado en Google)
           try {
             const googleMainIds = new Set(mainTasks.map(t => t.id));
             const tareasLocales = await Tareas.find({
@@ -1117,29 +1121,26 @@ class GoogleTasksService {
               'googleTasksSync.googleTaskListId': taskList.id,
               'googleTasksSync.googleTaskId': { $exists: true, $ne: null }
             });
-            const toDelete = tareasLocales.filter(t => t.googleTasksSync?.googleTaskId && !googleMainIds.has(t.googleTasksSync.googleTaskId));
-            if (toDelete.length > 0) {
-              logger.sync(`🧹 Eliminando ${toDelete.length} tareas locales que no existen más en Google`);
-              const { TareaSeries } = await import('../models/index.js');
-              for (const t of toDelete) {
+            const toUnlink = tareasLocales.filter(t => t.googleTasksSync?.googleTaskId && !googleMainIds.has(t.googleTasksSync.googleTaskId));
+            if (toUnlink.length > 0) {
+              logger.sync(`🧹 Desvinculando ${toUnlink.length} tareas locales que no existen más en Google (soft-unlink)`);
+              for (const t of toUnlink) {
                 try {
-                  if (t.serieId) {
-                    await Tareas.deleteMany({
-                      usuario: userId,
-                      serieId: t.serieId,
-                      _id: { $ne: t._id },
-                    });
-                    await TareaSeries.updateOne(
-                      { _id: t.serieId, usuario: userId },
-                      { activa: false },
-                    );
-                  }
-                  await Tareas.findByIdAndDelete(t._id);
-                } catch (delErr) {
-                  logger.warn?.(`No se pudo eliminar tarea huérfana ${t._id}: ${delErr.message}`);
+                  if (!t.googleTasksSync) t.googleTasksSync = {};
+                  t.googleTasksSync.googleTaskId = null;
+                  t.googleTasksSync.enabled = false;
+                  t.googleTasksSync.needsSync = false;
+                  t.googleTasksSync.syncStatus = 'unlinked';
+                  t.googleTasksSync.syncingStartedAt = null;
+                  t.googleTasksSync.updated = new Date();
+                  await t.save();
+                } catch (unlinkErr) {
+                  logger.warn?.(`No se pudo desvincular tarea ${t._id}: ${unlinkErr.message}`);
                 }
               }
-              syncResults.deletedLocalNotInGoogle += toDelete.length;
+              syncResults.unlinkedLocalNotInGoogle = (syncResults.unlinkedLocalNotInGoogle || 0) + toUnlink.length;
+              // Compat métrica antigua (ya no hard-delete)
+              syncResults.deletedLocalNotInGoogle = syncResults.unlinkedLocalNotInGoogle;
             }
           } catch (cleanupErr) {
             logger.warn?.(`No se pudo limpiar tareas locales inexistentes en Google para "${taskList.title}": ${cleanupErr.message}`);
@@ -1668,7 +1669,13 @@ class GoogleTasksService {
 
   // Métodos auxiliares
 
+  hasLocalPendingGoogleSync(tarea) {
+    const sync = tarea?.googleTasksSync || {};
+    return sync.needsSync === true || sync.syncStatus === 'pending';
+  }
+
   shouldRefreshGoogleDueDate(tarea, googleTask) {
+    if (this.hasLocalPendingGoogleSync(tarea)) return false;
     if (!googleTask?.due) return false;
     const due = Tareas.parseGoogleDueDate(googleTask.due);
     if (!due) return false;
@@ -1680,6 +1687,7 @@ class GoogleTasksService {
   }
 
   shouldRefreshGoogleNotes(tarea, googleTask) {
+    if (this.hasLocalPendingGoogleSync(tarea)) return false;
     const googleNotes = String(googleTask?.notes || '');
     if (!googleNotes.trim()) return false;
 
@@ -1699,7 +1707,7 @@ class GoogleTasksService {
   }
 
   shouldRefreshGoogleStatus(tarea, googleTask) {
-    if (tarea.googleTasksSync?.needsSync === true) return false;
+    if (this.hasLocalPendingGoogleSync(tarea)) return false;
     const googleCompleted = googleTask?.status === 'completed';
     const localCompleted =
       Boolean(tarea.completada)
@@ -1716,7 +1724,7 @@ class GoogleTasksService {
     );
   }
 
-  /** Estado, due y metadatos Google — siempre en import (aunque notes/título no cambien). */
+  /** Estado, due y metadatos Google en import (omitir si hasLocalPendingGoogleSync). */
   applyGoogleStatusAndDue(tarea, googleTask) {
     if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
     tarea.completada = googleTask.status === 'completed';

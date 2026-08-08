@@ -12,6 +12,7 @@ import {
   taskEventTitleSx,
   taskEventTimeSx,
 } from '../../styles/taskListStyles';
+import { GoogleTaskOriginMark } from './GoogleTaskOriginMark';
 
 /**
  * Bloque visual de tarea/evento en vistas de calendario (día, semana, todo el día).
@@ -27,6 +28,7 @@ export default function TaskEventBlock({
   const { task, start, end, allDay, objetivo } = event;
   const completed = isTaskCompleted(task);
   const isEvento = String(task?.tipo || '').toUpperCase() === 'EVENTO';
+  const isVirtual = Boolean(task?.virtual);
   const estadoColor = getEstadoColor(task?.estado || 'PENDIENTE', 'TAREA');
   const accent = isEvento
     ? theme.palette.primary.main
@@ -42,7 +44,7 @@ export default function TaskEventBlock({
     ? 'Todo el día'
     : (formatTaskCardSchedule(scheduleTask, { isMobile: false, uppercase: false }) || `${format(start, 'HH:mm', { locale: es })} – ${format(end, 'HH:mm', { locale: es })}`);
 
-  const showCheckbox = onToggleComplete && !isEvento && !timedCompact;
+  const showCheckbox = onToggleComplete && !isEvento && !timedCompact && !isVirtual;
   const showTime = !compact && !timedCompact;
 
   return (
@@ -51,14 +53,17 @@ export default function TaskEventBlock({
         e.stopPropagation();
         onClick?.(task);
       }}
-      sx={getTaskEventBlockSx({
-        theme,
-        accent,
-        completed,
-        compact,
-        timedCompact,
-        minHeight: timedCompact ? MIN_EVENT_HEIGHT_PX : undefined,
-      })}
+      sx={{
+        ...getTaskEventBlockSx({
+          theme,
+          accent,
+          completed,
+          compact,
+          timedCompact,
+          minHeight: timedCompact ? MIN_EVENT_HEIGHT_PX : undefined,
+        }),
+        ...(isVirtual ? { opacity: 0.72 } : null),
+      }}
     >
       {showCheckbox && (
         <Checkbox
@@ -75,7 +80,7 @@ export default function TaskEventBlock({
       <Box sx={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <Typography sx={taskEventTitleSx(timedCompact, completed)}>
           {task.titulo}
-          {(task.esRecurrente || task.serieId) && (
+          {(task.esRecurrente || task.serieId || task.virtual) && (
             <Typography
               component="span"
               variant="caption"
@@ -84,11 +89,13 @@ export default function TaskEventBlock({
               ↻
             </Typography>
           )}
+          <GoogleTaskOriginMark tarea={task} />
         </Typography>
         {showTime && (
           <Typography sx={taskEventTimeSx}>
             {timeLabel}
             {objetivo?.nombre ? ` · ${objetivo.nombre}` : ''}
+            {isVirtual ? ' · virtual' : ''}
           </Typography>
         )}
       </Box>

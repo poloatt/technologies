@@ -8,7 +8,7 @@ import { usePageWithHistory } from '@shared/hooks';
 import { applyTimedMoveToTask } from '@shared/utils/calendar/calendarDragUtils';
 import { isTaskCompleted } from '@shared/utils/agendaRules';
 import { getNormalizedToday } from '@shared/utils/dateUtils';
-import { TareaForm, buildTareaPayload, syncTareaToGoogleInBackground } from '../tasks/form';
+import { TareaForm, buildTareaPayload, syncTareaToGoogleInBackground, syncTareaStatusToGoogleInBackground } from '../tasks/form';
 import GoogleTasksConfig from '../tasks/google/GoogleTasksConfig';
 import { useCalendarTaskFilter } from './hooks/useCalendarTaskFilter';
 import { useHabitsAgendaView } from '../habits/hooks/useHabitsAgendaView';
@@ -223,6 +223,7 @@ export default function AgendaCalendarPage() {
         }
         return t;
       }));
+      syncTareaStatusToGoogleInBackground(updated, target);
       await fetchDataStable();
     } catch (error) {
       console.error('Error al actualizar tarea:', error);

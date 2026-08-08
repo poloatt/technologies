@@ -4,19 +4,22 @@ import {
   IconButton,
   Stack,
   TextField,
+  FormControlLabel,
+  Switch,
+  Typography,
 } from '@mui/material';
 import { startOfDay } from 'date-fns';
 import { useTaskSchedule } from '@shared/hooks/useTaskSchedule';
 import {
   TareaFormRow,
-  TareaFormPillSelect,
   TareaFormHeaderContentRow,
+  TareaFormObjetivoSummary,
+  TareaFormOwnersRow,
   tareaFormStandardFieldSx,
   tareaFormFieldInputSx,
   tareaFormActionIconSx,
   tareaFormObjetivoSubtareasSectionSx,
   tareaFormObjetivoSubtareasContentSx,
-  tareaFormObjetivoSubtareasPillSelectSx,
   tareaFormSubtaskRowSx,
   tareaFormSubtaskListSx,
   taskFormSubtaskCheckIconSx,
@@ -24,8 +27,8 @@ import {
 import { TareaFormIcons } from '@shared/components/forms/tareaFormIcons';
 import TareaFormDescriptionField from '@shared/components/forms/TareaFormDescriptionField';
 import TareaFormScheduleSummary from './fields/TareaFormScheduleSummary';
-import { TareaFormSettingsRow } from '@shared/components/forms/tareaFormUi';
 import { findObjetivoById } from './buildTareaPayload';
+
 function mapObjetivoOptions(objetivos) {
   return (objetivos || []).map((obj) => ({
     value: obj._id || obj.id,
@@ -54,6 +57,11 @@ export default function TareaFormAdvancedFields({
   showRecurrenceInSettings = true,
   onCreateObjetivo,
   onToggleSubtarea,
+  onDelegateRequest,
+  currentUserId = null,
+  showOwners = true,
+  showGoogleSyncToggle = false,
+  onToggleGoogleSync,
 }) {
   const objetivos = objetivosProp ?? ObjetivosProp ?? [];
   const [newSubtarea, setNewSubtarea] = useState('');
@@ -67,15 +75,15 @@ export default function TareaFormAdvancedFields({
   };
 
   const handleObjetivoChange = (event) => {
-    const objetivoId = event.target.value;
-    const objetivo = findObjetivoById(objetivos, objetivoId);
+    const nextObjetivoId = event.target.value;
+    const objetivo = findObjetivoById(objetivos, nextObjetivoId);
     const listId = objetivo?.googleTasksSync?.googleTaskListId || null;
 
     setFormData((prev) => {
       const syncEnabled = prev.googleTasksSync?.enabled;
       return {
         ...prev,
-        objetivo: objetivoId || null,
+        objetivo: nextObjetivoId || null,
         googleTasksSync: {
           ...(prev.googleTasksSync || {}),
           ...(listId ? { googleTaskListId: listId } : {}),
@@ -127,16 +135,22 @@ export default function TareaFormAdvancedFields({
     }
   };
 
+  const lockedObjetivoId = objetivoId || null;
+  const canEditObjetivo = showObjetivo && !lockedObjetivoId && tipo !== 'EVENTO';
   const objetivoValue = (() => {
-    const currentValue = formData.objetivo || '';
+    const currentValue = lockedObjetivoId || formData.objetivo || '';
     const exists = (objetivos || []).some((p) => (p._id || p.id) === currentValue);
-    return exists ? currentValue : '';
+    return exists ? currentValue : (lockedObjetivoId || '');
   })();
+
+  const lockedObjetivo = lockedObjetivoId
+    ? findObjetivoById(objetivos, lockedObjetivoId)
+    : null;
+  const lockedObjetivoLabel = lockedObjetivo?.nombre || lockedObjetivo?.titulo || null;
 
   const subtareas = formData.subtareas || [];
   const objetivoOptions = mapObjetivoOptions(objetivos);
 
-  // --- Horario (fecha + hora inicio/fin + todo el día) ---
   const {
     scheduleStart,
     scheduleEnd,
@@ -175,55 +189,102 @@ export default function TareaFormAdvancedFields({
       onDeadlineChange={(v) => setFormData((prev) => ({ ...prev, fechaVencimiento: v }))}
       recurrenceRrule={formData.rrule}
       onRecurrenceChange={(rr) => setFormData((prev) => ({ ...prev, rrule: rr }))}
+      showRecurrence={showRecurrenceInSettings}
       errors={errors}
     />
   );
 
-  const settingsBlock = (
-    <TareaFormSettingsRow
-      estado={formData.estado}
-      onEstadoChange={handleChange('estado')}
-      showPrioridad={false}
-      showRecurrence={false}
-      tipo={tipo}
-      errors={errors}
+  const showSubtareasUi = showSubtareas && tipo !== 'EVENTO';
+  const hasSubtareas = subtareas.length > 0;
+
+  const subtareaInput = (
+    <TextField
+      variant="standard"
+      fullWidth
+      placeholder="Agregar subtarea..."
+      value={newSubtarea}
+      onChange={(e) => setNewSubtarea(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddSubtarea();
+        }
+      }}
+      sx={{
+        flex: 1,
+        minWidth: 0,
+        width: '100%',
+        ...tareaFormStandardFieldSx,
+        '& .MuiInputBase-input': {
+          ...tareaFormFieldInputSx,
+          color: newSubtarea ? 'text.primary' : 'text.secondary',
+        },
+      }}
     />
   );
 
-  const objetivoBlock = showObjetivo && !objetivoId && tipo !== 'EVENTO' && (
-    <TareaFormRow icon={TareaFormIcons.objetivo} showDivider={false} align="center">
-      <Box sx={[tareaFormObjetivoSubtareasContentSx, tareaFormObjetivoSubtareasPillSelectSx]}>
-        <TareaFormPillSelect
-          value={objetivoValue}
-          onChange={handleObjetivoChange}
-          options={objetivoOptions}
-          emptyLabel="Sin objetivo"
-          error={errors.objetivo}
-          required
-          pillWidth="grow"
-          onCreate={onCreateObjetivo}
-          createLabel="Nuevo objetivo"
-        />
+  const subtareaComposerRow = (
+    <TareaFormRow icon={TareaFormIcons.subtarea} showDivider={false} align="center">
+      <Box sx={tareaFormObjetivoSubtareasContentSx}>
+        <TareaFormHeaderContentRow>
+          {subtareaInput}
+        </TareaFormHeaderContentRow>
       </Box>
     </TareaFormRow>
   );
 
-  const subtareasBlock = showSubtareas && tipo !== 'EVENTO' && (
+  const showObjetivoSummary = canEditObjetivo || Boolean(lockedObjetivoLabel) || tipo === 'EVENTO' || showSubtareasUi;
+  const objetivoMetaBlock = (showSettings || showObjetivoSummary) && (
+    <TareaFormObjetivoSummary
+      estado={formData.estado}
+      onEstadoChange={handleChange('estado')}
+      showEstado={showSettings}
+      showObjetivo={canEditObjetivo || Boolean(lockedObjetivoLabel)}
+      objetivoValue={objetivoValue}
+      onObjetivoChange={canEditObjetivo ? handleObjetivoChange : undefined}
+      objetivoOptions={objetivoOptions}
+      objetivoLabel={lockedObjetivoLabel || undefined}
+      emptyObjetivoLabel="Sin objetivo"
+      onCreateObjetivo={canEditObjetivo ? onCreateObjetivo : undefined}
+      createObjetivoLabel="Nuevo objetivo"
+      showSubtareas={showSubtareasUi}
+      subtareasCount={subtareas.length}
+      emptySubtareasLabel="Sin subtareas"
+      subtareaComposer={!hasSubtareas ? subtareaInput : null}
+      errors={errors}
+      defaultExpanded={Boolean(errors.objetivo)}
+    />
+  );
+
+  const subtareasListBlock = showSubtareasUi && hasSubtareas && (
     <>
-      <TareaFormRow icon={TareaFormIcons.subtarea} showDivider={false} align="center">
-        <Box sx={tareaFormObjetivoSubtareasContentSx}>
-          <TareaFormHeaderContentRow>
+      <Stack spacing={0.5} sx={tareaFormSubtaskListSx}>
+        {subtareas.map((subtarea, index) => (
+          <Box
+            key={subtarea._id || `sub-${index}`}
+            sx={tareaFormSubtaskRowSx}
+          >
+            <IconButton
+              size="small"
+              onClick={() => handleToggleSubtareaClick(index)}
+              sx={{
+                p: 0.5,
+                color: subtarea.completada ? 'success.main' : 'text.secondary',
+                '& .MuiSvgIcon-root': taskFormSubtaskCheckIconSx,
+              }}
+            >
+              <TareaFormIcons.completed />
+            </IconButton>
             <TextField
+              value={subtarea.titulo}
               variant="standard"
-              fullWidth
-              placeholder="Agregar subtarea..."
-              value={newSubtarea}
-              onChange={(e) => setNewSubtarea(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddSubtarea();
-                }
+              onChange={(e) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  subtareas: prev.subtareas.map((st, i) =>
+                    (i === index ? { ...st, titulo: e.target.value } : st),
+                  ),
+                }));
               }}
               sx={{
                 flex: 1,
@@ -231,94 +292,91 @@ export default function TareaFormAdvancedFields({
                 ...tareaFormStandardFieldSx,
                 '& .MuiInputBase-input': {
                   ...tareaFormFieldInputSx,
-                  color: newSubtarea ? 'text.primary' : 'text.secondary',
+                  textDecoration: subtarea.completada ? 'line-through' : 'none',
+                  color: subtarea.completada ? 'text.secondary' : 'text.primary',
                 },
               }}
             />
-          </TareaFormHeaderContentRow>
-        </Box>
-      </TareaFormRow>
-      {subtareas.length > 0 && (
-        <Stack spacing={0.5} sx={tareaFormSubtaskListSx}>
-          {subtareas.map((subtarea, index) => (
-            <Box
-              key={subtarea._id || `sub-${index}`}
-              sx={tareaFormSubtaskRowSx}
+            <IconButton
+              size="small"
+              onClick={() => handleDeleteSubtarea(index)}
+              sx={{
+                p: 0.5,
+                color: 'error.main',
+                '& .MuiSvgIcon-root': tareaFormActionIconSx,
+              }}
             >
-              <IconButton
-                size="small"
-                onClick={() => handleToggleSubtareaClick(index)}
-                sx={{
-                  p: 0.5,
-                  color: subtarea.completada ? 'success.main' : 'text.secondary',
-                  '& .MuiSvgIcon-root': taskFormSubtaskCheckIconSx,
-                }}
-              >
-                <TareaFormIcons.completed />
-              </IconButton>
-              <TextField
-                value={subtarea.titulo}
-                variant="standard"
-                onChange={(e) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    subtareas: prev.subtareas.map((st, i) =>
-                      (i === index ? { ...st, titulo: e.target.value } : st),
-                    ),
-                  }));
-                }}
-                sx={{
-                  flex: 1,
-                  minWidth: 0,
-                  ...tareaFormStandardFieldSx,
-                  '& .MuiInputBase-input': {
-                    ...tareaFormFieldInputSx,
-                    textDecoration: subtarea.completada ? 'line-through' : 'none',
-                    color: subtarea.completada ? 'text.secondary' : 'text.primary',
-                  },
-                }}
-              />
-              <IconButton
-                size="small"
-                onClick={() => handleDeleteSubtarea(index)}
-                sx={{
-                  p: 0.5,
-                  color: 'error.main',
-                  '& .MuiSvgIcon-root': tareaFormActionIconSx,
-                }}
-              >
-                <TareaFormIcons.close />
-              </IconButton>
-            </Box>
-          ))}
-        </Stack>
-      )}
+              <TareaFormIcons.close />
+            </IconButton>
+          </Box>
+        ))}
+      </Stack>
+      {subtareaComposerRow}
     </>
   );
 
-  const objetivoSubtareasSection = (objetivoBlock || subtareasBlock) && (
+  const ownersBlock = showOwners ? (
+    <TareaFormOwnersRow
+      owners={formData.owners}
+      creatorId={formData.usuario?._id || formData.usuario}
+      currentUserId={currentUserId}
+      onAddOwner={typeof onDelegateRequest === 'function' ? onDelegateRequest : undefined}
+      readOnly={typeof onDelegateRequest !== 'function'}
+    />
+  ) : null;
+
+  const googleSyncToggle = showGoogleSyncToggle
+    && tipo !== 'EVENTO'
+    && String(formData.tipo || '').toUpperCase() !== 'HABITO' ? (
+    <FormControlLabel
+      sx={{ mx: 0, mt: 0.5, alignItems: 'center' }}
+      control={(
+        <Switch
+          size="small"
+          checked={Boolean(formData.googleTasksSync?.enabled)}
+          onChange={() => {
+            if (typeof onToggleGoogleSync === 'function') {
+              onToggleGoogleSync();
+              return;
+            }
+            setFormData((prev) => {
+              const nextEnabled = !prev.googleTasksSync?.enabled;
+              return {
+                ...prev,
+                googleTasksSync: {
+                  ...(prev.googleTasksSync || {}),
+                  enabled: nextEnabled,
+                  needsSync: nextEnabled ? true : Boolean(prev.googleTasksSync?.needsSync),
+                  syncStatus: nextEnabled ? 'pending' : (prev.googleTasksSync?.syncStatus || 'synced'),
+                },
+              };
+            });
+          }}
+        />
+      )}
+      label={(
+        <Typography variant="body2" color="text.secondary">
+          Sincronizar con Google Tasks
+        </Typography>
+      )}
+    />
+  ) : null;
+
+  const metaSubtareasSection = (objetivoMetaBlock || subtareasListBlock || ownersBlock || googleSyncToggle) && (
     <Box sx={tareaFormObjetivoSubtareasSectionSx}>
-      {objetivoBlock}
-      {subtareasBlock}
+      {ownersBlock}
+      {objetivoMetaBlock}
+      {subtareasListBlock}
+      {googleSyncToggle}
     </Box>
   );
 
   if (variant === 'compact') {
     return (
       <>
-        {showSettings && (
-          <TareaFormSettingsRow
-            estado={formData.estado}
-            onEstadoChange={handleChange('estado')}
-            showPrioridad={false}
-            showRecurrence={showRecurrenceInSettings}
-            recurrenceRrule={formData.rrule}
-            onRecurrenceChange={(rr) => setFormData((prev) => ({ ...prev, rrule: rr }))}
-            tipo={tipo}
-            errors={errors}
-          />
-        )}
-        {objetivoSubtareasSection}
+        {ownersBlock}
+        {objetivoMetaBlock}
+        {subtareasListBlock}
       </>
     );
   }
@@ -333,8 +391,7 @@ export default function TareaFormAdvancedFields({
       )}
 
       {showSchedule && scheduleBlock}
-      {showSettings && settingsBlock}
-      {objetivoSubtareasSection}
+      {metaSubtareasSection}
     </>
   );
 }

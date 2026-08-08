@@ -3,8 +3,8 @@ import { Box } from '@mui/material';
 import {
   EditOutlined as EditIcon,
   DeleteOutlined as DeleteIcon,
-  CalendarTodayOutlined as PushIcon,
-  PersonOutlined as DelegateIcon,
+  EventRepeatOutlined as PushIcon,
+  PersonAddOutlined as DelegateIcon,
   CheckCircleOutlined as CompleteIcon,
   RefreshOutlined as ReactivateIcon,
   CancelOutlined as CancelIcon,
@@ -17,6 +17,7 @@ import {
   TareaFormPriorityToggle,
   TareaFormAttachButton,
 } from '@shared/components/forms/tareaFormUi';
+import { getNextPushTooltip } from '../utils/taskPushSchedule';
 
 const TareaActions = ({
   tarea,
@@ -39,6 +40,9 @@ const TareaActions = ({
   const actions = [];
   const isEvento = tarea?.tipo === 'EVENTO';
   const isHighPriority = tarea?.prioridad === 'ALTA';
+  const estado = String(tarea?.estado || '').toUpperCase();
+  const isCancelled = estado === 'CANCELADA';
+  const isCompleted = Boolean(tarea?.completada) || estado === 'COMPLETADA';
 
   const guardCreate = (action) => (
     isCreateMode ? { ...action, disabled: true } : action
@@ -63,42 +67,74 @@ const TareaActions = ({
     tooltip: isHighPriority ? 'Cambiar a prioridad baja' : 'Cambiar a prioridad alta',
   } : null;
 
+  const googleAction = (onGoogleSync || isCreateMode) ? {
+    key: 'googleSync',
+    icon: syncingToGoogle
+      ? <SyncIcon className="animate-spin" sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />
+      : <GoogleIcon sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />,
+    label: googleTasksSync?.enabled
+      ? (googleTasksSync?.googleTaskId ? 'Sincronizado con Google Tasks' : 'Sync Google activado')
+      : 'Sincronizar con Google Tasks',
+    tooltip: isCreateMode
+      ? 'Guarda la tarea primero'
+      : (googleTasksSync?.enabled
+        ? 'Sincronizar ahora con Google Tasks'
+        : 'Activá sync en el formulario o sincronizá ahora'),
+    color: (googleTasksSync?.enabled || googleTasksSync?.googleTaskId) ? 'success.main' : 'text.secondary',
+    hoverColor: (googleTasksSync?.enabled || googleTasksSync?.googleTaskId) ? 'success.main' : 'text.primary',
+    disabled: syncingToGoogle || isCreateMode || isCancelled,
+    onClick: onGoogleSync,
+  } : null;
+
   if (variant === 'form') {
     if (attachAction) actions.push(attachAction);
     if (priorityAction) actions.push(priorityAction);
-  } else if (!tarea.completada) {
+  } else if (isCancelled) {
+    actions.push({
+      key: 'reactivate',
+      icon: <ReactivateIcon />,
+      label: 'Reactivar',
+      tooltip: 'Reactivar',
+      onClick: () => onReactivate?.(tarea),
+    });
+    if (googleAction) actions.push(googleAction);
+  } else if (!isCompleted) {
+    // Completar → Prioridad → Empujar → Delegar → Adjuntar → Google → Cancelar → Eliminar
     actions.push(
-      guardCreate({
-        key: 'push',
-        icon: <PushIcon />,
-        label: 'Empujar',
-        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Empujar',
-        onClick: () => onPush?.(tarea),
-      }),
-      guardCreate({
-        key: 'delegate',
-        icon: <DelegateIcon />,
-        label: 'Delegar',
-        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Delegar',
-        onClick: () => onDelegate?.(tarea),
-      }),
-    );
-    if (attachAction) actions.push(attachAction);
-    if (priorityAction) actions.push(priorityAction);
-    actions.push(
-      guardCreate({
-        key: 'cancel',
-        icon: <CancelIcon />,
-        label: 'Cancelar',
-        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Cancelar',
-        onClick: () => onCancel?.(tarea),
-      }),
       guardCreate({
         key: 'complete',
         icon: <CompleteIcon />,
         label: 'Completar todo',
         tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Completar todo',
         onClick: () => onComplete?.(tarea),
+      }),
+    );
+    if (priorityAction) actions.push(guardCreate(priorityAction));
+    actions.push(
+      guardCreate({
+        key: 'push',
+        icon: <PushIcon />,
+        label: 'Empujar',
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : getNextPushTooltip(tarea),
+        onClick: () => onPush?.(tarea),
+      }),
+      guardCreate({
+        key: 'delegate',
+        icon: <DelegateIcon />,
+        label: 'Delegar',
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Delegar / agregar owner',
+        onClick: () => onDelegate?.(tarea),
+      }),
+    );
+    if (attachAction) actions.push(attachAction);
+    if (googleAction) actions.push(googleAction);
+    actions.push(
+      guardCreate({
+        key: 'cancel',
+        icon: <CancelIcon />,
+        label: 'Cancelar',
+        tooltip: isCreateMode ? 'Guarda la tarea primero' : 'Cancelar (queda en Archivo)',
+        onClick: () => onCancel?.(tarea),
       }),
     );
 
@@ -117,26 +153,11 @@ const TareaActions = ({
       icon: <ReactivateIcon />,
       label: 'Reactivar',
       tooltip: 'Reactivar',
-      onClick: () => onReactivate(tarea)
+      onClick: () => onReactivate(tarea),
     });
     if (attachAction) actions.push(attachAction);
     if (priorityAction) actions.push(priorityAction);
-  }
-
-  if (onGoogleSync || isCreateMode) {
-    const isSynced = Boolean(googleTasksSync?.googleTaskId);
-    actions.push({
-      key: 'googleSync',
-      icon: syncingToGoogle
-        ? <SyncIcon className="animate-spin" sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />
-        : <GoogleIcon sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />,
-      label: isSynced ? 'Sincronizado con Google Tasks' : 'Sincronizar con Google Tasks',
-      tooltip: isCreateMode ? 'Guarda la tarea primero' : (isSynced ? 'Sincronizado con Google Tasks' : 'Sincronizar con Google Tasks'),
-      color: isSynced ? 'success.main' : 'text.secondary',
-      hoverColor: isSynced ? 'success.main' : 'text.primary',
-      disabled: syncingToGoogle || isCreateMode,
-      onClick: onGoogleSync,
-    });
+    if (googleAction) actions.push(googleAction);
   }
 
   if (variant !== 'form') {
@@ -160,4 +181,4 @@ const TareaActions = ({
   );
 };
 
-export default TareaActions; 
+export default TareaActions;

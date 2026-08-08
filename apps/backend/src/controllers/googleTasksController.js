@@ -8,6 +8,7 @@ import {
   CALENDAR_OAUTH_STATE_PREFIX,
   completeCalendarOAuth,
 } from './googleCalendarController.js';
+import { signOAuthState, verifyOAuthState } from '../utils/oauthState.js';
 
 const postMessageOrigin = () => {
   try {
@@ -190,12 +191,12 @@ export const getAuthUrl = async (req, res) => {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
-      state: String(userId),
+      state: signOAuthState({ userId, kind: 'tasks' }),
       prompt: 'consent',
       login_hint: user?.email // Sugerir la cuenta ya logueada
     });
 
-    console.log('🔗 URL generada con state:', String(userId));
+    console.log('🔗 URL generada con state firmado para userId:', String(userId));
 
     res.json({ 
       success: true, 
@@ -239,11 +240,17 @@ export const handleCallback = async (req, res) => {
     console.log('  - authError:', authError);
     console.log('  - req.user:', req.user);
 
-    const stateStr = String(state || '');
-    const isCalendarAuth = stateStr.startsWith(CALENDAR_OAUTH_STATE_PREFIX);
-    const userId = isCalendarAuth
-      ? stateStr.slice(CALENDAR_OAUTH_STATE_PREFIX.length)
-      : stateStr;
+    const verified = verifyOAuthState(state);
+    if (!verified?.userId) {
+      console.error('❌ OAuth state inválido o expirado:', state);
+      return res.send(callbackHtml(
+        "{ type: 'google_tasks_auth', status: 'error', message: 'Sesión OAuth inválida o expirada' }",
+        'Error: Sesión OAuth inválida o expirada. Cierra esta ventana e intenta de nuevo.'
+      ));
+    }
+    const isCalendarAuth = verified.kind === 'cal'
+      || String(state || '').startsWith(CALENDAR_OAUTH_STATE_PREFIX);
+    const userId = verified.userId;
     console.log('🔍 userId final extraído:', userId, isCalendarAuth ? '(Calendar)' : '(Tasks)');
     
     if (!userId || userId === 'undefined') {

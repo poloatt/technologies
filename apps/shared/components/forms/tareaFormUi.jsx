@@ -8,6 +8,8 @@ export { default as TareaFormDescriptionField } from './TareaFormDescriptionFiel
 export { default as HabitIconPicker } from './HabitIconPicker';
 export { default as HabitFormTitleField } from './HabitFormTitleField';
 export { default as TareaFormSettingsRow } from './TareaFormSettingsRow';
+export { default as TareaFormObjetivoSummary } from './TareaFormObjetivoSummary';
+export { default as TareaFormOwnersRow } from './TareaFormOwnersRow';
 export { default as TareaFormRecurrencePicker, labelForRrule } from './TareaFormRecurrencePicker';
 export {
   default as TareaFormDeadlineField,

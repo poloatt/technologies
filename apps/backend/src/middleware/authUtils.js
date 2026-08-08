@@ -40,9 +40,21 @@ export const isResourceOwner = (resource, userId) => {
   return resourceUserId === userId;
 };
 
+/** Co-owner vía `owners[]` (Delegar). */
+export const isResourceCoOwner = (resource, userId) => {
+  if (!resource || !userId || !Array.isArray(resource.owners)) {
+    return false;
+  }
+  const uid = String(userId);
+  return resource.owners.some((entry) => {
+    const id = entry?._id ?? entry?.id ?? entry;
+    return id != null && String(id) === uid;
+  });
+};
+
 // Utilidad para verificar si el usuario puede acceder al recurso
 export const canAccessResource = (resource, user) => {
   if (!user) return false;
   if (isAdmin(user)) return true;
-  return isResourceOwner(resource, user.id);
+  return isResourceOwner(resource, user.id) || isResourceCoOwner(resource, user.id);
 };

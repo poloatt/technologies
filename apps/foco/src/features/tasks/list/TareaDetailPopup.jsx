@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
-import { Box } from '@mui/material';
 import TareaActions from '../components/TareaActions';
+import TareaDelegateDialog from '../components/TareaDelegateDialog';
 import TareaForm from '../form/TareaForm';
 import { useTareaDetailActions } from './useTareaDetailActions';
+import { buildTareaActionsToolbarProps } from './buildTareaActionsToolbarProps';
 
 /**
  * Editable task detail popup: TareaForm + quick-action toolbar (TareaActions).
@@ -15,6 +16,7 @@ export default function TareaDetailPopup({
   isMobile,
   agendaView = 'ahora',
   desktopHalfScreen = false,
+  embedded = false,
   objetivos = [],
   onSubmit,
   onObjetivosUpdate,
@@ -47,38 +49,51 @@ export default function TareaDetailPopup({
     onClose();
   };
 
+  const excludeOwnerIds = [
+    tarea.usuario?._id || tarea.usuario,
+    ...(actions.ownersLocal || []).map((o) => o?._id || o?.id || o),
+  ].filter(Boolean);
+
   return (
-    <TareaForm
-      open={open}
-      onClose={onClose}
-      onSubmit={handleSubmit}
-      initialData={tarea}
-      isEditing
-      objetivos={objetivos}
-      onObjetivosUpdate={onObjetivosUpdate}
-      updateWithHistory={updateWithHistory}
-      shell="detail"
-      agendaView={agendaView}
-      desktopHalfScreen={desktopHalfScreen}
-      actionsToolbar={(syncProps) => (
-        <Box sx={{ mb: 0.5 }}>
-          <TareaActions
-            tarea={{ ...tarea, prioridad: actions.prioridadLocal }}
-            hideEdit
-            onDelete={handleDelete}
-            onPush={actions.handlePush}
-            onDelegate={actions.handleDelegate}
-            onTogglePriority={actions.handleTogglePriority}
-            onAttach={syncProps.onAttach}
-            onComplete={actions.handleComplete}
-            onReactivate={actions.handleReactivate}
-            onCancel={actions.handleCancel}
-            onGoogleSync={syncProps.canGoogleSync ? syncProps.handleSyncToGoogle : undefined}
-            syncingToGoogle={syncProps.syncingToGoogle}
-            googleTasksSync={syncProps.googleTasksSync}
-          />
-        </Box>
-      )}
-    />
+    <>
+      <TareaForm
+        open={open}
+        onClose={onClose}
+        onSubmit={handleSubmit}
+        initialData={{
+          ...tarea,
+          owners: actions.ownersLocal ?? tarea.owners,
+          estado: actions.estadoLocal ?? tarea.estado,
+        }}
+        isEditing
+        objetivos={objetivos}
+        onObjetivosUpdate={onObjetivosUpdate}
+        updateWithHistory={updateWithHistory}
+        shell="detail"
+        agendaView={agendaView}
+        desktopHalfScreen={desktopHalfScreen}
+        embedded={embedded}
+        onDelegateRequest={actions.handleDelegate}
+        actionsToolbar={(syncProps) => {
+          const props = buildTareaActionsToolbarProps({
+            tarea,
+            actions,
+            hideEdit: true,
+            onDelete: handleDelete,
+            onAttach: syncProps.onAttach,
+            onGoogleSync: syncProps.canGoogleSync ? syncProps.handleSyncToGoogle : undefined,
+            syncingToGoogle: syncProps.syncingToGoogle,
+            googleTasksSync: syncProps.googleTasksSync,
+          });
+          return props ? <TareaActions {...props} /> : null;
+        }}
+      />
+      <TareaDelegateDialog
+        open={actions.delegateOpen}
+        onClose={() => actions.setDelegateOpen(false)}
+        onSelect={actions.handleAddOwner}
+        excludeIds={excludeOwnerIds}
+      />
+    </>
   );
 }

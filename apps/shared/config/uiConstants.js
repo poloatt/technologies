@@ -238,11 +238,12 @@ export function calculateTopPadding(showToolbar, agendaUnified = false, rutinasS
  * @param {number} [extraPadding=24]
  * @returns {string}
  */
-export function getMainBottomPadding(isMobileOrTablet, extraPadding = 24) {
+export function getMainBottomPadding(isMobileOrTablet, extraPadding) {
+  const extra = extraPadding ?? (isMobileOrTablet ? 24 : 8);
   if (isMobileOrTablet) {
-    return `calc(${SPACING.bottomNavigationHeight}px + env(safe-area-inset-bottom, 0px) + ${extraPadding}px)`;
+    return `calc(${SPACING.bottomNavigationHeight}px + env(safe-area-inset-bottom, 0px) + ${extra}px)`;
   }
-  return `${FOOTER_CONFIG.height + extraPadding}px`;
+  return `${FOOTER_CONFIG.height + extra}px`;
 }
 
 /**

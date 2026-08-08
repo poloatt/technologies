@@ -18,16 +18,29 @@ const LIST_VIRTUAL_HORIZON_DAYS = parseInt(
   10,
 );
 
+function buildUserAccessClause(userId) {
+  return {
+    $or: [
+      { usuario: userId },
+      { owners: userId },
+    ],
+  };
+}
+
 function buildOverlapQuery(userId, from, to) {
   return {
-    usuario: userId,
-    $or: [
-      { fechaVencimiento: { $gte: from, $lte: to } },
-      { fechaInicio: { $gte: from, $lte: to } },
+    $and: [
+      buildUserAccessClause(userId),
       {
-        tipo: 'EVENTO',
-        fechaInicio: { $lte: to },
-        fechaFin: { $gte: from },
+        $or: [
+          { fechaVencimiento: { $gte: from, $lte: to } },
+          { fechaInicio: { $gte: from, $lte: to } },
+          {
+            tipo: 'EVENTO',
+            fechaInicio: { $lte: to },
+            fechaFin: { $gte: from },
+          },
+        ],
       },
     ],
   };
@@ -51,6 +64,7 @@ export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo) {
     Tareas.find(buildOverlapQuery(userId, from, to))
       .select('-googleDueHistory -archivos -googleTasksSync.syncErrors')
       .populate('objetivo', 'nombre estado')
+      .populate('owners', 'nombre email')
       .sort({ fechaInicio: 1 })
       .lean({ virtuals: true }),
   ]);
@@ -140,11 +154,13 @@ function transformAgendaDoc(doc) {
  * Filtra documentos de lista por vista Ahora/Luego (testeable sin BD).
  */
 export function filterDocsForListView(docs, options = {}, now = new Date()) {
-  const { isInAhora, isInLuego, isTaskCompleted } = agendaListRules;
+  const { isInAhora, isInLuego, isTaskCompleted, isTaskCancelled } = agendaListRules;
   const includeCompleted = options.includeCompleted === true;
   const view = options.view;
 
   return docs.filter((t) => {
+    // Canceladas solo viven en Archivo — nunca en Ahora/Luego.
+    if (isTaskCancelled(t)) return false;
     if (!includeCompleted && isTaskCompleted(t)) return false;
     if (view === 'ahora') return isInAhora(t, now);
     if (view === 'luego') return isInLuego(t, now);

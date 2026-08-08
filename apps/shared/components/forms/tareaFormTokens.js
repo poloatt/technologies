@@ -74,6 +74,20 @@ export const taskFormCaptionTextSx = {
   color: 'text.secondary',
 };
 
+/** Small type label floating above the title (Evento / Tarea). */
+export const taskFormTipoFloatingLabelSx = {
+  ...taskFormCaptionTextSx,
+  fontSize: '0.6875rem',
+  fontWeight: 500,
+  letterSpacing: '0.03em',
+  lineHeight: 1.2,
+  display: 'block',
+  width: 'fit-content',
+  maxWidth: '100%',
+  pointerEvents: 'none',
+  userSelect: 'none',
+};
+
 export const taskFormFieldInputSx = {
   fontSize: TASK_FORM_BODY_FONT_SIZE,
   lineHeight: TASK_FORM_BODY_LINE_HEIGHT,
@@ -336,6 +350,19 @@ export const TASK_FORM_ESTADO_OPTIONS = [
   { value: 'EN_PROGRESO', label: 'En Progreso' },
   { value: 'COMPLETADA', label: 'Completada' },
 ];
+
+export const TASK_FORM_ESTADO_CANCELADA_OPTION = {
+  value: 'CANCELADA',
+  label: 'Cancelada',
+};
+
+/** Pills de estado: Cancelada solo cuando la tarea ya está cancelada. */
+export function getTaskFormEstadoOptions(estado) {
+  if (String(estado || '').toUpperCase() === 'CANCELADA') {
+    return [...TASK_FORM_ESTADO_OPTIONS, TASK_FORM_ESTADO_CANCELADA_OPTION];
+  }
+  return TASK_FORM_ESTADO_OPTIONS;
+}
 
 export const TASK_FORM_OBJETIVO_ESTADO_OPTIONS = [
   { value: 'PENDIENTE', label: 'Pendiente' },
@@ -657,4 +684,5 @@ export { TASK_FORM_ACTION_COLUMN_WIDTH as TAREA_FORM_ACTION_COLUMN_WIDTH };
 export { TASK_FORM_TIPO_EVENTO_TAREA as TAREA_FORM_TIPO_EVENTO_TAREA };
 export { TASK_FORM_TIPO_ALL as TAREA_FORM_TIPO_ALL };
 export { TASK_FORM_ESTADO_OPTIONS as TAREA_FORM_ESTADO_OPTIONS };
+export { TASK_FORM_ESTADO_CANCELADA_OPTION as TAREA_FORM_ESTADO_CANCELADA_OPTION };
 export { TASK_FORM_OBJETIVO_ESTADO_OPTIONS as TAREA_FORM_OBJETIVO_ESTADO_OPTIONS };

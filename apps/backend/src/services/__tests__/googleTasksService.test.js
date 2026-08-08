@@ -175,4 +175,25 @@ Subtareas:
     };
     expect(googleTasksService.shouldApplyGoogleUpdate(freshLocal, googleTask)).toBe(false);
   });
+
+  test('pending local blocks import helpers (status/due/notes)', () => {
+    const googleTask = {
+      status: 'completed',
+      due: '2026-05-20T00:00:00.000Z',
+      notes: 'Cambiado en Google',
+      updated: '2026-05-18T18:00:00.000Z',
+    };
+    const pending = {
+      completada: false,
+      estado: 'PENDIENTE',
+      fechaVencimiento: new Date(2026, 4, 19, 12, 0, 0, 0),
+      descripcion: 'Local',
+      googleTasksSync: { needsSync: true, syncStatus: 'pending' },
+    };
+    expect(googleTasksService.hasLocalPendingGoogleSync(pending)).toBe(true);
+    expect(googleTasksService.shouldRefreshGoogleStatus(pending, googleTask)).toBe(false);
+    expect(googleTasksService.shouldRefreshGoogleDueDate(pending, googleTask)).toBe(false);
+    expect(googleTasksService.shouldRefreshGoogleNotes(pending, googleTask)).toBe(false);
+    expect(googleTasksService.shouldImportFromGoogle(pending, googleTask)).toBe(false);
+  });
 });

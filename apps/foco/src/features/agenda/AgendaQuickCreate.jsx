@@ -25,7 +25,6 @@ import {
   TareaFormHeaderTitleRow,
   HabitFormTitleField,
   tareaFormObjetivoSubtareasContentSx,
-  tareaFormObjetivoSubtareasPillSelectSx,
   TAREA_FORM_HEADER_ACTION_GUTTER,
   TASK_FORM_HORIZONTAL_PX,
   TareaFormAttachmentsSection,
@@ -377,7 +376,7 @@ export default function AgendaQuickCreate({
         {tipo !== 'HABITO' && (
           <Box sx={{ mb: 0.5 }}>
             <TareaActions
-              isCreateMode
+              variant="form"
               hideEdit
               tarea={{
                 tipo,
@@ -505,7 +504,7 @@ export default function AgendaQuickCreate({
 
       {tipo === 'TAREA' && !expanded && (
         <TareaFormRow icon={TareaFormIcons.objetivo} showDivider={false} align="center">
-          <Box sx={[tareaFormObjetivoSubtareasContentSx, tareaFormObjetivoSubtareasPillSelectSx]}>
+          <Box sx={tareaFormObjetivoSubtareasContentSx}>
             <TareaFormPillSelect
               value={objetivo}
               onChange={(e) => {

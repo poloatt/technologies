@@ -29,6 +29,9 @@ router.put('/habits/reorder', checkAuth, usersController.reorderHabits);
 router.put('/habits/:habitId', checkAuth, usersController.updateHabit);
 router.delete('/habits/:habitId', checkAuth, usersController.deleteHabit);
 
+// Búsqueda pública de usuarios (Delegar / co-owners) — antes de /:id
+router.get('/search', checkAuth, usersController.searchPublic);
+
 // Rutas para administración de usuarios (solo para administradores)
 router.get('/', checkRole([ROLES.ADMIN]), usersController.getAll);
 router.post('/', checkRole([ROLES.ADMIN]), usersController.create);

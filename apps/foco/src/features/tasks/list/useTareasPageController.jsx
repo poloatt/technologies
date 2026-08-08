@@ -5,7 +5,7 @@ import { usePageWithHistory, useResponsive } from '@shared/hooks';
 import { useAgendaFilter } from '../../agenda/hooks/useAgendaFilter';
 import { useObjetivosLight } from '../hooks/useObjetivosLight';
 import { useTasksForList } from '../hooks/useTasksForList';
-import { isInAhora, isInLuego, isTaskCompleted } from '@shared/utils/agendaRules';
+import { isInAhora, isInLuego, isTaskCompleted, isTaskCancelled } from '@shared/utils/agendaRules';
 import { useRutinas, useHabits } from '@shared/context';
 import { getNormalizedToday } from '@shared/utils/dateUtils';
 import { ensureRutinaForDate } from '../../habits/daily/ensureRutinaForDate';
@@ -34,6 +34,7 @@ export function useTareasPageController() {
     const tasksArray = Array.isArray(tareas) ? tareas : [];
     const now = new Date();
     return tasksArray.filter((t) => {
+      if (isTaskCancelled(t)) return false;
       const isCompleted = isTaskCompleted(t);
       if (!showCompleted && isCompleted) return false;
       return isInAhora(t, now);
@@ -45,6 +46,7 @@ export function useTareasPageController() {
     const tasksArray = Array.isArray(tareas) ? tareas : [];
     const now = new Date();
     return tasksArray.filter((t) => {
+      if (isTaskCancelled(t)) return false;
       const isCompleted = isTaskCompleted(t);
       if (!showCompleted && isCompleted) return false;
       return isInLuego(t, now);

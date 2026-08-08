@@ -41,6 +41,14 @@ export const isTaskCompleted = (t) => {
   return false;
 };
 
+export const isTaskCancelled = (t) => {
+  if (!t) return false;
+  return String(t.estado || '').toUpperCase() === 'CANCELADA';
+};
+
+/** Completadas o canceladas: visibles en Archivo, no en listas activas. */
+export const isTaskArchived = (t) => isTaskCompleted(t) || isTaskCancelled(t);
+
 export const getTaskStart = (t) =>
   parseTaskDate(t?.fechaInicio || t?.inicio || t?.start);
 

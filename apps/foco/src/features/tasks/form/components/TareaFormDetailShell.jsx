@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Dialog, SwipeableDrawer } from '@mui/material';
+import { Box, Dialog, Paper, SwipeableDrawer } from '@mui/material';
 import { tareaFormGooglePaperSx } from '@shared/components/forms/tareaFormUi';
 
 /**
@@ -10,8 +10,27 @@ export function getDesktopPanelSide(agendaView) {
   return agendaView === 'ahora' ? 'right' : 'left';
 }
 
+const scrollBodySx = {
+  overflowY: 'auto',
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+const footerOutsideSx = {
+  flexShrink: 0,
+  bgcolor: 'background.default',
+};
+
 /**
- * Shell for task detail popup: SwipeableDrawer on mobile, half-screen Dialog on desktop agenda.
+ * Shell for task detail popup:
+ * - Mobile: bottom SwipeableDrawer
+ * - Desktop embedded: card + footer bar outside (always visible)
+ * - Desktop dialog: half-screen panel on the opposite side (fallback)
+ *
+ * When `footer` is provided, it stays pinned below the scrollable body
+ * (and outside the card in embedded mode) — side-sheet best practice.
  */
 export default function TareaFormDetailShell({
   open,
@@ -19,6 +38,8 @@ export default function TareaFormDetailShell({
   isMobile,
   agendaView = 'ahora',
   desktopHalfScreen = false,
+  embedded = false,
+  footer = null,
   children,
 }) {
   if (isMobile) {
@@ -37,6 +58,8 @@ export default function TareaFormDetailShell({
             borderBottomLeftRadius: 0,
             borderBottomRightRadius: 0,
             maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
           },
         }}
         sx={{
@@ -56,19 +79,50 @@ export default function TareaFormDetailShell({
             flexShrink: 0,
           }}
         />
-        <Box
+        <Box sx={scrollBodySx}>{children}</Box>
+        {footer && (
+          <Box sx={{ ...footerOutsideSx, borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+            {footer}
+          </Box>
+        )}
+      </SwipeableDrawer>
+    );
+  }
+
+  if (desktopHalfScreen && embedded) {
+    if (!open) return null;
+    return (
+      <Box
+        sx={{
+          flex: 1,
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          gap: 1,
+        }}
+      >
+        <Paper
+          elevation={0}
           sx={{
-            overflowY: 'auto',
+            ...tareaFormGooglePaperSx(false),
             flex: 1,
             minHeight: 0,
+            width: '100%',
+            m: 0,
+            borderRadius: 1.5,
             display: 'flex',
             flexDirection: 'column',
-            pb: 2,
+            overflow: 'hidden',
+            border: '1px solid',
+            borderColor: 'divider',
           }}
         >
-          {children}
-        </Box>
-      </SwipeableDrawer>
+          <Box sx={scrollBodySx}>{children}</Box>
+        </Paper>
+        {footer && <Box sx={footerOutsideSx}>{footer}</Box>}
+      </Box>
     );
   }
 
@@ -81,6 +135,7 @@ export default function TareaFormDetailShell({
         open={open}
         onClose={onClose}
         maxWidth={false}
+        hideBackdrop={false}
         PaperProps={{
           sx: {
             ...tareaFormGooglePaperSx(false),
@@ -105,9 +160,12 @@ export default function TareaFormDetailShell({
           },
         }}
       >
-        <Box sx={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {children}
-        </Box>
+        <Box sx={scrollBodySx}>{children}</Box>
+        {footer && (
+          <Box sx={{ ...footerOutsideSx, borderTop: 1, borderColor: 'divider' }}>
+            {footer}
+          </Box>
+        )}
       </Dialog>
     );
   }
@@ -129,9 +187,12 @@ export default function TareaFormDetailShell({
       }}
       sx={{ zIndex: 1300 }}
     >
-      <Box sx={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {children}
-      </Box>
+      <Box sx={scrollBodySx}>{children}</Box>
+      {footer && (
+        <Box sx={{ ...footerOutsideSx, borderTop: 1, borderColor: 'divider' }}>
+          {footer}
+        </Box>
+      )}
     </Dialog>
   );
 }

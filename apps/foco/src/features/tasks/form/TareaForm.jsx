@@ -1,10 +1,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import {
-  Button,
   TextField,
   Box,
-  Stack,
-  Tooltip,
 } from '@mui/material';
 import {
   TareaFormTipoSelector,
@@ -14,8 +11,6 @@ import {
   TareaFormFooter,
   TareaFormPriorityToggle,
   tareaFormTitleFieldSx,
-  tareaFormPillTextSx,
-  TAREA_FORM_CHEVRON_ICON_SIZE,
   TareaFormHeaderTitleRow,
   HabitFormTitleField,
   TAREA_FORM_HEADER_ACTION_GUTTER,
@@ -23,16 +18,15 @@ import {
   TareaFormAttachmentsSection,
   useTareaFormAttachments,
 } from '@shared/components/forms/tareaFormUi';
+import { useAuth } from '@shared/context/AuthContext';
 import TareaFormAdvancedFields from './TareaFormAdvancedFields';
+import TareaDelegateDialog from '../components/TareaDelegateDialog';
+import TareaFormDetailShell from './components/TareaFormDetailShell';
 import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
 import { saveHabitFromForm } from '@shared/habits/form';
 import { useHabitFormState } from '../../habits/templates/useHabitFormState';
 import { useResponsive } from '@shared/hooks';
 import { useHabits, useRutinas } from '@shared/context';
-import {
-  Google as GoogleIcon,
-  Sync as SyncIcon,
-} from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import clienteAxios from '@shared/config/axios';
 import {
@@ -56,6 +50,11 @@ const ObjetivoForm = React.lazy(() => import('../../objetivos/ObjetivoForm'));
  * @param {Function} updateWithHistory - Función para actualizar tareas con historial (opcional)
  *   Solo se usa para actualizar subtareas dentro del formulario cuando la tarea ya está guardada.
  *   Si no se proporciona, las actualizaciones de subtareas solo funcionarán para subtareas nuevas (sin _id).
+ * @param {'dialog'|'detail'} shell - Contenedor: diálogo centrado o detalle (drawer / half-screen)
+ * @param {string} agendaView - Horizonte ahora|luego (posiciona el panel desktop)
+ * @param {boolean} desktopHalfScreen - Panel a mitad de pantalla en desktop
+ * @param {boolean} embedded - En desktop, rellena la columna padre en lugar de Dialog
+ * @param {Function} actionsToolbar - Toolbar de acciones rápidas (detalle)
  */
 const TareaForm = ({ 
   open, 
@@ -66,12 +65,20 @@ const TareaForm = ({
   objetivoId,
   objetivos,
   onObjetivosUpdate,
-  updateWithHistory
+  updateWithHistory,
+  shell = 'dialog',
+  agendaView = 'ahora',
+  desktopHalfScreen = false,
+  embedded = false,
+  actionsToolbar,
+  onDelegateRequest,
 }) => {
   const { isMobile } = useResponsive();
+  const { user } = useAuth();
   const { habits, addHabit, fetchHabits } = useHabits();
   const { updateUserHabitPreference } = useRutinas();
   const [isObjetivoFormOpen, setIsObjetivoFormOpen] = useState(false);
+  const [delegateOpen, setDelegateOpen] = useState(false);
   const {
     habitSection,
     setHabitSection,
@@ -95,6 +102,7 @@ const TareaForm = ({
     prioridad: 'BAJA',
     archivos: [],
     objetivo: null,
+    owners: [],
     completada: false,
     subtareas: [],
     tipo: 'TAREA',
@@ -133,7 +141,9 @@ const TareaForm = ({
         fechaVencimiento: initialData?.fechaVencimiento ? new Date(initialData.fechaVencimiento) : null,
         objetivo: objetivoId || (initialData?.objetivo?._id || initialData?.objetivo) || null,
         estado: initialData?.estado || 'PENDIENTE',
-        subtareas: initialData?.subtareas || []
+        subtareas: initialData?.subtareas || [],
+        owners: initialData?.owners || [],
+        usuario: initialData?.usuario,
       });
       resetHabitForm();
       setErrors({});
@@ -353,12 +363,32 @@ const TareaForm = ({
 
     try {
       setSyncingToGoogle(true);
+
+      if (!formData.googleTasksSync?.enabled) {
+        setFormData((prev) => ({
+          ...prev,
+          googleTasksSync: {
+            ...(prev.googleTasksSync || {}),
+            enabled: true,
+            needsSync: true,
+            syncStatus: 'pending',
+          },
+        }));
+        // Persist enable before one-shot sync so export queue picks it up
+        await clienteAxios.put(`/api/tareas/${formData._id}`, {
+          googleTasksSync: {
+            ...(formData.googleTasksSync || {}),
+            enabled: true,
+            needsSync: true,
+            syncStatus: 'pending',
+          },
+        });
+      }
       
       const response = await clienteAxios.post(`/api/google-tasks/sync/task/${formData._id}`);
       const taskSynced = response.data?.success === true;
       
       if (taskSynced) {
-        // Actualizar el estado local con la información de sincronización
         setFormData(prev => ({
           ...prev,
           googleTasksSync: {
@@ -383,28 +413,76 @@ const TareaForm = ({
   };
 
   const handleToggleGoogleSync = () => {
-    setFormData(prev => ({
-      ...prev,
-      googleTasksSync: {
-        ...prev.googleTasksSync,
-        enabled: !prev.googleTasksSync.enabled
-      }
-    }));
+    setFormData((prev) => {
+      const nextEnabled = !prev.googleTasksSync?.enabled;
+      return {
+        ...prev,
+        googleTasksSync: {
+          ...(prev.googleTasksSync || {}),
+          enabled: nextEnabled,
+          needsSync: nextEnabled ? true : Boolean(prev.googleTasksSync?.needsSync),
+          syncStatus: nextEnabled ? 'pending' : (prev.googleTasksSync?.syncStatus || 'synced'),
+        },
+      };
+    });
   };
 
+  const isDetailShell = shell === 'detail';
+  const Shell = isDetailShell ? TareaFormDetailShell : TareaFormDialogShell;
+  const hasTools = typeof actionsToolbar === 'function';
+  const footerOutside = isDetailShell;
+
+  const toolsSlot = hasTools
+    ? actionsToolbar({
+      onAttach: handleFileChange,
+      canGoogleSync: Boolean(isEditing && formData._id && !isHabitMode),
+      handleSyncToGoogle,
+      syncingToGoogle,
+      googleTasksSync: formData.googleTasksSync,
+    })
+    : null;
+
+  const footerEl = (
+    <TareaFormFooter
+      onSave={handleSubmit}
+      saving={saving}
+      saveLabel={isEditing ? 'Actualizar' : 'Guardar'}
+      showCancel={footerOutside}
+      onCancel={footerOutside ? onClose : undefined}
+      cancelLabel="Cerrar"
+    />
+  );
+
   return (
-    <TareaFormDialogShell open={open} onClose={onClose} isMobile={isMobile}>
-        <TareaFormHeader onClose={onClose}>
-          <TareaFormTipoSelector
-            value={formData.tipo || 'TAREA'}
-            options={canSelectHabit ? TAREA_FORM_TIPO_ALL : TAREA_FORM_TIPO_EVENTO_TAREA}
-            readOnly={!canSelectHabit}
-            onChange={(v) => {
-              setFormData((prev) => ({ ...prev, tipo: v }));
-              if (v !== 'HABITO') setErrors({});
-            }}
-            sx={{ mb: 1.5, pr: TAREA_FORM_HEADER_ACTION_GUTTER }}
-          />
+    <Shell
+      open={open}
+      onClose={onClose}
+      isMobile={isMobile}
+      {...(isDetailShell
+        ? { agendaView, desktopHalfScreen, embedded, footer: footerEl }
+        : {})}
+    >
+        <TareaFormHeader onClose={footerOutside ? undefined : onClose}>
+          {hasTools && !isHabitMode && (
+            <Box sx={{ mb: 1.25 }}>
+              {toolsSlot}
+            </Box>
+          )}
+
+          {canSelectHabit && (
+            <TareaFormTipoSelector
+              value={formData.tipo || 'TAREA'}
+              options={TAREA_FORM_TIPO_ALL}
+              onChange={(v) => {
+                setFormData((prev) => ({ ...prev, tipo: v }));
+                if (v !== 'HABITO') setErrors({});
+              }}
+              sx={{
+                mb: isHabitMode ? 1 : 1.5,
+                pr: footerOutside ? 0 : TAREA_FORM_HEADER_ACTION_GUTTER,
+              }}
+            />
+          )}
 
           {isHabitMode ? (
             <HabitFormTitleField
@@ -420,76 +498,45 @@ const TareaForm = ({
               autoFocus
             />
           ) : (
-          <TareaFormHeaderTitleRow
-            action={formData.tipo !== 'EVENTO' ? (
-              <TareaFormPriorityToggle
-                prioridad={formData.prioridad}
-                onChange={(value) => setFormData((prev) => ({ ...prev, prioridad: value }))}
+          <Box sx={{ position: 'relative', ...(!canSelectHabit ? { pt: 1.35 } : null) }}>
+            {!canSelectHabit && (
+              <TareaFormTipoSelector
+                value={formData.tipo || 'TAREA'}
+                options={TAREA_FORM_TIPO_EVENTO_TAREA}
+                readOnly
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  zIndex: 1,
+                }}
               />
-            ) : null}
-          >
-            <TextField
-              variant="standard"
-              fullWidth
-              placeholder="Agregar título"
-              value={formData.titulo}
-              onChange={handleChange('titulo')}
-              error={!!errors.titulo}
-              helperText={errors.titulo}
-              required
-              autoFocus
-              sx={{ flex: 1, minWidth: 0, ...tareaFormTitleFieldSx }}
-            />
-          </TareaFormHeaderTitleRow>
-          )}
-
-          <Stack direction="row" spacing={0.5} sx={{ mt: 1, flexWrap: 'wrap' }}>
-            {isEditing && formData._id && !isHabitMode && (
-              <Tooltip
-                title={
-                  formData.googleTasksSync?.enabled
-                    ? (formData.googleTasksSync?.googleTaskId
-                      ? 'Sincronizado con Google Tasks'
-                      : 'Sincronizar con Google Tasks')
-                    : 'Habilitar sincronización con Google Tasks'
-                }
-              >
-                <span style={{ display: 'inline-flex' }}>
-                <Button
-                  variant="text"
-                  startIcon={
-                    syncingToGoogle ? (
-                      <SyncIcon className="animate-spin" sx={{ fontSize: TAREA_FORM_CHEVRON_ICON_SIZE }} />
-                    ) : (
-                      <GoogleIcon
-                        sx={{
-                          fontSize: TAREA_FORM_CHEVRON_ICON_SIZE,
-                          color: formData.googleTasksSync?.googleTaskId
-                            ? 'success.main'
-                            : 'text.secondary',
-                        }}
-                      />
-                    )
-                  }
-                  size="small"
-                  onClick={handleSyncToGoogle}
-                  disabled={syncingToGoogle}
-                  sx={{
-                    color: formData.googleTasksSync?.googleTaskId
-                      ? 'success.main'
-                      : 'text.secondary',
-                    textTransform: 'none',
-                    ...tareaFormPillTextSx,
-                    minWidth: 'auto',
-                    px: 0.5,
-                  }}
-                >
-                  {syncingToGoogle ? 'Sincronizando...' : 'Google'}
-                </Button>
-                </span>
-              </Tooltip>
             )}
-          </Stack>
+            <TareaFormHeaderTitleRow
+              action={
+                !hasTools && formData.tipo !== 'EVENTO' ? (
+                  <TareaFormPriorityToggle
+                    prioridad={formData.prioridad}
+                    onChange={(value) => setFormData((prev) => ({ ...prev, prioridad: value }))}
+                  />
+                ) : null
+              }
+            >
+              <TextField
+                variant="standard"
+                fullWidth
+                placeholder="Agregar título"
+                value={formData.titulo}
+                onChange={handleChange('titulo')}
+                error={!!errors.titulo}
+                helperText={errors.titulo}
+                required
+                autoFocus
+                sx={{ flex: 1, minWidth: 0, ...tareaFormTitleFieldSx }}
+              />
+            </TareaFormHeaderTitleRow>
+          </Box>
+          )}
         </TareaFormHeader>
 
         <Box sx={{ px: 2 }}>
@@ -518,6 +565,10 @@ const TareaForm = ({
           onCreateObjetivo={() => setIsObjetivoFormOpen(true)}
           onToggleSubtarea={handleToggleSubtarea}
           onAttach={handleFileChange}
+          currentUserId={user?.id || user?._id}
+          onDelegateRequest={onDelegateRequest || (() => setDelegateOpen(true))}
+          showGoogleSyncToggle
+          onToggleGoogleSync={handleToggleGoogleSync}
         />
         )}
 
@@ -529,11 +580,7 @@ const TareaForm = ({
           )}
         </Box>
 
-        <TareaFormFooter
-          onSave={handleSubmit}
-          saving={saving}
-          saveLabel={isEditing ? 'Actualizar' : 'Guardar'}
-        />
+        {!footerOutside && footerEl}
 
       <Suspense fallback={null}>
         <ObjetivoForm
@@ -543,7 +590,30 @@ const TareaForm = ({
           isEditing={false}
         />
       </Suspense>
-    </TareaFormDialogShell>
+
+      {!onDelegateRequest ? (
+        <TareaDelegateDialog
+          open={delegateOpen}
+          onClose={() => setDelegateOpen(false)}
+          onSelect={(userSelected) => {
+            const id = String(userSelected._id || userSelected.id);
+            setFormData((prev) => {
+              const existing = (prev.owners || []).map((o) => String(o?._id || o?.id || o));
+              if (existing.includes(id)) return prev;
+              return {
+                ...prev,
+                owners: [...(prev.owners || []), userSelected],
+              };
+            });
+          }}
+          excludeIds={[
+            user?.id || user?._id,
+            formData.usuario?._id || formData.usuario,
+            ...(formData.owners || []).map((o) => o?._id || o?.id || o),
+          ].filter(Boolean)}
+        />
+      ) : null}
+    </Shell>
   );
 };
 

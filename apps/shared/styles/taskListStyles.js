@@ -70,6 +70,7 @@ export function getTaskGroupShellSx(isMobile = false) {
     overflow: 'hidden',
     mx: isMobile ? 0 : 'auto',
     width: '100%',
+    minHeight: 0,
     boxShadow: (theme) => theme.shadows[1],
   };
 }
@@ -274,6 +275,6 @@ export const taskEventTimeSx = {
 export function getTaskListStackSx(isMobile = false) {
   return {
     spacing: isMobile ? 1 : 1.5,
-    pb: isMobile ? 4 : 6,
+    pb: isMobile ? 4 : 1.5,
   };
 }

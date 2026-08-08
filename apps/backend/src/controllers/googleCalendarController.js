@@ -2,6 +2,7 @@ import { Users } from '../models/index.js';
 import config from '../config/config.js';
 import { getUserId } from '../utils/authUtils.js';
 import googleCalendarService from '../services/googleCalendarService.js';
+import { signOAuthState } from '../utils/oauthState.js';
 
 const GOOGLE_OAUTH_REDIRECT_URI = `${config.backendUrl}/api/google-tasks/callback`;
 export const CALENDAR_OAUTH_STATE_PREFIX = 'cal:';
@@ -74,7 +75,7 @@ export const getAuthUrl = async (req, res) => {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
-      state: `${CALENDAR_OAUTH_STATE_PREFIX}${userId}`,
+      state: signOAuthState({ userId, kind: 'cal' }),
       prompt: 'consent',
       login_hint: user?.email,
     });

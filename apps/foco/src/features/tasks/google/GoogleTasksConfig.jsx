@@ -58,6 +58,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useSnackbar } from 'notistack';
 import clienteAxios from '@shared/config/axios';
+import { useAuth } from '@shared/context/AuthContext';
 
 const SYNC_DIRECTION_LABELS = {
   bidirectional: 'Bidireccional (Google ↔ Attadia)',
@@ -352,6 +353,8 @@ function SyncResultPanel({ summary, onDismiss }) {
 }
 
 const GoogleTasksConfig = ({ open, onClose }) => {
+  const { user } = useAuth();
+  const isAdmin = String(user?.role || '').toUpperCase() === 'ADMIN';
   const [config, setConfig] = useState({
     enabled: false,
     lastSync: null,
@@ -801,7 +804,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
       let errorMessage = err.response?.data?.error || 'Error en la sincronización';
       let errorType = 'error';
 
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMessage = 'La sincronización tardó demasiado (más de 3 min). Probá de nuevo; si persiste, usá sync incremental (esperá 24h entre syncs completos).';
       } else if (errorMessage.includes('Permisos insuficientes')) {
         errorType = 'warning';
@@ -1046,23 +1049,34 @@ const GoogleTasksConfig = ({ open, onClose }) => {
                   <Box>
                     <Typography variant="body2" fontWeight={600}>Auto-sync</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Cada ~10–15 min en el servidor
+                      {isAdmin
+                        ? 'Cada ~10–15 min en el servidor (control global)'
+                        : (autoSync.isRunning
+                          ? 'Activo en el servidor (~10–15 min)'
+                          : 'Gestionado por el servidor')}
                     </Typography>
                   </Box>
-                  <Switch
-                    checked={autoSync.isRunning}
-                    onChange={handleToggleAutoSync}
-                    disabled={loading || syncing}
-                    sx={{
-                      '& .MuiSwitch-switchBase.Mui-checked': { color: GOOGLE.green },
-                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: alpha(GOOGLE.green, 0.5) },
-                    }}
-                  />
+                  {isAdmin ? (
+                    <Switch
+                      checked={autoSync.isRunning}
+                      onChange={handleToggleAutoSync}
+                      disabled={loading || syncing}
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': { color: GOOGLE.green },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: alpha(GOOGLE.green, 0.5) },
+                      }}
+                    />
+                  ) : (
+                    <Typography variant="caption" color="text.secondary" sx={{ pr: 1 }}>
+                      {autoSync.isRunning ? 'On' : 'Off'}
+                    </Typography>
+                  )}
                 </Box>
 
                 <LimitationsNote>
                   Listas ↔ objetivos. Subtareas en notas de Google. Los horarios de Tasks no vienen por API;
-                  solo fecha o horario definido en Atta. Los eventos del calendario se importan en la pestaña Calendar.
+                  solo fecha o horario definido en Atta. Hábitos y rutinas no se sincronizan. Los eventos del
+                  calendario se importan en la pestaña Calendar.
                 </LimitationsNote>
 
                 <Accordion

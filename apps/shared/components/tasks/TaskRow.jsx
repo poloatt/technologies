@@ -28,6 +28,7 @@ ensureTaskListAnimations();
 /**
  * Fila de tarea reutilizable (lista, objetivos, archivo).
  * Mobile y desktop comparten el mismo componente; el padding/tipografía responde a `isMobile`.
+ * Click: abrir detalle. Click derecho (desktop) / long-press (móvil-tablet): listón de acciones.
  */
 export function TaskRow({
   tarea,
@@ -37,6 +38,7 @@ export function TaskRow({
   selectedTareas = [],
   onSelectTarea,
   onToggleOpen,
+  onOpenActions,
   agendaView = 'ahora',
   isMobile: isMobileProp,
 }) {
@@ -46,7 +48,7 @@ export function TaskRow({
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [longPressActivated, setLongPressActivated] = useState(false);
   const [showMultiSelectHint, setShowMultiSelectHint] = useState(false);
-  const { isMobile: isMobileResponsive, theme } = useResponsive();
+  const { isMobile: isMobileResponsive, isMobileOrTablet, theme } = useResponsive();
   const isMobile = isMobileProp ?? isMobileResponsive;
   const { maskText } = useValuesVisibility();
 
@@ -76,15 +78,9 @@ export function TaskRow({
     return () => window.removeEventListener('showMultiSelectHint', handleShowMultiSelectHint);
   }, []);
 
-  const handleMouseDown = () => {
-    if (isMobile || hasSelections) return;
-    setIsLongPressing(true);
-    setLongPressActivated(false);
-    const timer = setTimeout(() => {
-      onSelectTarea?.(taskId);
-      setLongPressActivated(true);
-    }, 500);
-    setLongPressTimer(timer);
+  const openActionsFromEvent = (event) => {
+    if (typeof onOpenActions !== 'function') return;
+    onOpenActions(tarea, event.currentTarget);
   };
 
   const clearLongPress = () => {
@@ -96,15 +92,28 @@ export function TaskRow({
     setLongPressActivated(false);
   };
 
-  const handleTouchStart = () => {
-    if (!isMobile || hasSelections) return;
+  const handleTouchStart = (event) => {
+    if (!isMobileOrTablet || hasSelections) return;
     setIsLongPressing(true);
     setLongPressActivated(false);
+    const target = event.currentTarget;
     const timer = setTimeout(() => {
-      onSelectTarea?.(taskId);
       setLongPressActivated(true);
-    }, 300);
+      if (typeof onOpenActions === 'function') {
+        onOpenActions(tarea, target);
+      } else {
+        onSelectTarea?.(taskId);
+      }
+    }, 350);
     setLongPressTimer(timer);
+  };
+
+  const handleContextMenu = (event) => {
+    if (typeof onOpenActions !== 'function') return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearLongPress();
+    openActionsFromEvent(event);
   };
 
   const handleRowClick = (e) => {
@@ -157,9 +166,7 @@ export function TaskRow({
         layoutDividerColor,
       })}
       onClick={handleRowClick}
-      onMouseDown={handleMouseDown}
-      onMouseUp={clearLongPress}
-      onMouseLeave={clearLongPress}
+      onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
       onTouchEnd={clearLongPress}
       onTouchCancel={clearLongPress}

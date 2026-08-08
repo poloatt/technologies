@@ -188,7 +188,7 @@ export function Layout() {
                 minHeight: 0,
                 border: 'none',
                 outline: 'none',
-                pb: 3,
+                pb: { xs: 1, sm: 0 },
               }}>
                 <Outlet />
               </Box>
@@ -269,7 +269,7 @@ export function Layout() {
                 minHeight: 0,
                 border: 'none',
                 outline: 'none',
-                pb: 3,
+                pb: { xs: 1, sm: 0 },
               }}>
                 <Outlet />
               </Box>

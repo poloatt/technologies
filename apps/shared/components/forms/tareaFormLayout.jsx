@@ -10,7 +10,6 @@ import {
   taskFormBodyTextSx,
   taskFormCaptionTextSx,
   taskFormHeaderContentRowSx,
-  taskFormHeaderIconSpacerSx,
   taskFormPillTextSx,
   taskFormReadOnlyBodyLineSx,
   taskFormReadOnlyMetaLineSx,
@@ -72,16 +71,18 @@ export function TareaFormRow({ icon: Icon, children, showDivider = false, align 
       sx={{
         display: 'flex',
         alignItems: align === 'center' ? 'center' : 'flex-start',
-        gap: TASK_FORM_ROW_GAP,
+        gap: Icon ? TASK_FORM_ROW_GAP : 0,
         py: TASK_FORM_ROW_PY,
         minHeight: TASK_FORM_ROW_MIN_HEIGHT,
         borderBottom: showDivider ? 1 : 0,
         borderColor: 'divider',
       }}
     >
-      <Box sx={taskFormRowIconColumnSx(align)}>
-        {Icon ? <Icon sx={taskFormRowIconSx} /> : null}
-      </Box>
+      {Icon ? (
+        <Box sx={taskFormRowIconColumnSx(align)}>
+          <Icon sx={taskFormRowIconSx} />
+        </Box>
+      ) : null}
       <Box sx={{ flex: 1, minWidth: 0 }}>{children}</Box>
     </Box>
   );
@@ -95,7 +96,7 @@ export function TareaFormHeaderTitleRow({ children, action, leading, sx }) {
       sx={{
         display: 'flex',
         alignItems: 'flex-start',
-        gap: TASK_FORM_ROW_GAP,
+        gap: leading ? TASK_FORM_ROW_GAP : 0,
         width: '100%',
         ...sx,
       }}
@@ -113,9 +114,7 @@ export function TareaFormHeaderTitleRow({ children, action, leading, sx }) {
         >
           {leading}
         </Box>
-      ) : (
-        <Box sx={taskFormHeaderIconSpacerSx} aria-hidden />
-      )}
+      ) : null}
       <Box sx={{
         ...(hasAction ? taskFormHeaderContentRowSx : { flex: 1, minWidth: 0, width: '100%' }),
         flex: 1,

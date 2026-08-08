@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { isInAhora, isInLuego, isTaskCompleted } from '@shared/utils/agendaRules';
+import { isInAhora, isInLuego, isTaskCompleted, isTaskCancelled } from '@shared/utils/agendaRules';
 
 /**
  * Filtrado UI Ahora/Luego sobre tareas ya acotadas por API /list.
@@ -32,6 +32,7 @@ export function useAgendaFilter(tasks) {
     const now = new Date();
 
     return tasksArray.filter((t) => {
+      if (isTaskCancelled(t)) return false;
       if (!showCompleted && isTaskCompleted(t)) return false;
       if (agendaView === 'ahora') return isInAhora(t, now);
       if (agendaView === 'luego') return isInLuego(t, now);

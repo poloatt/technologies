@@ -1,21 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSnackbar } from 'notistack';
-import { addDays, addWeeks, addMonths, isWeekend, startOfMonth } from 'date-fns';
+import { getNextPushDate } from '../utils/taskPushSchedule';
+
+function normalizeOwnerIds(owners = [], creatorId) {
+  const ids = (Array.isArray(owners) ? owners : [])
+    .map((o) => String(o?._id ?? o?.id ?? o))
+    .filter(Boolean);
+  if (creatorId && !ids.includes(String(creatorId))) {
+    ids.unshift(String(creatorId));
+  }
+  return [...new Set(ids)];
+}
 
 /**
- * Action handlers for TareaDetailPopup (extracted from TareaRow).
+ * Action handlers for TareaDetailPopup / TareaActionsPopover.
  */
 export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado, onRefreshData }) {
   const [estadoLocal, setEstadoLocal] = useState(tarea?.estado);
   const [subtareasLocal, setSubtareasLocal] = useState(tarea?.subtareas || []);
   const [prioridadLocal, setPrioridadLocal] = useState(tarea?.prioridad);
+  const [ownersLocal, setOwnersLocal] = useState(tarea?.owners || []);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [delegateOpen, setDelegateOpen] = useState(false);
   const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     setEstadoLocal(tarea?.estado);
     setSubtareasLocal(tarea?.subtareas || []);
     setPrioridadLocal(tarea?.prioridad);
+    setOwnersLocal(tarea?.owners || []);
   }, [tarea]);
 
   const handleSubtareaToggle = async (subtareaId, completada) => {
@@ -55,27 +68,7 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
   };
 
   const handlePush = async (t) => {
-    const today = new Date();
-    let nuevaFecha;
-
-    switch ((t.pushCount || 0) % 4) {
-      case 0:
-        nuevaFecha = addDays(today, 1);
-        while (isWeekend(nuevaFecha)) {
-          nuevaFecha = addDays(nuevaFecha, 1);
-        }
-        break;
-      case 1:
-        nuevaFecha = addWeeks(today, 1);
-        break;
-      case 2:
-        nuevaFecha = startOfMonth(addMonths(today, 1));
-        break;
-      case 3:
-      default:
-        nuevaFecha = today;
-        break;
-    }
+    const nuevaFecha = getNextPushDate(t);
 
     try {
       const tareaOriginal = { ...t };
@@ -92,9 +85,38 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
     }
   };
 
-  const handleDelegate = () => {
-    enqueueSnackbar('Función por implementar', { variant: 'info' });
-  };
+  const handleDelegate = useCallback(() => {
+    setDelegateOpen(true);
+  }, []);
+
+  const handleAddOwner = useCallback(async (user) => {
+    if (!tarea || !user) return;
+    const userId = String(user._id || user.id);
+    const creatorId = tarea.usuario?._id || tarea.usuario;
+    const currentIds = normalizeOwnerIds(ownersLocal, creatorId);
+    if (currentIds.includes(userId)) {
+      enqueueSnackbar('Ese usuario ya es owner', { variant: 'info' });
+      return;
+    }
+
+    const nextOwners = [...currentIds, userId];
+
+    try {
+      const tareaOriginal = { ...tarea };
+      const updated = await updateWithHistory(
+        tarea._id,
+        { owners: nextOwners },
+        tareaOriginal,
+      );
+      setOwnersLocal(updated?.owners || [...(ownersLocal || []), user]);
+      if (onUpdateEstado) onUpdateEstado(updated);
+      enqueueSnackbar('Owner agregado', { variant: 'success' });
+      if (onRefreshData) await onRefreshData();
+    } catch (error) {
+      console.error('Error al delegar:', error);
+      enqueueSnackbar('Error al agregar owner', { variant: 'error' });
+    }
+  }, [tarea, ownersLocal, updateWithHistory, onUpdateEstado, onRefreshData, enqueueSnackbar]);
 
   const handleTogglePriority = async (t) => {
     try {
@@ -158,7 +180,9 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
     try {
       const tareaOriginal = { ...t };
       const updated = await updateWithHistory(t._id, { estado: 'CANCELADA', completada: false }, tareaOriginal);
+      setEstadoLocal('CANCELADA');
       if (onUpdateEstado) onUpdateEstado(updated);
+      if (onRefreshData) await onRefreshData();
       enqueueSnackbar('Tarea cancelada exitosamente', { variant: 'success' });
     } catch (error) {
       console.error('Error al cancelar tarea:', error);
@@ -170,10 +194,14 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
     estadoLocal,
     subtareasLocal,
     prioridadLocal,
+    ownersLocal,
     isUpdating,
+    delegateOpen,
+    setDelegateOpen,
     handleSubtareaToggle,
     handlePush,
     handleDelegate,
+    handleAddOwner,
     handleTogglePriority,
     handleComplete,
     handleReactivate,

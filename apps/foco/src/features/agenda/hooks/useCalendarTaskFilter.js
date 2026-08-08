@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { isTaskCompleted } from '@shared/utils/agendaRules';
+import { isTaskCompleted, isTaskCancelled } from '@shared/utils/agendaRules';
 
 /**
  * Filtro de calendario: solo ocultar/mostrar completadas.
@@ -19,8 +19,11 @@ export function useCalendarTaskFilter(tasks) {
 
   const filteredTasks = useMemo(() => {
     const list = Array.isArray(tasks) ? tasks : [];
-    if (showCompleted) return list;
-    return list.filter((t) => !isTaskCompleted(t));
+    return list.filter((t) => {
+      if (isTaskCancelled(t)) return false;
+      if (!showCompleted && isTaskCompleted(t)) return false;
+      return true;
+    });
   }, [tasks, showCompleted]);
 
   return { filteredTasks, showCompleted };

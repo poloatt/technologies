@@ -27,6 +27,15 @@ export function isTaskCompleted(t) {
   return false;
 }
 
+export function isTaskCancelled(t) {
+  if (!t) return false;
+  return String(t.estado || '').toUpperCase() === 'CANCELADA';
+}
+
+export function isTaskArchived(t) {
+  return isTaskCompleted(t) || isTaskCancelled(t);
+}
+
 export function getTaskDue(t) {
   const due = parseTaskDate(
     t?.fechaVencimiento || t?.vencimiento || t?.dueDate || t?.fecha,

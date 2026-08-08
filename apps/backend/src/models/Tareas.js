@@ -35,7 +35,7 @@ const tareaSchema = createSchema({
   },
   estado: {
     type: String,
-    enum: ['PENDIENTE', 'EN_PROGRESO', 'COMPLETADA'],
+    enum: ['PENDIENTE', 'EN_PROGRESO', 'COMPLETADA', 'CANCELADA'],
     default: 'PENDIENTE'
   },
   tipo: {
@@ -96,6 +96,11 @@ const tareaSchema = createSchema({
     ref: 'Users',
     required: true
   },
+  /** Creador + co-owners (Delegar agrega usuarios aquí; `usuario` permanece el creador). */
+  owners: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Users',
+  }],
   prioridad: {
     type: String,
     enum: ['BAJA', 'ALTA'],
@@ -444,6 +449,14 @@ tareaSchema.pre('findOneAndUpdate', async function() {
   }
 
   const patch = update.$set || update;
+  const applyField = (key, value) => {
+    if (update.$set) {
+      update.$set[key] = value;
+    } else {
+      update[key] = value;
+    }
+  };
+
   const newObjetivoId = patch.objetivo;
   if (
     newObjetivoId
@@ -454,13 +467,6 @@ tareaSchema.pre('findOneAndUpdate', async function() {
     const objetivo = await Objetivos.findById(newObjetivoId);
     const listId = objetivo?.googleTasksSync?.googleTaskListId;
     if (listId) {
-      const applyField = (key, value) => {
-        if (update.$set) {
-          update.$set[key] = value;
-        } else {
-          update[key] = value;
-        }
-      };
       applyField('googleTasksSync.googleTaskListId', listId);
       const syncEnabled = patch.googleTasksSync?.enabled
         ?? docToUpdate.googleTasksSync?.enabled;
@@ -468,6 +474,26 @@ tareaSchema.pre('findOneAndUpdate', async function() {
         applyField('googleTasksSync.needsSync', true);
         applyField('googleTasksSync.syncStatus', 'pending');
       }
+    }
+  }
+
+  // findByIdAndUpdate bypasses pre('save'); mark Google export when status/completion changes
+  const syncEnabled = patch['googleTasksSync.enabled']
+    ?? patch.googleTasksSync?.enabled
+    ?? docToUpdate.googleTasksSync?.enabled;
+  if (syncEnabled) {
+    const nextCompletada = patch.completada;
+    const nextEstado = patch.estado;
+    const completadaChanged = nextCompletada !== undefined
+      && Boolean(nextCompletada) !== Boolean(docToUpdate.completada);
+    const estadoChanged = nextEstado !== undefined
+      && String(nextEstado) !== String(docToUpdate.estado || '');
+    const subtareasTouched = update.subtareas !== undefined || patch.subtareas !== undefined;
+    if (completadaChanged || estadoChanged || subtareasTouched) {
+      applyField('googleTasksSync.needsSync', true);
+      applyField('googleTasksSync.syncStatus', 'pending');
+      const prevVersion = docToUpdate.googleTasksSync?.localVersion || 0;
+      applyField('googleTasksSync.localVersion', prevVersion + 1);
     }
   }
 });

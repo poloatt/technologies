@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Chip,
   FormControlLabel,
   IconButton,
+  Menu,
   MenuItem,
   Switch,
   TextField,
   Typography,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   AttachFile as AttachFileIcon,
   KeyboardArrowDown as ChevronDownIcon,
@@ -17,35 +19,32 @@ import { TareaFormIcons } from './tareaFormIcons';
 import { getEstadoColor } from '../common/StatusSystem';
 import {
   TASK_FORM_ICON_SIZE,
-  TASK_FORM_PILL_BORDER_WIDTH,
   TASK_FORM_PILL_GAP,
-  TASK_FORM_PILL_HEIGHT,
   TASK_FORM_PILL_OUTLINE_BORDER,
   TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
   TASK_FORM_PILL_OUTLINED_BG,
   TASK_FORM_PILL_OUTLINED_BG_HOVER,
-  TASK_FORM_PILL_BORDER_RADIUS,
+  TASK_FORM_PILL_FILL_BG,
   TASK_FORM_ESTADO_OPTIONS,
   TASK_FORM_TIPO_ALL,
   TASK_FORM_TIPO_EVENTO_TAREA,
+  TASK_FORM_STANDARD_PILL_WIDTH,
+  TASK_FORM_OBJETIVO_PILL_MAX_WIDTH,
   taskFormChipSx,
-  taskFormGrowingSelectPillSx,
   taskFormSettingsPillSx,
   taskFormHeaderActionColumnSx,
   taskFormHeaderActionIconSx,
   taskFormPillIconSx,
-  taskFormPillOutlinedSx,
-  taskFormPillSelectFieldSx,
+  taskFormPillChevronSx,
   taskFormPillSolidSx,
+  taskFormFixedPillSx,
   taskFormSchedulePillButtonSx,
   taskFormSettingsPillButtonSx,
   taskFormAllDaySwitchControlSx,
   taskFormAllDaySwitchGroupSx,
   taskFormSwitchLabelSx,
+  taskFormTipoFloatingLabelSx,
 } from './tareaFormTokens';
-
-const TASK_FORM_CREATE_OPTION = '__task_form_create__';
-const TASK_FORM_TIPO_SEGMENT_PADDING_X = 1.25;
 
 const taskFormPriorityToggleIconSx = (isHigh) =>
   taskFormHeaderActionIconSx(isHigh ? 'error.main' : 'text.secondary');
@@ -141,86 +140,6 @@ export function TareaFormAttachButton({ onChange, disabled = false, sx }) {
 TareaFormPriorityToggle.isButtonComponent = true;
 TareaFormAttachButton.isButtonComponent = true;
 
-export function TareaFormPillSelect({
-  value,
-  onChange,
-  options = [],
-  placeholder = 'Seleccionar',
-  error,
-  helperText,
-  required,
-  emptyLabel = 'Sin objetivo',
-  onCreate,
-  createLabel = 'Nuevo objetivo',
-  pillWidth = 'fixed',
-  showEmptyOption = true,
-}) {
-  const selectPillSx = pillWidth === 'grow'
-    ? taskFormGrowingSelectPillSx
-    : taskFormSettingsPillSx;
-
-  const handleChange = (event) => {
-    if (event.target.value === TASK_FORM_CREATE_OPTION) {
-      onCreate?.();
-      return;
-    }
-    onChange?.(event);
-  };
-
-  return (
-    <TextField
-      select
-      variant="standard"
-      value={value || ''}
-      onChange={handleChange}
-      error={!!error}
-      helperText={helperText || error}
-      required={required}
-      SelectProps={{
-        displayEmpty: true,
-        IconComponent: ChevronDownIcon,
-      }}
-      InputProps={{
-        disableUnderline: true,
-      }}
-      sx={[
-        taskFormPillSelectFieldSx,
-        {
-          '& .MuiSelect-select': {
-            ...selectPillSx,
-            color: value ? 'text.primary' : 'text.secondary',
-          },
-        },
-      ]}
-    >
-      {showEmptyOption ? (
-        <MenuItem value="">
-          <em>{emptyLabel}</em>
-        </MenuItem>
-      ) : null}
-      {options.map((opt) => (
-        <MenuItem key={opt.value} value={opt.value}>
-          {opt.label}
-        </MenuItem>
-      ))}
-      {onCreate ? (
-        <MenuItem
-          value={TASK_FORM_CREATE_OPTION}
-          sx={{
-            color: 'primary.main',
-            fontWeight: 500,
-            borderTop: 1,
-            borderColor: 'divider',
-            mt: 0.5,
-          }}
-        >
-          {createLabel}
-        </MenuItem>
-      ) : null}
-    </TextField>
-  );
-}
-
 export function TareaFormTipoSelector({
   value,
   onChange,
@@ -230,28 +149,45 @@ export function TareaFormTipoSelector({
   sx,
 }) {
   const isInteractive = !readOnly && !disabled && typeof onChange === 'function';
+  const selectedOption =
+    options.find((segment) => segment.value === value)
+    || options.find((segment) => segment.value === 'TAREA')
+    || options[0];
+
+  if (readOnly) {
+    return (
+      <Typography
+        component="span"
+        aria-label={`Tipo: ${selectedOption?.label || ''}`}
+        sx={{
+          ...taskFormTipoFloatingLabelSx,
+          ...(disabled ? { opacity: 0.45 } : null),
+          ...sx,
+        }}
+      >
+        {selectedOption?.label}
+      </Typography>
+    );
+  }
 
   return (
     <Box
       role="group"
       aria-label="Tipo"
       sx={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
+        display: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        alignItems: 'center',
+        gap: TASK_FORM_PILL_GAP,
         width: '100%',
-        height: TASK_FORM_PILL_HEIGHT,
-        minHeight: TASK_FORM_PILL_HEIGHT,
-        borderRadius: TASK_FORM_PILL_BORDER_RADIUS,
-        border: `${TASK_FORM_PILL_BORDER_WIDTH} solid ${TASK_FORM_PILL_OUTLINE_BORDER}`,
-        overflow: 'hidden',
-        boxSizing: 'border-box',
-        ...(readOnly || disabled ? { pointerEvents: 'none', opacity: readOnly ? 0.92 : 0.45 } : null),
+        minWidth: 0,
+        ...(disabled ? { pointerEvents: 'none', opacity: 0.45 } : null),
         ...sx,
       }}
     >
-      {options.map((segment, index) => {
+      {options.map((segment) => {
         const selected = value === segment.value;
-        const isLast = index === options.length - 1;
 
         return (
           <Box
@@ -262,34 +198,26 @@ export function TareaFormTipoSelector({
             aria-label={segment.label}
             aria-pressed={selected}
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              alignSelf: 'stretch',
-              width: '100%',
+              ...taskFormSettingsPillSx,
+              flex: '1 1 0',
               minWidth: 0,
-              minHeight: TASK_FORM_PILL_HEIGHT,
-              height: '100%',
-              px: TASK_FORM_TIPO_SEGMENT_PADDING_X,
-              py: 0,
-              m: 0,
-              border: 'none',
-              borderRight: isLast
-                ? 'none'
-                : `${TASK_FORM_PILL_BORDER_WIDTH} solid ${TASK_FORM_PILL_OUTLINE_BORDER}`,
-              boxSizing: 'border-box',
-              whiteSpace: 'nowrap',
+              width: 'auto',
+              maxWidth: 'none',
+              justifyContent: 'center',
               textAlign: 'center',
-              fontSize: taskFormPillOutlinedSx.fontSize,
-              lineHeight: 1,
+              px: 1.25,
               fontWeight: selected ? 500 : 400,
-              bgcolor: selected ? 'action.selected' : 'transparent',
+              bgcolor: selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG,
               color: selected ? 'text.primary' : 'text.secondary',
+              borderColor: selected ? TASK_FORM_PILL_OUTLINE_BORDER_HOVER : TASK_FORM_PILL_OUTLINE_BORDER,
               cursor: isInteractive ? 'pointer' : 'default',
-              transition: 'background-color 0.15s ease',
-              fontFamily: 'inherit',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
               '&:hover': isInteractive
-                ? { bgcolor: selected ? 'action.selected' : TASK_FORM_PILL_OUTLINED_BG_HOVER }
+                ? {
+                  bgcolor: selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG_HOVER,
+                  borderColor: TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+                }
                 : undefined,
             }}
           >
@@ -310,8 +238,10 @@ export function TaskFormEstadoRow({
   disabled = false,
   sx,
 }) {
+  const theme = useTheme();
   const isInteractive = !readOnly && !disabled && typeof onChange === 'function';
   const currentValue = value || options[0]?.value || 'PENDIENTE';
+  const isDark = theme.palette.mode === 'dark';
 
   return (
     <Box
@@ -331,7 +261,13 @@ export function TaskFormEstadoRow({
     >
       {options.map((opt) => {
         const selected = currentValue === opt.value;
-        const estadoBorderColor = getEstadoColor(opt.value, entityType);
+        const estadoMain = getEstadoColor(opt.value, entityType) || theme.palette.text.secondary;
+        const softBg = selected
+          ? alpha(estadoMain, isDark ? 0.14 : 0.10)
+          : TASK_FORM_PILL_OUTLINED_BG;
+        const softBorder = selected
+          ? alpha(estadoMain, isDark ? 0.42 : 0.32)
+          : TASK_FORM_PILL_OUTLINE_BORDER;
 
         return (
           <Box
@@ -351,16 +287,18 @@ export function TaskFormEstadoRow({
               textAlign: 'center',
               px: 1,
               fontWeight: selected ? 500 : 400,
-              bgcolor: selected ? 'action.selected' : TASK_FORM_PILL_OUTLINED_BG,
+              bgcolor: softBg,
               color: selected ? 'text.primary' : 'text.secondary',
-              borderColor: selected ? estadoBorderColor : TASK_FORM_PILL_OUTLINE_BORDER,
+              borderColor: softBorder,
               cursor: isInteractive ? 'pointer' : 'default',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               '&:hover': isInteractive
                 ? {
-                  bgcolor: selected ? 'action.selected' : TASK_FORM_PILL_OUTLINED_BG_HOVER,
-                  borderColor: selected ? estadoBorderColor : TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+                  bgcolor: selected ? alpha(estadoMain, isDark ? 0.18 : 0.14) : TASK_FORM_PILL_OUTLINED_BG_HOVER,
+                  borderColor: selected
+                    ? alpha(estadoMain, isDark ? 0.55 : 0.42)
+                    : TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
                 }
                 : undefined,
             }}
@@ -436,6 +374,162 @@ export const TareaFormPillButton = React.forwardRef(function TareaFormPillButton
     </Box>
   );
 });
+
+/**
+ * Select estilo pill (mismo patrón que cadencia): cápsula + menú.
+ * Mejor que MUI Select para la estética del form; el collapse de fecha
+ * queda reservado a editores multi-campo.
+ */
+export function TareaFormPillSelect({
+  value,
+  onChange,
+  options = [],
+  placeholder = 'Seleccionar',
+  error,
+  helperText,
+  required,
+  emptyLabel = 'Sin objetivo',
+  onCreate,
+  createLabel = 'Nuevo objetivo',
+  pillWidth = 'fixed',
+  showEmptyOption = true,
+  disabled = false,
+  variant = 'settings',
+}) {
+  const [anchor, setAnchor] = useState(null);
+  const open = Boolean(anchor);
+
+  const selected = options.find((opt) => String(opt.value) === String(value ?? ''));
+  const hasValue = value !== null && value !== undefined && value !== '';
+  const label = selected?.label
+    || (hasValue ? String(value) : null)
+    || emptyLabel
+    || placeholder;
+
+  const emitChange = (nextValue) => {
+    onChange?.({ target: { value: nextValue } });
+  };
+
+  const close = () => setAnchor(null);
+
+  const widthSx = pillWidth === 'grow' || pillWidth === 'full'
+    ? {
+      width: '100%',
+      maxWidth: pillWidth === 'full' ? '100%' : TASK_FORM_OBJETIVO_PILL_MAX_WIDTH,
+      minWidth: 0,
+      justifyContent: 'space-between',
+    }
+    : {
+      ...taskFormFixedPillSx,
+      justifyContent: 'space-between',
+    };
+
+  return (
+    <Box
+      sx={{
+        width: pillWidth === 'grow' || pillWidth === 'full' ? '100%' : 'auto',
+        maxWidth: pillWidth === 'grow' ? TASK_FORM_OBJETIVO_PILL_MAX_WIDTH : undefined,
+        minWidth: 0,
+      }}
+    >
+      <TareaFormPillButton
+        variant={variant}
+        disabled={disabled}
+        onClick={(e) => setAnchor(e.currentTarget)}
+        aria-label={label}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        sx={{
+          ...widthSx,
+          color: hasValue ? 'text.primary' : 'text.secondary',
+          ...(error ? { borderColor: 'error.main' } : null),
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            textAlign: 'left',
+          }}
+        >
+          {label}
+          {required && !hasValue ? ' *' : ''}
+        </Box>
+        <ChevronDownIcon sx={taskFormPillChevronSx} />
+      </TareaFormPillButton>
+
+      {(helperText || error) ? (
+        <Typography
+          variant="caption"
+          color={error ? 'error' : 'text.secondary'}
+          sx={{ mt: 0.5, display: 'block', px: 0.5 }}
+        >
+          {helperText || error}
+        </Typography>
+      ) : null}
+
+      <Menu
+        anchorEl={anchor}
+        open={open}
+        onClose={close}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: Math.max(TASK_FORM_STANDARD_PILL_WIDTH, anchor?.offsetWidth || 0),
+              maxHeight: 320,
+            },
+          },
+        }}
+      >
+        {showEmptyOption ? (
+          <MenuItem
+            selected={!hasValue}
+            onClick={() => {
+              close();
+              emitChange('');
+            }}
+          >
+            <em style={{ fontStyle: 'normal' }}>{emptyLabel}</em>
+          </MenuItem>
+        ) : null}
+        {options.map((opt) => (
+          <MenuItem
+            key={opt.value}
+            selected={String(opt.value) === String(value ?? '')}
+            onClick={() => {
+              close();
+              emitChange(opt.value);
+            }}
+          >
+            {opt.label}
+          </MenuItem>
+        ))}
+        {onCreate ? (
+          <MenuItem
+            onClick={() => {
+              close();
+              onCreate();
+            }}
+            sx={{
+              color: 'primary.main',
+              fontWeight: 500,
+              borderTop: 1,
+              borderColor: 'divider',
+              mt: 0.5,
+            }}
+          >
+            {createLabel}
+          </MenuItem>
+        ) : null}
+      </Menu>
+    </Box>
+  );
+}
 
 export function TareaFormAllDaySwitch({
   checked,
