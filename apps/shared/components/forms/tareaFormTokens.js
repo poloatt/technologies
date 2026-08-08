@@ -323,10 +323,10 @@ export const taskFormSaveButtonSx = {
   fontWeight: TASK_FORM_BUTTON_FONT_WEIGHT,
   fontSize: TASK_FORM_BUTTON_FONT_SIZE,
   boxShadow: 'none',
-  bgcolor: '#8ab4f8',
+  bgcolor: '#ffffff',
   color: '#202124',
   '&:hover': {
-    bgcolor: '#aecbfa',
+    bgcolor: '#f1f3f4',
     boxShadow: 'none',
   },
   '&.Mui-disabled': {

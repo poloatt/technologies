@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
   Button,
   Typography,
   Box,
@@ -16,218 +14,91 @@ import {
   CircularProgress,
   Tooltip,
   TextField,
-  Divider,
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   FormControl,
-  InputLabel,
   Select,
   MenuItem,
   Checkbox,
   FormGroup,
   Tabs,
   Tab,
-  Chip,
-  Collapse,
 } from '@mui/material';
-import { alpha, useTheme } from '@mui/material/styles';
 import {
   Google as GoogleIcon,
   Sync as SyncIcon,
-  Close as CloseIcon,
-  CloudOff as CloudOffIcon,
   DeleteSweep as DeleteSweepIcon,
   ExpandMore as ExpandMoreIcon,
-  Build as BuildIcon,
-  ArrowDownward as ImportIcon,
-  ArrowUpward as ExportIcon,
-  FolderOutlined as FolderIcon,
   Schedule as ScheduleIcon,
   LinkOff as LinkOffIcon,
-  Event as EventIcon,
-  TaskAlt as TaskAltIcon,
-  InfoOutlined as InfoIcon,
-  CheckCircleOutline as CheckCircleOutlineIcon,
 } from '@mui/icons-material';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useSnackbar } from 'notistack';
 import clienteAxios from '@shared/config/axios';
 import { useAuth } from '@shared/context/AuthContext';
+import { useResponsive } from '@shared/hooks';
+import {
+  TareaFormHeader,
+  TareaFormFooter,
+  TareaFormSectionLabel,
+  tareaFormDialogPaperSx,
+  tareaFormSaveButtonSx,
+  tareaFormBodyTextSx,
+  tareaFormCaptionTextSx,
+  tareaFormAllDaySwitchControlSx,
+  TASK_FORM_HORIZONTAL_PX,
+  TASK_FORM_BODY_FONT_SIZE,
+} from '@shared/components/forms/tareaFormUi';
 
 const SYNC_DIRECTION_LABELS = {
-  bidirectional: 'Bidireccional (Google ↔ Attadia)',
-  to_google: 'Solo hacia Google',
+  bidirectional: 'Bidireccional',
+  to_google: 'Solo a Google',
   from_google: 'Solo desde Google',
 };
 
-/** Colores marca Google (acentos sutiles sobre tema Attadia oscuro). */
-const GOOGLE = {
-  blue: '#4285F4',
-  red: '#EA4335',
-  yellow: '#FBBC04',
-  green: '#34A853',
-};
-
-function GoogleBrandStrip() {
-  return (
-    <Box sx={{ display: 'flex', height: 3, overflow: 'hidden', borderRadius: '3px 3px 0 0' }}>
-      {[GOOGLE.blue, GOOGLE.red, GOOGLE.yellow, GOOGLE.green].map((color) => (
-        <Box key={color} sx={{ flex: 1, bgcolor: color }} />
-      ))}
-    </Box>
-  );
-}
-
-function ConnectionChip({ connected }) {
-  return (
-    <Chip
-      size="small"
-      label={connected ? 'Conectado' : 'Sin conectar'}
-      icon={(
-        <Box
-          component="span"
-          sx={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            bgcolor: connected ? GOOGLE.green : 'text.disabled',
-            ml: '6px !important',
-          }}
-        />
-      )}
-      sx={{
-        height: 26,
-        fontWeight: 600,
-        fontSize: '0.6875rem',
-        letterSpacing: '0.02em',
-        bgcolor: connected ? alpha(GOOGLE.green, 0.12) : alpha('#fff', 0.04),
-        color: connected ? GOOGLE.green : 'text.secondary',
-        border: '1px solid',
-        borderColor: connected ? alpha(GOOGLE.green, 0.35) : 'divider',
-      }}
-    />
-  );
-}
-
-function ServicePanel({ children, accent = GOOGLE.blue, sx }) {
-  return (
-    <Box
-      sx={{
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: 'divider',
-        bgcolor: alpha('#fff', 0.02),
-        overflow: 'hidden',
-        ...sx,
-      }}
-    >
-      <Box sx={{ height: 3, bgcolor: accent, opacity: 0.85 }} />
-      <Box sx={{ p: 2 }}>{children}</Box>
-    </Box>
-  );
-}
-
 function TabPanel({ value, index, children }) {
   if (value !== index) return null;
-  return <Box role="tabpanel" sx={{ pt: 2 }}>{children}</Box>;
+  return <Box role="tabpanel" sx={{ pt: 1 }}>{children}</Box>;
 }
 
-function GoogleConnectButton({ onClick, disabled, label, icon: Icon = GoogleIcon, variant = 'tasks' }) {
-  const accent = variant === 'calendar' ? GOOGLE.blue : GOOGLE.green;
+function SharedPrimaryButton({ onClick, disabled, loading, label, loadingLabel, startIcon }) {
   return (
     <Button
       variant="contained"
       fullWidth
       disabled={disabled}
       onClick={onClick}
-      startIcon={<Icon sx={{ fontSize: 20 }} />}
-      sx={{
-        py: 1.35,
-        borderRadius: 2,
-        fontWeight: 600,
-        textTransform: 'none',
-        bgcolor: '#fff',
-        color: '#202124',
-        boxShadow: `0 1px 3px ${alpha('#000', 0.35)}`,
-        '&:hover': {
-          bgcolor: alpha('#fff', 0.92),
-          boxShadow: `0 2px 8px ${alpha(accent, 0.25)}`,
-        },
-        '&.Mui-disabled': {
-          bgcolor: alpha('#fff', 0.12),
-          color: 'text.disabled',
-        },
-      }}
-    >
-      {label}
-    </Button>
-  );
-}
-
-function SyncPrimaryButton({ onClick, disabled, loading, label, loadingLabel }) {
-  return (
-    <Button
-      variant="contained"
-      fullWidth
-      disabled={disabled}
-      onClick={onClick}
-      startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <SyncIcon />}
-      sx={{
-        py: 1.25,
-        borderRadius: 2,
-        fontWeight: 600,
-        textTransform: 'none',
-        bgcolor: 'primary.main',
-        color: '#181818',
-        '&:hover': { bgcolor: alpha('#fff', 0.88) },
-        '&.Mui-disabled': { bgcolor: alpha('#fff', 0.15), color: alpha('#fff', 0.35) },
-      }}
+      startIcon={loading ? <CircularProgress size={16} color="inherit" /> : startIcon}
+      sx={tareaFormSaveButtonSx}
     >
       {loading ? loadingLabel : label}
     </Button>
   );
 }
 
-function LimitationsNote({ children }) {
-  const [open, setOpen] = useState(false);
+function SettingRow({ label, hint, control }) {
   return (
     <Box
       sx={{
-        borderRadius: 1.5,
-        border: '1px solid',
-        borderColor: alpha(GOOGLE.blue, 0.2),
-        bgcolor: alpha(GOOGLE.blue, 0.06),
-        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        py: 0.75,
+        minHeight: 40,
       }}
     >
-      <Button
-        fullWidth
-        onClick={() => setOpen((v) => !v)}
-        startIcon={<InfoIcon sx={{ fontSize: 18, color: GOOGLE.blue }} />}
-        endIcon={<ExpandMoreIcon sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />}
-        sx={{
-          justifyContent: 'flex-start',
-          py: 1,
-          px: 1.5,
-          color: 'text.secondary',
-          textTransform: 'none',
-          fontWeight: 500,
-          fontSize: '0.75rem',
-        }}
-      >
-        Limitaciones de la API de Google
-      </Button>
-      <Collapse in={open}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1.5, pb: 1.5, lineHeight: 1.5 }}>
-          {children}
-        </Typography>
-      </Collapse>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="body2" sx={tareaFormBodyTextSx}>{label}</Typography>
+        {hint ? (
+          <Typography variant="caption" color="text.secondary" sx={tareaFormCaptionTextSx}>
+            {hint}
+          </Typography>
+        ) : null}
+      </Box>
+      {control}
     </Box>
   );
 }
@@ -273,81 +144,23 @@ function SyncResultPanel({ summary, onDismiss }) {
     + b.tareasFromGoogleCreated + b.tareasFromGoogleUpdated > 0;
   const severity = summary.totalErrors > 0 ? 'warning' : hasChanges ? 'success' : 'info';
 
-  const rows = [
-    b.ObjetivosCreated > 0 && { icon: <FolderIcon fontSize="small" />, text: `${b.ObjetivosCreated} objetivo(s) creado(s) en Attadia` },
-    b.ObjetivosUpdated > 0 && { icon: <FolderIcon fontSize="small" />, text: `${b.ObjetivosUpdated} objetivo(s) actualizado(s)` },
-    b.tareasFromGoogleCreated > 0 && { icon: <ImportIcon fontSize="small" />, text: `${b.tareasFromGoogleCreated} tarea(s) importada(s) desde Google` },
-    b.tareasFromGoogleUpdated > 0 && { icon: <ImportIcon fontSize="small" />, text: `${b.tareasFromGoogleUpdated} tarea(s) actualizada(s) desde Google` },
-    b.tareasToGoogle > 0 && { icon: <ExportIcon fontSize="small" />, text: `${b.tareasToGoogle} tarea(s) enviada(s) a Google` },
-    b.tareasFromGoogleSkippedLists > 0 && {
-      icon: <CloudOffIcon fontSize="small" color="info" />,
-      text: `${b.tareasFromGoogleSkippedLists} lista(s) de Google sin objetivo vinculado (no importadas)`,
-    },
-    b.tareasFromGoogleSkippedTasks > 0 && {
-      icon: <CloudOffIcon fontSize="small" color="disabled" />,
-      text: `${b.tareasFromGoogleSkippedTasks} tarea(s) en listas vinculadas ya estaban al día`,
-    },
-    b.seriesCreated > 0 && {
-      icon: <ScheduleIcon fontSize="small" />,
-      text: `${b.seriesCreated} serie(s) recurrente(s) nueva(s)`,
-    },
-    b.seriesUpdated > 0 && {
-      icon: <ScheduleIcon fontSize="small" />,
-      text: `${b.seriesUpdated} serie(s) recurrente(s) actualizada(s)`,
-    },
-    b.instancesLinked > 0 && {
-      icon: <ImportIcon fontSize="small" />,
-      text: `${b.instancesLinked} instancia(s) vinculada(s) a series`,
-    },
-    b.expandLocalCreated > 0 && {
-      icon: <ImportIcon fontSize="small" />,
-      text: `${b.expandLocalCreated} ocurrencia(s) en calendario (series recurrentes)`,
-    },
-    b.expandCreated > b.expandLocalCreated && {
-      icon: <ExportIcon fontSize="small" />,
-      text: `${b.expandCreated - (b.expandLocalCreated || 0)} ocurrencia(s) adicionales materializadas`,
-    },
-    b.expandSynced > 0 && {
-      icon: <ExportIcon fontSize="small" />,
-      text: `${b.expandSynced} ocurrencia(s) exportada(s) a Google`,
-    },
+  const lines = [
+    b.tareasFromGoogleCreated > 0 && `${b.tareasFromGoogleCreated} importadas`,
+    b.tareasFromGoogleUpdated > 0 && `${b.tareasFromGoogleUpdated} actualizadas`,
+    b.tareasToGoogle > 0 && `${b.tareasToGoogle} enviadas`,
+    b.ObjetivosCreated + b.ObjetivosUpdated > 0
+      && `${b.ObjetivosCreated + b.ObjetivosUpdated} objetivo(s)`,
+    b.tareasFromGoogleSkippedLists > 0
+      && `${b.tareasFromGoogleSkippedLists} lista(s) sin vincular`,
   ].filter(Boolean);
 
   return (
-    <Alert
-      severity={severity}
-      onClose={onDismiss}
-      sx={{ '& .MuiAlert-message': { width: '100%' } }}
-    >
-      <Typography variant="subtitle2" sx={{ mb: rows.length ? 1 : 0 }}>
-        {hasChanges ? 'Sincronización completada' : 'Sin cambios en esta sincronización'}
+    <Alert severity={severity} onClose={onDismiss} sx={{ py: 0.5 }}>
+      <Typography variant="body2" sx={tareaFormBodyTextSx}>
+        {hasChanges ? 'Sync completado' : 'Sin cambios'}
+        {lines.length ? ` · ${lines.join(' · ')}` : ''}
+        {summary.totalErrors > 0 ? ` · ${summary.totalErrors} error(es)` : ''}
       </Typography>
-      {rows.length > 0 ? (
-        <List dense disablePadding>
-          {rows.map((row, i) => (
-            <ListItem key={i} disableGutters sx={{ py: 0.25 }}>
-              <ListItemIcon sx={{ minWidth: 28 }}>{row.icon}</ListItemIcon>
-              <ListItemText primaryTypographyProps={{ variant: 'body2' }} primary={row.text} />
-            </ListItem>
-          ))}
-        </List>
-      ) : (
-        <Typography variant="body2" color="text.secondary">
-          Vincula cada lista de Google Tasks a un objetivo en Attadia (mismo nombre o ID guardado).
-          Los eventos nativos de Google Calendar no se importan por Tasks; usa la sección Google Calendar más abajo.
-          Las tareas con hora en Google Calendar UI no llegan por API; solo eventos del calendario.
-        </Typography>
-      )}
-      {!hasChanges && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          La agenda muestra tareas en el día/semana seleccionados. Las completadas aparecen atenuadas.
-        </Typography>
-      )}
-      {summary.totalErrors > 0 && (
-        <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 1 }}>
-          {summary.totalErrors} error(es). Revisa el detalle arriba en el panel de avisos.
-        </Typography>
-      )}
     </Alert>
   );
 }
@@ -355,6 +168,7 @@ function SyncResultPanel({ summary, onDismiss }) {
 const GoogleTasksConfig = ({ open, onClose }) => {
   const { user } = useAuth();
   const isAdmin = String(user?.role || '').toUpperCase() === 'ADMIN';
+  const { isMobile } = useResponsive();
   const [config, setConfig] = useState({
     enabled: false,
     lastSync: null,
@@ -376,7 +190,6 @@ const GoogleTasksConfig = ({ open, onClose }) => {
   const [calendarCalendars, setCalendarCalendars] = useState([]);
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
-  const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
@@ -504,8 +317,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
     } catch (err) {
       enqueueSnackbar(
         err.response?.data?.error || err.message || 'Error al conectar Google Calendar',
-        { variant: 'error',
-        },
+        { variant: 'error' },
       );
     } finally {
       setLoading(false);
@@ -739,22 +551,22 @@ const GoogleTasksConfig = ({ open, onClose }) => {
     setSummary({
       totalSuccess,
       totalErrors,
-        breakdown: {
-          ObjetivosCreated: parsed.objetivosCreated,
-          ObjetivosUpdated: parsed.objetivosUpdated,
-          tareasToGoogle: parsed.toGoogle,
-          tareasFromGoogleCreated: parsed.fromCreated,
-          tareasFromGoogleUpdated: parsed.fromUpdated,
-          tareasFromGoogleSkippedLists: parsed.fromSkippedLists,
-          tareasFromGoogleSkippedTasks: parsed.fromSkippedTasks,
-          seriesCreated: parsed.seriesCreated,
-          seriesUpdated: parsed.seriesUpdated,
-          instancesLinked: parsed.instancesLinked,
-          expandCreated: parsed.expandCreated,
-          expandLocalCreated: parsed.expandLocalCreated,
-          expandSynced: parsed.expandSynced,
-        },
-      });
+      breakdown: {
+        ObjetivosCreated: parsed.objetivosCreated,
+        ObjetivosUpdated: parsed.objetivosUpdated,
+        tareasToGoogle: parsed.toGoogle,
+        tareasFromGoogleCreated: parsed.fromCreated,
+        tareasFromGoogleUpdated: parsed.fromUpdated,
+        tareasFromGoogleSkippedLists: parsed.fromSkippedLists,
+        tareasFromGoogleSkippedTasks: parsed.fromSkippedTasks,
+        seriesCreated: parsed.seriesCreated,
+        seriesUpdated: parsed.seriesUpdated,
+        instancesLinked: parsed.instancesLinked,
+        expandCreated: parsed.expandCreated,
+        expandLocalCreated: parsed.expandLocalCreated,
+        expandSynced: parsed.expandSynced,
+      },
+    });
 
     if (totalSuccess === 0 && parsed.fromSkippedLists > 0) {
       enqueueSnackbar(
@@ -844,446 +656,379 @@ const GoogleTasksConfig = ({ open, onClose }) => {
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      fullScreen={isMobile}
       PaperProps={{
         sx: {
-          borderRadius: 3,
-          border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: theme.palette.background.paper,
-          overflow: 'hidden',
+          ...tareaFormDialogPaperSx(isMobile),
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}
+      sx={{
+        '& .MuiBackdrop-root': {
+          bottom: isMobile ? '56px' : 0,
         },
       }}
     >
-      <GoogleBrandStrip />
-
-      <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, pb: 1, pt: 2 }}>
-        <Box
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: 2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            bgcolor: alpha('#fff', 0.06),
-            border: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <GoogleIcon sx={{ color: '#fff', fontSize: 22 }} />
+      <TareaFormHeader onClose={onClose}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, pr: 0.5 }}>
+          <GoogleIcon sx={{ color: '#fff', fontSize: 22, mt: 0.35, flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography
+              variant="subtitle1"
+              component="div"
+              sx={{ ...tareaFormBodyTextSx, fontWeight: 700, fontSize: '1rem', lineHeight: 1.3 }}
+            >
+              Google Sync
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mt: 0.25, ...tareaFormCaptionTextSx }}
+            >
+              Tasks y Calendar
+            </Typography>
+          </Box>
         </Box>
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="h6" component="div" lineHeight={1.2} fontWeight={700}>
-            Google Workspace
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-            Sincroniza Tasks y Calendar con Attadia Foco
-          </Typography>
-        </Box>
-        <IconButton onClick={onClose} size="small" aria-label="Cerrar" sx={{ mt: -0.5 }}>
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
+      </TareaFormHeader>
 
-      <Box sx={{ px: 2, pb: 0 }}>
+      {(loading || syncing || calendarSyncing) && (
+        <LinearProgress sx={{ flexShrink: 0 }} />
+      )}
+
+      <DialogContent
+        sx={{
+          px: TASK_FORM_HORIZONTAL_PX,
+          py: 1.5,
+          flex: 1,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+        }}
+      >
         <Tabs
           value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
           variant="fullWidth"
           sx={{
-            minHeight: 40,
-            '& .MuiTabs-indicator': {
-              height: 3,
-              borderRadius: '3px 3px 0 0',
-              bgcolor: activeTab === 0 ? GOOGLE.green : GOOGLE.blue,
-            },
+            minHeight: 36,
+            borderBottom: 1,
+            borderColor: 'divider',
             '& .MuiTab-root': {
-              minHeight: 40,
-              py: 1,
+              minHeight: 36,
               textTransform: 'none',
+              fontSize: TASK_FORM_BODY_FONT_SIZE,
               fontWeight: 600,
-              fontSize: '0.8125rem',
-              color: 'text.secondary',
-              gap: 0.75,
-              '&.Mui-selected': { color: 'text.primary' },
+              py: 0.75,
             },
           }}
         >
-          <Tab
-            icon={<TaskAltIcon sx={{ fontSize: 18 }} />}
-            iconPosition="start"
-            label="Tasks"
-          />
-          <Tab
-            icon={<EventIcon sx={{ fontSize: 18 }} />}
-            iconPosition="start"
-            label="Calendar"
-          />
+          <Tab label="Tasks" />
+          <Tab label="Calendar" />
         </Tabs>
-        <Divider />
-      </Box>
 
-      <DialogContent sx={{ pt: 0, px: 2, pb: 1 }}>
-        {(loading || syncing || calendarSyncing) && (
-          <LinearProgress
-            sx={{
-              mb: 2,
-              mt: 1,
-              borderRadius: 1,
-              bgcolor: alpha('#fff', 0.06),
-              '& .MuiLinearProgress-bar': {
-                bgcolor: activeTab === 0 ? GOOGLE.green : GOOGLE.blue,
-              },
-            }}
-          />
+        {error && (
+          <Alert
+            severity={error.type || 'error'}
+            onClose={() => setError(null)}
+            sx={{ py: 0.5 }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600, ...tareaFormBodyTextSx }}>
+              {error.title}
+            </Typography>
+            <Typography variant="caption" sx={tareaFormCaptionTextSx}>
+              {error.message}
+            </Typography>
+            {error.details?.length > 0 && (
+              <Box component="ul" sx={{ m: 0, pl: 2, mt: 0.5 }}>
+                {error.details.slice(0, 3).map((d, i) => (
+                  <Typography component="li" key={i} variant="caption" sx={tareaFormCaptionTextSx}>
+                    {typeof d === 'string' ? d : d.message || JSON.stringify(d)}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Alert>
         )}
 
-        <Stack spacing={2}>
-          {error && (
-            <Alert severity={error.type} onClose={() => setError(null)} sx={{ borderRadius: 2 }}>
-              <Typography variant="subtitle2">{error.title}</Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-line' }}>
-                {error.message}
-              </Typography>
-              {error.details?.length > 0 && (
-                <Box sx={{ mt: 1, maxHeight: 80, overflow: 'auto' }}>
-                  {error.details.map((d, i) => (
-                    <Typography key={i} variant="caption" display="block" color="text.secondary">
-                      · {d}
-                    </Typography>
-                  ))}
-                </Box>
-              )}
-            </Alert>
-          )}
+        {summary && activeTab === 0 && (
+          <SyncResultPanel summary={summary} onDismiss={() => setSummary(null)} />
+        )}
 
-          {syncing && activeTab === 0 && (
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <CircularProgress size={16} sx={{ color: GOOGLE.green }} />
-              <Typography variant="body2" color="text.secondary">
-                Sincronizando Google Tasks…
-              </Typography>
-            </Stack>
-          )}
+        <TabPanel value={activeTab} index={0}>
+          {config.enabled ? (
+            <Stack spacing={0.5}>
+              <SettingRow
+                label="Conectado"
+                hint={`Último sync: ${lastSyncLabel}`}
+                control={(
+                  <Tooltip title="Desconectar">
+                    <IconButton
+                      size="small"
+                      onClick={handleDisableGoogleTasks}
+                      disabled={loading}
+                      aria-label="Desconectar Google Tasks"
+                    >
+                      <LinkOffIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              />
 
-          {calendarSyncing && activeTab === 1 && (
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <CircularProgress size={16} sx={{ color: GOOGLE.blue }} />
-              <Typography variant="body2" color="text.secondary">
-                Sincronizando eventos de Calendar…
-              </Typography>
-            </Stack>
-          )}
-
-          {!syncing && summary && activeTab === 0 && (
-            <SyncResultPanel summary={summary} onDismiss={() => setSummary(null)} />
-          )}
-
-          <TabPanel value={activeTab} index={0}>
-            {config.enabled ? (
-              <Stack spacing={2}>
-                <ServicePanel accent={GOOGLE.green}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <CheckCircleOutlineIcon sx={{ color: GOOGLE.green, fontSize: 22 }} />
-                      <Typography variant="subtitle1" fontWeight={700}>Google Tasks</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                      <ConnectionChip connected />
-                      <Tooltip title="Desconectar">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={handleDisableGoogleTasks}
-                            disabled={loading || syncing}
-                          >
-                            <LinkOffIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Stack>
-                  </Stack>
-
-                  <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.5 }}>
-                    <ScheduleIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-                    <Typography variant="caption" color="text.secondary">
-                      Última sync: {lastSyncLabel}
-                    </Typography>
-                  </Stack>
-
-                  <FormControl size="small" fullWidth sx={{ mb: 2 }}>
-                    <InputLabel id="gtasks-sync-direction-label">Dirección</InputLabel>
+              <SettingRow
+                label="Dirección"
+                control={(
+                  <FormControl size="small" sx={{ minWidth: 150 }}>
                     <Select
-                      labelId="gtasks-sync-direction-label"
-                      label="Dirección"
                       value={config.syncDirection || 'bidirectional'}
                       onChange={handleSyncDirectionChange}
-                      disabled={loading || syncing}
+                      disabled={loading}
+                      sx={{ fontSize: TASK_FORM_BODY_FONT_SIZE }}
                     >
                       {Object.entries(SYNC_DIRECTION_LABELS).map(([value, label]) => (
-                        <MenuItem key={value} value={value}>{label}</MenuItem>
+                        <MenuItem key={value} value={value} sx={{ fontSize: TASK_FORM_BODY_FONT_SIZE }}>
+                          {label}
+                        </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
+                )}
+              />
 
-                  <SyncPrimaryButton
-                    onClick={handleSyncNow}
-                    disabled={syncing || loading}
-                    loading={syncing}
-                    label="Sincronizar Tasks"
-                    loadingLabel="Sincronizando…"
-                  />
-                </ServicePanel>
+              {isAdmin && (
+                <SettingRow
+                  label="Auto-sync"
+                  hint={autoSync.isRunning ? 'Cada ~10 min' : 'Desactivado'}
+                  control={(
+                    <FormControlLabel
+                      control={(
+                        <Switch
+                          size="small"
+                          checked={!!autoSync.isRunning}
+                          onChange={handleToggleAutoSync}
+                          disabled={loading}
+                        />
+                      )}
+                      label=""
+                      sx={{ ...tareaFormAllDaySwitchControlSx, m: 0 }}
+                    />
+                  )}
+                />
+              )}
 
-                <Box
+              <Box sx={{ pt: 1 }}>
+                <SharedPrimaryButton
+                  onClick={handleSyncNow}
+                  disabled={syncing || loading}
+                  loading={syncing}
+                  label="Sincronizar ahora"
+                  loadingLabel="Sincronizando…"
+                  startIcon={<SyncIcon />}
+                />
+              </Box>
+
+              <Accordion
+                disableGutters
+                elevation={0}
+                expanded={showAdvanced}
+                onChange={(_, exp) => setShowAdvanced(exp)}
+                sx={{
+                  bgcolor: 'transparent',
+                  '&:before': { display: 'none' },
+                  mt: 0.5,
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon fontSize="small" />}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    px: 0.5,
-                    py: 0.5,
-                    borderRadius: 1.5,
-                    bgcolor: alpha('#fff', 0.02),
+                    minHeight: 36,
+                    px: 0,
+                    '& .MuiAccordionSummary-content': { my: 0.5 },
                   }}
                 >
-                  <Box>
-                    <Typography variant="body2" fontWeight={600}>Auto-sync</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {isAdmin
-                        ? 'Cada ~10–15 min en el servidor (control global)'
-                        : (autoSync.isRunning
-                          ? 'Activo en el servidor (~10–15 min)'
-                          : 'Gestionado por el servidor')}
-                    </Typography>
-                  </Box>
-                  {isAdmin ? (
-                    <Switch
-                      checked={autoSync.isRunning}
-                      onChange={handleToggleAutoSync}
-                      disabled={loading || syncing}
-                      sx={{
-                        '& .MuiSwitch-switchBase.Mui-checked': { color: GOOGLE.green },
-                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: alpha(GOOGLE.green, 0.5) },
-                      }}
-                    />
-                  ) : (
-                    <Typography variant="caption" color="text.secondary" sx={{ pr: 1 }}>
-                      {autoSync.isRunning ? 'On' : 'Off'}
-                    </Typography>
-                  )}
-                </Box>
-
-                <LimitationsNote>
-                  Listas ↔ objetivos. Subtareas en notas de Google. Los horarios de Tasks no vienen por API;
-                  solo fecha o horario definido en Atta. Hábitos y rutinas no se sincronizan. Los eventos del
-                  calendario se importan en la pestaña Calendar.
-                </LimitationsNote>
-
-                <Accordion
-                  expanded={showAdvanced}
-                  onChange={(_, exp) => setShowAdvanced(exp)}
-                  disableGutters
-                  elevation={0}
-                  sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
-                >
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
-                    sx={{ px: 0.5, minHeight: 36, '& .MuiAccordionSummary-content': { my: 0 } }}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <BuildIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                        Herramientas avanzadas
-                      </Typography>
-                    </Stack>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ px: 0.5, pt: 0 }}>
-                    <Stack spacing={2}>
-                      <Box>
-                        <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                          Normalizar títulos
-                        </Typography>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          fullWidth
-                          startIcon={<DeleteSweepIcon />}
-                          onClick={handleCleanupDuplicates}
-                          disabled={syncing || loading}
-                          sx={{ borderRadius: 2, borderColor: 'divider' }}
-                        >
-                          Normalizar títulos locales
-                        </Button>
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>Por objetivo</Typography>
-                        <TextField
-                          size="small"
-                          fullWidth
-                          placeholder="Nombre del objetivo, ej. Salud"
-                          value={objetivoName}
-                          onChange={(e) => setObjetivoName(e.target.value)}
-                          disabled={syncing}
-                          sx={{ mb: 1 }}
-                        />
-                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                          <Button variant="outlined" size="small" onClick={handleAuditProject} disabled={syncing || !objetivoName.trim()}>
-                            Auditar
-                          </Button>
-                          <FormControlLabel
-                            control={
-                              <Switch size="small" checked={applyCleanup} onChange={(e) => setApplyCleanup(e.target.checked)} disabled={syncing} />
-                            }
-                            label={<Typography variant="caption">Aplicar</Typography>}
-                          />
-                          <Button
-                            variant="outlined"
-                            color="warning"
-                            size="small"
-                            onClick={handleCleanupProject}
-                            disabled={syncing || !objetivoName.trim()}
-                          >
-                            {applyCleanup ? 'Limpiar' : 'Simular'}
-                          </Button>
-                        </Stack>
-                      </Box>
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
-              </Stack>
-            ) : (
-              <Stack spacing={2} alignItems="stretch">
-                <ServicePanel accent={GOOGLE.green}>
-                  <Stack alignItems="center" textAlign="center" spacing={1.5} sx={{ py: 1 }}>
-                    <CloudOffIcon sx={{ fontSize: 44, color: alpha('#fff', 0.2) }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 320 }}>
-                      Conectá Google Tasks para sincronizar listas con tus objetivos en Attadia.
-                    </Typography>
-                  </Stack>
-                </ServicePanel>
-                <GoogleConnectButton
-                  onClick={handleEnableGoogleTasks}
-                  disabled={loading}
-                  label="Conectar Google Tasks"
-                  icon={TaskAltIcon}
-                  variant="tasks"
-                />
-              </Stack>
-            )}
-          </TabPanel>
-
-          <TabPanel value={activeTab} index={1}>
-            {calendarConfig.enabled ? (
-              <Stack spacing={2}>
-                <ServicePanel accent={GOOGLE.blue}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <EventIcon sx={{ color: GOOGLE.blue, fontSize: 22 }} />
-                      <Typography variant="subtitle1" fontWeight={700}>Google Calendar</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                      <ConnectionChip connected />
-                      <Tooltip title="Desconectar Calendar">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={handleDisableGoogleCalendar}
-                            disabled={loading || calendarSyncing}
-                          >
-                            <LinkOffIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Stack>
-                  </Stack>
-
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
-                    Última sync: {calendarLastSyncLabel}
+                  <Typography variant="body2" color="text.secondary" sx={tareaFormBodyTextSx}>
+                    Más opciones
                   </Typography>
-
-                  {calendarCalendars.length > 0 && (
-                    <FormGroup sx={{ mb: 2, gap: 0.25 }}>
-                      {calendarCalendars.map((cal) => (
-                        <FormControlLabel
-                          key={cal.id}
-                          control={(
-                            <Checkbox
-                              size="small"
-                              checked={(calendarConfig.selectedCalendarIds || ['primary']).includes(cal.id)}
-                              onChange={(e) => handleCalendarSelectionChange(cal.id, e.target.checked)}
-                              disabled={loading || calendarSyncing}
-                              sx={{
-                                color: alpha(GOOGLE.blue, 0.5),
-                                '&.Mui-checked': { color: GOOGLE.blue },
-                              }}
-                            />
-                          )}
-                          label={(
-                            <Typography variant="body2">
-                              {cal.summary}{cal.primary ? ' · principal' : ''}
-                            </Typography>
-                          )}
-                        />
-                      ))}
-                    </FormGroup>
-                  )}
-
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    disabled={calendarSyncing || loading}
-                    onClick={handleCalendarSyncNow}
-                    startIcon={calendarSyncing ? <CircularProgress size={16} /> : <SyncIcon />}
-                    sx={{
-                      py: 1.1,
-                      borderRadius: 2,
-                      fontWeight: 600,
-                      textTransform: 'none',
-                      borderColor: alpha(GOOGLE.blue, 0.45),
-                      color: GOOGLE.blue,
-                      '&:hover': {
-                        borderColor: GOOGLE.blue,
-                        bgcolor: alpha(GOOGLE.blue, 0.08),
-                      },
-                    }}
-                  >
-                    {calendarSyncing ? 'Sincronizando…' : 'Sincronizar eventos'}
-                  </Button>
-                </ServicePanel>
-
-                <LimitationsNote>
-                  Importa eventos del calendario (clases, reuniones) con horario en la grilla de Foco.
-                  No incluye tasks con checkbox de Google Calendar — esos vienen por la pestaña Tasks (sin hora por API).
-                </LimitationsNote>
-              </Stack>
-            ) : (
-              <Stack spacing={2}>
-                <ServicePanel accent={GOOGLE.blue}>
-                  <Stack alignItems="center" textAlign="center" spacing={1.5} sx={{ py: 1 }}>
-                    <EventIcon sx={{ fontSize: 44, color: alpha(GOOGLE.blue, 0.35) }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 320 }}>
-                      Importá citas y clases con horario real en el calendario de Foco (solo lectura).
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 0, pt: 0, pb: 0.5 }}>
+                  <Stack spacing={1.25}>
+                    <Typography variant="caption" color="text.secondary" sx={tareaFormCaptionTextSx}>
+                      Listas ↔ objetivos (mismo nombre). Sin subtareas anidadas, ni hábitos/rutinas.
                     </Typography>
+
+                    <Box>
+                      <TareaFormSectionLabel>Mantenimiento</TareaFormSectionLabel>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        startIcon={<DeleteSweepIcon />}
+                        onClick={handleCleanupDuplicates}
+                        disabled={syncing || loading}
+                        sx={{ textTransform: 'none', mt: 0.5 }}
+                      >
+                        Normalizar títulos
+                      </Button>
+                    </Box>
+
+                    <Box>
+                      <TareaFormSectionLabel>Por objetivo</TareaFormSectionLabel>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        placeholder="Nombre del objetivo"
+                        value={objetivoName}
+                        onChange={(e) => setObjetivoName(e.target.value)}
+                        sx={{ mt: 0.5, mb: 1 }}
+                        inputProps={{ style: { fontSize: TASK_FORM_BODY_FONT_SIZE } }}
+                      />
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={handleAuditProject}
+                          disabled={syncing || loading || !objetivoName.trim()}
+                          sx={{ textTransform: 'none', flex: 1 }}
+                        >
+                          Auditar
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color={applyCleanup ? 'error' : 'inherit'}
+                          onClick={handleCleanupProject}
+                          disabled={syncing || loading || !objetivoName.trim()}
+                          sx={{ textTransform: 'none', flex: 1 }}
+                        >
+                          {applyCleanup ? 'Limpiar' : 'Simular'}
+                        </Button>
+                      </Stack>
+                      <FormControlLabel
+                        control={(
+                          <Checkbox
+                            size="small"
+                            checked={applyCleanup}
+                            onChange={(e) => setApplyCleanup(e.target.checked)}
+                          />
+                        )}
+                        label={(
+                          <Typography variant="caption" sx={tareaFormCaptionTextSx}>
+                            Aplicar limpieza (no solo simular)
+                          </Typography>
+                        )}
+                        sx={{ mt: 0.5, ml: 0 }}
+                      />
+                    </Box>
                   </Stack>
-                </ServicePanel>
-                <GoogleConnectButton
-                  onClick={handleEnableGoogleCalendar}
-                  disabled={loading}
-                  label="Conectar Google Calendar"
-                  icon={EventIcon}
-                  variant="calendar"
+                </AccordionDetails>
+              </Accordion>
+            </Stack>
+          ) : (
+            <Stack spacing={1.5} sx={{ py: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={tareaFormBodyTextSx}>
+                Conectá Google Tasks para sincronizar objetivos y tareas.
+              </Typography>
+              <SharedPrimaryButton
+                onClick={handleEnableGoogleTasks}
+                disabled={loading}
+                loading={loading}
+                label="Conectar Google Tasks"
+                loadingLabel="Conectando…"
+                startIcon={<GoogleIcon />}
+              />
+            </Stack>
+          )}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={1}>
+          {calendarConfig.enabled ? (
+            <Stack spacing={0.5}>
+              <SettingRow
+                label="Conectado"
+                hint={`Último sync: ${calendarLastSyncLabel}`}
+                control={(
+                  <Tooltip title="Desconectar">
+                    <IconButton
+                      size="small"
+                      onClick={handleDisableGoogleCalendar}
+                      disabled={loading}
+                      aria-label="Desconectar Google Calendar"
+                    >
+                      <LinkOffIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              />
+
+              {calendarCalendars.length > 0 && (
+                <Box sx={{ py: 0.5 }}>
+                  <Typography variant="body2" sx={{ mb: 0.5, ...tareaFormBodyTextSx }}>
+                    Calendarios
+                  </Typography>
+                  <FormGroup>
+                    {calendarCalendars.map((cal) => (
+                      <FormControlLabel
+                        key={cal.id}
+                        control={(
+                          <Checkbox
+                            size="small"
+                            checked={(calendarConfig.selectedCalendarIds || []).includes(cal.id)}
+                            onChange={(e) => handleCalendarSelectionChange(cal.id, e.target.checked)}
+                            disabled={loading}
+                          />
+                        )}
+                        label={(
+                          <Typography variant="body2" sx={tareaFormBodyTextSx}>
+                            {cal.summary || cal.id}
+                            {cal.primary ? ' (principal)' : ''}
+                          </Typography>
+                        )}
+                        sx={{ ml: 0, mr: 0 }}
+                      />
+                    ))}
+                  </FormGroup>
+                </Box>
+              )}
+
+              <Typography variant="caption" color="text.secondary" sx={{ pt: 0.5, ...tareaFormCaptionTextSx }}>
+                Solo importación · ventana ±6 meses
+              </Typography>
+
+              <Box sx={{ pt: 1 }}>
+                <SharedPrimaryButton
+                  onClick={handleCalendarSyncNow}
+                  disabled={calendarSyncing || loading}
+                  loading={calendarSyncing}
+                  label="Sincronizar ahora"
+                  loadingLabel="Sincronizando…"
+                  startIcon={<ScheduleIcon />}
                 />
-              </Stack>
-            )}
-          </TabPanel>
-        </Stack>
+              </Box>
+            </Stack>
+          ) : (
+            <Stack spacing={1.5} sx={{ py: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={tareaFormBodyTextSx}>
+                Conectá Google Calendar para importar eventos a la agenda.
+              </Typography>
+              <SharedPrimaryButton
+                onClick={handleEnableGoogleCalendar}
+                disabled={loading}
+                loading={loading}
+                label="Conectar Google Calendar"
+                loadingLabel="Conectando…"
+                startIcon={<GoogleIcon />}
+              />
+            </Stack>
+          )}
+        </TabPanel>
       </DialogContent>
 
-      <DialogActions sx={{ px: 2, pb: 2, pt: 0.5 }}>
-        <Button onClick={onClose} size="medium" sx={{ textTransform: 'none', fontWeight: 500 }}>
+      <TareaFormFooter>
+        <Button onClick={onClose} sx={{ textTransform: 'none' }}>
           Cerrar
         </Button>
-      </DialogActions>
+      </TareaFormFooter>
     </Dialog>
   );
 };
