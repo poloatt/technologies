@@ -4,8 +4,8 @@ import { TIEMPO_ICON_KEYS, TIEMPO_MODULE_ICON_KEY } from './tiempoIconKeys.js';
 
 /**
  * Niveles de navegación:
- * - App (Atta/Pulso/Foco): cambio en sidebar / AppsButton
- * - Branch (solo Atta): Finanzas — hub único con secciones in-page
+ * - App (Caja/Pulso/Foco): cambio en sidebar / AppsButton
+ * - Branch (solo Caja): Finanzas — hub único con secciones in-page
  * - Page: destinos hoja (toolbar/bottom nav en la rama activa)
  * - Subpage (opcional): hijos de una page (p. ej. recurrentes bajo Transacciones)
  *
@@ -14,7 +14,7 @@ import { TIEMPO_ICON_KEYS, TIEMPO_MODULE_ICON_KEY } from './tiempoIconKeys.js';
 export const modulos = [
   {
     id: 'assets',
-    title: 'Atta',
+    title: 'Caja',
     icon: 'dollarSign',
     path: '/finanzas',
     subItems: [
@@ -96,7 +96,7 @@ export const modulos = [
   {
     id: 'salud',
     title: 'Pulso',
-    icon: 'health',
+    icon: 'pulso',
     path: '/datacorporal',
     subItems: [
       { id: 'datacorporal', title: 'Data corporal', icon: 'monitorHeart', path: '/datacorporal', canAdd: true },
@@ -131,8 +131,8 @@ export const modulos = [
 export const bottomNavigationItems = [
   {
     id: 'assets',
-    appKey: 'atta',
-    title: 'Atta',
+    appKey: 'caja',
+    title: 'Caja',
     icon: 'dollarSign',
     path: '/finanzas',
     type: 'module',
@@ -142,7 +142,7 @@ export const bottomNavigationItems = [
     id: 'salud',
     appKey: 'pulso',
     title: 'Pulso',
-    icon: 'health',
+    icon: 'pulso',
     path: '/datacorporal',
     type: 'module',
     activePaths: ['/datacorporal', '/dieta', '/lab']

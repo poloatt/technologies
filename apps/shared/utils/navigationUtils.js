@@ -20,8 +20,8 @@ export function findActiveModule(currentPath) {
     return modulos.find((m) => m.id === 'tiempo') || null;
   }
 
-  // Atta: finanzas, propiedades e inventario comparten el módulo assets
-  if (ATTA_PATHS.some((p) => currentPath === p || currentPath.startsWith(`${p}/`))) {
+  // Caja: finanzas, propiedades e inventario comparten el módulo assets
+  if (CAJA_PATHS.some((p) => currentPath === p || currentPath.startsWith(`${p}/`))) {
     return modulos.find((m) => m.id === 'assets') || null;
   }
 
@@ -170,19 +170,19 @@ export function getBreadcrumbInfo(currentPath) {
 
 // --- Helpers para navegación entre apps (subdominios) ---
 
-const ATTA_PATHS = ['/finanzas', '/propiedades'];
+const CAJA_PATHS = ['/finanzas', '/propiedades'];
 const PULSO_PATHS = ['/datacorporal', '/dieta', '/lab'];
 const FOCO_PATHS = ['/rutinas', '/objetivos', '/tareas', '/archivo', '/configuracion'];
 
 const PORT_APP_MAPPING = {
-  '5174': 'atta',
+  '5174': 'caja',
   '5175': 'pulso',
   '5173': 'foco'
 };
 
 export function getAppKeyFromPath(pathname) {
   if (!pathname) return 'foco';
-  if (ATTA_PATHS.some(p => pathname.startsWith(p))) return 'atta';
+  if (CAJA_PATHS.some(p => pathname.startsWith(p))) return 'caja';
   if (PULSO_PATHS.some(p => pathname.startsWith(p))) return 'pulso';
   if (FOCO_PATHS.some(p => pathname.startsWith(p))) return 'foco';
   return 'foco';
@@ -191,7 +191,12 @@ export function getAppKeyFromPath(pathname) {
 export function getCurrentAppKey() {
   if (typeof window === 'undefined') return 'foco';
   const { hostname, port, pathname } = window.location;
-  if (hostname === 'atta.attadia.com' || hostname === 'atta.local.attadia.com') return 'atta';
+  if (
+    hostname === 'caja.attadia.com'
+    || hostname === 'caja.local.attadia.com'
+    || hostname === 'atta.attadia.com'
+    || hostname === 'atta.local.attadia.com'
+  ) return 'caja';
   if (hostname === 'pulso.attadia.com' || hostname === 'pulso.local.attadia.com') return 'pulso';
   if (hostname === 'foco.attadia.com' || hostname === 'foco.local.attadia.com') return 'foco';
   if (hostname === 'localhost' || hostname === '127.0.0.1') {

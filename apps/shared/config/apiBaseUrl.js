@@ -22,7 +22,8 @@ export function getApiBaseUrl() {
   }
 
   if (
-    hostname === 'atta.attadia.com'
+    hostname === 'caja.attadia.com'
+    || hostname === 'atta.attadia.com'
     || hostname === 'foco.attadia.com'
     || hostname === 'pulso.attadia.com'
   ) {

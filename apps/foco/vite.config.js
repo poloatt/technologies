@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
           '**/node_modules/**',
           '**/dist/**',
           '**/.git/**',
-          '**/apps/atta/**',
+          '**/apps/caja/**',
           '**/apps/pulso/**',
           '**/apps/backend/**',
           '**/.vite/**'

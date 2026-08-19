@@ -11,7 +11,7 @@ import {
 
 /**
  * Registro de recursos contables para el endpoint batch de counts.
- * La clave coincide con el id de sección que usa el hub/strip de Atta.
+ * La clave coincide con el id de sección que usa el hub/strip de Caja.
  * `filter` es estático; el filtro por usuario se agrega automáticamente
  * cuando el modelo tiene el path `usuario`.
  */

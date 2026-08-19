@@ -37,7 +37,7 @@ export function hubPageScrollSx({
 
 /**
  * Design system de secciones hub (cabecera tintada, shell redondeado, preview).
- * Usado por ATTA (Finanzas, Propiedades, Inventario) y Foco (Tareas: Hábitos, Objetivos).
+ * Usado por CAJA (Finanzas, Propiedades, Inventario) y Foco (Tareas: Hábitos, Objetivos).
  */
 export const HUB_SECTION = {
   sectionRadius: 3,
@@ -159,7 +159,7 @@ export function getHubSubsectionSx({ selected } = {}) {
   };
 }
 
-/** Footer expand compacto (uppercase) — hubs ATTA con Collapse inline. */
+/** Footer expand compacto (uppercase) — hubs CAJA con Collapse inline. */
 export const hubExpandButtonSx = {
   width: '100%',
   mt: 0.1,

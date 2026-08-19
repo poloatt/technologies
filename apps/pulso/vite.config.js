@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
           '**/dist/**',
           '**/.git/**',
           '**/apps/foco/**',
-          '**/apps/atta/**',
+          '**/apps/caja/**',
           '**/apps/backend/**',
           '**/.vite/**'
         ]

@@ -12,7 +12,7 @@ export const config = {
       ? getApiBaseUrl()
       : (import.meta.env.VITE_API_URL || 'http://localhost:5000'),
     frontendUrls: {
-      atta: import.meta.env.VITE_ATTA_URL || 'http://localhost:5174',
+      caja: import.meta.env.VITE_CAJA_URL || 'http://localhost:5174',
       foco: import.meta.env.VITE_FOCO_URL || 'http://localhost:5173',
       pulso: import.meta.env.VITE_PULSO_URL || 'http://localhost:5175'
     }
@@ -22,7 +22,7 @@ export const config = {
     apiPrefix: '/api',
     baseUrl: import.meta.env.VITE_API_URL || 'https://api.attadia.com',
     frontendUrls: {
-      atta: import.meta.env.VITE_ATTA_URL || 'https://atta.attadia.com',
+      caja: import.meta.env.VITE_CAJA_URL || 'https://caja.attadia.com',
       foco: import.meta.env.VITE_FOCO_URL || 'https://foco.attadia.com',
       pulso: import.meta.env.VITE_PULSO_URL || 'https://pulso.attadia.com'
     }
@@ -32,7 +32,8 @@ export const config = {
 // Determinar el ambiente actual
 const env = import.meta.env.MODE || 'development';
 const isProduction = typeof window !== 'undefined' && 
-  (window.location.hostname === 'atta.attadia.com' || 
+  (window.location.hostname === 'caja.attadia.com' ||
+   window.location.hostname === 'atta.attadia.com' ||
    window.location.hostname === 'foco.attadia.com' || 
    window.location.hostname === 'pulso.attadia.com' ||
    window.location.hostname.endsWith('.local.attadia.com'));
@@ -73,7 +74,7 @@ export const getCurrentAppUrl = () => {
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     switch (port) {
       case '5173': return currentConfig.frontendUrls.foco;
-      case '5174': return currentConfig.frontendUrls.atta;
+      case '5174': return currentConfig.frontendUrls.caja;
       case '5175': return currentConfig.frontendUrls.pulso;
       default: return origin;
     }
@@ -81,12 +82,16 @@ export const getCurrentAppUrl = () => {
 
   // Subdominios locales opcionales (USE_LOCAL_SUBDOMAINS en backend)
   if (hostname === 'foco.local.attadia.com') return currentConfig.frontendUrls.foco;
-  if (hostname === 'atta.local.attadia.com') return currentConfig.frontendUrls.atta;
+  if (hostname === 'caja.local.attadia.com' || hostname === 'atta.local.attadia.com') {
+    return currentConfig.frontendUrls.caja;
+  }
   if (hostname === 'pulso.local.attadia.com') return currentConfig.frontendUrls.pulso;
 
   // Producción
   if (hostname === 'foco.attadia.com') return currentConfig.frontendUrls.foco;
-  if (hostname === 'atta.attadia.com') return currentConfig.frontendUrls.atta;
+  if (hostname === 'caja.attadia.com' || hostname === 'atta.attadia.com') {
+    return currentConfig.frontendUrls.caja;
+  }
   if (hostname === 'pulso.attadia.com') return currentConfig.frontendUrls.pulso;
 
   // Staging u otros dominios: origin actual

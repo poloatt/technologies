@@ -323,7 +323,7 @@ export function AuthProvider({ children }) {
         setTimeout(() => reject(new Error('Timeout: La petición tardó demasiado')), 30000)
       );
       
-      // Usar un origin web válido para apps (foco/atta/pulso) incluso en contenedores nativos
+      // Usar un origin web válido para apps (foco/caja/pulso) incluso en contenedores nativos
       const appOrigin = getCurrentAppUrl() || window.location.origin;
 
       const params = new URLSearchParams();

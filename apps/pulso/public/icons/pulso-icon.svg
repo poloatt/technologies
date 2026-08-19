@@ -1,12 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Fondo para que el favicon no quede blanco sobre blanco -->
-  <circle cx="256" cy="256" r="148" fill="#181818"/>
-  <!-- Aro blanco encima del fondo -->
-  <circle cx="256" cy="256" r="148" fill="none" stroke="#ffffff" stroke-width="28"/>
-  <!-- Cruz médica centrada -->
-  <g transform="translate(256 256) scale(0.88) translate(-256 -256)">
-    <rect x="224" y="120" width="64" height="272" rx="12" fill="#ffffff"/>
-    <rect x="120" y="224" width="272" height="64" rx="12" fill="#ffffff"/>
+  <!-- Círculo MUI (MonetizationOnOutlined) + ECG MUI (MonitorHeartOutlined) -->
+  <circle cx="256" cy="256" r="240" fill="#181818"/>
+  <g transform="translate(48 48) scale(17.333333)" fill="#ffffff">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8"/>
+    <path transform="translate(12 12) scale(0.75) translate(-12 -12)" d="M14.89 7.55c-.34-.68-1.45-.68-1.79 0L10 13.76l-1.11-2.21A.988.988 0 0 0 8 11H2v2h5.38l1.72 3.45c.18.34.52.55.9.55s.72-.21.89-.55L14 10.24l1.11 2.21c.17.34.51.55.89.55h6v-2h-5.38z"/>
   </g>
 </svg>
-

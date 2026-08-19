@@ -4,7 +4,7 @@ export const PWA_DISMISS_KEY = 'attadia_pwa_install_dismissed';
 
 /** Metadatos por app para banners, preferencias y taskbar. */
 export const PWA_APPS = {
-  atta: { label: 'Atta', themeColor: '#16a34a' },
+  caja: { label: 'Caja', themeColor: '#16a34a' },
   foco: { label: 'Foco', themeColor: '#2563eb' },
   pulso: { label: 'Pulso', themeColor: '#dc2626' },
 };

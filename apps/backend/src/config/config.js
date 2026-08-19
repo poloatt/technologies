@@ -102,7 +102,7 @@ const configs = {
     // URLs de todas las apps en desarrollo
     frontendUrls: {
       foco: 'http://localhost:5173',
-      atta: 'http://localhost:5174', 
+      caja: 'http://localhost:5174',
       pulso: 'http://localhost:5175'
     },
     google: {
@@ -118,11 +118,11 @@ const configs = {
     mongoUrl: process.env.MONGO_PUBLIC_URL || process.env.MONGO_URL || process.env.MONGODB_URI || `mongodb://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@mongodb:27017/${process.env.MONGO_DB}?authSource=admin`,
     frontendUrl: process.env.FRONTEND_URL || 'https://foco.attadia.com',
     backendUrl: process.env.BACKEND_URL || 'https://api.attadia.com',
-    corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['https://foco.attadia.com', 'https://atta.attadia.com', 'https://pulso.attadia.com', 'https://attadia.com', 'https://www.attadia.com'],
+    corsOrigins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['https://foco.attadia.com', 'https://caja.attadia.com', 'https://atta.attadia.com', 'https://pulso.attadia.com', 'https://attadia.com', 'https://www.attadia.com'],
     // URLs de todas las apps en producción
     frontendUrls: {
       foco: 'https://foco.attadia.com',
-      atta: 'https://atta.attadia.com',
+      caja: 'https://caja.attadia.com',
       pulso: 'https://pulso.attadia.com'
     },
     google: {

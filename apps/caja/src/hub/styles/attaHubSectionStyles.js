@@ -1,0 +1,32 @@
+/**
+ * @deprecated Import from @shared/styles/hubSectionStyles. Aliases kept for CAJA consumers.
+ */
+export {
+  HUB_SECTION,
+  HUB_SECTION as CAJA_HUB,
+  hubSectionBg,
+  hubSectionBg as cajaHubSectionBg,
+  HUB_SECTION_CARD_BODY_MIN_HEIGHT,
+  HUB_SECTION_CARD_BODY_MIN_HEIGHT as CAJA_HUB_CARD_BODY_MIN_HEIGHT,
+  HUB_SECTION_CARD_MIN_HEIGHT,
+  HUB_SECTION_CARD_MIN_HEIGHT as CAJA_HUB_CARD_MIN_HEIGHT,
+  getHubCardSx,
+  getHubSectionCardSx,
+  getHubSectionCardSx as getCajaHubSectionCardSx,
+  hubSectionShellSx,
+  hubHeaderActionSx,
+  hubSectionHeaderSx,
+  hubSectionHeaderSx as cajaHubSectionHeaderSx,
+  hubSectionTitleSx,
+  hubSectionBodySx,
+  hubSectionBodySx as cajaHubSectionBodySx,
+  hubSectionShellBodySx,
+  hubGridContainerSx,
+  hubGridItemSx,
+  HUB_SUBSECTION,
+  HUB_SUBSECTION as CAJA_HUB_SUBSECTION,
+  getHubSubsectionSx,
+  getHubSubsectionSx as getCajaHubSubsectionSx,
+  hubExpandButtonSx,
+  hubHeaderIconSx,
+} from '@shared/styles/hubSectionStyles';

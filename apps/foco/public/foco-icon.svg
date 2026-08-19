@@ -1,9 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Reloj circular simple — misma estética que Atta y Pulso -->
-  <circle cx="256" cy="256" r="148" fill="#181818"/>
-  <circle cx="256" cy="256" r="148" fill="none" stroke="#ffffff" stroke-width="28"/>
-  <!-- Manecillas en posición 10:10 (convención estándar de iconos de reloj) -->
-  <line x1="256" y1="256" x2="210" y2="196" stroke="#ffffff" stroke-width="26" stroke-linecap="round"/>
-  <line x1="256" y1="256" x2="318" y2="208" stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
-  <circle cx="256" cy="256" r="12" fill="#ffffff"/>
+  <!-- MUI AccessTimeOutlined — reloj tradicional envuelto en círculo -->
+  <circle cx="256" cy="256" r="240" fill="#181818"/>
+  <g transform="translate(48 48) scale(17.333333)" fill="#ffffff">
+    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2M12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8m.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+  </g>
 </svg>

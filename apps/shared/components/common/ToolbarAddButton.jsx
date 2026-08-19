@@ -2,7 +2,7 @@ import React, { forwardRef, memo } from 'react';
 import { IconButton } from '@mui/material';
 import { AddOutlined } from '@mui/icons-material';
 
-/** Tamaño y hover compartidos por botones de toolbar (Foco, Atta, Pulso). */
+/** Tamaño y hover compartidos por botones de toolbar (Foco, Caja, Pulso). */
 export const TOOLBAR_ICON_BUTTON_SX = {
   width: { xs: 32, sm: 26 },
   height: { xs: 32, sm: 26 },
@@ -34,7 +34,7 @@ function mergeToolbarAddSx(buttonSx = {}, isActive = false) {
 }
 
 /**
- * Botón «+» de toolbar (mismo aspecto en Foco, Atta y Pulso).
+ * Botón «+» de toolbar (mismo aspecto en Foco, Caja y Pulso).
  * forwardRef para uso dentro de MUI Tooltip (HeaderAddButton).
  */
 export const ToolbarAddButton = memo(

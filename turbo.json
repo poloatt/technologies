@@ -10,7 +10,7 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "build:atta": {
+    "build:caja": {
       "dependsOn": ["build:shared"],
       "outputs": ["dist/**"]
     },

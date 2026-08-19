@@ -92,7 +92,7 @@ export default function DesktopAppsSection() {
         Apps de escritorio
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Instala Foco, Atta y Pulso por separado — como Google Workspace — para usar varias apps a la vez
+        Instala Foco, Caja y Pulso por separado — como Google Workspace — para usar varias apps a la vez
         desde la barra de tareas.
       </Typography>
 

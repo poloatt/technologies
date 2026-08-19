@@ -9,7 +9,7 @@ import { getCurrentAppKey, isRouteActive, navigateToAppPath, prefetchAppForPath 
 
 /**
  * Navegación inferior móvil.
- * Foco: páginas hijas. Atta/Pulso: switcher Atta | Pulso | Foco.
+ * Foco: páginas hijas. Caja/Pulso: switcher Caja | Pulso | Foco.
  */
 export default function BottomNavigation() {
   const { theme } = useResponsive();

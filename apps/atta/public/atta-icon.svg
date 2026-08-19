@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Ícono estilo Material: símbolo de dólar dentro de un círculo -->
-  <!-- Fondo para que el favicon no quede blanco sobre blanco -->
-  <circle cx="256" cy="256" r="148" fill="#181818"/>
-  <!-- Aro blanco encima del fondo -->
-  <circle cx="256" cy="256" r="148" fill="none" stroke="#ffffff" stroke-width="28"/>
-  <text x="256" y="320" font-family="Arial, sans-serif" font-size="200" font-weight="bold" text-anchor="middle" fill="#ffffff">$</text>
-</svg>

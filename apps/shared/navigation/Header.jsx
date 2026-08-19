@@ -13,7 +13,7 @@ import { alpha } from '@mui/material/styles';
   import { useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
   import { Dialog } from '../utils/materialImports';
-  // import { MercadoPagoConnectButton, BankConnectionForm } from '../../../atta/src/finance/bankconnections'; // Comentado: import cruzado
+  // import { MercadoPagoConnectButton, BankConnectionForm } from '../../../caja/src/finance/bankconnections'; // Comentado: import cruzado
   import { getBreadcrumbs } from './breadcrumbUtils';
 import { getIconByKey, icons } from './menuIcons';
 import { modulos } from './menuStructure';

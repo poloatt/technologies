@@ -211,6 +211,12 @@ const userSchema = new mongoose.Schema({
     enum: ['USER', 'ADMIN'],
     default: 'USER'
   },
+  // Acceso a attadia.com HQ. Independiente del ADMIN de las apps.
+  // Solo HQ_OWNER_EMAIL puede otorgarlo.
+  hqAccess: {
+    type: Boolean,
+    default: false
+  },
   lastLogin: Date,
   activo: {
     type: Boolean,

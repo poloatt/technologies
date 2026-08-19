@@ -1,6 +1,6 @@
 /**
  * Genera iconos PNG en múltiples tamaños a partir del SVG de cada app.
- * Uso: node scripts/generate-icons.cjs [foco|atta|pulso|all]
+ * Uso: node scripts/generate-icons.cjs [foco|caja|pulso|all]
  */
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
 
 const APPS = {
   foco: { svg: 'apps/foco/public/foco-icon.svg', out: 'apps/foco/public/icons' },
-  atta: { svg: 'apps/atta/public/atta-icon.svg', out: 'apps/atta/public/icons' },
+  caja: { svg: 'apps/caja/public/caja-icon.svg', out: 'apps/caja/public/icons' },
   pulso: { svg: 'apps/pulso/public/pulso-icon.svg', out: 'apps/pulso/public/icons' },
 };
 

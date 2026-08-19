@@ -9,16 +9,16 @@ import clienteAxios from '../config/axios';
 import { useLocation } from 'react-router-dom';
 import { NAV_TYPO } from '../config/uiConstants';
 
-const ATTA_HUB_PATHS = ['/finanzas', '/propiedades'];
+const CAJA_HUB_PATHS = ['/finanzas', '/propiedades'];
 
-function isAttaHubPath(path) {
-  return ATTA_HUB_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+function isCajaHubPath(path) {
+  return CAJA_HUB_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
 function shouldRunHealthCheck(path) {
   return (
     path === '/'
-    || isAttaHubPath(path)
+    || isCajaHubPath(path)
     || path.startsWith('/tiempo')
     || path.startsWith('/tareas')
   );

@@ -457,8 +457,8 @@ export const authController = {
             const port = host.split(':')[1];
             if (port === '5173' && config.frontendUrls.foco) {
               callbackOrigin = config.frontendUrls.foco;
-            } else if (port === '5174' && config.frontendUrls.atta) {
-              callbackOrigin = config.frontendUrls.atta;
+            } else if (port === '5174' && config.frontendUrls.caja) {
+              callbackOrigin = config.frontendUrls.caja;
             } else if (port === '5175' && config.frontendUrls.pulso) {
               callbackOrigin = config.frontendUrls.pulso;
             }
@@ -470,8 +470,11 @@ export const authController = {
           if (host) {
             if (host.includes('foco.attadia.com') && config.frontendUrls.foco) {
               callbackOrigin = config.frontendUrls.foco;
-            } else if (host.includes('atta.attadia.com') && config.frontendUrls.atta) {
-              callbackOrigin = config.frontendUrls.atta;
+            } else if (
+              (host.includes('caja.attadia.com') || host.includes('atta.attadia.com'))
+              && config.frontendUrls.caja
+            ) {
+              callbackOrigin = config.frontendUrls.caja;
             } else if (host.includes('pulso.attadia.com') && config.frontendUrls.pulso) {
               callbackOrigin = config.frontendUrls.pulso;
             }

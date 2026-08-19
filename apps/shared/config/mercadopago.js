@@ -3,7 +3,7 @@ export const MERCADOPAGO_CONFIG = {
   // URLs de redirección por ambiente
   redirectURIs: {
     development: 'http://localhost:5173/mercadopago/callback',
-    production: 'https://atta.attadia.com/mercadopago/callback'
+    production: 'https://caja.attadia.com/mercadopago/callback'
   },
   
   // Colores de marca
@@ -53,8 +53,9 @@ export const getRedirectURI = () => {
   if (hostname === 'localhost' || hostname.includes('127.0.0.1')) {
     // En desarrollo, usar el puerto actual dinámicamente
     redirectURI = `http://localhost:${port}/mercadopago/callback`;
-  } else if (hostname === 'atta.attadia.com' || 
-             hostname === 'foco.attadia.com' || 
+  } else if (hostname === 'caja.attadia.com' ||
+             hostname === 'atta.attadia.com' ||
+             hostname === 'foco.attadia.com' ||
              hostname === 'pulso.attadia.com') {
     redirectURI = MERCADOPAGO_CONFIG.redirectURIs.production;
   } else {

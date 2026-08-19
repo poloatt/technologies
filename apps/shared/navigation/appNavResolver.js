@@ -1,8 +1,8 @@
 /**
  * Navegación derivada de menuStructure.js
  *
- * Niveles Atta (assets):
- * - app: Atta (assets)
+ * Niveles Caja (assets):
+ * - app: Caja (assets)
  * - branch: Finanzas (hub único; Propiedades e Inventario son secciones in-page)
  * - page: Transacciones, Cuentas, Propiedades… (nivel 2)
  *
@@ -43,8 +43,8 @@ function getAssetsModule() {
   return modulos.find((m) => m.id === 'assets') || null;
 }
 
-/** Atta: ramas virtuales Finanzas | Propiedades | Inventario (toolbar derecha desktop). */
-export function getAttaBranches() {
+/** Caja: ramas virtuales Finanzas | Propiedades | Inventario (toolbar derecha desktop). */
+export function getCajaBranches() {
   const finanzas = getFinanzasBranch();
   const propiedades = getPropiedadesSectionNode();
   const inventario = getInventarioSectionNode();
@@ -84,8 +84,8 @@ export function getInventarioSectionPages() {
   return pages.map((page) => toNavItem(page, 'page', 'inventario')).filter(Boolean);
 }
 
-/** Subpáginas de una rama Atta (todas las del menú, incl. en construcción). */
-export function getAttaBranchPages(branchId) {
+/** Subpáginas de una rama Caja (todas las del menú, incl. en construcción). */
+export function getCajaBranchPages(branchId) {
   if (branchId === 'propiedades') {
     return getPropiedadesSectionPages();
   }
@@ -120,7 +120,7 @@ export const FINANZAS_TOOLBAR_EXCLUDE_PAGE_IDS = [
  */
 export function getFinanzasBranchPages() {
   const exclude = new Set(FINANZAS_TOOLBAR_EXCLUDE_PAGE_IDS);
-  return getAttaBranchPages('finanzas').filter((page) => !exclude.has(page.id));
+  return getCajaBranchPages('finanzas').filter((page) => !exclude.has(page.id));
 }
 
 /** Subpáginas Propiedades ocultas en hub/strip (finanzas duplicadas). */
@@ -141,23 +141,23 @@ export const INVENTARIO_HUB_STRIP_EXCLUDE_PAGE_IDS = [
 /** Páginas Propiedades para strip in-page: propiedades, inquilinos, contratos. */
 export function getPropiedadesBranchPages() {
   const exclude = new Set(PROPIEDADES_HUB_STRIP_EXCLUDE_PAGE_IDS);
-  return getAttaBranchPages('propiedades').filter((page) => !exclude.has(page.id));
+  return getCajaBranchPages('propiedades').filter((page) => !exclude.has(page.id));
 }
 
 /** Páginas Inventario para strip in-page: solo la sección principal. */
 export function getInventarioBranchPages() {
   const exclude = new Set(INVENTARIO_HUB_STRIP_EXCLUDE_PAGE_IDS);
-  return getAttaBranchPages('inventario').filter((page) => !exclude.has(page.id));
+  return getCajaBranchPages('inventario').filter((page) => !exclude.has(page.id));
 }
 
-export function getAttaBranchById(branchId) {
-  return getAttaBranches().find((b) => b.id === branchId) || null;
+export function getCajaBranchById(branchId) {
+  return getCajaBranches().find((b) => b.id === branchId) || null;
 }
 
 /**
  * Ítems para bottom nav móvil.
  * - Foco: páginas hijas (Rutinas, Objetivos, Tareas).
- * - Atta/Pulso: switcher de las 3 apps → hub de cada una.
+ * - Caja/Pulso: switcher de las 3 apps → hub de cada una.
  */
 export function resolveBottomNavItems(appKey = getCurrentAppKey()) {
   if (appKey === 'foco') {
@@ -175,14 +175,14 @@ export function resolveBottomNavItems(appKey = getCurrentAppKey()) {
   }));
 }
 
-/** Toolbar derecha Atta (desktop): Finanzas | Propiedades | Inventario. */
-export function resolveAttaToolbarRight(currentPath) {
+/** Toolbar derecha Caja (desktop): Finanzas | Propiedades | Inventario. */
+export function resolveCajaToolbarRight(currentPath) {
   const moduloActivo = findActiveModule(currentPath);
   if (moduloActivo?.id !== 'assets') {
     return { branches: [], activeBranchId: null };
   }
 
-  const branches = getAttaBranches();
+  const branches = getCajaBranches();
   let activeBranchId = 'finanzas';
 
   if (isInventarioBranchRoute(currentPath)) {
@@ -201,7 +201,7 @@ export function resolveAttaToolbarRight(currentPath) {
  * Si la ruta está en una page con subItems (p. ej. transacciones → recurrentes),
  * devuelve navegación contextual [page, ...subpages]; si no, todas las pages de la rama.
  */
-function resolveAttaBranchToolbarPages(currentPath, branchId) {
+function resolveCajaBranchToolbarPages(currentPath, branchId) {
   if (branchId === 'finanzas') {
     return getFinanzasBranchPages();
   }
@@ -227,24 +227,24 @@ function resolveAttaBranchToolbarPages(currentPath, branchId) {
     }
   }
 
-  return getAttaBranchPages(branchId);
+  return getCajaBranchPages(branchId);
 }
 
-/** Toolbar centro Atta (móvil y desktop): subpáginas de la sección activa. */
-export function resolveAttaToolbarCenter(currentPath) {
+/** Toolbar centro Caja (móvil y desktop): subpáginas de la sección activa. */
+export function resolveCajaToolbarCenter(currentPath) {
   const moduloActivo = findActiveModule(currentPath);
   if (moduloActivo?.id !== 'assets') return [];
 
   if (isInventarioBranchRoute(currentPath)) {
-    return resolveAttaBranchToolbarPages(currentPath, 'inventario');
+    return resolveCajaBranchToolbarPages(currentPath, 'inventario');
   }
   if (
     currentPath === '/propiedades'
     || (currentPath.startsWith('/propiedades/') && !isInventarioBranchRoute(currentPath))
   ) {
-    return resolveAttaBranchToolbarPages(currentPath, 'propiedades');
+    return resolveCajaBranchToolbarPages(currentPath, 'propiedades');
   }
-  return resolveAttaBranchToolbarPages(currentPath, 'finanzas');
+  return resolveCajaBranchToolbarPages(currentPath, 'finanzas');
 }
 
 function isInventarioBranchRoute(pathname) {
@@ -256,7 +256,7 @@ function isInventarioBranchRoute(pathname) {
   );
 }
 
-export function isAttaPageActive(pathname, page) {
+export function isCajaPageActive(pathname, page) {
   if (!page) return false;
   if (page.id === 'finanzas') {
     return pathname === '/finanzas';
@@ -310,10 +310,10 @@ export function resolveFlatModulePagesMap(moduleId) {
 }
 
 /**
- * Hub Atta para botón «atrás» en subpáginas.
+ * Hub Caja para botón «atrás» en subpáginas.
  * Finanzas → /finanzas; Propiedades → /finanzas; Inventario → /finanzas.
  */
-export function resolveAttaBranchHubPath(pathname) {
+export function resolveCajaBranchHubPath(pathname) {
   if (pathname === '/finanzas' || pathname.startsWith('/finanzas/')) {
     return pathname === '/finanzas' ? null : '/finanzas';
   }
@@ -333,8 +333,8 @@ export function resolveAttaBranchHubPath(pathname) {
 }
 
 /** Etiqueta del hub de rama (tooltip del botón atrás). */
-export function resolveAttaBranchHubLabel(pathname) {
-  const hubPath = resolveAttaBranchHubPath(pathname);
+export function resolveCajaBranchHubLabel(pathname) {
+  const hubPath = resolveCajaBranchHubPath(pathname);
   if (!hubPath) return null;
   if (hubPath === '/finanzas') return 'Finanzas';
   if (hubPath === '/propiedades') return 'Propiedades';
@@ -342,7 +342,7 @@ export function resolveAttaBranchHubLabel(pathname) {
   return 'Volver';
 }
 
-export function isAttaBranchActive(pathname, branch) {
+export function isCajaBranchActive(pathname, branch) {
   if (!branch) return false;
   if (branch.id === 'finanzas') {
     return pathname === '/finanzas' || pathname.startsWith('/finanzas/');

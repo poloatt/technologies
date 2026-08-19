@@ -14,6 +14,7 @@ const config = {
   frontendUrl: process.env.FRONTEND_URL,
   corsOrigins: [
     'https://foco.attadia.com',
+    'https://caja.attadia.com',
     'https://atta.attadia.com',
     'https://pulso.attadia.com',
     'https://attadia.com',

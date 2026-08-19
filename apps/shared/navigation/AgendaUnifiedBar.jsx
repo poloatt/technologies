@@ -13,11 +13,11 @@ import {
   resolveToolbarRightByPath,
 } from './toolbarModules';
 import { getAgendaBarSlot } from './toolbarRegistry';
-import { resolveAttaBranchHubPath } from './appNavResolver';
-import { isAttaToolbarPath, isPulsoToolbarPath } from './unifiedBarPaths';
+import { resolveCajaBranchHubPath } from './appNavResolver';
+import { isCajaToolbarPath, isPulsoToolbarPath } from './unifiedBarPaths';
 
 /**
- * Barra superior unificada (Foco / Atta / Pulso):
+ * Barra superior unificada (Foco / Caja / Pulso):
  * izquierda: menú; centro: acciones; derecha: subpáginas + apps.
  */
 export default function AgendaUnifiedBar({ currentPath = '' }) {
@@ -46,22 +46,22 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   }, []);
 
   const showRightNav = !isMobile || showEntityToolbarNavigation;
-  const isAttaPath = isAttaToolbarPath(path);
+  const isCajaPath = isCajaToolbarPath(path);
   const isPulsoPath = isPulsoToolbarPath(path);
   const showRutinasActions = isRutinasPath(path);
-  const useCenterActionsOverlay = isAttaPath || isPulsoPath || showRutinasActions;
+  const useCenterActionsOverlay = isCajaPath || isPulsoPath || showRutinasActions;
   const hideGridCenter = useCenterActionsOverlay;
-  const showAttaBranchSwitcher = isAttaPath && !isMobile && RightComp;
+  const showCajaBranchSwitcher = isCajaPath && !isMobile && RightComp;
 
   const showRightGridColumn = Boolean(
-    showRightNav && RightComp && !showAttaBranchSwitcher && (!isMobile || isAttaPath),
+    showRightNav && RightComp && !showCajaBranchSwitcher && (!isMobile || isCajaPath),
   );
   const showGridCenter = showCenter && !hideGridCenter;
   const gridColumns = showRightGridColumn ? '1fr auto' : '1fr';
 
-  const showAttaBranchBack = isAttaPath && !!resolveAttaBranchHubPath(path);
+  const showCajaBranchBack = isCajaPath && !!resolveCajaBranchHubPath(path);
   const TOOLBAR_BACK_SLOT_WIDTH = 34;
-  const showBranchBack = showAttaBranchBack && !isMobile;
+  const showBranchBack = showCajaBranchBack && !isMobile;
   const MOBILE_LEFT_INSET = 0;
   const rutinasFullBleedLeft = showRutinasActions && isMobileOrTablet;
   const baseCenterInsetLeft = rutinasFullBleedLeft
@@ -73,7 +73,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
     ? baseCenterInsetLeft + TOOLBAR_BACK_SLOT_WIDTH
     : baseCenterInsetLeft;
   const gridMarginRight = collapsedWidth;
-  const centerOverlayRight = showAttaBranchSwitcher
+  const centerOverlayRight = showCajaBranchSwitcher
     ? collapsedWidth + 96
     : gridMarginRight;
 
@@ -118,7 +118,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
               <FocoCenterActions section="rutinas" dense />
             </Box>
           )}
-          {isAttaPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
+          {isCajaPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
           {isPulsoPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
         </Box>
       )}
@@ -169,7 +169,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
         <SystemButtons.AppsButton />
       </Box>
 
-      {showAttaBranchSwitcher && (
+      {showCajaBranchSwitcher && (
         <Box
           sx={{
             position: 'absolute',
