@@ -15,7 +15,9 @@ const config = {
   corsOrigins: [
     'https://foco.attadia.com',
     'https://atta.attadia.com',
-    'https://pulso.attadia.com'
+    'https://pulso.attadia.com',
+    'https://attadia.com',
+    'https://www.attadia.com',
   ],
   sessionSecret: process.env.SESSION_SECRET,
   google: {
