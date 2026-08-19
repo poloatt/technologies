@@ -1,8 +1,8 @@
 {
-  "name": "attadia-monorepo",
+  "name": "technologies",
   "version": "1.0.0",
   "private": true,
-  "description": "Attadia Monorepo - Atta, Foco, Pulso Apps",
+  "description": "Attadia Technologies — Foco, Caja, Pulso",
   "scripts": {
     "dev": "turbo run dev --parallel",
     "dev:legacy": "concurrently \"npm run dev --workspace=apps/foco\" \"npm run dev --workspace=apps/atta\" \"npm run dev --workspace=apps/pulso\" \"npm run dev --workspace=apps/backend\"",
