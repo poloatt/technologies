@@ -7,7 +7,17 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
+
+let sharp;
+try {
+  sharp = require('sharp');
+} catch (err) {
+  if (err.code === 'MODULE_NOT_FOUND') {
+    console.warn('sharp no está instalado; se omiten iconos y se usan los PNG existentes.');
+    process.exit(0);
+  }
+  throw err;
+}
 
 const root = path.resolve(__dirname, '..');
 
