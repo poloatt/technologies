@@ -8,6 +8,7 @@
     "dev": "vite --port 5175",
     "prebuild": "node ../../scripts/generate-icons.cjs pulso",
     "build": "vite build",
+    "prebuild:prod": "node ../../scripts/generate-icons.cjs pulso",
     "build:prod": "vite build --mode production",
     "start": "vite preview --port 5175",
     "lint": "eslint . --ext js,jsx",

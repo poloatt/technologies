@@ -60,7 +60,7 @@ function iconBlock(favicon, hash) {
 function patchIndexHtml(htmlPath, favicon, hash) {
   let html = fs.readFileSync(htmlPath, 'utf8');
   const markedBlock = `    <!-- app-icons -->\n${iconBlock(favicon, hash)}\n    <!-- /app-icons -->`;
-  const marked = /<!-- app-icons -->[\s\S]*?<!-- \/app-icons -->/;
+  const marked = /[ \t]*<!-- app-icons -->[\s\S]*?<!-- \/app-icons -->/;
   if (marked.test(html)) {
     html = html.replace(marked, markedBlock);
   } else if (/<meta charset="UTF-8" \/>/.test(html)) {
@@ -85,9 +85,8 @@ function patchIndexHtml(htmlPath, favicon, hash) {
 }
 
 function versionedIconSrc(src, hash) {
-  const pathOnly = String(src).split('?')[0];
-  const file = pathOnly.replace(/\/icons\/(?:[a-f0-9]{8,16}\/)?/, '');
-  return `/icons/${hash}/${file.replace(/^\//, '')}`;
+  const file = path.posix.basename(String(src).split('?')[0]);
+  return `/icons/${hash}/${file}`;
 }
 
 function patchManifest(manifestPath, hash) {
@@ -155,7 +154,7 @@ async function generateForApp(appKey) {
   patchIndexHtml(htmlPath, favicon, hash);
   patchManifest(manifestPath, hash);
   cleanOldHashDirs(outDir, hash);
-  console.log(`[${appKey}] icon hash ${hash}`);
+  console.log(`[${appKey}] icon hash ${hash} → html + manifest`);
 }
 
 async function main() {

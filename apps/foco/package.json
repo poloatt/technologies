@@ -8,6 +8,7 @@
     "dev": "vite --port 5173",
     "prebuild": "node ../../scripts/generate-icons.cjs foco",
     "build": "vite build",
+    "prebuild:prod": "node ../../scripts/generate-icons.cjs foco",
     "build:prod": "vite build --mode production",
     "start": "vite preview --port 5173",
     "lint": "eslint . --ext js,jsx",
