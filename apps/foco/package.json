@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173",
+    "prebuild": "node ../../scripts/generate-icons.cjs foco",
     "build": "vite build",
     "build:prod": "vite build --mode production",
     "start": "vite preview --port 5173",

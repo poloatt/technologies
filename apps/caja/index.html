@@ -2,16 +2,16 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-        <!-- app-icons -->
-    <link rel="icon" type="image/svg+xml" href="/foco-icon.svg?v=34f5452433" />
-    <link rel="shortcut icon" type="image/svg+xml" href="/foco-icon.svg?v=34f5452433" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/34f5452433/icon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/34f5452433/icon-192x192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/34f5452433/icon-180x180.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/34f5452433/icon-152x152.png" />
-    <link rel="apple-touch-icon" sizes="144x144" href="/icons/34f5452433/icon-144x144.png" />
-    <link rel="apple-touch-icon" href="/icons/34f5452433/icon-180x180.png" />
-    <link rel="manifest" href="/manifest.json?v=34f5452433" />
+    <!-- app-icons -->
+    <link rel="icon" type="image/svg+xml" href="/caja-icon.svg?v=18183f079c" />
+    <link rel="shortcut icon" type="image/svg+xml" href="/caja-icon.svg?v=18183f079c" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/18183f079c/icon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/18183f079c/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/18183f079c/icon-180x180.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/18183f079c/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="/icons/18183f079c/icon-144x144.png" />
+    <link rel="apple-touch-icon" href="/icons/18183f079c/icon-180x180.png" />
+    <link rel="manifest" href="/manifest.json?v=18183f079c" />
     <!-- /app-icons -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#181818" />
@@ -21,11 +21,11 @@
     <meta name="format-detection" content="telephone=no" />
     <meta name="msapplication-tap-highlight" content="no" />
     <meta name="apple-touch-fullscreen" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Foco" />
-    <meta name="application-name" content="Foco" />
+    <meta name="apple-mobile-web-app-title" content="Caja" />
+    <meta name="application-name" content="Caja" />
     <meta name="msapplication-TileColor" content="#181818" />
     <meta name="msapplication-config" content="none" />
-    <title>Foco</title>
+    <title>Caja</title>
     <style>
       html,body{background:#181818;color:#e6e6e6;margin:0}
       .app-loading-screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#181818}
@@ -38,52 +38,19 @@
       @keyframes gl-bounce{0%,80%,100%{transform:scale(.55);opacity:.45}40%{transform:scale(1);opacity:1}}
     </style>
     <script>
-      // Evitar mensaje de React DevTools en desarrollo
       if (typeof window.__REACT_DEVTOOLS_GLOBAL_HOOK__ === 'object') {
         __REACT_DEVTOOLS_GLOBAL_HOOK__.inject = function() {};
       }
-      
-      // Prevenir zoom en input focus en iOS
+
       document.addEventListener('gesturestart', function(e) {
         e.preventDefault();
       });
 
-      // Tras un deploy, un SW cache-first puede servir bundles viejos cuyos lazy chunks ya no existen.
-      // Detectar fallo de import dinámico, limpiar SW/caches y recargar una sola vez.
-      (function() {
-        var CHUNK_RECOVERY_KEY = 'foco-chunk-recovery';
-        window.addEventListener('unhandledrejection', function(event) {
-          var reason = event.reason && (event.reason.message || String(event.reason));
-          if (!reason || !/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(reason)) {
-            return;
-          }
-          if (sessionStorage.getItem(CHUNK_RECOVERY_KEY)) return;
-          sessionStorage.setItem(CHUNK_RECOVERY_KEY, '1');
-          event.preventDefault();
-          var cleanup = Promise.resolve();
-          if ('serviceWorker' in navigator) {
-            cleanup = navigator.serviceWorker.getRegistrations().then(function(regs) {
-              return Promise.all(regs.map(function(r) { return r.unregister(); }));
-            });
-          }
-          cleanup.then(function() {
-            if (window.caches && window.caches.keys) {
-              return caches.keys().then(function(keys) {
-                return Promise.all(keys.map(function(k) { return caches.delete(k); }));
-              });
-            }
-          }).then(function() {
-            window.location.reload();
-          });
-        });
-      })();
-
-      // Registrar Service Worker solo en producción; desregistrar en desarrollo
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           var isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
           if (!isLocalhost) {
-            navigator.serviceWorker.register('/sw.js?v=6')
+            navigator.serviceWorker.register('/sw.js')
               .then(function(registration) {
                 console.log('SW registered: ', registration);
                 if (registration.update) {
@@ -98,7 +65,6 @@
               window.location.reload();
             });
           } else {
-            // En desarrollo: desregistrar cualquier SW previo y limpiar caches
             navigator.serviceWorker.getRegistrations().then(function(registrations) {
               registrations.forEach(function(reg) { reg.unregister(); });
             });

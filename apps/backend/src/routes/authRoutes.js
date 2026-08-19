@@ -162,7 +162,14 @@ router.get('/google/url', (req, res) => {
   }
 
   const isVercelPreview = typeof origin === 'string' && origin.includes('vercel.app');
-  const isAllowedOrigin = allowedOrigins.includes(origin) || isVercelPreview;
+  let isAttadiaFrontendOrigin = false;
+  try {
+    const hostname = origin ? new URL(origin).hostname : '';
+    isAttadiaFrontendOrigin = hostname === 'attadia.com' || (hostname.endsWith('.attadia.com') && hostname !== 'api.attadia.com');
+  } catch {
+    isAttadiaFrontendOrigin = false;
+  }
+  const isAllowedOrigin = allowedOrigins.includes(origin) || isVercelPreview || isAttadiaFrontendOrigin;
 
   if (!isAllowedOrigin) {
     console.error('Origen no permitido:', {

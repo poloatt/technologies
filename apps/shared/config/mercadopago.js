@@ -42,29 +42,11 @@ export const MERCADOPAGO_CONFIG = {
   }
 };
 
-// Función para obtener la URL de redirección según el ambiente
+/** Redirect de OAuth MP: siempre el origin actual (evita caer a localhost en prod). */
 export const getRedirectURI = () => {
-  const hostname = window.location.hostname;
-  const port = window.location.port;
-  
-  console.log('🔵 [MercadoPago] getRedirectURI - hostname:', hostname, 'port:', port);
-  
-  let redirectURI;
-  if (hostname === 'localhost' || hostname.includes('127.0.0.1')) {
-    // En desarrollo, usar el puerto actual dinámicamente
-    redirectURI = `http://localhost:${port}/mercadopago/callback`;
-  } else if (hostname === 'caja.attadia.com' ||
-             hostname === 'atta.attadia.com' ||
-             hostname === 'foco.attadia.com' ||
-             hostname === 'pulso.attadia.com') {
-    redirectURI = MERCADOPAGO_CONFIG.redirectURIs.production;
-  } else {
-    // Fallback: usar puerto actual o 5173 por defecto
-    redirectURI = `http://localhost:${port || '5173'}/mercadopago/callback`;
-  }
-  
-  console.log('🔵 [MercadoPago] getRedirectURI - redirectURI:', redirectURI);
-  
+  const { hostname, origin } = window.location;
+  const redirectURI = `${origin}/mercadopago/callback`;
+  console.log('🔵 [MercadoPago] getRedirectURI - hostname:', hostname, 'redirectURI:', redirectURI);
   return redirectURI;
 };
 

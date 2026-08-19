@@ -177,6 +177,17 @@ app.use((req, res, next) => {
     corsOrigins.push('http://localhost:5173');
   }
 
+  const isAttadiaFrontendOrigin = (value) => {
+    if (!value) return false;
+    try {
+      const { hostname } = new URL(value);
+      if (hostname === 'api.attadia.com') return false;
+      return hostname === 'attadia.com' || hostname.endsWith('.attadia.com');
+    } catch {
+      return false;
+    }
+  };
+
   // Log para debug en desarrollo
   if (config.env === 'development') {
     console.log('🔍 CORS DEBUG:', {
@@ -204,7 +215,8 @@ app.use((req, res, next) => {
   const isVercelDomain = origin && origin.includes('vercel.app');
   const isAllowedOrigin = config.env === 'development' || 
                          (origin && corsOrigins.includes(origin)) || 
-                         isVercelDomain;
+                         isVercelDomain ||
+                         isAttadiaFrontendOrigin(origin);
   
   // Permitir peticiones sin origin (como health checks de Render)
   const isRequestWithoutOrigin = !origin;

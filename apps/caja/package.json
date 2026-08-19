@@ -1,18 +1,17 @@
 {
-  "name": "pulso-app",
+  "name": "caja-app",
   "private": true,
   "version": "1.0.0",
-  "description": "Pulso - Bienestar y Salud",
+  "description": "Caja - Property Management",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5175",
-    "prebuild": "node ../../scripts/generate-icons.cjs pulso",
+    "dev": "vite --port 5174",
     "build": "vite build",
     "build:prod": "vite build --mode production",
-    "start": "vite preview --port 5175",
+    "start": "vite preview --port 5174",
     "lint": "eslint . --ext js,jsx",
-    "preview": "vite preview --port 5175",
-    "preview:prod": "vite preview --mode production --port 5175",
+    "preview": "vite preview --port 5174",
+    "preview:prod": "vite preview --mode production --port 5174",
     "clean": "npx rimraf node_modules/.vite"
   },
   "dependencies": {

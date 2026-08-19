@@ -1,49 +1,37 @@
 {
-  "name": "Foco",
-  "short_name": "Foco",
-  "description": "Gestión de hábitos y rutinas",
-  "id": "https://foco.attadia.com/",
+  "name": "Caja",
+  "short_name": "Caja",
+  "description": "Gestión integral de propiedades inmobiliarias",
+  "id": "https://caja.attadia.com/",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "background_color": "#181818",
   "theme_color": "#181818",
   "categories": [
-    "productivity",
-    "lifestyle"
+    "finance",
+    "business"
   ],
   "shortcuts": [
     {
-      "name": "Rutinas",
-      "short_name": "Rutinas",
-      "url": "/rutinas?source=pwa",
+      "name": "Finanzas",
+      "short_name": "Finanzas",
+      "url": "/finanzas?source=pwa",
       "icons": [
         {
-          "src": "/icons/34f5452433/icon-192x192.png",
+          "src": "/icons/icon-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
       ]
     },
     {
-      "name": "Objetivos",
-      "short_name": "Objetivos",
-      "url": "/objetivos?source=pwa",
+      "name": "Propiedades",
+      "short_name": "Propiedades",
+      "url": "/propiedades?source=pwa",
       "icons": [
         {
-          "src": "/icons/34f5452433/icon-192x192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
-    },
-    {
-      "name": "Tareas",
-      "short_name": "Tareas",
-      "url": "/tareas?source=pwa",
-      "icons": [
-        {
-          "src": "/icons/34f5452433/icon-192x192.png",
+          "src": "/icons/icon-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -52,61 +40,61 @@
   ],
   "icons": [
     {
-      "src": "/icons/34f5452433/icon-72x72.png",
+      "src": "/icons/18183f079c/icon-72x72.png",
       "sizes": "72x72",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-96x96.png",
+      "src": "/icons/18183f079c/icon-96x96.png",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-128x128.png",
+      "src": "/icons/18183f079c/icon-128x128.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-144x144.png",
+      "src": "/icons/18183f079c/icon-144x144.png",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-152x152.png",
+      "src": "/icons/18183f079c/icon-152x152.png",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-192x192.png",
+      "src": "/icons/18183f079c/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-192x192.png",
+      "src": "/icons/18183f079c/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/34f5452433/icon-384x384.png",
+      "src": "/icons/18183f079c/icon-384x384.png",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-512x512.png",
+      "src": "/icons/18183f079c/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/34f5452433/icon-512x512.png",
+      "src": "/icons/18183f079c/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
