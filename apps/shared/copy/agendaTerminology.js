@@ -32,6 +32,7 @@ TRACKER / RUTINA — cadenciaUtils.debesMostrarHabitoEnFecha
 export const RUTINA_DAY_GROUP_COPY = {
   today: 'Hoy',
   notToday: 'No toca hoy',
+  done: 'Hecho',
 };
 
 export const TASK_HORIZON_COPY = {

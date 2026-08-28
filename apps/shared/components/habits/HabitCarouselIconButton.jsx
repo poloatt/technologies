@@ -36,6 +36,7 @@ export default function HabitCarouselIconButton({
   onToggle,
   requireExpand = false,
   onRequireExpand,
+  plainCompleted = false,
 }) {
   const horariosConfig = Array.isArray(itemConfig?.horarios) ? itemConfig.horarios : [];
   const completadoHoy = itemValue !== undefined ? itemValue : false;
@@ -71,12 +72,14 @@ export default function HabitCarouselIconButton({
   const statusLabel = isCompleted ? 'completado' : 'pendiente';
   const isNotTodaySlot = showCompletionState
     && (carouselSlot === 'notToday' || (!carouselSlot && !isScheduled));
-  const isPlainVisual = isNotTodaySlot && !isCompleted && !isPartiallyComplete;
+  const isPlainNotToday = isNotTodaySlot && !isCompleted && !isPartiallyComplete;
+  const isPlainDone = plainCompleted && isCompleted;
+  const isPlainVisual = isPlainNotToday || isPlainDone;
   const isDashedCircle = !isPlainVisual && !isCompleted && (requireExpand || isPartiallyComplete);
   const isShinyPartial = isPartiallyComplete && !isCompleted && !isPlainVisual;
   const periodicHint = isCadenciaDebt ? getPeriodicCarouselCopy(mode, { isCadenciaDebt: true }) : '';
   const expandHint = requireExpand ? 'Expandir grupo para elegir franja' : '';
-  const plainHint = isPlainVisual ? RUTINA_DAY_GROUP_COPY.notToday : '';
+  const plainHint = isPlainNotToday ? RUTINA_DAY_GROUP_COPY.notToday : '';
   const tooltipTitle = expandHint
     ? `${label} — ${expandHint}`
     : (plainHint
@@ -108,6 +111,44 @@ export default function HabitCarouselIconButton({
     >
       <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
     </Box>
+  );
+
+  const plainCompletedButton = (
+    <IconButton
+      size="small"
+      disabled={!interactive}
+      aria-label={`${label}, completado`}
+      aria-pressed
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!interactive) return;
+        onToggle(section, itemId, displayHorario || horarioToShow);
+      }}
+      sx={{
+        width: size,
+        height: size,
+        minWidth: size,
+        minHeight: size,
+        maxWidth: size,
+        maxHeight: size,
+        p: 0,
+        borderRadius: '50%',
+        boxSizing: 'border-box',
+        bgcolor: 'transparent',
+        color: 'primary.main',
+        opacity: 0.65,
+        border: 'none',
+        boxShadow: 'none',
+        flex: '0 0 auto',
+        touchAction: 'pan-x',
+        '&:hover': {
+          bgcolor: 'action.hover',
+          opacity: 0.85,
+        },
+      }}
+    >
+      <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
+    </IconButton>
   );
 
   const iconButton = (
@@ -177,20 +218,38 @@ export default function HabitCarouselIconButton({
           verticalAlign: 'middle',
         }}
       >
-        {isPlainVisual ? plainIcon : (
-        <HabitCounterBadge
-          config={itemConfig}
-          currentTimeOfDay={currentTimeOfDay}
-          displayHorario={horarioToShow}
-          size={dense && !iconFontSize ? 'small' : 'medium'}
-          overlap="subtle"
-          reserveBadgeSpace={showCompletionState && !isNotTodaySlot}
-          rutina={rutinaHoy}
-          section={section}
-          itemId={itemId}
-        >
-          {iconButton}
-        </HabitCounterBadge>
+        {isPlainNotToday ? plainIcon : (
+          isPlainDone ? (
+            horarioToShow && showCompletionState ? (
+              <HabitCounterBadge
+                config={itemConfig}
+                currentTimeOfDay={currentTimeOfDay}
+                displayHorario={horarioToShow}
+                size={dense && !iconFontSize ? 'small' : 'medium'}
+                overlap="subtle"
+                reserveBadgeSpace={false}
+                rutina={rutinaHoy}
+                section={section}
+                itemId={itemId}
+              >
+                {plainCompletedButton}
+              </HabitCounterBadge>
+            ) : plainCompletedButton
+          ) : (
+            <HabitCounterBadge
+              config={itemConfig}
+              currentTimeOfDay={currentTimeOfDay}
+              displayHorario={horarioToShow}
+              size={dense && !iconFontSize ? 'small' : 'medium'}
+              overlap="subtle"
+              reserveBadgeSpace={showCompletionState && !isNotTodaySlot}
+              rutina={rutinaHoy}
+              section={section}
+              itemId={itemId}
+            >
+              {iconButton}
+            </HabitCounterBadge>
+          )
         )}
       </Box>
     </Tooltip>

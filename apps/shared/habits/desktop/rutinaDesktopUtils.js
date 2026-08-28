@@ -7,12 +7,13 @@ import {
 import { getHabitDisplayLabel } from '../domain/habitDisplayLabels.js';
 import { resolveItemVisibilityByCadence } from '../domain/resolveItemVisibility.js';
 import { resolveRutinaItemConfig } from '../domain/resolveRutinaItemConfig.js';
-import { isHabitCompletedForHistorial } from '../domain/habitCompletionUtils.js';
+import { isHabitCompletedForHistorial, isHabitFullyCompletedToday, isHabitPartiallyCompletedToday } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import {
   hasCadenciaDebt,
   isScheduledCadenciaDay,
   obtenerHistorialCompletados,
+  contarCompletadosEnPeriodo,
 } from '../utils/cadenciaUtils.js';
 import { parseAPIDate } from '../../utils/dateUtils.js';
 import { RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
@@ -206,23 +207,129 @@ export function categorizeSectionHabits({
 /** Etiquetas de agrupación del tracker diario (registro del día). */
 export const RUTINA_DAY_GROUP_LABELS = RUTINA_DAY_GROUP_COPY;
 
+function isDailyCadenceConfig(config = {}) {
+  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
+  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
+  return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
+}
+
 /**
- * Agrupa hábitos de una sección según si tocan hoy en el registro diario.
- * Dentro de cada grupo (Hoy / No toca hoy) el orden es fijo (no depende de completado).
+ * ¿Cuota del período satisfecha o hábito totalmente completado hoy?
+ * Usado para mover ítems a "Hecho" en lugar de "No toca hoy".
+ */
+export function isHabitQuotaOrDayDone({
+  config,
+  itemValue,
+  itemId,
+  section,
+  rutina,
+  rutinaForVisibility = rutina,
+}) {
+  if (!config || config.activo === false) return false;
+
+  const horarios = Array.isArray(config.horarios) ? config.horarios : [];
+  if (isDailyCadenceConfig(config) && horarios.length > 1) {
+    return isHabitFullyCompletedToday(itemValue, horarios);
+  }
+
+  if (isHabitCompletedForHistorial(itemValue)) {
+    return true;
+  }
+
+  const fechaRutina = parseAPIDate(rutina?.fecha) || new Date();
+  const historialDates = [...obtenerHistorialCompletados(itemId, section, rutinaForVisibility)];
+  const frecuencia = Number(config.frecuencia || 1);
+  const tipo = (config.tipo || 'DIARIO').toUpperCase();
+  const periodo = config.periodo || 'CADA_DIA';
+  const completadosEnPeriodo = contarCompletadosEnPeriodo(
+    fechaRutina,
+    tipo,
+    periodo,
+    historialDates,
+  );
+
+  return completadosEnPeriodo >= frecuencia;
+}
+
+/** Clasifica un ítem del tracker: today (pendiente), done (hecho), notToday. */
+export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility = rutina } = {}) {
+  const { config, itemValue, isScheduled, itemId, section } = entry;
+  const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
+
+  if (isDailyCadenceConfig(config) && horarios.length > 1) {
+    if (isHabitFullyCompletedToday(itemValue, horarios)) {
+      return 'done';
+    }
+    if (isHabitPartiallyCompletedToday(itemValue, horarios) || isScheduled) {
+      return 'today';
+    }
+    if (isHabitQuotaOrDayDone({ config, itemValue, itemId, section, rutina, rutinaForVisibility })) {
+      return 'done';
+    }
+    return 'notToday';
+  }
+
+  if (isHabitQuotaOrDayDone({ config, itemValue, itemId, section, rutina, rutinaForVisibility })) {
+    return 'done';
+  }
+
+  if (isScheduled) {
+    return 'today';
+  }
+
+  return 'notToday';
+}
+
+/**
+ * Agrupa hábitos de una sección: Hoy (pendientes), Hecho (completos/cuota), No toca hoy.
  */
 export function groupSectionHabitsByDaySchedule(params) {
-  const { section, habits = null } = params;
+  const { section, habits = null, rutina } = params;
   const { completed, incomplete, notScheduled } = categorizeSectionHabits(params);
   const sortOpts = { section, habits };
 
-  const today = sortSectionHabitsByFixedOrder([...incomplete, ...completed], sortOpts);
-  const notToday = sortSectionHabitsByFixedOrder(notScheduled, sortOpts);
+  const prefs = params.habitsPreferences ?? {};
+  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+  const itemIds = [...new Set([
+    ...incomplete.map((e) => e.itemId),
+    ...completed.map((e) => e.itemId),
+    ...notScheduled.map((e) => e.itemId),
+  ])];
+
+  const rutinaForVisibility = isHistorical
+    ? rutina
+    : {
+      ...rutina,
+      config: {
+        ...(rutina.config || {}),
+        [section]: Object.fromEntries(
+          itemIds.map((itemId) => [
+            itemId,
+            resolveRutinaItemConfig(section, itemId, rutina, prefs),
+          ]),
+        ),
+      },
+    };
+
+  const today = [];
+  const done = [];
+  const notToday = [];
+
+  [...incomplete, ...completed, ...notScheduled].forEach((entry) => {
+    const bucket = resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility });
+    if (bucket === 'done') done.push(entry);
+    else if (bucket === 'today') today.push(entry);
+    else notToday.push(entry);
+  });
+
+  const sortEntries = (entries) => sortSectionHabitsByFixedOrder(entries, sortOpts);
 
   return {
-    today,
-    todayPending: today.filter((entry) => !entry.isCompleted),
-    todayCompleted: today.filter((entry) => entry.isCompleted),
-    notToday,
+    today: sortEntries(today),
+    todayPending: today,
+    todayCompleted: done,
+    done: sortEntries(done),
+    notToday: sortEntries(notToday),
   };
 }
 

@@ -1,6 +1,8 @@
 import React, { useMemo, memo, useEffect, useState } from 'react';
 import { Box, Typography, CircularProgress, Grid } from '@mui/material';
 import RutinaCard from './RutinaCard';
+import RutinaCadenceLayout from './RutinaCadenceLayout';
+import useRutinaPageView from './useRutinaPageView';
 import {
   rutinaGridContainerSx,
   rutinaGridItemSx,
@@ -21,6 +23,7 @@ export const RutinaTable = ({
 }) => {
   const { customSections } = useHabits();
   const { isDesktop } = useResponsive();
+  const { isCadenceView } = useRutinaPageView();
 
   const {
     groupDialogOpen,
@@ -57,9 +60,11 @@ export const RutinaTable = ({
   }, [rutina?.fecha, rutina?._id]);
 
   const [expandedSection, setExpandedSection] = useState(null);
+  const [expandedCadence, setExpandedCadence] = useState(null);
 
   useEffect(() => {
     setExpandedSection(null);
+    setExpandedCadence(null);
   }, [rutinaDateKey]);
 
   if (loadingProp) {
@@ -82,7 +87,14 @@ export const RutinaTable = ({
 
   return (
     <Box key={rutinaDateKey}>
-      {isDesktop ? (
+      {isCadenceView ? (
+        <RutinaCadenceLayout
+          rutina={rutina}
+          variant={isDesktop ? 'desktop' : 'mobile'}
+          expandedCadence={expandedCadence}
+          onExpandedCadenceChange={setExpandedCadence}
+        />
+      ) : isDesktop ? (
         <RutinaDesktopLayout rutina={rutina} />
       ) : (
         <>

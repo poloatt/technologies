@@ -48,4 +48,27 @@ export {
   groupSectionHabitsByDaySchedule,
   getSectionCarouselItems,
   getDefaultSelectedSection,
+  isHabitQuotaOrDayDone,
+  resolveRutinaScheduleBucket,
 } from '../desktop/rutinaDesktopUtils.js';
+
+export {
+  RUTINA_CADENCE_BUCKETS,
+  resolveHabitCadenceBucket,
+  getCadenceBucketLabel,
+  compareCadenceBuckets,
+} from './habitCadenceBuckets.js';
+
+export { groupRutinaHabitsByCadence } from '../desktop/rutinaCadenceUtils.js';
+export {
+  getCadenceBucketCarouselItems,
+  getCadenceBucketCompletionStats,
+  getDefaultSelectedCadenceBucket,
+  groupDailyCadenceByFranja,
+  resolveActiveDailyFranja,
+  isViewingRutinaToday,
+  entryHasConfiguredDailyFranjas,
+  resolveEntryFranjaFocusHorario,
+  DAILY_CADENCE_FRANJA_ORDER,
+  CADENCE_BUCKET_ICON_KEYS,
+} from '../desktop/rutinaCadenceUtils.js';

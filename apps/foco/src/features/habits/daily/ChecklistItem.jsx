@@ -36,6 +36,7 @@ const ChecklistItem = ({
   completionValue = undefined,
   dragHandleAttributes = null,
   dragHandleListeners = null,
+  focusHorario = null,
 }) => {
   const { rutina } = useRutinas();
 
@@ -129,16 +130,39 @@ const ChecklistItem = ({
   }, [config, isCompleted, rutina, section, itemId]);
 
   const horariosConfig = Array.isArray(config?.horarios) ? config.horarios : [];
-  const hasMultipleFranjas = horariosConfig.length > 1;
+  const normalizedFocusHorario = focusHorario
+    ? String(focusHorario).toUpperCase()
+    : null;
+  const hasMultipleFranjas = horariosConfig.length > 1 && !normalizedFocusHorario;
   const habitPartiallyComplete = hasMultipleFranjas
     && horariosConfig.some((horario) => isHorarioCompleted(String(horario).toUpperCase()))
     && !horariosConfig.every((horario) => isHorarioCompleted(String(horario).toUpperCase()));
-  const singleDisplayHorario = horariosConfig.length === 1
-    ? String(horariosConfig[0]).toUpperCase()
-    : null;
+  const singleDisplayHorario = normalizedFocusHorario
+    || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
 
   const renderHabitActionButtons = () => {
     if (readOnly) return null;
+
+    if (normalizedFocusHorario && normalizedFocusHorario !== 'GENERAL') {
+      const franjaCompleted = isHorarioCompleted(normalizedFocusHorario);
+      return (
+        <HabitIconButton
+          isCompleted={franjaCompleted}
+          Icon={Icon}
+          onClick={(e) => {
+            e.stopPropagation();
+            onItemClick(itemId, e, normalizedFocusHorario);
+          }}
+          readOnly={readOnly}
+          config={config}
+          currentTimeOfDay={getCurrentTimeOfDay()}
+          displayHorario={normalizedFocusHorario}
+          rutina={rutina}
+          section={section}
+          itemId={itemId}
+        />
+      );
+    }
 
     if (hasMultipleFranjas) {
       return (
@@ -277,6 +301,7 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.config?.frecuencia === nextProps.config?.frecuencia &&
     prevProps.config?.activo === nextProps.config?.activo &&
     prevHorarios === nextHorarios &&
-    prevCompletion === nextCompletion
+    prevCompletion === nextCompletion &&
+    prevProps.focusHorario === nextProps.focusHorario
   );
 });

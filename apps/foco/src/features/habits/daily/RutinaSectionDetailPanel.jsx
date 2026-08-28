@@ -28,7 +28,7 @@ export default function RutinaSectionDetailPanel({
     [habits],
   );
 
-  const { today, notToday } = useMemo(
+  const { today, done, notToday } = useMemo(
     () => groupSectionHabitsByDaySchedule({
       section,
       rutina,
@@ -52,7 +52,7 @@ export default function RutinaSectionDetailPanel({
     }
   }, [reorderHabits, section]);
 
-  const hasAny = today.length > 0 || notToday.length > 0;
+  const hasAny = today.length > 0 || done.length > 0 || notToday.length > 0;
 
   if (!hasAny) {
     return (
@@ -97,14 +97,17 @@ export default function RutinaSectionDetailPanel({
         />
         <RutinaDayGroupList
           today={today}
+          done={done}
           notToday={notToday}
           section={section}
           rutina={rutina}
           readOnly={readOnly}
           sortable
           sectionHabits={habits?.[section] || []}
+          habitsPreferences={habitsPreferences}
           onReorder={handleReorderHabits}
           onItemClick={onItemClick}
+          onDoneToggle={onItemClick}
           onEditHabit={handleEditHabit}
         />
       </Box>

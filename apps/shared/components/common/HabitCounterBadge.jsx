@@ -178,6 +178,30 @@ export const HabitCounterBadge = ({
             showBadge = false;
         }
       }
+    } else {
+      const horarioAMostrar = displayHorario ? String(displayHorario).toUpperCase() : null;
+      if (horarioAMostrar && VALID_TIME_OF_DAY.includes(horarioAMostrar)) {
+        resolvedHorario = horarioAMostrar;
+        switch (horarioAMostrar) {
+          case 'MAÑANA':
+            badgeContent = <WbSunnyIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
+            showBadge = true;
+            isNumber = false;
+            break;
+          case 'TARDE':
+            badgeContent = <WbTwilightIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
+            showBadge = true;
+            isNumber = false;
+            break;
+          case 'NOCHE':
+            badgeContent = <NightlightIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
+            showBadge = true;
+            isNumber = false;
+            break;
+          default:
+            showBadge = false;
+        }
+      }
     }
     // Si no tiene horarios pero frecuencia > 1, no mostrar badge (solo frecuencia)
     // (El badge solo muestra horarios, no frecuencia para diarios)

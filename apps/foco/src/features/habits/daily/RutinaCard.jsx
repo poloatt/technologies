@@ -184,6 +184,7 @@ const RutinaCard = ({
     const matchFocused = (items) => items.filter((entry) => entry.itemId === focusedItemId);
     return {
       today: matchFocused(grouped.today),
+      done: matchFocused(grouped.done),
       notToday: matchFocused(grouped.notToday),
     };
   }, [section, rutina, habits, habitPrefs, localData, focusedItemId, habitIconsMap]);
@@ -299,14 +300,17 @@ const RutinaCard = ({
           <List dense disablePadding sx={{ py: 0, my: 0 }}>
             <RutinaDayGroupList
               today={habitGroups.today}
+              done={habitGroups.done}
               notToday={habitGroups.notToday}
               section={section}
               rutina={rutina}
               readOnly={readOnly}
               sortable={isExpanded}
               sectionHabits={sectionHabits}
+              habitsPreferences={habitPrefs}
               onReorder={handleReorderHabits}
               onItemClick={handleItemClick}
+              onDoneToggle={handleItemClick}
               onEditHabit={handleEditHabit}
               localData={localData}
             />

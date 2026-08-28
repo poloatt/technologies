@@ -175,12 +175,13 @@ describe('rutinaDesktopUtils', () => {
       const rutina = makeRutina({
         bodyCare: { shower: true },
       });
-      const { today, todayCompleted, todayPending, notToday } = groupSectionHabitsByDaySchedule({
+      const { today, done, todayCompleted, todayPending, notToday } = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina,
         habits: mockHabits,
       });
-      expect(today.map((h) => h.itemId)).toEqual(['shower', 'weekly']);
+      expect(today.map((h) => h.itemId)).toEqual(['weekly']);
+      expect(done.map((h) => h.itemId)).toContain('shower');
       expect(todayCompleted.map((h) => h.itemId)).toContain('shower');
       expect(todayPending.map((h) => h.itemId)).toContain('weekly');
       expect(notToday.map((h) => h.itemId)).not.toContain('shower');
@@ -195,26 +196,29 @@ describe('rutinaDesktopUtils', () => {
         rutina: rutinaPending,
         habits: mockHabits,
       });
-      const done = groupSectionHabitsByDaySchedule({
+      const doneState = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina: rutinaDone,
         habits: mockHabits,
       });
-      expect(pending.today.map((h) => h.itemId)).toEqual(done.today.map((h) => h.itemId));
+      expect(pending.today.map((h) => h.itemId)).toEqual(['shower', 'weekly']);
+      expect(doneState.today.map((h) => h.itemId)).toEqual(['weekly']);
+      expect(doneState.done.map((h) => h.itemId)).toEqual(['shower']);
     });
 
-    it('places off-schedule habits in notToday', () => {
+    it('places quota-satisfied off-schedule habits in Hecho, not notToday', () => {
       const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
       const rutina = makeRutina({
         fecha: sunday.toISOString(),
         historial: { bodyCare: { weekly: { '2026-06-16': true } } },
       });
-      const { notToday, today } = groupSectionHabitsByDaySchedule({
+      const { notToday, today, done } = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina,
         habits: mockHabits,
       });
-      expect(notToday.map((h) => h.itemId)).toContain('weekly');
+      expect(done.map((h) => h.itemId)).toContain('weekly');
+      expect(notToday.map((h) => h.itemId)).not.toContain('weekly');
       expect(today.map((h) => h.itemId)).toContain('shower');
     });
 
