@@ -40,6 +40,7 @@ import {
 import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
 
 import { DEFAULT_HABIT_CONFIG, normalizeHabitConfig, saveHabitFromForm } from '@shared/habits/form';
+import { isCustomHabitSection, resolveSectionLabel } from '@shared/habits';
 
 import { normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 
@@ -53,7 +54,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
   const { isMobile } = useResponsive();
 
-  const { habits, customSections, addHabit, updateHabit, deleteHabit, fetchHabits } = useHabits();
+  const { habits, customSections, addHabit, updateHabit, deleteHabit, deleteHabitSection, fetchHabits } = useHabits();
   const { sectionOptions, sectionSelectProps, groupDialogProps } = useHabitSectionCreateOption({
     onSectionCreated: (sectionId) => setFormData((prev) => ({ ...prev, section: sectionId })),
   });
@@ -178,9 +179,9 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
         habitId = editingHabit.id || editingHabit._id;
 
+        const normalizedConfig = normalizeHabitConfig(config);
 
-
-        await updateHabit(habitId, editingSection, {
+        const habitPayload = {
 
           label: formData.label.trim(),
 
@@ -188,51 +189,87 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
           activo: editingHabit.activo !== undefined ? editingHabit.activo : true,
 
-        });
+        };
 
 
 
         if (formData.section !== editingSection) {
 
-          const currentConfig = rutina?.config?.[editingSection]?.[habitId];
+          const isLastInSource = (habits[editingSection] || []).length <= 1;
 
-          await clienteAxios.delete(`/api/users/habits/${habitId}`, {
+          const isCustomSource = isCustomHabitSection(editingSection);
+
+          let deleteSourceGroup = false;
+
+
+
+          if (isLastInSource && isCustomSource) {
+
+            const sourceLabel = resolveSectionLabel(editingSection, customSections);
+
+            deleteSourceGroup = window.confirm(
+
+              `Este es el último hábito del grupo «${sourceLabel}».\n\n¿Eliminar el grupo también?\n\n• Aceptar: elimina el grupo\n• Cancelar: deja el grupo vacío`,
+
+            );
+
+          }
+
+
+
+          const orden = habits[formData.section]?.length || 0;
+
+          await clienteAxios.post('/api/users/habits', {
+
+            section: formData.section,
+
+            habit: {
+
+              id: habitId,
+
+              ...habitPayload,
+
+              orden,
+
+            },
+
+          });
+
+
+
+          await clienteAxios.delete(`/api/users/habits/${encodeURIComponent(habitId)}`, {
 
             data: { section: editingSection },
 
           });
 
-          const orden = habits[formData.section]?.length || 0;
 
-          await addHabit(formData.section, {
 
-            id: habitId,
+          if (deleteSourceGroup) {
 
-            label: formData.label.trim(),
-
-            icon: formData.icon,
-
-            activo: editingHabit.activo !== undefined ? editingHabit.activo : true,
-
-            orden,
-
-          });
-
-          if (currentConfig && updateUserHabitPreference) {
-
-            await updateUserHabitPreference(formData.section, habitId, currentConfig, true);
+            await deleteHabitSection(editingSection);
 
           }
 
-        }
+
+
+          if (updateUserHabitPreference) {
+
+            await updateUserHabitPreference(formData.section, habitId, normalizedConfig, true);
+
+          }
+
+        } else {
+
+          await updateHabit(habitId, editingSection, habitPayload);
 
 
 
-        const normalizedConfig = normalizeHabitConfig(config);
+          if (updateUserHabitPreference) {
 
-        if (updateUserHabitPreference) {
+            await updateUserHabitPreference(formData.section, habitId, normalizedConfig, true);
 
-          await updateUserHabitPreference(formData.section, habitId, normalizedConfig, true);
+          }
 
         }
 
@@ -268,6 +305,8 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
       }
 
+
+
       onClose();
 
     } catch (error) {
@@ -276,7 +315,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
       setErrors({
 
-        submit: error.message || 'Error al guardar el hábito. Por favor, intenta nuevamente.',
+        submit: error.response?.data?.error || error.message || 'Error al guardar el hábito. Por favor, intenta nuevamente.',
 
       });
 
@@ -310,7 +349,8 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
   const isEditing = Boolean(editingHabit && editingSection);
   const sectionHabitCount = (habits[editingSection] || []).length;
-  const canDelete = isEditing && sectionHabitCount > 1;
+  const isCustomSourceSection = isCustomHabitSection(editingSection);
+  const canDelete = isEditing && (sectionHabitCount > 1 || isCustomSourceSection);
 
   const handleDelete = async () => {
     if (!isEditing) return;
@@ -322,7 +362,20 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
     setIsSaving(true);
     try {
+      let deleteSourceGroup = false;
+      if (sectionHabitCount <= 1 && isCustomSourceSection) {
+        const sourceLabel = resolveSectionLabel(editingSection, customSections);
+        deleteSourceGroup = window.confirm(
+          `Este es el último hábito del grupo «${sourceLabel}».\n\n¿Eliminar el grupo también?\n\n• Aceptar: elimina el grupo\n• Cancelar: deja el grupo vacío`,
+        );
+      }
+
       await deleteHabit(habitId, editingSection);
+
+      if (deleteSourceGroup) {
+        await deleteHabitSection(editingSection);
+      }
+
       await fetchHabits();
       onClose();
     } catch (error) {

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
+import { useHabits } from '@shared/context';
 import RutinaSectionCarousel from './RutinaSectionCarousel';
 import RutinaDayGroupList from './RutinaDayGroupList';
 import HabitFormDialog from '@shared/components/HabitFormDialog';
@@ -15,6 +16,7 @@ export default function RutinaSectionDetailPanel({
   onItemClick,
   onToggle,
 }) {
+  const { reorderHabits } = useHabits();
   const [editingHabitDialog, setEditingHabitDialog] = useState({
     open: false,
     habit: null,
@@ -40,6 +42,15 @@ export default function RutinaSectionDetailPanel({
   const handleEditHabit = useCallback((habit, habitSection) => {
     setEditingHabitDialog({ open: true, habit, section: habitSection });
   }, []);
+
+  const handleReorderHabits = useCallback(async (habitIds) => {
+    if (!habitIds?.length || !section) return;
+    try {
+      await reorderHabits(section, habitIds);
+    } catch {
+      // feedback en HabitsContext
+    }
+  }, [reorderHabits, section]);
 
   const hasAny = today.length > 0 || notToday.length > 0;
 
@@ -90,6 +101,9 @@ export default function RutinaSectionDetailPanel({
           section={section}
           rutina={rutina}
           readOnly={readOnly}
+          sortable
+          sectionHabits={habits?.[section] || []}
+          onReorder={handleReorderHabits}
           onItemClick={onItemClick}
           onEditHabit={handleEditHabit}
         />

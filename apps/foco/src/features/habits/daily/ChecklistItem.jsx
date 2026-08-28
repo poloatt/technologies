@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from 'react';
 import { ListItem, Box, Typography } from '@mui/material';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import { HabitCrudActions } from '@shared/components/common';
 import HabitIconButton from '@shared/components/habits/HabitIconButton';
@@ -33,6 +34,8 @@ const ChecklistItem = ({
   onEditHabit,
   localData = null,
   completionValue = undefined,
+  dragHandleAttributes = null,
+  dragHandleListeners = null,
 }) => {
   const { rutina } = useRutinas();
 
@@ -199,6 +202,26 @@ const ChecklistItem = ({
   return (
     <ListItem disablePadding sx={rutinaChecklistItemSx}>
       <Box sx={rutinaChecklistRowSx}>
+        {dragHandleListeners && (
+          <Box
+            {...dragHandleAttributes}
+            {...dragHandleListeners}
+            onClick={(event) => event.stopPropagation()}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              color: 'text.disabled',
+              cursor: 'grab',
+              touchAction: 'none',
+              flexShrink: 0,
+              mr: 0.25,
+              '&:active': { cursor: 'grabbing' },
+            }}
+            aria-label={`Reordenar ${habitLabel || itemId}`}
+          >
+            <DragIndicatorIcon sx={{ fontSize: 18 }} />
+          </Box>
+        )}
         {renderHabitActionButtons()}
         <Box sx={rutinaChecklistContentSx}>
           <Box sx={rutinaChecklistTextColumnSx}>

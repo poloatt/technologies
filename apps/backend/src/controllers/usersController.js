@@ -1231,8 +1231,8 @@ export const usersController = {
       const habitToDelete = user.customHabits[section][habitIndex];
       const canonicalId = getHabitId(habitToDelete) || String(habitId);
 
-      // Validar que no se eliminen todos los hábitos de una sección
-      if (user.customHabits[section].length <= 1) {
+      const isCustomSection = getCustomHabitSections(user).some((s) => s.id === section);
+      if (user.customHabits[section].length <= 1 && !isCustomSection) {
         return res.status(400).json({ error: 'No se puede eliminar el último hábito de la sección' });
       }
 

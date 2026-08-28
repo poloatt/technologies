@@ -62,7 +62,7 @@ const RutinaCard = ({
   onExpandedSectionChange,
 }) => {
   const { rutina, markItemComplete } = useRutinas();
-  const { habits, customSections } = useHabits();
+  const { habits, customSections, reorderHabits } = useHabits();
   const { habitsPreferences, prefsReady } = useHabitsPreferences();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
   const { isMobileOrTablet } = useResponsive();
@@ -192,6 +192,15 @@ const RutinaCard = ({
     handleItemClick(itemId, null, horario);
   }, [handleItemClick]);
 
+  const handleReorderHabits = useCallback(async (habitIds) => {
+    if (!habitIds?.length) return;
+    try {
+      await reorderHabits(section, habitIds);
+    } catch {
+      // feedback en HabitsContext
+    }
+  }, [reorderHabits, section]);
+
   const showCollapsedCarousel = !isExpanded && !expandedSection;
 
   if (isSectionEmpty) {
@@ -294,6 +303,9 @@ const RutinaCard = ({
               section={section}
               rutina={rutina}
               readOnly={readOnly}
+              sortable={isExpanded}
+              sectionHabits={sectionHabits}
+              onReorder={handleReorderHabits}
               onItemClick={handleItemClick}
               onEditHabit={handleEditHabit}
               localData={localData}
