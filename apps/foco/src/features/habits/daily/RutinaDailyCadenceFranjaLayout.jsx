@@ -48,10 +48,15 @@ export default function RutinaDailyCadenceFranjaLayout({
     [franjaGroups],
   );
 
-  const allDoneItems = useMemo(
-    () => franjaGroups.flatMap((group) => group.done),
-    [franjaGroups],
-  );
+  const allDoneItems = useMemo(() => {
+    const seen = new Set();
+    return franjaGroups.flatMap((group) => group.done).filter((entry) => {
+      const key = `${entry.section}:${entry.itemId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [franjaGroups]);
 
   const handleCarouselToggle = (entrySection, itemId, horario) => {
     onItemClick(entrySection, itemId, null, horario);

@@ -237,6 +237,46 @@ describe('rutinaDesktopUtils', () => {
       expect(ids).toEqual(['shower', 'weekly']);
       expect(todayPending.find((h) => h.itemId === 'weekly')?.isCadenciaDebt).toBe(true);
     });
+
+    it('places interval personalizado habit (cada 4d) in Hecho when resting, not notToday', () => {
+      const today = new Date(2026, 5, 25, 12, 0, 0, 0);
+      const rutina = makeRutina({
+        fecha: today.toISOString(),
+        bodyCare: { shave: false },
+        config: {
+          bodyCare: {
+            shower: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+            weekly: { tipo: 'SEMANAL', frecuencia: 1, activo: true, diasSemana: [1] },
+            shave: {
+              tipo: 'PERSONALIZADO',
+              periodo: 'CADA_DIA',
+              frecuencia: 4,
+              activo: true,
+            },
+          },
+          nutricion: {
+            water: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+          },
+        },
+        historial: { bodyCare: { shave: { '2026-06-24': true } } },
+      });
+      const habitsWithShave = {
+        ...mockHabits,
+        bodyCare: [
+          ...mockHabits.bodyCare,
+          { id: 'shave', label: 'Shave', icon: 'BodyTrim', activo: true, orden: 2 },
+        ],
+      };
+      const { done, notToday } = groupSectionHabitsByDaySchedule({
+        section: 'bodyCare',
+        rutina,
+        habits: habitsWithShave,
+      });
+      expect(done.map((h) => h.itemId)).toContain('shave');
+      expect(notToday.map((h) => h.itemId)).not.toContain('shave');
+      const shaveEntry = done.find((h) => h.itemId === 'shave');
+      expect(shaveEntry?.config?.horarios || []).toHaveLength(0);
+    });
   });
 
   describe('getSectionCarouselItems', () => {

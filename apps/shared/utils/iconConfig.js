@@ -9,6 +9,7 @@ export {
   getIconByName,
   availableIcons,
   getHabitIconOptions,
+  getHabitIconGroups,
   getHabitIconLabel,
   DEFAULT_HABIT_ICON,
   HABIT_ICON_LABELS,

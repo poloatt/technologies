@@ -123,6 +123,49 @@ export function isScheduledCadenciaDay(fechaObjetivo, cadenciaConfig) {
   return false;
 }
 
+/**
+ * ¿Hábito PERSONALIZADO en período de descanso tras completar (p. ej. cada 4 días)?
+ * No aplica a periódicos con días fijos (diasSemana/diasMes).
+ */
+export function isIntervalCadenceResting(fechaObjetivo, cadenciaConfig, historialCompletado = []) {
+  if (!cadenciaConfig || cadenciaConfig.activo === false) return false;
+
+  const tipo = (cadenciaConfig.tipo || 'DIARIO').toUpperCase();
+  if (tipo !== 'PERSONALIZADO') return false;
+  if (resolveFixedPeriodicCadence(cadenciaConfig)) return false;
+
+  const ultimaCompletacion = obtenerUltimaCompletacion(historialCompletado);
+  if (!ultimaCompletacion) return false;
+
+  const fecha = normalizeCadenciaDate(fechaObjetivo);
+  const frecuencia = Number(cadenciaConfig.frecuencia || 1);
+  const periodo = cadenciaConfig.periodo || 'CADA_DIA';
+  let diasIntervalo = frecuencia;
+
+  switch (periodo) {
+    case 'CADA_SEMANA':
+      diasIntervalo = frecuencia * 7;
+      break;
+    case 'CADA_MES':
+      diasIntervalo = frecuencia * 30;
+      break;
+    case 'CADA_TRIMESTRE':
+      diasIntervalo = frecuencia * 90;
+      break;
+    case 'CADA_SEMESTRE':
+      diasIntervalo = frecuencia * 180;
+      break;
+    case 'CADA_ANO':
+    case 'CADA_AÑO':
+      diasIntervalo = frecuencia * 365;
+      break;
+    default:
+      break;
+  }
+
+  return differenceInDays(fecha, ultimaCompletacion) < diasIntervalo;
+}
+
 function resolveFixedPeriodicCadence(cadenciaConfig) {
   if (!cadenciaConfig) return null;
 
@@ -509,4 +552,5 @@ export default {
   isScheduledCadenciaDay,
   getScheduledDatesInPeriod,
   hasCadenciaDebt,
+  isIntervalCadenceResting,
 };

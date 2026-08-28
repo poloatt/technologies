@@ -1,7 +1,7 @@
 /** Buckets de cadencia para la vista agrupada en /rutinas. */
 export const RUTINA_CADENCE_BUCKETS = [
-  { id: 'DIARIO', label: 'Diario', iconKey: 'calendarToday' },
-  { id: 'SEMANAL', label: 'Semanal', iconKey: 'eventNote' },
+  { id: 'DIARIO', label: 'Hoy', iconKey: 'calendarToday' },
+  { id: 'SEMANAL', label: 'Esta semana', iconKey: 'eventNote' },
   { id: 'MENSUAL', label: 'Mensual', iconKey: 'accessTime' },
   { id: 'TRIMESTRAL', label: 'Trimestral', iconKey: 'repeat' },
   { id: 'SEMESTRAL', label: 'Semestral', iconKey: 'repeat' },

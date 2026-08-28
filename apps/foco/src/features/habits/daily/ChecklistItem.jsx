@@ -125,6 +125,9 @@ const ChecklistItem = ({
     if (tipo === 'DIARIO' && horariosConfig.length > 0) {
       return label;
     }
+    if (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA') {
+      return label;
+    }
 
     return `${label} • ${completados}/${frecuencia}`;
   }, [config, isCompleted, rutina, section, itemId]);

@@ -12,6 +12,7 @@ import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import {
   hasCadenciaDebt,
   isScheduledCadenciaDay,
+  isIntervalCadenceResting,
   obtenerHistorialCompletados,
   contarCompletadosEnPeriodo,
 } from '../utils/cadenciaUtils.js';
@@ -213,6 +214,13 @@ function isDailyCadenceConfig(config = {}) {
   return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
 }
 
+/** Multi-franja real solo para DIARIO (p. ej. mañana + noche). */
+function isDailyMultiHorarioConfig(config = {}) {
+  if ((config?.tipo || 'DIARIO').toUpperCase() !== 'DIARIO') return false;
+  const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
+  return horarios.length > 1;
+}
+
 /**
  * ¿Cuota del período satisfecha o hábito totalmente completado hoy?
  * Usado para mover ítems a "Hecho" en lugar de "No toca hoy".
@@ -227,8 +235,8 @@ export function isHabitQuotaOrDayDone({
 }) {
   if (!config || config.activo === false) return false;
 
-  const horarios = Array.isArray(config.horarios) ? config.horarios : [];
-  if (isDailyCadenceConfig(config) && horarios.length > 1) {
+  if (isDailyMultiHorarioConfig(config)) {
+    const horarios = Array.isArray(config.horarios) ? config.horarios : [];
     return isHabitFullyCompletedToday(itemValue, horarios);
   }
 
@@ -248,7 +256,11 @@ export function isHabitQuotaOrDayDone({
     historialDates,
   );
 
-  return completadosEnPeriodo >= frecuencia;
+  if (completadosEnPeriodo >= frecuencia) {
+    return true;
+  }
+
+  return isIntervalCadenceResting(fechaRutina, config, historialDates);
 }
 
 /**
@@ -278,7 +290,7 @@ export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility
   const { config, itemValue, isScheduled, itemId, section } = entry;
   const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
 
-  if (isDailyCadenceConfig(config) && horarios.length > 1) {
+  if (isDailyMultiHorarioConfig(config)) {
     if (isHabitFullyCompletedToday(itemValue, horarios)) {
       return 'done';
     }

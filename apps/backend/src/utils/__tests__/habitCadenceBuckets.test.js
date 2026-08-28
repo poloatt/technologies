@@ -19,7 +19,8 @@ describe('resolveHabitCadenceBucket', () => {
   });
 
   it('returns readable labels', () => {
-    expect(getCadenceBucketLabel('DIARIO')).toBe('Diario');
+    expect(getCadenceBucketLabel('DIARIO')).toBe('Hoy');
+    expect(getCadenceBucketLabel('SEMANAL')).toBe('Esta semana');
     expect(getCadenceBucketLabel('TRIMESTRAL')).toBe('Trimestral');
   });
 });

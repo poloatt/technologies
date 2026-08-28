@@ -6,7 +6,7 @@ import {
   Typography,
 } from '@mui/material';
 import { KeyboardArrowDown as ChevronDownIcon } from '@mui/icons-material';
-import { getHabitIconOptions, getIconByName } from '@shared/utils/habitIcons';
+import { getHabitIconGroups, getHabitIconOptions, getIconByName } from '@shared/utils/habitIcons';
 import { PickerPopover } from './tareaFormPickers';
 import {
   TASK_FORM_ICON_SIZE,
@@ -21,7 +21,7 @@ const ICON_CELL_SIZE = 40;
 function HabitIconPickerGrid({
   listId,
   ariaLabel,
-  icons,
+  groups,
   value,
   onSelect,
 }) {
@@ -31,45 +31,68 @@ function HabitIconPickerGrid({
       role="listbox"
       aria-label={ariaLabel}
       sx={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${GRID_COLUMNS}, ${ICON_CELL_SIZE}px)`,
-        gap: 0.5,
-        p: 1.5,
-        maxHeight: 280,
+        maxHeight: 360,
         overflowY: 'auto',
+        py: 0.5,
       }}
     >
-      {icons.map(({ name, label }) => {
-        const IconComp = getIconByName(name);
-        if (!IconComp) return null;
-        const selected = value === name;
-        return (
-          <Tooltip key={name} title={label} arrow placement="top">
-            <IconButton
-              role="option"
-              aria-selected={selected}
-              aria-label={label}
-              size="small"
-              onClick={() => onSelect(name)}
-              sx={{
-                width: ICON_CELL_SIZE,
-                height: ICON_CELL_SIZE,
-                borderRadius: 1.5,
-                border: 1,
-                borderColor: selected ? 'primary.main' : 'transparent',
-                bgcolor: selected ? 'action.selected' : 'transparent',
-                color: selected ? 'primary.main' : 'text.secondary',
-                '&:hover': {
-                  bgcolor: 'action.hover',
-                  color: 'text.primary',
-                },
-              }}
-            >
-              <IconComp sx={{ fontSize: '1.25rem' }} />
-            </IconButton>
-          </Tooltip>
-        );
-      })}
+      {groups.map((group) => (
+        <Box key={group.id} sx={{ px: 1.5, pt: group.id === groups[0]?.id ? 1 : 1.25, pb: 0.5 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: 'block',
+              fontWeight: 600,
+              fontSize: '0.68rem',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              mb: 0.75,
+            }}
+          >
+            {group.label}
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${GRID_COLUMNS}, ${ICON_CELL_SIZE}px)`,
+              gap: 0.5,
+            }}
+          >
+            {group.icons.map(({ name, label }) => {
+              const IconComp = getIconByName(name);
+              if (!IconComp) return null;
+              const selected = value === name;
+              return (
+                <Tooltip key={name} title={label} arrow placement="top">
+                  <IconButton
+                    role="option"
+                    aria-selected={selected}
+                    aria-label={label}
+                    size="small"
+                    onClick={() => onSelect(name)}
+                    sx={{
+                      width: ICON_CELL_SIZE,
+                      height: ICON_CELL_SIZE,
+                      borderRadius: 1.5,
+                      border: 1,
+                      borderColor: selected ? 'primary.main' : 'transparent',
+                      bgcolor: selected ? 'action.selected' : 'transparent',
+                      color: selected ? 'primary.main' : 'text.secondary',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                        color: 'text.primary',
+                      },
+                    }}
+                  >
+                    <IconComp sx={{ fontSize: '1.25rem' }} />
+                  </IconButton>
+                </Tooltip>
+              );
+            })}
+          </Box>
+        </Box>
+      ))}
     </Box>
   );
 }
@@ -82,6 +105,7 @@ function HabitIconPickerGrid({
 export default function HabitIconPicker({
   value,
   onChange,
+  iconGroups = getHabitIconGroups(),
   icons = getHabitIconOptions(),
   variant = 'field',
   error,
@@ -93,6 +117,10 @@ export default function HabitIconPicker({
   const listId = useId();
   const open = Boolean(anchorEl);
   const SelectedIcon = getIconByName(value);
+
+  const groups = iconGroups?.length
+    ? iconGroups
+    : [{ id: 'all', label: 'Iconos', icons }];
 
   const handleOpen = (event) => {
     if (disabled) return;
@@ -111,7 +139,7 @@ export default function HabitIconPicker({
       <HabitIconPickerGrid
         listId={listId}
         ariaLabel={ariaLabel}
-        icons={icons}
+        groups={groups}
         value={value}
         onSelect={handleSelect}
       />

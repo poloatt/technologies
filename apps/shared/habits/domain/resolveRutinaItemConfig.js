@@ -2,10 +2,8 @@ import { DEFAULT_HABIT_ITEM_CONFIG } from './habitSectionIds.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { VALID_TIME_OF_DAY } from '../../utils/timeOfDayUtils.js';
 
-function isDailyCadence(config = {}) {
-  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
-  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
-  return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
+function isTrueDailyTipo(config = {}) {
+  return (config?.tipo || 'DIARIO').toUpperCase() === 'DIARIO';
 }
 
 function normalizeHorariosList(horarios) {
@@ -15,11 +13,14 @@ function normalizeHorariosList(horarios) {
     .filter(Boolean);
 }
 
-/** Deriva franjas efectivas cuando frecuencia > 1 pero horarios vacíos. */
+/**
+ * Deriva franjas horarias solo para tipo DIARIO con frecuencia > 1.
+ * PERSONALIZADO CADA_DIA usa frecuencia como intervalo en días, no como veces/día.
+ */
 export function resolveEffectiveDailyHorarios(config = {}) {
   const horarios = normalizeHorariosList(config.horarios);
   if (horarios.length > 0) return horarios;
-  if (!isDailyCadence(config)) return [];
+  if (!isTrueDailyTipo(config)) return [];
 
   const frecuencia = Number(config.frecuencia || 1);
   if (frecuencia <= 1) return [];

@@ -106,4 +106,103 @@ describe('cadence view — dynamic Diario promotion', () => {
     expect(resolveRutinaScheduleBucket(entry, { rutina })).toBe('today');
     expect(resolveCadenceViewBucket(entry, rutina)).toBe('DIARIO');
   });
+
+  it('places quota-satisfied weekly habit in Hecho, not notToday, in Semanal bucket', () => {
+    const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
+    const rutina = makeWeeklyRutina({
+      fecha: sunday.toISOString(),
+      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
+    });
+    const semanal = groupRutinaHabitsByCadence({ rutina, habits, iconsMap })
+      .find((b) => b.id === 'SEMANAL');
+
+    expect(semanal?.done.map((e) => e.itemId)).toEqual(['weekly']);
+    expect(semanal?.notToday.map((e) => e.itemId)).toEqual([]);
+
+    const weekdayGroups = groupWeeklyCadenceByWeekday(semanal, rutina);
+    expect(weekdayGroups.flatMap((g) => g.done).map((e) => e.itemId)).toContain('weekly');
+    expect(weekdayGroups.flatMap((g) => g.pending).map((e) => e.itemId)).not.toContain('weekly');
+  });
+
+  it('places quota-satisfied monthly habit in Hecho, not notToday, in Mensual bucket', () => {
+    const day20 = new Date(2026, 5, 20, 12, 0, 0, 0);
+    const rutina = {
+      _id: 'r1',
+      fecha: day20.toISOString(),
+      bodyCare: { monthly: false },
+      config: {
+        bodyCare: {
+          monthly: {
+            tipo: 'MENSUAL',
+            frecuencia: 1,
+            activo: true,
+            diasMes: [1, 15],
+          },
+        },
+      },
+      historial: { bodyCare: { monthly: { '2026-06-01': true } } },
+    };
+    const habitsMonthly = {
+      bodyCare: [{ id: 'monthly', label: 'Mensual', icon: 'Spa', activo: true, orden: 0 }],
+    };
+    const iconsMonthly = { bodyCare: { monthly: () => null } };
+
+    const mensual = groupRutinaHabitsByCadence({
+      rutina,
+      habits: habitsMonthly,
+      iconsMap: iconsMonthly,
+    }).find((b) => b.id === 'MENSUAL');
+
+    expect(mensual?.done.map((e) => e.itemId)).toEqual(['monthly']);
+    expect(mensual?.notToday.map((e) => e.itemId)).toEqual([]);
+  });
+
+  it('places quota-satisfied weekly habit in Diario franja Hecho, not notToday', () => {
+    const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
+    const rutina = makeWeeklyRutina({
+      fecha: sunday.toISOString(),
+      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
+    });
+    const diario = groupRutinaHabitsByCadence({ rutina, habits, iconsMap })
+      .find((b) => b.id === 'DIARIO');
+
+    expect(diario).toBeUndefined();
+
+    const rutinaWithDaily = makeWeeklyRutina({
+      fecha: sunday.toISOString(),
+      bodyCare: { shower: false, weekly: false },
+      config: {
+        bodyCare: {
+          shower: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+          weekly: {
+            tipo: 'SEMANAL',
+            frecuencia: 1,
+            activo: true,
+            diasSemana: [1],
+          },
+        },
+      },
+      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
+    });
+    const habitsBoth = {
+      bodyCare: [
+        { id: 'shower', label: 'Ducha', icon: 'Shower', activo: true, orden: 0 },
+        { id: 'weekly', label: 'Semanal', icon: 'Spa', activo: true, orden: 1 },
+      ],
+    };
+    const iconsBoth = { bodyCare: { shower: () => null, weekly: () => null } };
+
+    const diarioBucket = groupRutinaHabitsByCadence({
+      rutina: rutinaWithDaily,
+      habits: habitsBoth,
+      iconsMap: iconsBoth,
+    }).find((b) => b.id === 'DIARIO');
+
+    const franjaGroups = groupDailyCadenceByFranja(diarioBucket, rutinaWithDaily);
+    const notTodayIds = franjaGroups.flatMap((g) => g.notToday.map((e) => e.itemId));
+    const doneIds = franjaGroups.flatMap((g) => g.done.map((e) => e.itemId));
+
+    expect(notTodayIds).not.toContain('weekly');
+    expect(doneIds).not.toContain('weekly');
+  });
 });

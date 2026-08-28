@@ -27,6 +27,7 @@ export {
   getFrecuenciaLabel,
   hasCadenciaDebt,
   isScheduledCadenciaDay,
+  isIntervalCadenceResting,
   getCadenciaWeekRange,
   DIAS_SEMANA,
   CADENCIA_WEEK_STARTS_ON,
