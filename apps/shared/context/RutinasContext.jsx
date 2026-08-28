@@ -4,11 +4,12 @@ import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
 import { startOfDay } from 'date-fns';
 import { getNormalizedToday, toISODateString, parseAPIDate, formatDateForAPI } from '../utils/dateUtils';
-import { resolveHabitConfigApplyFrom, getRutinaDayMode } from '@shared/habits';
+import { resolveHabitConfigApplyFrom, getRutinaDayMode, buildHistoricalFranjaMigrationPayload } from '@shared/habits';
+import { getCachedHabitsPreferences, fetchHabitsPreferencesFromApi } from '../hooks/useHabitsPreferences.js';
 import rutinasService from '../services/rutinasService';
 import { UISettingsContext } from './UISettingsContext';
 import { calculateCompletionPercentage } from '../utils/rutinaCalculations';
-import { isHabitCompletedForHistorial } from '../habits/domain/habitCompletionUtils.js';
+import { isHabitCompletedForHistorial, ensureHabitCompletionShape, rutinaItemValuesDiffer } from '../habits/domain/habitCompletionUtils.js';
 import { normalizeTimeOfDay } from '../utils/timeOfDayUtils';
 import { invalidateHabitsPreferencesCache } from '../hooks/useHabitsPreferences.js';
 import { resolveUndoScope } from '../config/undoScopeConfig';
@@ -247,10 +248,47 @@ export const RutinasProvider = ({ children }) => {
       if (rutinaEnCache) {
         rutinaData = rutinaEnCache;
       } else {
-        // Si no está en caché, hacer petición al servidor
         const response = await rutinasService.getRutinaById(rutinaId);
         rutinaData = response;
+      }
 
+      let migrated = false;
+
+      if (rutinaData?.fecha && getRutinaDayMode(rutinaData.fecha) === 'historical') {
+        const prefs = getCachedHabitsPreferences() ?? await fetchHabitsPreferencesFromApi();
+        const migrationPayload = buildHistoricalFranjaMigrationPayload(rutinaData, prefs);
+        if (migrationPayload) {
+          try {
+            await clienteAxios.put(`/api/rutinas/${rutinaData._id}`, migrationPayload);
+            if (migrationPayload.config) {
+              rutinaData = {
+                ...rutinaData,
+                config: {
+                  ...(rutinaData.config || {}),
+                  ...Object.fromEntries(
+                    Object.entries(migrationPayload.config).map(([section, items]) => [
+                      section,
+                      { ...(rutinaData.config?.[section] || {}), ...items },
+                    ]),
+                  ),
+                },
+              };
+            }
+            Object.keys(migrationPayload).forEach((key) => {
+              if (key === '_id' || key === 'config') return;
+              rutinaData = {
+                ...rutinaData,
+                [key]: { ...(rutinaData[key] || {}), ...migrationPayload[key] },
+              };
+            });
+            migrated = true;
+          } catch (migrationError) {
+            console.warn('[RutinasContext] No se pudo migrar franjas históricas:', migrationError);
+          }
+        }
+      }
+
+      if (!rutinaEnCache || migrated) {
         // Actualizar el array de rutinas y recalcular historial
         const base = Array.isArray(rutinasRef.current) ? rutinasRef.current : [];
         const newRutinas = [...base];
@@ -647,6 +685,12 @@ export const RutinasProvider = ({ children }) => {
           [section]: mergedSectionConfig,
         },
       };
+
+      const currentItemValue = rutina?.[section]?.[itemId];
+      const reshapedValue = ensureHabitCompletionShape(currentItemValue, normalizedConfig);
+      if (rutinaItemValuesDiffer(currentItemValue, reshapedValue)) {
+        updateData[section] = { [itemId]: reshapedValue };
+      }
 
       await clienteAxios.put(`/api/rutinas/${targetRutinaId}`, updateData);
       patchRutinaItemConfig(targetRutinaId, section, itemId, normalizedConfig);

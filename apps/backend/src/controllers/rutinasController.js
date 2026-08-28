@@ -262,6 +262,7 @@ class RutinasController extends BaseController {
       const completionSections = buildEmptyCompletionSections(
         usuarioConfig?.customHabits,
         seccionesValidas,
+        configCompleta,
       );
 
       const nuevaRutina = new this.Model({

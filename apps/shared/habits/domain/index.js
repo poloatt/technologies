@@ -20,11 +20,16 @@ export {
   isHabitHorarioCompleted,
   isHabitFullyCompletedToday,
   isHabitPartiallyCompletedToday,
+  buildEmptyHabitCompletionValue,
+  ensureHabitCompletionShape,
+  getHabitCompletionSlotCount,
+  getHabitCompletedSlotCount,
 } from './habitCompletionUtils.js';
 
 export {
   resolveCarouselItemConfig,
   resolveRutinaItemConfig,
+  resolveEffectiveDailyHorarios,
 } from './resolveRutinaItemConfig.js';
 
 export {
@@ -49,7 +54,7 @@ export {
   shouldShowRutinaItem,
 } from './resolveItemVisibility.js';
 
-export { resolveRutinaForDate } from './resolveRutinaForDate.js';
+export { buildHistoricalFranjaMigrationPayload } from './migrateHistoricalRutinaFranjas.js';
 export { buildHabitSectionLabelsMap } from './buildHabitSectionLabelsMap.js';
 export {
   resolveHabitSections,

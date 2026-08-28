@@ -3,6 +3,91 @@
  * Soporta formato legacy (boolean) y formato por horario ({ MAÑANA: true, ... }).
  */
 
+function isDailyCadence(config = {}) {
+  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
+  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
+  return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
+}
+
+function normalizeHorarios(horarios) {
+  if (!Array.isArray(horarios)) return [];
+  return horarios.map((h) => String(h).toUpperCase()).filter(Boolean);
+}
+
+/** Valor inicial de completado según config (boolean o objeto por franja). */
+export function buildEmptyHabitCompletionValue(config = {}) {
+  const horarios = normalizeHorarios(config.horarios);
+
+  if (isDailyCadence(config) && horarios.length > 0) {
+    return horarios.reduce((acc, horario) => {
+      acc[horario] = false;
+      return acc;
+    }, {});
+  }
+
+  return false;
+}
+
+/**
+ * Alinea el valor guardado al formato esperado cuando hay franjas configuradas.
+ * Migra boolean legacy → objeto por franja.
+ */
+export function ensureHabitCompletionShape(itemValue, config = {}) {
+  const horarios = normalizeHorarios(config.horarios);
+
+  if (!isDailyCadence(config) || horarios.length === 0) {
+    return itemValue;
+  }
+
+  if (isHabitValueObject(itemValue)) {
+    const next = { ...itemValue };
+    horarios.forEach((horario) => {
+      if (!(horario in next)) next[horario] = false;
+    });
+    return next;
+  }
+
+  if (typeof itemValue === 'boolean') {
+    return horarios.reduce((acc, horario) => {
+      acc[horario] = itemValue === true;
+      return acc;
+    }, {});
+  }
+
+  return buildEmptyHabitCompletionValue(config);
+}
+
+/** Cantidad de unidades de completado para métricas (franjas o 1). */
+export function getHabitCompletionSlotCount(itemValue, config = {}) {
+  if (isHabitValueObject(itemValue)) {
+    return Object.keys(itemValue).length;
+  }
+
+  const horarios = normalizeHorarios(config.horarios);
+  if (isDailyCadence(config) && horarios.length > 0) {
+    return horarios.length;
+  }
+
+  return 1;
+}
+
+/** Cantidad de franjas completadas para métricas. */
+export function getHabitCompletedSlotCount(itemValue, config = {}) {
+  if (isHabitValueObject(itemValue)) {
+    return Object.values(itemValue).filter(Boolean).length;
+  }
+
+  if (typeof itemValue === 'boolean') {
+    const horarios = normalizeHorarios(config.horarios);
+    if (isDailyCadence(config) && horarios.length > 0) {
+      return itemValue === true ? horarios.length : 0;
+    }
+    return itemValue === true ? 1 : 0;
+  }
+
+  return 0;
+}
+
 export function getHabitItemValue(rutina, section, itemId, localData = null) {
   if (localData && localData[itemId] !== undefined) return localData[itemId];
   return rutina?.[section]?.[itemId];

@@ -3,6 +3,8 @@
  * No usar para restablecer hábitos de usuarios existentes.
  */
 
+import { buildEmptyHabitCompletionValue } from '@attadia/shared/habits';
+
 export const HABIT_SECTION_KEYS = ['bodyCare', 'nutricion', 'ejercicio', 'cleaning'];
 
 export const DEFAULT_CUSTOM_HABITS = {
@@ -75,10 +77,14 @@ export function applyCustomHabitsToRutinaConfig(customHabits, rutinasConfig, sec
 }
 
 /**
- * Mapas de completado vacíos (false) alineados a customHabits activos.
- * Evita defaults legacy (bath/agua/gym…) en documentos nuevos.
+ * Mapas de completado vacíos alineados a customHabits activos y su config de cadencia.
+ * Hábitos diarios con franjas (MAÑANA/TARDE/NOCHE) se inicializan como objeto por slot.
  */
-export function buildEmptyCompletionSections(customHabits, sections = HABIT_SECTION_KEYS) {
+export function buildEmptyCompletionSections(
+  customHabits,
+  sections = HABIT_SECTION_KEYS,
+  configMap = null,
+) {
   const out = {};
   sections.forEach((section) => {
     out[section] = {};
@@ -88,7 +94,10 @@ export function buildEmptyCompletionSections(customHabits, sections = HABIT_SECT
       .forEach((habit) => {
         const habitId = habit.id || habit._id;
         if (!habitId) return;
-        out[section][habitId] = false;
+        const itemConfig = configMap?.[section]?.[habitId];
+        out[section][habitId] = itemConfig
+          ? buildEmptyHabitCompletionValue(itemConfig)
+          : false;
       });
   });
   return out;

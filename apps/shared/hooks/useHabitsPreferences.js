@@ -14,7 +14,11 @@ export function setHabitsPreferencesCache(prefs) {
   cachedHabitsPreferences = prefs ?? {};
 }
 
-function fetchHabitsPreferencesFromApi() {
+export function getCachedHabitsPreferences() {
+  return cachedHabitsPreferences;
+}
+
+export function fetchHabitsPreferencesFromApi() {
   return clienteAxios.get('/api/users/preferences/habits')
     .then((response) => response.data?.habits || {})
     .catch(() => ({}));

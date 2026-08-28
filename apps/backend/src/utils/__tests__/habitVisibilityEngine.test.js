@@ -730,6 +730,66 @@ describe('habitVisibilityEngine', () => {
       expect(resolved.tipo).toBe('DIARIO');
       expect(resolved.horarios).toEqual(['MAÑANA']);
     });
+
+    it('fills historical horarios from preferences when snapshot has none', () => {
+      const historicalDate = new Date('2020-01-15T12:00:00.000Z');
+      const rutinaHistorica = buildRutina({
+        fecha: historicalDate.toISOString(),
+        config: {
+          bodyCare: {
+            cuidadoBucal: {
+              tipo: 'DIARIO',
+              frecuencia: 1,
+              activo: true,
+              periodo: 'CADA_DIA',
+              horarios: [],
+            },
+          },
+        },
+      });
+      const habitsPreferences = {
+        bodyCare: {
+          cuidadoBucal: {
+            tipo: 'DIARIO',
+            frecuencia: 2,
+            periodo: 'CADA_DIA',
+            horarios: ['MAÑANA', 'NOCHE'],
+            activo: true,
+          },
+        },
+      };
+
+      const resolved = resolveRutinaItemConfig(
+        'bodyCare',
+        'cuidadoBucal',
+        rutinaHistorica,
+        habitsPreferences,
+      );
+      expect(resolved.tipo).toBe('DIARIO');
+      expect(resolved.frecuencia).toBe(2);
+      expect(resolved.horarios).toEqual(['MAÑANA', 'NOCHE']);
+    });
+
+    it('derives horarios from frecuencia when snapshot lacks franjas', () => {
+      const historicalDate = new Date('2020-01-15T12:00:00.000Z');
+      const rutinaHistorica = buildRutina({
+        fecha: historicalDate.toISOString(),
+        config: {
+          bodyCare: {
+            agua: {
+              tipo: 'DIARIO',
+              frecuencia: 2,
+              activo: true,
+              periodo: 'CADA_DIA',
+              horarios: [],
+            },
+          },
+        },
+      });
+
+      const resolved = resolveRutinaItemConfig('bodyCare', 'agua', rutinaHistorica, {});
+      expect(resolved.horarios).toEqual(['MAÑANA', 'TARDE']);
+    });
   });
 
   describe('cadencia carry-over carousel', () => {

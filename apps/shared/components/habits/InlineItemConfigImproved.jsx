@@ -295,6 +295,24 @@ const InlineItemConfigImproved = ({
 
         updatedConfig.horarios = currentHorarios.slice(0, newFrecuencia);
 
+      } else {
+
+        const tipo = String(updatedConfig.tipo || 'DIARIO').toUpperCase();
+
+        const periodo = String(updatedConfig.periodo || 'CADA_DIA').toUpperCase();
+
+        const isDaily = tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
+
+        if (isDaily && newFrecuencia > 1 && currentHorarios.length < newFrecuencia) {
+
+          const normalized = normalizeTimeOfDay(currentHorarios);
+
+          const remaining = VALID_TIME_OF_DAY.filter((h) => !normalized.includes(h));
+
+          updatedConfig.horarios = [...normalized, ...remaining].slice(0, newFrecuencia);
+
+        }
+
       }
 
     }

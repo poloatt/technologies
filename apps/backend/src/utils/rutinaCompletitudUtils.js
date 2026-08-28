@@ -1,4 +1,4 @@
-import { shouldShowRutinaItem } from '@attadia/shared/habits';
+import { shouldShowRutinaItem, getHabitCompletionSlotCount, getHabitCompletedSlotCount } from '@attadia/shared/habits';
 import { collectRutinaSectionKeys } from './habitSectionsUtils.js';
 import { toPlainValue, repairRutinaItemConfig } from './rutinaDocumentUtils.js';
 import { toPlainRutinaSnapshot } from '@attadia/shared/habits';
@@ -62,12 +62,9 @@ export function calculateRutinaCompletitud(rutinaDoc) {
       const isObjectFormat = typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue);
       const isBooleanFormat = typeof fieldValue === 'boolean';
 
-      if (isObjectFormat) {
-        sectionTotal += Object.keys(fieldValue).length;
-        sectionCompleted += Object.values(fieldValue).filter(Boolean).length;
-      } else if (isBooleanFormat) {
-        sectionTotal += 1;
-        if (fieldValue === true) sectionCompleted += 1;
+      if (isObjectFormat || isBooleanFormat) {
+        sectionTotal += getHabitCompletionSlotCount(fieldValue, itemConfig);
+        sectionCompleted += getHabitCompletedSlotCount(fieldValue, itemConfig);
       } else {
         sectionTotal += 1;
       }
