@@ -273,6 +273,9 @@ export function useTareasPageController() {
     };
 
     const handleOpenGoogleTasksConfig = () => {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
       setIsGoogleTasksConfigOpen(true);
     };
 

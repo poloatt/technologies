@@ -161,6 +161,8 @@ export function filterDocsForListView(docs, options = {}, now = new Date()) {
   return docs.filter((t) => {
     // Canceladas solo viven en Archivo — nunca en Ahora/Luego.
     if (isTaskCancelled(t)) return false;
+    // Desvinculadas de Google (eliminadas allí) no deben aparecer en activas.
+    if (t.googleTasksSync?.syncStatus === 'unlinked') return false;
     if (!includeCompleted && isTaskCompleted(t)) return false;
     if (view === 'ahora') return isInAhora(t, now);
     if (view === 'luego') return isInLuego(t, now);

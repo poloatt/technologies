@@ -63,9 +63,14 @@ const main = async () => {
       process.exit(1);
     }
 
-    console.log('🚀 Iniciando fullSyncWithUser...');
+    console.log('🚀 Iniciando fullSyncWithUser...', {
+      fullImport: args.fullImport === true || args.fullImport === 'true',
+    });
     const t0 = Date.now();
-    const results = await googleTasksService.fullSyncWithUser(user);
+    const forceFullImport = args.fullImport === true || args.fullImport === 'true';
+    const results = await googleTasksService.fullSyncWithUser(user, {
+      fullImport: forceFullImport || undefined,
+    });
     const elapsedMs = Date.now() - t0;
 
     console.log('✅ Sincronización terminada en', elapsedMs, 'ms');

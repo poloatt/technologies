@@ -109,7 +109,7 @@ class GoogleCalendarService {
         timeMax: timeMax.toISOString(),
         singleEvents: true,
         orderBy: 'startTime',
-        showDeleted: false,
+        showDeleted: true,
         maxResults: 250,
         pageToken,
       });

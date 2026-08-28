@@ -142,7 +142,7 @@ const tareaSchema = createSchema({
     lastSyncDate: Date,
     syncStatus: {
       type: String,
-      enum: ['pending', 'syncing', 'synced', 'error'],
+      enum: ['pending', 'syncing', 'synced', 'error', 'unlinked'],
       default: 'pending'
     },
     syncingStartedAt: Date, // Timestamp cuando comenzó la sincronización
@@ -201,8 +201,13 @@ tareaSchema.pre('save', function(next) {
     };
   }
   
-  // Marcar para sincronización si la tarea fue modificada y tiene Google Tasks habilitado
-  if (!this.isNew && this.isModified() && this.googleTasksSync?.enabled) {
+  // Marcar para sincronización si la tarea fue modificada localmente (no en import desde Google)
+  if (
+    !this.isNew
+    && this.isModified()
+    && this.googleTasksSync?.enabled
+    && !this.$locals?.skipGoogleSyncMark
+  ) {
     this.googleTasksSync.needsSync = true;
     this.googleTasksSync.localVersion = (this.googleTasksSync.localVersion || 0) + 1;
     this.googleTasksSync.syncStatus = 'pending';

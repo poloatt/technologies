@@ -137,7 +137,8 @@ Subtareas:
     });
     expect(tarea.completada).toBe(true);
     expect(tarea.estado).toBe('COMPLETADA');
-    expect(tarea.fechaVencimiento.getHours()).toBe(12);
+    expect(tarea.fechaVencimiento.getDate()).toBe(20);
+    expect(tarea.fechaVencimiento.getMonth()).toBe(4);
   });
 
   test('shouldImportFromGoogle when due or notes differ', () => {
@@ -176,7 +177,43 @@ Subtareas:
     expect(googleTasksService.shouldApplyGoogleUpdate(freshLocal, googleTask)).toBe(false);
   });
 
-  test('pending local blocks import helpers (status/due/notes)', () => {
+  test('applyGoogleStatusFromGoogle preserves needsSync when local export pending', () => {
+    const tarea = new Tareas({
+      titulo: 'Test',
+      usuario: '507f1f77bcf86cd799439011',
+      estado: 'PENDIENTE',
+      completada: false,
+      googleTasksSync: { enabled: true, needsSync: true, syncStatus: 'pending' },
+    });
+    googleTasksService.applyGoogleStatusFromGoogle(tarea, {
+      id: 'gt-1',
+      status: 'completed',
+      completed: '2026-05-19T12:00:00.000Z',
+      updated: '2026-05-19T12:00:00.000Z',
+    }, { preservePendingExport: true });
+    expect(tarea.completada).toBe(true);
+    expect(tarea.estado).toBe('COMPLETADA');
+    expect(tarea.googleTasksSync.needsSync).toBe(true);
+    expect(tarea.googleTasksSync.syncStatus).toBe('pending');
+  });
+
+  test('shouldApplyGoogleDueDespitePending when Google due is newer than last sync', () => {
+    const googleTask = {
+      due: '2026-08-28T00:00:00.000Z',
+      updated: '2026-08-28T10:00:00.000Z',
+    };
+    const tarea = {
+      fechaVencimiento: new Date(2026, 7, 21, 12, 0, 0, 0),
+      googleTasksSync: {
+        needsSync: true,
+        syncStatus: 'pending',
+        updated: new Date('2026-08-21T08:00:00.000Z'),
+      },
+    };
+    expect(googleTasksService.shouldApplyGoogleDueDespitePending(tarea, googleTask)).toBe(true);
+  });
+
+  test('pending local blocks content import but not status refresh', () => {
     const googleTask = {
       status: 'completed',
       due: '2026-05-20T00:00:00.000Z',
@@ -191,9 +228,10 @@ Subtareas:
       googleTasksSync: { needsSync: true, syncStatus: 'pending' },
     };
     expect(googleTasksService.hasLocalPendingGoogleSync(pending)).toBe(true);
-    expect(googleTasksService.shouldRefreshGoogleStatus(pending, googleTask)).toBe(false);
+    expect(googleTasksService.shouldRefreshGoogleStatus(pending, googleTask)).toBe(true);
+    expect(googleTasksService.shouldImportContentFromGoogle(pending, googleTask)).toBe(false);
     expect(googleTasksService.shouldRefreshGoogleDueDate(pending, googleTask)).toBe(false);
     expect(googleTasksService.shouldRefreshGoogleNotes(pending, googleTask)).toBe(false);
-    expect(googleTasksService.shouldImportFromGoogle(pending, googleTask)).toBe(false);
+    expect(googleTasksService.shouldImportFromGoogle(pending, googleTask)).toBe(true);
   });
 });

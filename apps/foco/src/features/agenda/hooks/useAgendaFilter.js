@@ -33,6 +33,7 @@ export function useAgendaFilter(tasks) {
 
     return tasksArray.filter((t) => {
       if (isTaskCancelled(t)) return false;
+      if (t.googleTasksSync?.syncStatus === 'unlinked') return false;
       if (!showCompleted && isTaskCompleted(t)) return false;
       if (agendaView === 'ahora') return isInAhora(t, now);
       if (agendaView === 'luego') return isInLuego(t, now);

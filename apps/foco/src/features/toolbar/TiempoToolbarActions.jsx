@@ -17,13 +17,7 @@ import { getIconByKey } from '@shared/navigation/menuIcons';
 import { matchTiempoSection } from '@shared/navigation/tiempoToolbarPaths';
 import { TIEMPO_ICON_KEYS } from '@shared/navigation/tiempoIconKeys';
 import { toggleTareasPageView, useTareasPageView } from '../tasks/list/useTareasPageView';
-import { RUTINA_PAGE_VIEW, toggleRutinaPageView } from '../habits/daily/useRutinaPageView';
-
-function readStoredRutinaPageView() {
-  if (typeof window === 'undefined') return RUTINA_PAGE_VIEW.group;
-  const stored = window.localStorage.getItem('foco.rutinas.pageView');
-  return stored === RUTINA_PAGE_VIEW.cadence ? RUTINA_PAGE_VIEW.cadence : RUTINA_PAGE_VIEW.group;
-}
+import { RUTINA_PAGE_VIEW, readStoredRutinaPageView, toggleRutinaPageView } from '../habits/daily/useRutinaPageView';
 
 const ScopedUndoButton = SystemButtons.ScopedUndoButton;
 
@@ -150,7 +144,10 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
             '& .MuiSvgIcon-root': { color: '#fff' },
           },
         },
-        onClick: () => window.dispatchEvent(new CustomEvent('openGoogleTasksConfig')),
+        onClick: (e) => {
+          e?.currentTarget?.blur();
+          window.dispatchEvent(new CustomEvent('openGoogleTasksConfig'));
+        },
       }] : []),
       ...(section === 'tareas' ? [{
         key: 'toggleAgendaView',

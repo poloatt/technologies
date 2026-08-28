@@ -657,6 +657,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
       maxWidth="sm"
       fullWidth
       fullScreen={isMobile}
+      disableRestoreFocus
       PaperProps={{
         sx: {
           ...tareaFormDialogPaperSx(isMobile),

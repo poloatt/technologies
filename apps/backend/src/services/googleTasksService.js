@@ -123,8 +123,8 @@ class GoogleTasksService {
    * Cachea por taskListId durante la corrida actual.
    */
   async listAllTasksInList(taskListId, userId, options = {}) {
-    // Cache básica por corrida
-    if (this.taskListCache.has(taskListId)) {
+    // Cache básica por corrida (omitir si skipCache — p. ej. listado completo para soft-unlink)
+    if (!options.skipCache && this.taskListCache.has(taskListId)) {
       return this.taskListCache.get(taskListId);
     }
     const tasksApi = this.getTasksApi(userId);
@@ -136,6 +136,7 @@ class GoogleTasksService {
           tasklist: taskListId,
           showCompleted: options.showCompleted ?? true,
           showHidden: options.showHidden ?? true,
+          showDeleted: options.showDeleted ?? false,
           maxResults: options.maxResults ?? 100,
           fields: options.fields ?? 'items(id,title,notes,status,updated,due,parent,position),nextPageToken',
           pageToken,
@@ -149,7 +150,9 @@ class GoogleTasksService {
       items.push(...batch);
       pageToken = resp.data.nextPageToken;
     } while (pageToken);
-    this.taskListCache.set(taskListId, items);
+    if (!options.skipCache) {
+      this.taskListCache.set(taskListId, items);
+    }
     return items;
   }
 
@@ -985,6 +988,11 @@ class GoogleTasksService {
 
       logger.sync(`📥 Importando desde ${googleTaskLists.length} TaskLists de Google Tasks`);
 
+      const repairedUnlinked = await this.repairPreviouslyUnlinkedTasks(userId);
+      if (repairedUnlinked > 0) {
+        logger.sync(`🩹 Archivadas ${repairedUnlinked} tareas previamente desvinculadas de Google`);
+      }
+
       // Import incremental salvo full sync explícito (necesario para detectar series recurrentes)
       let updatedMin = null;
       const lastSync = user?.googleTasksConfig?.lastSync ? new Date(user.googleTasksConfig.lastSync) : null;
@@ -1065,22 +1073,29 @@ class GoogleTasksService {
 
               if (tarea) {
                 const localPending = this.hasLocalPendingGoogleSync(tarea);
-                const shouldImport = this.shouldImportFromGoogle(tarea, googleTask);
-                if (shouldImport) {
+                const shouldImportContent = this.shouldImportContentFromGoogle(tarea, googleTask);
+                if (shouldImportContent) {
                   this.applyNotesFromGoogle(tarea, googleTask);
                   tarea.titulo = this.cleanTitle(tarea.titulo || googleTask.title);
                 }
-                // Pending local wins: never overwrite status/due or clear needsSync mid-edit/export
-                if (!localPending) {
+                // Estado completado en Google siempre gana; due avanza si Google es más reciente
+                if (localPending) {
+                  if (this.statusDiffersFromGoogle(tarea, googleTask)) {
+                    this.applyGoogleStatusFromGoogle(tarea, googleTask, { preservePendingExport: true });
+                  }
+                  if (this.shouldApplyGoogleDueDespitePending(tarea, googleTask)) {
+                    this.applyGoogleDueFromGoogle(tarea, googleTask);
+                  }
+                } else {
                   this.applyGoogleStatusAndDue(tarea, googleTask);
                 }
-                if (shouldImport) {
+                if (shouldImportContent || tarea.isModified()) {
+                  this.markSaveFromGoogleImport(tarea);
                   await tarea.save();
                   syncResults.updated++;
-                  logger.sync(`📝 Actualizada tarea desde Google: "${googleTask.title}"`);
-                } else if (tarea.isModified()) {
-                  await tarea.save();
-                  syncResults.updated++;
+                  if (shouldImportContent) {
+                    logger.sync(`📝 Actualizada tarea desde Google: "${googleTask.title}"`);
+                  }
                 } else {
                   syncResults.skippedTasks++;
                   syncResults.skipped++;
@@ -1098,7 +1113,8 @@ class GoogleTasksService {
                 this.applyNotesFromGoogle(nuevaTarea, googleTask);
                 this.applyGoogleStatusAndDue(nuevaTarea, googleTask);
                 nuevaTarea.googleTasksSync.googleTaskListId = taskList.id;
-                
+
+                this.markSaveFromGoogleImport(nuevaTarea);
                 await nuevaTarea.save();
                 existingByGoogleId.set(googleTask.id, nuevaTarea);
                 syncResults.created++;
@@ -1111,17 +1127,30 @@ class GoogleTasksService {
             }
           }
 
-          // Soft-unlink: no borrar locales si desaparecieron en Google (evita pérdida de datos)
-          if (isFullImport) {
+          // Soft-unlink: detectar tareas eliminadas en Google (en cada sync, no solo full import)
           try {
-            const googleMainIds = new Set(mainTasks.map(t => t.id));
+            const allGoogleTasks = await this.listAllTasksInList(taskList.id, userId, {
+              showCompleted: true,
+              showHidden: true,
+              showDeleted: true,
+              maxResults: 100,
+              fields: 'items(id,parent,deleted),nextPageToken',
+              skipCache: true,
+            });
+            const googleMainIds = new Set(
+              (allGoogleTasks || [])
+                .filter((task) => !task.parent && !task.deleted)
+                .map((t) => t.id),
+            );
             const tareasLocales = await Tareas.find({
               usuario: userId,
               objetivo: objetivo._id,
               'googleTasksSync.googleTaskListId': taskList.id,
-              'googleTasksSync.googleTaskId': { $exists: true, $ne: null }
+              'googleTasksSync.googleTaskId': { $exists: true, $ne: null },
             });
-            const toUnlink = tareasLocales.filter(t => t.googleTasksSync?.googleTaskId && !googleMainIds.has(t.googleTasksSync.googleTaskId));
+            const toUnlink = tareasLocales.filter(
+              (t) => t.googleTasksSync?.googleTaskId && !googleMainIds.has(t.googleTasksSync.googleTaskId),
+            );
             if (toUnlink.length > 0) {
               logger.sync(`🧹 Desvinculando ${toUnlink.length} tareas locales que no existen más en Google (soft-unlink)`);
               for (const t of toUnlink) {
@@ -1133,19 +1162,23 @@ class GoogleTasksService {
                   t.googleTasksSync.syncStatus = 'unlinked';
                   t.googleTasksSync.syncingStartedAt = null;
                   t.googleTasksSync.updated = new Date();
+                  // Eliminada en Google → archivar localmente (sale de RETRASADAS/activas)
+                  t.estado = 'CANCELADA';
+                  t.completada = false;
+                  this.markSaveFromGoogleImport(t);
                   await t.save();
                 } catch (unlinkErr) {
                   logger.warn?.(`No se pudo desvincular tarea ${t._id}: ${unlinkErr.message}`);
                 }
               }
               syncResults.unlinkedLocalNotInGoogle = (syncResults.unlinkedLocalNotInGoogle || 0) + toUnlink.length;
-              // Compat métrica antigua (ya no hard-delete)
               syncResults.deletedLocalNotInGoogle = syncResults.unlinkedLocalNotInGoogle;
             }
           } catch (cleanupErr) {
             logger.warn?.(`No se pudo limpiar tareas locales inexistentes en Google para "${taskList.title}": ${cleanupErr.message}`);
           }
 
+          if (isFullImport) {
           // Limpieza: deduplicar en BD por título normalizado dentro del objetivo cuando NO tienen googleTaskId
           try {
             const tareasSinId = await Tareas.find({
@@ -1669,9 +1702,22 @@ class GoogleTasksService {
 
   // Métodos auxiliares
 
+  /** Evita que pre('save') marque needsSync al persistir cambios importados desde Google. */
+  markSaveFromGoogleImport(tarea) {
+    tarea.$locals = { ...(tarea.$locals || {}), skipGoogleSyncMark: true };
+  }
+
   hasLocalPendingGoogleSync(tarea) {
     const sync = tarea?.googleTasksSync || {};
     return sync.needsSync === true || sync.syncStatus === 'pending';
+  }
+
+  statusDiffersFromGoogle(tarea, googleTask) {
+    const googleCompleted = googleTask?.status === 'completed';
+    const localCompleted =
+      Boolean(tarea.completada)
+      || String(tarea.estado || '').toUpperCase() === 'COMPLETADA';
+    return googleCompleted !== localCompleted;
   }
 
   shouldRefreshGoogleDueDate(tarea, googleTask) {
@@ -1707,35 +1753,31 @@ class GoogleTasksService {
   }
 
   shouldRefreshGoogleStatus(tarea, googleTask) {
-    if (this.hasLocalPendingGoogleSync(tarea)) return false;
-    const googleCompleted = googleTask?.status === 'completed';
-    const localCompleted =
-      Boolean(tarea.completada)
-      || String(tarea.estado || '').toUpperCase() === 'COMPLETADA';
-    return googleCompleted !== localCompleted;
+    return this.statusDiffersFromGoogle(tarea, googleTask);
   }
 
-  shouldImportFromGoogle(tarea, googleTask) {
+  /** Import de título/notas/due (no incluye status — se maneja aparte). */
+  shouldImportContentFromGoogle(tarea, googleTask) {
+    if (this.hasLocalPendingGoogleSync(tarea)) return false;
     return (
       this.shouldApplyGoogleUpdate(tarea, googleTask)
       || this.shouldRefreshGoogleDueDate(tarea, googleTask)
       || this.shouldRefreshGoogleNotes(tarea, googleTask)
+    );
+  }
+
+  shouldImportFromGoogle(tarea, googleTask) {
+    return (
+      this.shouldImportContentFromGoogle(tarea, googleTask)
       || this.shouldRefreshGoogleStatus(tarea, googleTask)
     );
   }
 
-  /** Estado, due y metadatos Google en import (omitir si hasLocalPendingGoogleSync). */
-  applyGoogleStatusAndDue(tarea, googleTask) {
+  /** Solo estado completado/pendiente + metadatos Google (sin due). */
+  applyGoogleStatusFromGoogle(tarea, googleTask, { preservePendingExport = false } = {}) {
     if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
     tarea.completada = googleTask.status === 'completed';
     tarea.estado = googleTask.status === 'completed' ? 'COMPLETADA' : 'PENDIENTE';
-    if (googleTask.due) {
-      const dueDate = Tareas.parseGoogleDueDate(googleTask.due);
-      if (dueDate && typeof tarea.recordGoogleDueSnapshot === 'function') {
-        tarea.recordGoogleDueSnapshot(dueDate);
-      }
-      mergeGoogleDueWithLocalSchedule(tarea, googleTask.due);
-    }
     tarea.googleTasksSync.googleTaskId = googleTask.id;
     tarea.googleTasksSync.updated = googleTask.updated
       ? new Date(googleTask.updated)
@@ -1744,9 +1786,71 @@ class GoogleTasksService {
       ? new Date(googleTask.completed)
       : null;
     tarea.googleTasksSync.enabled = true;
-    tarea.googleTasksSync.syncStatus = 'synced';
-    tarea.googleTasksSync.needsSync = false;
-    tarea.googleTasksSync.syncingStartedAt = null;
+    if (!preservePendingExport) {
+      tarea.googleTasksSync.syncStatus = 'synced';
+      tarea.googleTasksSync.needsSync = false;
+      tarea.googleTasksSync.syncingStartedAt = null;
+    }
+  }
+
+  /** Estado, due y metadatos Google en import (omitir due si hasLocalPendingGoogleSync). */
+  applyGoogleStatusAndDue(tarea, googleTask) {
+    this.applyGoogleStatusFromGoogle(tarea, googleTask, { preservePendingExport: false });
+    this.applyGoogleDueFromGoogle(tarea, googleTask);
+  }
+
+  applyGoogleDueFromGoogle(tarea, googleTask) {
+    if (!googleTask?.due) return;
+    const dueDate = Tareas.parseGoogleDueDate(googleTask.due);
+    if (dueDate && typeof tarea.recordGoogleDueSnapshot === 'function') {
+      tarea.recordGoogleDueSnapshot(dueDate);
+    }
+    mergeGoogleDueWithLocalSchedule(tarea, googleTask.due);
+    if (googleTask.updated) {
+      if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
+      tarea.googleTasksSync.updated = new Date(googleTask.updated);
+    }
+  }
+
+  googleDueDiffersFromLocal(tarea, googleTask) {
+    if (!googleTask?.due) return false;
+    const due = Tareas.parseGoogleDueDate(googleTask.due);
+    if (!due) return false;
+    const local = tarea.fechaVencimiento || tarea.fechaInicio;
+    if (!local) return true;
+    const localDt = local instanceof Date ? local : new Date(local);
+    if (Number.isNaN(localDt.getTime())) return true;
+    return Math.abs(localDt.getTime() - due.getTime()) > 60_000;
+  }
+
+  /** Due de Google avanza aunque haya export local pendiente (p. ej. recurrente completada en Google). */
+  shouldApplyGoogleDueDespitePending(tarea, googleTask) {
+    if (!this.googleDueDiffersFromLocal(tarea, googleTask)) return false;
+    const googleUpdated = googleTask.updated ? new Date(googleTask.updated) : null;
+    if (!googleUpdated || Number.isNaN(googleUpdated.getTime())) return true;
+    const syncUpdated = tarea.googleTasksSync?.updated
+      ? new Date(tarea.googleTasksSync.updated)
+      : null;
+    if (!syncUpdated || Number.isNaN(syncUpdated.getTime())) return true;
+    return googleUpdated.getTime() > syncUpdated.getTime();
+  }
+
+  /** Tareas desvinculadas antes del fix quedaban visibles en RETRASADAS — archivarlas. */
+  async repairPreviouslyUnlinkedTasks(userId) {
+    const stale = await Tareas.find({
+      usuario: userId,
+      'googleTasksSync.syncStatus': 'unlinked',
+      estado: { $ne: 'CANCELADA' },
+    });
+    let repaired = 0;
+    for (const t of stale) {
+      t.estado = 'CANCELADA';
+      t.completada = false;
+      this.markSaveFromGoogleImport(t);
+      await t.save();
+      repaired += 1;
+    }
+    return repaired;
   }
 
   shouldApplyGoogleUpdate(tarea, googleTask) {

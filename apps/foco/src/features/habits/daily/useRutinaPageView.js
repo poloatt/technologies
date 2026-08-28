@@ -8,12 +8,14 @@ export const RUTINA_PAGE_VIEW = {
 const STORAGE_KEY = 'foco.rutinas.pageView';
 
 function readStoredView() {
-  if (typeof window === 'undefined') return RUTINA_PAGE_VIEW.group;
+  if (typeof window === 'undefined') return RUTINA_PAGE_VIEW.cadence;
   const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === RUTINA_PAGE_VIEW.cadence ? RUTINA_PAGE_VIEW.cadence : RUTINA_PAGE_VIEW.group;
+  return stored === RUTINA_PAGE_VIEW.group ? RUTINA_PAGE_VIEW.group : RUTINA_PAGE_VIEW.cadence;
 }
 
-export function toggleRutinaPageView(currentView = RUTINA_PAGE_VIEW.group) {
+export { readStoredView as readStoredRutinaPageView };
+
+export function toggleRutinaPageView(currentView = RUTINA_PAGE_VIEW.cadence) {
   const nextView = currentView === RUTINA_PAGE_VIEW.cadence
     ? RUTINA_PAGE_VIEW.group
     : RUTINA_PAGE_VIEW.cadence;
