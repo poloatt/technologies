@@ -3,7 +3,7 @@ import { Badge } from '@mui/material';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import WbTwilightIcon from '@mui/icons-material/WbTwilight';
 import NightlightIcon from '@mui/icons-material/Nightlight';
-import { contarCompletadosEnPeriodo, isFlexiblePeriodic, isHabitPartiallyCompletedToday } from '@shared/habits';
+import { contarCompletadosEnPeriodo, isFlexiblePeriodic } from '@shared/habits';
 import { isHabitCompletedForHistorial, isHabitHorarioCompleted } from '@shared/habits';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 import { getNormalizedToday, parseAPIDate, toISODateString } from '@shared/utils/dateUtils';
@@ -228,10 +228,9 @@ export const HabitCounterBadge = ({
   };
 
   const itemValue = rutina?.[section]?.[itemId];
-  const isPartialHabit = !isNumber && isHabitPartiallyCompletedToday(itemValue, horarios);
   const badgeAccent = isNumber
     ? 'primary.main'
-    : (resolvedHorario && (isHabitHorarioCompleted(itemValue, resolvedHorario) || isPartialHabit)
+    : (resolvedHorario && isHabitHorarioCompleted(itemValue, resolvedHorario)
       ? 'primary.main'
       : 'text.disabled');
 

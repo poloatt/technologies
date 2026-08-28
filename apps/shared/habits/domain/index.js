@@ -2,6 +2,7 @@
  * @shared/habits/domain — lógica pura (Node-safe).
  */
 export { getRutinaFranjaItems } from './getRutinaFranjaItems.js';
+export { resolveRutinaForDate } from './resolveRutinaForDate.js';
 export { toPlainRutinaSnapshot, plainCloneDeep } from './plainRutinaSnapshot.js';
 export { computeRutinaToggleValue } from './toggleHabitCompletion.js';
 export { persistRutinaItemToggle } from './persistRutinaItemToggle.js';

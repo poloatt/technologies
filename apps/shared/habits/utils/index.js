@@ -50,6 +50,7 @@ export {
   getDefaultSelectedSection,
   isHabitQuotaOrDayDone,
   resolveRutinaScheduleBucket,
+  isEntryDueOnRutinaDay,
 } from '../desktop/rutinaDesktopUtils.js';
 
 export {
@@ -65,10 +66,16 @@ export {
   getCadenceBucketCompletionStats,
   getDefaultSelectedCadenceBucket,
   groupDailyCadenceByFranja,
+  groupWeeklyCadenceByWeekday,
   resolveActiveDailyFranja,
   isViewingRutinaToday,
   entryHasConfiguredDailyFranjas,
   resolveEntryFranjaFocusHorario,
+  resolveCadenceViewBucket,
+  resolveEntryWeekdays,
   DAILY_CADENCE_FRANJA_ORDER,
+  WEEKDAY_ORDER,
   CADENCE_BUCKET_ICON_KEYS,
+  bucketUsesFranjaLayout,
+  bucketUsesWeekdayLayout,
 } from '../desktop/rutinaCadenceUtils.js';

@@ -134,9 +134,6 @@ const ChecklistItem = ({
     ? String(focusHorario).toUpperCase()
     : null;
   const hasMultipleFranjas = horariosConfig.length > 1 && !normalizedFocusHorario;
-  const habitPartiallyComplete = hasMultipleFranjas
-    && horariosConfig.some((horario) => isHorarioCompleted(String(horario).toUpperCase()))
-    && !horariosConfig.every((horario) => isHorarioCompleted(String(horario).toUpperCase()));
   const singleDisplayHorario = normalizedFocusHorario
     || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
 
@@ -182,7 +179,6 @@ const ChecklistItem = ({
               <HabitIconButton
                 key={normalizedHorario}
                 isCompleted={franjaCompleted}
-                isPartialPending={habitPartiallyComplete && !franjaCompleted}
                 Icon={Icon}
                 onClick={(e) => {
                   e.stopPropagation();

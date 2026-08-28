@@ -28,7 +28,7 @@ export default function RutinaDoneCarousel({
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
-  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getHabitCarouselSurface(theme, {
+  const { size, bg, hoverBg, rail, iconFontSize } = getHabitCarouselSurface(theme, {
     dense: !isMobileOrTablet,
     mobile: isMobileOrTablet,
   });
@@ -41,7 +41,6 @@ export default function RutinaDoneCarousel({
     display: 'flex',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    justifyContent: 'flex-start',
     gap: isMobileOrTablet ? 0.5 : 0.25,
     overflowX: 'auto',
     overflowY: 'hidden',
@@ -54,6 +53,7 @@ export default function RutinaDoneCarousel({
     msOverflowStyle: 'none',
     minHeight: size + 4,
     py: 0.25,
+    width: '100%',
     '&::-webkit-scrollbar': { display: 'none' },
   }), [isDragging, isMobileOrTablet, size]);
 
@@ -71,10 +71,6 @@ export default function RutinaDoneCarousel({
       sx={{
         width: '100%',
         minWidth: 0,
-        py: 0.25,
-        mb: 0.5,
-        borderBottom: '1px solid',
-        borderColor: dividerColor,
       }}
     >
       <HabitCarouselScrollTrack
@@ -83,6 +79,7 @@ export default function RutinaDoneCarousel({
         theme={theme}
         scrollTrackSx={scrollTrackSx}
         enableDragScroll={!readOnly}
+        centerWhenFits
         bind={bind}
         mergeScrollRef={(node) => {
           scrollRef.current = node;

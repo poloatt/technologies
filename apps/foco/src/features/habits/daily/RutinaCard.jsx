@@ -272,6 +272,7 @@ const RutinaCard = ({
                 rutina={rutina}
                 habits={habits}
                 habitsPreferences={habitPrefs}
+                localData={localData}
                 onToggle={handleCarouselToggle}
                 onRequireExpand={(_, itemId) => openExpandedForHabit(itemId)}
                 interactive={!readOnly}
@@ -287,16 +288,6 @@ const RutinaCard = ({
     >
       <Collapse in={isExpanded} unmountOnExit>
         <Box>
-          {isMobileOrTablet && (
-            <RutinaSectionCarousel
-              section={section}
-              rutina={rutina}
-              habits={habits}
-              habitsPreferences={habitPrefs}
-              onToggle={handleCarouselToggle}
-              interactive={!readOnly}
-            />
-          )}
           <List dense disablePadding sx={{ py: 0, my: 0 }}>
             <RutinaDayGroupList
               today={habitGroups.today}

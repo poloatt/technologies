@@ -46,6 +46,8 @@ export default function RutinaSectionCarousel({
 
   habitsPreferences = {},
 
+  localData = null,
+
   onToggle,
 
   interactive = true,
@@ -132,9 +134,11 @@ export default function RutinaSectionCarousel({
 
       currentTimeOfDay,
 
+      localData,
+
     }),
 
-    [section, rutina, habits, habitsPreferences, sectionIconsMap, currentTimeOfDay],
+    [section, rutina, habits, habitsPreferences, sectionIconsMap, currentTimeOfDay, localData],
 
   );
 

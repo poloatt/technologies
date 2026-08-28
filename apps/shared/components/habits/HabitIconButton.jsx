@@ -7,12 +7,10 @@ import { getRutinaHabitIconButtonSx } from '../../styles/rutinaPageStyles';
 /** Botón circular de hábito para listas/checklist de rutina. */
 export default function HabitIconButton({
   isCompleted,
-  isPartialPending = false,
   Icon,
   onClick,
   readOnly,
   size = 38,
-  iconSize = 'small',
   mr = 1,
   config = {},
   currentTimeOfDay,
@@ -40,7 +38,7 @@ export default function HabitIconButton({
         size="small"
         onClick={onClick}
         disabled={readOnly}
-        sx={getRutinaHabitIconButtonSx({ isCompleted, isPartialPending, size, mr })}
+        sx={getRutinaHabitIconButtonSx({ isCompleted, size, mr })}
         {...props}
       >
         {Icon && <Icon sx={{ fontSize: size <= 32 ? '1.1rem' : '1.2rem' }} />}

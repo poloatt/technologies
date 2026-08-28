@@ -251,6 +251,28 @@ export function isHabitQuotaOrDayDone({
   return completadosEnPeriodo >= frecuencia;
 }
 
+/**
+ * ¿El ítem toca hoy (cadencia del día o deuda), más allá de isScheduled del tracker?
+ * Cubre semanales/mensuales en día programado cuando debesMostrarHabitoEnFecha falla.
+ */
+export function isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility = rutina) {
+  if (entry.isScheduled || entry.isCadenciaDebt) return true;
+
+  const { config, itemId, section, itemValue } = entry;
+  if (!config || isDailyCadenceConfig(config)) {
+    return Boolean(entry.isScheduled);
+  }
+
+  const fechaRutina = parseAPIDate(rutina?.fecha) || new Date();
+  if (isScheduledCadenciaDay(fechaRutina, config)) return true;
+
+  const historialDates = [...obtenerHistorialCompletados(itemId, section, rutinaForVisibility)];
+  if (isHabitCompletedForHistorial(itemValue)) {
+    historialDates.push(fechaRutina);
+  }
+  return hasCadenciaDebt(fechaRutina, config, historialDates);
+}
+
 /** Clasifica un ítem del tracker: today (pendiente), done (hecho), notToday. */
 export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility = rutina } = {}) {
   const { config, itemValue, isScheduled, itemId, section } = entry;
@@ -273,7 +295,7 @@ export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility
     return 'done';
   }
 
-  if (isScheduled) {
+  if (isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility)) {
     return 'today';
   }
 
@@ -342,7 +364,7 @@ function resolveItemCarouselDaySchedule(config, fechaRutina) {
   return isScheduledCadenciaDay(fechaRutina, config);
 }
 
-/** Todos los hábitos activos de una sección para el carrusel (ahora → luego → no hoy; orden fijo). */
+/** Todos los hábitos activos pendientes de una sección para el carrusel (ahora → luego → no hoy). */
 export function getSectionCarouselItems({
   section,
   rutina,
@@ -350,8 +372,19 @@ export function getSectionCarouselItems({
   habitsPreferences = null,
   iconsMap = null,
   currentTimeOfDay = 'MAÑANA',
+  localData = null,
 }) {
   if (!section || !rutina) return [];
+
+  const { done } = groupSectionHabitsByDaySchedule({
+    section,
+    rutina,
+    habits,
+    habitsPreferences,
+    iconsMap,
+    localData,
+  });
+  const doneIds = new Set(done.map((entry) => entry.itemId));
 
   const prefs = habitsPreferences ?? {};
   const sectionIcons = iconsMap?.[section] || {};
@@ -361,6 +394,7 @@ export function getSectionCarouselItems({
 
   const entriesWithSlot = itemIds.reduce((acc, itemId) => {
     if (iconsMap && !sectionIcons[itemId]) return acc;
+    if (doneIds.has(itemId)) return acc;
 
     const config = resolveRutinaItemConfig(section, itemId, rutina, prefs);
     if (config.activo === false) return acc;

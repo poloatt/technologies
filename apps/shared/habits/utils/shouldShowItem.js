@@ -1,4 +1,4 @@
-import { debesMostrarHabitoEnFecha } from './cadenciaUtils.js';
+import { debesMostrarHabitoEnFecha, obtenerHistorialCompletados } from './cadenciaUtils.js';
 import { parseAPIDate, toISODateString, getNormalizedToday } from '../../utils/dateUtils.js';
 import { getCurrentTimeOfDay } from '../../utils/timeOfDayUtils.js';
 import { shouldShowHabitForCurrentTime } from './habitTimeLogic.js';
@@ -80,7 +80,7 @@ export default function shouldShowItem(section, itemId, rutina, additionalData =
     const sectionHist = additionalData?.historial?.[section];
     const itemHist = sectionHist?.[itemId];
     if (Array.isArray(itemHist)) {
-      historial = itemHist.map(d => new Date(d));
+      historial = itemHist.map((d) => new Date(d));
     } else if (itemHist && typeof itemHist === 'object') {
       historial = Object.entries(itemHist)
         .filter(([, completed]) => completed === true)
@@ -89,6 +89,8 @@ export default function shouldShowItem(section, itemId, rutina, additionalData =
       historial = Object.entries(sectionHist)
         .filter(([, items]) => items && items[itemId] === true)
         .map(([dateStr]) => parseAPIDate(dateStr) || new Date(dateStr));
+    } else {
+      historial = [...obtenerHistorialCompletados(itemId, section, rutina)];
     }
     const itemValue = rutina?.[section]?.[itemId];
     if (isHabitCompletedForHistorial(itemValue)) {

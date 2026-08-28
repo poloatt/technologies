@@ -4,7 +4,6 @@ import { HabitCounterBadge } from '../common/HabitCounterBadge';
 import {
   getHorarioForCarousel,
   isHabitFullyCompletedToday,
-  isHabitPartiallyCompletedToday,
 } from '../../habits';
 import { getPeriodicCarouselCopy, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology';
 
@@ -52,9 +51,6 @@ export default function HabitCarouselIconButton({
   const isBooleanFormat = typeof itemValue === 'boolean';
   const frecuencia = Number(itemConfig?.frecuencia || 1);
   const hasMultipleDaily = frecuencia > 1 || horariosConfig.length > 1;
-  const isPartiallyComplete = showCompletionState
-    && hasMultipleDaily
-    && isHabitPartiallyCompletedToday(itemValue, horariosConfig);
 
   let isCompleted = false;
   if (showCompletionState) {
@@ -72,14 +68,18 @@ export default function HabitCarouselIconButton({
   const statusLabel = isCompleted ? 'completado' : 'pendiente';
   const isNotTodaySlot = showCompletionState
     && (carouselSlot === 'notToday' || (!carouselSlot && !isScheduled));
-  const isPlainNotToday = isNotTodaySlot && !isCompleted && !isPartiallyComplete;
+  const isPlainInactiveSlot = showCompletionState && !isCompleted && (
+    carouselSlot === 'notToday'
+    || carouselSlot === 'luego'
+    || carouselSlot === 'inactiveFranja'
+    || (!carouselSlot && !isScheduled)
+  );
   const isPlainDone = plainCompleted && isCompleted;
-  const isPlainVisual = isPlainNotToday || isPlainDone;
-  const isDashedCircle = !isPlainVisual && !isCompleted && (requireExpand || isPartiallyComplete);
-  const isShinyPartial = isPartiallyComplete && !isCompleted && !isPlainVisual;
+  const isPlainPending = isPlainInactiveSlot;
+  const isDashedCircle = !isPlainPending && !isPlainDone && !isCompleted && requireExpand;
   const periodicHint = isCadenciaDebt ? getPeriodicCarouselCopy(mode, { isCadenciaDebt: true }) : '';
   const expandHint = requireExpand ? 'Expandir grupo para elegir franja' : '';
-  const plainHint = isPlainNotToday ? RUTINA_DAY_GROUP_COPY.notToday : '';
+  const plainHint = isNotTodaySlot ? RUTINA_DAY_GROUP_COPY.notToday : '';
   const tooltipTitle = expandHint
     ? `${label} — ${expandHint}`
     : (plainHint
@@ -111,6 +111,44 @@ export default function HabitCarouselIconButton({
     >
       <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
     </Box>
+  );
+
+  const plainPendingButton = (
+    <IconButton
+      size="small"
+      disabled={!canQuickToggle}
+      aria-label={`${label}, ${statusLabel}`}
+      aria-pressed={isCompleted}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!canQuickToggle) return;
+        onToggle(section, itemId, displayHorario || horarioToShow);
+      }}
+      sx={{
+        width: size,
+        height: size,
+        minWidth: size,
+        minHeight: size,
+        maxWidth: size,
+        maxHeight: size,
+        p: 0,
+        borderRadius: '50%',
+        boxSizing: 'border-box',
+        bgcolor: 'transparent',
+        color: 'text.disabled',
+        opacity: 0.45,
+        border: 'none',
+        boxShadow: 'none',
+        flex: '0 0 auto',
+        touchAction: 'pan-x',
+        '&:hover': {
+          bgcolor: canQuickToggle ? 'action.hover' : 'transparent',
+          opacity: canQuickToggle ? 0.65 : 0.45,
+        },
+      }}
+    >
+      <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
+    </IconButton>
   );
 
   const plainCompletedButton = (
@@ -177,13 +215,13 @@ export default function HabitCarouselIconButton({
               borderRadius: '50%',
               boxSizing: 'border-box',
               bgcolor: isCompleted ? 'action.selected' : bg,
-              color: isCompleted || isShinyPartial ? 'primary.main' : 'text.secondary',
+              color: isCompleted ? 'primary.main' : 'text.secondary',
               border: '1px solid',
               borderStyle: isDashedCircle ? 'dashed' : 'solid',
-              borderColor: isCompleted || isShinyPartial ? 'primary.main' : rail,
+              borderColor: isCompleted ? 'primary.main' : rail,
               flex: '0 0 auto',
               touchAction: 'pan-x',
-              opacity: requireExpand && !isPartiallyComplete ? 0.72 : 1,
+              opacity: requireExpand ? 0.72 : 1,
               transition: showCompletionState
                 ? 'color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease'
                 : undefined,
@@ -195,14 +233,39 @@ export default function HabitCarouselIconButton({
               },
               '&:hover': {
                 bgcolor: isCompleted ? 'action.selected' : hoverBg,
-                color: isCompleted || isShinyPartial ? 'primary.main' : 'text.primary',
-                ...((requireExpand || isPartiallyComplete) && !isCompleted && { opacity: 1 }),
+                color: isCompleted ? 'primary.main' : 'text.primary',
+                ...(requireExpand && !isCompleted && { opacity: 1 }),
               },
             }}
           >
             <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
           </IconButton>
   );
+
+  const habitBadge = (child, reserveBadgeSpace = showCompletionState && !isNotTodaySlot) => (
+    <HabitCounterBadge
+      config={itemConfig}
+      currentTimeOfDay={currentTimeOfDay}
+      displayHorario={horarioToShow}
+      size={dense && !iconFontSize ? 'small' : 'medium'}
+      overlap="subtle"
+      reserveBadgeSpace={reserveBadgeSpace}
+      rutina={rutinaHoy}
+      section={section}
+      itemId={itemId}
+    >
+      {child}
+    </HabitCounterBadge>
+  );
+
+  let renderedButton = iconButton;
+  if (isPlainPending) {
+    renderedButton = canQuickToggle ? plainPendingButton : plainIcon;
+  } else if (isPlainDone) {
+    renderedButton = plainCompletedButton;
+  }
+
+  const wrapBadge = !isPlainPending || Boolean(horarioToShow);
 
   return (
     <Tooltip title={tooltipTitle} arrow placement="top">
@@ -218,39 +281,9 @@ export default function HabitCarouselIconButton({
           verticalAlign: 'middle',
         }}
       >
-        {isPlainNotToday ? plainIcon : (
-          isPlainDone ? (
-            horarioToShow && showCompletionState ? (
-              <HabitCounterBadge
-                config={itemConfig}
-                currentTimeOfDay={currentTimeOfDay}
-                displayHorario={horarioToShow}
-                size={dense && !iconFontSize ? 'small' : 'medium'}
-                overlap="subtle"
-                reserveBadgeSpace={false}
-                rutina={rutinaHoy}
-                section={section}
-                itemId={itemId}
-              >
-                {plainCompletedButton}
-              </HabitCounterBadge>
-            ) : plainCompletedButton
-          ) : (
-            <HabitCounterBadge
-              config={itemConfig}
-              currentTimeOfDay={currentTimeOfDay}
-              displayHorario={horarioToShow}
-              size={dense && !iconFontSize ? 'small' : 'medium'}
-              overlap="subtle"
-              reserveBadgeSpace={showCompletionState && !isNotTodaySlot}
-              rutina={rutinaHoy}
-              section={section}
-              itemId={itemId}
-            >
-              {iconButton}
-            </HabitCounterBadge>
-          )
-        )}
+        {wrapBadge
+          ? habitBadge(renderedButton, isPlainDone ? false : (showCompletionState && !isNotTodaySlot))
+          : renderedButton}
       </Box>
     </Tooltip>
   );

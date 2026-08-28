@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/core';
 import ChecklistItem from './ChecklistItem';
 import SortableRutinaHabitRow from './SortableRutinaHabitRow';
-import RutinaDoneCarousel from './RutinaDoneCarousel';
+import RutinaDoneSection from './RutinaDoneSection';
 import { RUTINA_DAY_GROUP_COPY } from '@shared/copy/agendaTerminology';
 import { isHabitCompletedForHistorial, isHabitHorarioCompleted, resolveEntryFranjaFocusHorario } from '@shared/habits';
 
@@ -288,18 +288,14 @@ export default function RutinaDayGroupList({
         </Box>
       )}
       {!hideDone && hasDone && (
-        <Box sx={{ mt: (hasToday || notToday.length > 0) ? 0.5 : 0 }}>
-          <Typography variant="caption" sx={GROUP_HEADING_SX}>
-            {RUTINA_DAY_GROUP_COPY.done}
-          </Typography>
-          <RutinaDoneCarousel
-            items={done}
-            rutina={rutina}
-            habitsPreferences={habitsPreferences}
-            readOnly={readOnly}
-            onToggle={handleDoneToggle}
-          />
-        </Box>
+        <RutinaDoneSection
+          items={done}
+          rutina={rutina}
+          habitsPreferences={habitsPreferences}
+          readOnly={readOnly}
+          onToggle={handleDoneToggle}
+          showDivider={hasToday || notToday.length > 0}
+        />
       )}
     </>
   );

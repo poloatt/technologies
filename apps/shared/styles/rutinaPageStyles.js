@@ -206,13 +206,9 @@ export const rutinaBackToListIconSx = {
 /** Botón circular de hábito (lista expandida de rutina). */
 export function getRutinaHabitIconButtonSx({
   isCompleted,
-  isPartialPending = false,
   size = 38,
   mr = 1,
 } = {}) {
-  const showRing = isCompleted || isPartialPending;
-  const isShinyPartial = isPartialPending && !isCompleted;
-
   return {
     width: size,
     height: size,
@@ -225,20 +221,18 @@ export function getRutinaHabitIconButtonSx({
     justifyContent: 'center',
     mr,
     cursor: 'pointer',
-    color: isCompleted || isShinyPartial ? 'primary.main' : 'text.secondary',
+    color: isCompleted ? 'primary.main' : 'text.secondary',
     bgcolor: isCompleted ? 'action.selected' : 'transparent',
     borderRadius: '50%',
-    ...(showRing && {
-      border: '1px solid',
-      borderStyle: isPartialPending ? 'dashed' : 'solid',
-      borderColor: isCompleted || isShinyPartial ? 'primary.main' : 'divider',
-    }),
+    border: '1px solid',
+    borderStyle: 'solid',
+    borderColor: isCompleted ? 'primary.main' : 'divider',
     transition: 'all 0.2s ease',
     '& .MuiSvgIcon-root': {
       fontSize: size <= 32 ? '1.1rem' : '1.2rem',
     },
     '&:hover': {
-      color: isCompleted || isShinyPartial ? 'primary.main' : 'text.primary',
+      color: isCompleted ? 'primary.main' : 'text.primary',
       bgcolor: isCompleted ? 'action.selected' : 'action.hover',
     },
   };
@@ -381,4 +375,22 @@ export const rutinaSystemButtonsSx = {
 export const rutinaInlineConfigSx = {
   width: '100%',
   mt: 1,
+};
+
+/** Separador fino antes del sector Hecho. */
+export const rutinaDoneSectionDividerSx = {
+  mt: 0.75,
+  pt: 0.75,
+  borderTop: '1px solid',
+  borderColor: (theme) => alpha(theme.palette.divider, 0.3),
+};
+
+export const rutinaDoneSectionHeadingSx = {
+  px: 0.5,
+  py: 0.5,
+  fontWeight: 600,
+  color: 'text.secondary',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  fontSize: '0.7rem',
 };

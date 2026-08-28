@@ -6,22 +6,11 @@ import {
   isViewingRutinaToday,
   DAILY_CADENCE_FRANJA_ORDER,
 } from '@shared/habits';
-import { RUTINA_DAY_GROUP_COPY } from '@shared/copy/agendaTerminology';
 import RutinaDayGroupList from './RutinaDayGroupList';
 import RutinaFranjaIconCarousel from './RutinaFranjaIconCarousel';
-import RutinaDoneCarousel from './RutinaDoneCarousel';
+import RutinaDoneSection from './RutinaDoneSection';
 
 const TIME_FRANJA_ORDER = DAILY_CADENCE_FRANJA_ORDER.filter((key) => key !== 'GENERAL');
-
-const GROUP_HEADING_SX = {
-  px: 0.5,
-  py: 0.75,
-  fontWeight: 600,
-  color: 'text.secondary',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  fontSize: '0.7rem',
-};
 
 const FRANJA_HEADING_SX = {
   px: 0.5,
@@ -143,20 +132,14 @@ export default function RutinaDailyCadenceFranjaLayout({
     <Box>
       {TIME_FRANJA_ORDER.map(renderTimeFranja)}
 
-      {allDoneItems.length > 0 && (
-        <Box sx={{ mt: hasContentAboveDone ? 0.5 : 0 }}>
-          <Typography variant="caption" sx={GROUP_HEADING_SX}>
-            {RUTINA_DAY_GROUP_COPY.done}
-          </Typography>
-          <RutinaDoneCarousel
-            items={allDoneItems}
-            rutina={rutina}
-            habitsPreferences={habitsPreferences}
-            readOnly={readOnly}
-            onToggle={handleDoneToggle}
-          />
-        </Box>
-      )}
+      <RutinaDoneSection
+        items={allDoneItems}
+        rutina={rutina}
+        habitsPreferences={habitsPreferences}
+        readOnly={readOnly}
+        onToggle={handleDoneToggle}
+        showDivider={hasContentAboveDone}
+      />
     </Box>
   );
 }

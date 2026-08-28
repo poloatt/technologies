@@ -240,7 +240,7 @@ describe('rutinaDesktopUtils', () => {
   });
 
   describe('getSectionCarouselItems', () => {
-    it('returns habits in fixed orden regardless of completion', () => {
+    it('excludes done habits from carousel', () => {
       const rutinaPending = makeRutina();
       const rutinaDone = makeRutina({ bodyCare: { shower: true } });
       const pendingIds = getSectionCarouselItems({
@@ -254,7 +254,7 @@ describe('rutinaDesktopUtils', () => {
         habits: mockHabits,
       }).map((h) => h.itemId);
       expect(pendingIds).toEqual(['shower', 'weekly']);
-      expect(doneIds).toEqual(pendingIds);
+      expect(doneIds).toEqual(['weekly']);
     });
 
     it('orders ahora before luego before notToday', () => {
@@ -289,7 +289,7 @@ describe('rutinaDesktopUtils', () => {
       expect(items.map((h) => h.itemId)).toEqual(['shower', 'nightly', 'weekly', 'tuesdayOnly']);
     });
 
-    it('keeps carousel slot and order when marking cadencia debt complete', () => {
+    it('removes done habits from carousel when marking cadencia debt complete', () => {
       const tuesday = new Date(2026, 5, 23, 12, 0, 0, 0);
       const rutinaPending = makeRutina({
         fecha: tuesday.toISOString(),
@@ -310,12 +310,11 @@ describe('rutinaDesktopUtils', () => {
         rutina: rutinaDone,
         habits: mockHabits,
       });
-      expect(pending.map((h) => h.itemId)).toEqual(done.map((h) => h.itemId));
-      expect(pending.map((h) => h.carouselSlot)).toEqual(done.map((h) => h.carouselSlot));
-      expect(done.find((h) => h.itemId === 'weekly')?.carouselSlot).toBe('notToday');
+      expect(pending.map((h) => h.itemId)).toEqual(['shower', 'weekly']);
+      expect(done.map((h) => h.itemId)).toEqual(['shower']);
     });
 
-    it('keeps slot when marking a scheduled-day habit complete', () => {
+    it('removes done habits from carousel when marking scheduled-day habits complete', () => {
       const rutinaPending = makeRutina();
       const rutinaDone = makeRutina({
         bodyCare: { shower: true, weekly: true },
@@ -338,9 +337,8 @@ describe('rutinaDesktopUtils', () => {
         habits: mockHabits,
         currentTimeOfDay: 'MAÑANA',
       });
-      expect(pending.map((h) => h.itemId)).toEqual(done.map((h) => h.itemId));
-      expect(pending.map((h) => h.carouselSlot)).toEqual(done.map((h) => h.carouselSlot));
-      expect(done.find((h) => h.itemId === 'weekly')?.carouselSlot).not.toBe('notToday');
+      expect(pending.map((h) => h.itemId)).toEqual(['shower', 'weekly']);
+      expect(done.map((h) => h.itemId)).toEqual([]);
     });
   });
 

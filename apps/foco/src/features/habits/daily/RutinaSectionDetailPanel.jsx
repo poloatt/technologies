@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
-import { useHabits } from '@shared/context';
-import RutinaSectionCarousel from './RutinaSectionCarousel';
+import { useHabits, useRutinas } from '@shared/context';
 import RutinaDayGroupList from './RutinaDayGroupList';
 import HabitFormDialog from '@shared/components/HabitFormDialog';
 import { groupSectionHabitsByDaySchedule } from '@shared/habits';
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
+import useRutinaItemToggle from '@foco/features/habits/hooks/useRutinaItemToggle';
+import useRutinaSectionLocalData from '@foco/features/habits/hooks/useRutinaSectionLocalData';
 
 export default function RutinaSectionDetailPanel({
   section,
@@ -13,10 +14,33 @@ export default function RutinaSectionDetailPanel({
   habits,
   habitsPreferences = {},
   readOnly = false,
-  onItemClick,
-  onToggle,
 }) {
   const { reorderHabits } = useHabits();
+  const { markItemComplete, patchRutinaSection } = useRutinas();
+  const sectionData = rutina?.[section] || {};
+  const [localData, setLocalData] = useRutinaSectionLocalData(section, sectionData, rutina);
+
+  const toggleItem = useRutinaItemToggle({
+    rutina,
+    habitsPreferences,
+    markItemComplete,
+    patchRutinaSection,
+    readOnly,
+    getSectionOverrides: () => localData,
+    onOptimisticValue: (_sec, itemId, newValue) => {
+      setLocalData((prev) => ({ ...prev, [itemId]: newValue }));
+    },
+    onRevertValue: (_sec, itemId, previousValue) => {
+      setLocalData((prev) => ({ ...prev, [itemId]: previousValue }));
+    },
+    onServerValue: (_sec, itemId, serverValue) => {
+      setLocalData((prev) => ({ ...prev, [itemId]: serverValue }));
+    },
+  });
+
+  const handleItemClick = useCallback((itemId, event, horario = null) => {
+    toggleItem(section, itemId, horario, event);
+  }, [toggleItem, section]);
   const [editingHabitDialog, setEditingHabitDialog] = useState({
     open: false,
     habit: null,
@@ -35,8 +59,9 @@ export default function RutinaSectionDetailPanel({
       habits,
       habitsPreferences,
       iconsMap: habitIconsMap,
+      localData,
     }),
-    [section, rutina, habits, habitsPreferences, habitIconsMap],
+    [section, rutina, habits, habitsPreferences, habitIconsMap, localData],
   );
 
   const handleEditHabit = useCallback((habit, habitSection) => {
@@ -56,20 +81,10 @@ export default function RutinaSectionDetailPanel({
 
   if (!hasAny) {
     return (
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <RutinaSectionCarousel
-          section={section}
-          rutina={rutina}
-          habits={habits}
-          habitsPreferences={habitsPreferences}
-          onToggle={onToggle}
-          interactive={!readOnly}
-        />
-        <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            No hay hábitos en esta sección
-          </Typography>
-        </Box>
+      <Box sx={{ flex: 1, minWidth: 0, py: 4, textAlign: 'center' }}>
+        <Typography variant="body2" color="text.secondary">
+          No hay hábitos en esta sección
+        </Typography>
       </Box>
     );
   }
@@ -87,14 +102,6 @@ export default function RutinaSectionDetailPanel({
           gap: 1,
         }}
       >
-        <RutinaSectionCarousel
-          section={section}
-          rutina={rutina}
-          habits={habits}
-          habitsPreferences={habitsPreferences}
-          onToggle={onToggle}
-          interactive={!readOnly}
-        />
         <RutinaDayGroupList
           today={today}
           done={done}
@@ -106,9 +113,10 @@ export default function RutinaSectionDetailPanel({
           sectionHabits={habits?.[section] || []}
           habitsPreferences={habitsPreferences}
           onReorder={handleReorderHabits}
-          onItemClick={onItemClick}
-          onDoneToggle={onItemClick}
+          onItemClick={handleItemClick}
+          onDoneToggle={handleItemClick}
           onEditHabit={handleEditHabit}
+          localData={localData}
         />
       </Box>
 

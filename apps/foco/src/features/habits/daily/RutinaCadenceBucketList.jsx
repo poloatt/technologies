@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box } from '@mui/material';
+import { bucketUsesFranjaLayout, bucketUsesWeekdayLayout } from '@shared/habits';
 import RutinaDailyCadenceFranjaLayout from './RutinaDailyCadenceFranjaLayout';
+import RutinaWeeklyCadenceDayLayout from './RutinaWeeklyCadenceDayLayout';
 import RutinaDayGroupList from './RutinaDayGroupList';
 
 /** Lista Hoy/Hecho/No toca hoy para un bucket de cadencia. */
@@ -16,9 +18,23 @@ export default function RutinaCadenceBucketList({
   sortable = false,
   localDataBySection = {},
 }) {
-  if (bucket.id === 'DIARIO') {
+  if (bucketUsesFranjaLayout(bucket.id)) {
     return (
       <RutinaDailyCadenceFranjaLayout
+        bucket={bucket}
+        rutina={rutina}
+        readOnly={readOnly}
+        onItemClick={onItemClick}
+        onEditHabit={onEditHabit}
+        habitsPreferences={habitsPreferences}
+        localDataBySection={localDataBySection}
+      />
+    );
+  }
+
+  if (bucketUsesWeekdayLayout(bucket.id)) {
+    return (
+      <RutinaWeeklyCadenceDayLayout
         bucket={bucket}
         rutina={rutina}
         readOnly={readOnly}

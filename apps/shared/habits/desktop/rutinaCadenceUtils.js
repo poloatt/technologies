@@ -13,9 +13,28 @@ import {
   groupSectionHabitsByDaySchedule,
   sortSectionCarouselBySlot,
   resolveRutinaScheduleBucket,
+  isEntryDueOnRutinaDay,
 } from './rutinaDesktopUtils.js';
 import { isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
+import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
+
+/** Lunes → Domingo. */
+export const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
+
+/** Solo Diario usa subgrupos por franja horaria. */
+export const CADENCE_BUCKETS_WITH_FRANJA = ['DIARIO'];
+
+export function bucketUsesFranjaLayout(bucketId) {
+  return CADENCE_BUCKETS_WITH_FRANJA.includes(bucketId);
+}
+
+/** Semanal agrupa por día de la semana (Lunes, Martes, …). */
+export const CADENCE_BUCKETS_WITH_WEEKDAY = ['SEMANAL'];
+
+export function bucketUsesWeekdayLayout(bucketId) {
+  return CADENCE_BUCKETS_WITH_WEEKDAY.includes(bucketId);
+}
 
 export { CADENCE_BUCKET_ICON_KEYS };
 
@@ -92,7 +111,7 @@ function resolveFranjaScheduleBucket(entry, franjaKey, rutina) {
     if (resolveRutinaScheduleBucket(entry, { rutina }) === 'done') {
       return 'done';
     }
-    if (!entry.isScheduled) {
+    if (!isEntryDueOnRutinaDay(entry, rutina)) {
       return 'notToday';
     }
     return 'today';
@@ -130,6 +149,62 @@ export function groupDailyCadenceByFranja(bucket, rutina) {
     .filter((group) => group.today.length > 0 || group.done.length > 0 || group.notToday.length > 0);
 }
 
+function isWeeklyCadenceConfig(config = {}) {
+  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
+  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
+  return tipo === 'SEMANAL' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_SEMANA');
+}
+
+/** Días de la semana configurados para un hábito semanal (0=Dom … 6=Sáb). */
+export function resolveEntryWeekdays(config = {}) {
+  const diasSemana = Array.isArray(config?.diasSemana) ? config.diasSemana : [];
+  const normalized = diasSemana.filter((d) => typeof d === 'number' && d >= 0 && d <= 6);
+  if (normalized.length > 0) return [...new Set(normalized)].sort((a, b) => a - b);
+  return WEEKDAY_ORDER.map((d) => d.value);
+}
+
+/**
+ * Bucket de vista por cadencia: lo que toca hoy (incl. semanal/mensual) → Diario.
+ * El bucket nativo del hábito no cambia; solo la agrupación en la UI.
+ */
+export function resolveCadenceViewBucket(entry, rutina) {
+  const nativeBucket = resolveHabitCadenceBucket(entry.config);
+  if (nativeBucket === 'DIARIO') return 'DIARIO';
+  if (isEntryDueOnRutinaDay(entry, rutina)) return 'DIARIO';
+  return nativeBucket;
+}
+
+/**
+ * Agrupa ítems del bucket Semanal por día de la semana (solo hábitos que no tocan hoy).
+ */
+export function groupWeeklyCadenceByWeekday(bucket, rutina) {
+  const weekdayMap = Object.fromEntries(
+    WEEKDAY_ORDER.map(({ value }) => [value, { pending: [], done: [] }]),
+  );
+
+  bucket.items.forEach((entry) => {
+    if (!isWeeklyCadenceConfig(entry.config)) return;
+
+    const scheduleBucket = resolveRutinaScheduleBucket(entry, { rutina });
+    const targetKey = scheduleBucket === 'done' ? 'done' : 'pending';
+
+    resolveEntryWeekdays(entry.config).forEach((weekdayKey) => {
+      const group = weekdayMap[weekdayKey];
+      if (!group) return;
+      group[targetKey].push({ ...entry, weekdayKey });
+    });
+  });
+
+  return WEEKDAY_ORDER
+    .map(({ value, label }) => ({
+      weekdayKey: value,
+      weekdayLabel: label,
+      pending: weekdayMap[value].pending,
+      done: weekdayMap[value].done,
+    }))
+    .filter((group) => group.pending.length > 0 || group.done.length > 0);
+}
+
 /**
  * Agrupa hábitos activos de todas las secciones por cadencia (Diario, Semanal, …).
  * Solo incluye buckets con al menos un hábito.
@@ -159,7 +234,7 @@ export function groupRutinaHabitsByCadence({
 
     [...grouped.today, ...grouped.done, ...grouped.notToday].forEach((entry) => {
       if (entry.config?.activo === false) return;
-      const bucketId = resolveHabitCadenceBucket(entry.config);
+      const bucketId = resolveCadenceViewBucket(entry, rutina);
       bucketsMap[bucketId].push({
         ...entry,
         section,
@@ -234,8 +309,9 @@ export function getCadenceBucketCarouselItems({
       currentTimeOfDay,
     }).forEach((entry) => {
       const config = resolveRutinaItemConfig(section, entry.itemId, rutina, habitsPreferences);
-      if (resolveHabitCadenceBucket(config) !== bucketId) return;
-      combined.push({ ...entry, section });
+      const viewEntry = { ...entry, section, config };
+      if (resolveCadenceViewBucket(viewEntry, rutina) !== bucketId) return;
+      combined.push(viewEntry);
     });
   });
 

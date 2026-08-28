@@ -66,7 +66,6 @@ export default function RutinaFranjaIconCarousel({
     display: 'flex',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    justifyContent: 'flex-start',
     gap: isMobileOrTablet ? 0.5 : 0.25,
     overflowX: 'auto',
     overflowY: 'hidden',
@@ -79,6 +78,7 @@ export default function RutinaFranjaIconCarousel({
     msOverflowStyle: 'none',
     minHeight: size + 4,
     py: 0.25,
+    width: '100%',
     '&::-webkit-scrollbar': { display: 'none' },
   }), [isDragging, isMobileOrTablet, size]);
 
@@ -96,6 +96,7 @@ export default function RutinaFranjaIconCarousel({
       theme={theme}
       scrollTrackSx={scrollTrackSx}
       enableDragScroll={!readOnly}
+      centerWhenFits
       bind={bind}
       mergeScrollRef={(node) => {
         scrollRef.current = node;
@@ -111,6 +112,10 @@ export default function RutinaFranjaIconCarousel({
         const displayHorario = resolveEntryHorario(entry);
         const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
         const isNotToday = entry.isScheduled === false;
+        const isActiveFranja = franjaKey === activeFranjaKey;
+        const carouselSlot = isNotToday
+          ? 'notToday'
+          : (isActiveFranja ? 'ahora' : 'inactiveFranja');
 
         return (
           <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
@@ -125,7 +130,7 @@ export default function RutinaFranjaIconCarousel({
               rutinaHoy={rutina}
               mode={carouselMode}
               displayHorario={displayHorario}
-              carouselSlot={isNotToday ? 'notToday' : (carouselMode === 'luego' ? 'luego' : 'ahora')}
+              carouselSlot={carouselSlot}
               isScheduled={!isNotToday}
               dense={!isMobileOrTablet}
               interactive={!readOnly}
