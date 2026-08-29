@@ -8,10 +8,12 @@ import { useHabits, useRutinas } from '@shared/context';
 import clienteAxios from '@shared/config/axios';
 import {
   tareaFormDialogPaperSx,
+  getTareaFormDialogSx,
   TareaFormHeader,
   TASK_FORM_HORIZONTAL_PX,
   TASK_FORM_HEADER_ACTION_COLUMN_WIDTH,
 } from '@shared/components/forms/tareaFormUi';
+import { useSidebar } from '@shared/context/SidebarContext';
 import { generateHabitId } from '@shared/habits/form';
 import { invalidateHabitsPreferencesCache, updateHabitChainsOnApi } from '@shared/hooks/useHabitsPreferences';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
@@ -41,7 +43,8 @@ const EMPTY_FORM = {
 };
 
 export const HabitsManager = ({ open, onClose }) => {
-  const { isMobile } = useResponsive();
+  const { isMobile, isDesktop } = useResponsive();
+  const { isOpen: sidebarOpen, sidebarWidth, collapsedWidth } = useSidebar();
   const {
     habits,
     loading,
@@ -846,6 +849,11 @@ export const HabitsManager = ({ open, onClose }) => {
   const showMobileHabitsChange = isMobile && managerMode === 'habits' && !showAddForm && sortedHabits.length > 0;
   const showMobileRoutinesChange = isMobile && managerMode === 'routines' && routineChains.length > 0;
 
+  const dialogContentOffset = useMemo(() => {
+    if (!isDesktop) return 0;
+    return sidebarOpen ? sidebarWidth : collapsedWidth;
+  }, [collapsedWidth, isDesktop, sidebarOpen, sidebarWidth]);
+
   const handleMobilePickerToggle = useCallback(() => {
     if (managerMode === 'habits') {
       setMobileListExpanded((prev) => !prev);
@@ -977,7 +985,10 @@ export const HabitsManager = ({ open, onClose }) => {
       fullWidth
       maxWidth="md"
       scroll="body"
-      sx={{ zIndex: Z_INDEX.modalOverlay }}
+      sx={getTareaFormDialogSx(isMobile, {
+        zIndex: Z_INDEX.modalOverlay,
+        contentOffset: dialogContentOffset,
+      })}
       PaperProps={{
         sx: {
           ...tareaFormDialogPaperSx(isMobile),

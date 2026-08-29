@@ -91,6 +91,7 @@ export default function HabitRoutineFormDialog({
       </DialogContent>
 
       <TareaFormFooter
+        pinned
         onCancel={onClose}
         showCancel
         onSave={handleSave}

@@ -5,7 +5,17 @@ import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDay
 import HabitIconButton from '@shared/components/habits/HabitIconButton';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import { useRutinas } from '@shared/context';
-import { isHabitHorarioCompleted, formatHabitCadenceProgressLabel, resolveHabitCompletadosEnPeriodo } from '@shared/habits';
+import { useResponsive, useHabitItemContextMenu } from '@shared/hooks';
+import {
+  isHabitHorarioCompleted,
+  formatHabitCadenceProgressLabel,
+  resolveHabitCompletadosEnPeriodo,
+  canPostponeHabitFranja,
+  resolvePostponeTargetFranja,
+  getPostponeMenuLabel,
+} from '@shared/habits';
+import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
+import { HABIT_PERIODIC_COPY } from '@shared/copy/agendaTerminology';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
@@ -18,8 +28,9 @@ import {
   rutinaChecklistStackCellContentSx,
   rutinaChecklistStackCellTextSx,
   rutinaChecklistIconColumnSx,
-  getRutinaChecklistIconSize,
+  getRutinaChecklistDragHandleSlotSx,
 } from '@shared/styles/rutinaPageStyles';
+import { getRutinaDragHandleGlyph, getRutinaHabitIconTokens } from '@shared/styles/rutinaIconTokens';
 
 export { default as HabitIconButton } from '@shared/components/habits/HabitIconButton';
 
@@ -40,8 +51,16 @@ const ChecklistItem = ({
   stackCell = false,
   hideMeta = false,
   iconColumnCompact = false,
+  isCadenciaDebt = false,
+  isScheduled = true,
+  allowPostpone = false,
+  onPostpone,
 }) => {
   const { rutina } = useRutinas();
+  const { isMobileOrTablet } = useResponsive();
+  const { menuState, closeMenu, getRowHandlers } = useHabitItemContextMenu({
+    enabled: allowPostpone && !readOnly,
+  });
 
   const isHorarioCompleted = (horario) => {
     const itemValue = localData?.[itemId] !== undefined
@@ -52,6 +71,8 @@ const ChecklistItem = ({
 
   const secondaryText = useMemo(() => {
     if (!config) return '';
+    if (isCadenciaDebt) return HABIT_PERIODIC_COPY.cadenciaDebt;
+
     const completados = resolveHabitCompletadosEnPeriodo({
       itemId,
       section,
@@ -59,8 +80,16 @@ const ChecklistItem = ({
       config,
       isCompleted,
     });
-    return formatHabitCadenceProgressLabel(config, completados);
-  }, [config, isCompleted, rutina, section, itemId]);
+    const baseLabel = formatHabitCadenceProgressLabel(config, completados);
+    const tipo = (config.tipo || 'DIARIO').toUpperCase();
+    const isDaily = tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && config?.periodo === 'CADA_DIA');
+
+    if (!isDaily && isScheduled) {
+      return `Hoy · ${baseLabel}`;
+    }
+
+    return baseLabel;
+  }, [config, isCompleted, rutina, section, itemId, isCadenciaDebt, isScheduled]);
 
   const horariosConfig = useMemo(
     () => normalizeTimeOfDay(config?.horarios),
@@ -73,7 +102,43 @@ const ChecklistItem = ({
   const singleDisplayHorario = normalizedFocusHorario
     || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
 
-  const iconSize = stackCell ? 32 : getRutinaChecklistIconSize(iconColumnCompact);
+  const iconTokens = getRutinaHabitIconTokens({
+    mobile: isMobileOrTablet,
+    compact: iconColumnCompact,
+    stackCell,
+  });
+  const iconSize = iconTokens.size;
+  const iconGlyph = iconTokens.glyph;
+
+  const itemValue = localData?.[itemId] !== undefined
+    ? localData[itemId]
+    : (completionValue !== undefined ? completionValue : rutina?.[section]?.[itemId]);
+
+  const postponeFranja = normalizedFocusHorario || singleDisplayHorario || getCurrentTimeOfDay();
+  const nextPostponeFranja = resolvePostponeTargetFranja({
+    config,
+    itemValue,
+    focusHorario: postponeFranja,
+    currentTimeOfDay: getCurrentTimeOfDay(),
+  });
+  const postponeLabel = getPostponeMenuLabel(nextPostponeFranja);
+  const canPostpone = canPostponeHabitFranja({
+    rutina,
+    section,
+    itemId,
+    config,
+    itemValue,
+    focusHorario: postponeFranja,
+    currentTimeOfDay: getCurrentTimeOfDay(),
+    readOnly,
+    allowPostpone,
+  });
+  const postponeEntry = { section, itemId, config, itemValue, label: habitLabel || itemId };
+  const postponeRowHandlers = getRowHandlers(postponeEntry, {
+    canPostpone,
+    postponeLabel,
+    franja: postponeFranja,
+  });
 
   const renderHabitActionButtons = () => {
     if (readOnly) return null;
@@ -96,6 +161,7 @@ const ChecklistItem = ({
           itemId={itemId}
           readOnly={readOnly}
           size={iconSize}
+          glyph={iconGlyph}
           mr={0}
         />
       );
@@ -106,7 +172,7 @@ const ChecklistItem = ({
         <HabitIconScrollRow
           itemCount={horariosConfig.length}
           iconSize={iconSize}
-          sx={{ mr: 0, width: '100%', maxWidth: '100%' }}
+          sx={{ mr: 0, flexShrink: 0 }}
         >
           {(guardClick) => horariosConfig.map((horario) => {
             const normalizedHorario = String(horario).toUpperCase();
@@ -132,6 +198,7 @@ const ChecklistItem = ({
                 section={section}
                 itemId={itemId}
                 size={iconSize}
+                glyph={iconGlyph}
                 mr={0}
               />
             );
@@ -156,6 +223,7 @@ const ChecklistItem = ({
         section={section}
         itemId={itemId}
         size={iconSize}
+        glyph={iconGlyph}
         mr={0}
       />
     );
@@ -172,80 +240,73 @@ const ChecklistItem = ({
       }}
     >
       <Box sx={{ ...rutinaChecklistRowSx, ...(stackCell ? rutinaChecklistStackCellRowSx : null) }}>
-        {dragHandleListeners && (
-          <Box
-            {...dragHandleAttributes}
-            {...dragHandleListeners}
-            onClick={(event) => event.stopPropagation()}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              color: 'text.disabled',
-              cursor: 'grab',
-              touchAction: 'none',
-              flexShrink: 0,
-              mr: 0.25,
-              '&:active': { cursor: 'grabbing' },
-            }}
-            aria-label={`Reordenar ${habitLabel || itemId}`}
-          >
-            <DragIndicatorIcon sx={{ fontSize: 18 }} />
-          </Box>
-        )}
-        {habitActionButtons && (
-          stackCell ? habitActionButtons : (
-            <Box sx={rutinaChecklistIconColumnSx({ compact: iconColumnCompact })}>
-              {habitActionButtons}
-            </Box>
-          )
-        )}
-        <Box sx={{
-          ...rutinaChecklistContentSx,
-          ...(stackCell ? rutinaChecklistStackCellContentSx : null),
-        }}
-        >
-          <Box sx={{
-            ...rutinaChecklistTextColumnSx,
-            ...(stackCell ? rutinaChecklistStackCellTextSx : null),
+        <Box
+          sx={{
+            ...getRutinaChecklistDragHandleSlotSx(isMobileOrTablet),
+            ...(dragHandleListeners ? { cursor: 'grab' } : null),
           }}
-          >
-            <Box sx={{
-              display: 'flex',
-              alignItems: stackCell ? 'center' : 'center',
-              justifyContent: stackCell ? 'center' : 'flex-start',
-              gap: 0.5,
-              flex: 1,
-              minWidth: 0,
-              width: stackCell ? '100%' : undefined,
-              flexDirection: stackCell ? 'column' : 'row',
-            }}
+        >
+          {dragHandleListeners ? (
+            <Box
+              {...dragHandleAttributes}
+              {...dragHandleListeners}
+              onClick={(event) => event.stopPropagation()}
+              sx={{ display: 'flex', alignItems: 'center' }}
+              aria-label={`Reordenar ${habitLabel || itemId}`}
             >
-              <Typography
-                variant="body2"
-                sx={{
-                  ...rutinaChecklistLabelSx(isCompleted),
-                  ...(stackCell ? { whiteSpace: 'normal', textAlign: 'center', fontSize: '0.8125rem' } : null),
-                }}
-              >
-                {habitLabel || itemId}
-              </Typography>
+              <DragIndicatorIcon sx={{ fontSize: getRutinaDragHandleGlyph(isMobileOrTablet) }} />
             </Box>
+          ) : null}
+        </Box>
+        <Box
+          sx={{
+            ...rutinaChecklistContentSx,
+            ...(stackCell ? rutinaChecklistStackCellContentSx : null),
+            ...(canPostpone
+              ? {
+                cursor: 'context-menu',
+                WebkitTouchCallout: 'none',
+                userSelect: 'none',
+                touchAction: 'manipulation',
+              }
+              : null),
+          }}
+          {...(canPostpone ? postponeRowHandlers : {})}
+        >
+          <Box sx={rutinaChecklistIconColumnSx({ compact: iconColumnCompact, mobile: isMobileOrTablet })}>
+            {habitActionButtons}
+          </Box>
+          <Box
+            sx={{
+              ...rutinaChecklistTextColumnSx,
+              ...(stackCell ? rutinaChecklistStackCellTextSx : null),
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                ...rutinaChecklistLabelSx(isCompleted),
+                ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left', fontSize: '0.8125rem', width: '100%' } : null),
+              }}
+            >
+              {habitLabel || itemId}
+            </Typography>
             {config && !hideMeta && (
               <Box sx={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: stackCell ? 'center' : 'flex-start',
+                justifyContent: 'flex-start',
                 gap: 0.5,
                 mt: stackCell ? 0.1 : 0.2,
                 flexWrap: 'wrap',
-                width: stackCell ? '100%' : undefined,
+                width: '100%',
               }}
               >
                 <Typography
                   variant="caption"
                   sx={{
                     ...rutinaChecklistMetaSx,
-                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'center' } : null),
+                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left' } : null),
                   }}
                 >
                   {secondaryText}
@@ -255,6 +316,15 @@ const ChecklistItem = ({
           </Box>
         </Box>
       </Box>
+      {(allowPostpone && !readOnly) && (
+        <HabitItemPostponeMenu
+          open={menuState.open && menuState.entry?.itemId === itemId && menuState.entry?.section === section}
+          anchorPosition={menuState.anchorPosition}
+          postponeLabel={menuState.postponeLabel}
+          onClose={closeMenu}
+          onPostpone={() => onPostpone?.(section, itemId, menuState.franja || postponeFranja)}
+        />
+      )}
     </ListItem>
   );
 };
@@ -282,6 +352,9 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.focusHorario === nextProps.focusHorario &&
     prevProps.stackCell === nextProps.stackCell &&
     prevProps.hideMeta === nextProps.hideMeta &&
-    prevProps.iconColumnCompact === nextProps.iconColumnCompact
+    prevProps.iconColumnCompact === nextProps.iconColumnCompact &&
+    prevProps.isCadenciaDebt === nextProps.isCadenciaDebt &&
+    prevProps.isScheduled === nextProps.isScheduled &&
+    prevProps.allowPostpone === nextProps.allowPostpone
   );
 });

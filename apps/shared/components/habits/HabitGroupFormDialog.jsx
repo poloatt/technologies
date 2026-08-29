@@ -99,6 +99,7 @@ export default function HabitGroupFormDialog({
       </DialogContent>
 
       <TareaFormFooter
+        pinned
         onCancel={onClose}
         showCancel
         onSave={handleSave}

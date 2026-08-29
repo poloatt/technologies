@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Collapse, IconButton } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import CollapseChevron from '@shared/components/common/CollapseChevron';
+import { collapsePanelProps } from '@shared/styles/collapseSectionStyles';
 import {
   TareaFormRow,
   TareaFormPrimaryLine,
@@ -123,23 +124,17 @@ export default function TareaFormScheduleSummary({
             </TareaFormPrimaryLine>
             <TareaFormSecondaryLine>{metaLine}</TareaFormSecondaryLine>
           </Box>
-          <IconButton
-            size="small"
+          <CollapseChevron
+            expanded={isExpanded}
+            asButton
             onClick={handleSummaryClick}
             aria-label={isExpanded ? 'Ocultar horario' : 'Editar horario'}
-            sx={{
-              flexShrink: 0,
-              mt: 0.25,
-              transform: isExpanded ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.2s ease',
-            }}
-          >
-            <ExpandMoreIcon fontSize="small" />
-          </IconButton>
+            iconButtonSx={{ flexShrink: 0, mt: 0.25 }}
+          />
         </Box>
       </TareaFormRow>
 
-      <Collapse in={isExpanded} timeout={200} unmountOnExit>
+      <Collapse in={isExpanded} {...collapsePanelProps}>
         <TareaFormScheduleFields
           embeddedInSummary
           day={day}

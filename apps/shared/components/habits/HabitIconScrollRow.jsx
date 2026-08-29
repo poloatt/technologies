@@ -3,6 +3,7 @@ import { Box, IconButton } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { alpha, useTheme } from '@mui/material/styles';
+import { RUTINA_HABIT_ICON_SIZE } from '../../styles/rutinaIconTokens';
 import useHorizontalDragScroll from '../../hooks/useHorizontalDragScroll.js';
 
 const SCROLL_STEP_RATIO = 0.75;
@@ -51,7 +52,7 @@ function EdgeArrowBar({ direction, onClick, theme }) {
  */
 export default function HabitIconScrollRow({
   itemCount = 0,
-  iconSize = 38,
+  iconSize = RUTINA_HABIT_ICON_SIZE.desktop,
   gap = 0.35,
   maxVisibleIcons = 2.5,
   sx = {},

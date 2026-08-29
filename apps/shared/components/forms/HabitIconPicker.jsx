@@ -7,6 +7,11 @@ import {
 } from '@mui/material';
 import { KeyboardArrowDown as ChevronDownIcon } from '@mui/icons-material';
 import { getHabitIconGroups, getHabitIconOptions, getIconByName } from '@shared/utils/habitIcons';
+import { useResponsive } from '@shared/hooks';
+import {
+  getRutinaPickerIconTokens,
+  RUTINA_PICKER_TITLE_BUTTON_SIZE,
+} from '@shared/styles/rutinaIconTokens';
 import { PickerPopover } from './tareaFormPickers';
 import {
   TASK_FORM_ICON_SIZE,
@@ -16,7 +21,6 @@ import {
 } from './tareaFormTokens';
 
 const GRID_COLUMNS = 6;
-const ICON_CELL_SIZE = 40;
 
 function HabitIconPickerGrid({
   listId,
@@ -24,6 +28,8 @@ function HabitIconPickerGrid({
   groups,
   value,
   onSelect,
+  cellSize,
+  cellGlyph,
 }) {
   return (
     <Box
@@ -55,7 +61,7 @@ function HabitIconPickerGrid({
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${GRID_COLUMNS}, ${ICON_CELL_SIZE}px)`,
+              gridTemplateColumns: `repeat(${GRID_COLUMNS}, ${cellSize}px)`,
               gap: 0.5,
             }}
           >
@@ -72,8 +78,8 @@ function HabitIconPickerGrid({
                     size="small"
                     onClick={() => onSelect(name)}
                     sx={{
-                      width: ICON_CELL_SIZE,
-                      height: ICON_CELL_SIZE,
+                      width: cellSize,
+                      height: cellSize,
                       borderRadius: 1.5,
                       border: 1,
                       borderColor: selected ? 'primary.main' : 'transparent',
@@ -85,7 +91,7 @@ function HabitIconPickerGrid({
                       },
                     }}
                   >
-                    <IconComp sx={{ fontSize: '1.25rem' }} />
+                    <IconComp sx={{ fontSize: cellGlyph }} />
                   </IconButton>
                 </Tooltip>
               );
@@ -113,6 +119,11 @@ export default function HabitIconPicker({
   disabled = false,
   ariaLabel = 'Seleccionar icono del hábito',
 }) {
+  const { isMobileOrTablet } = useResponsive();
+  const pickerTokens = getRutinaPickerIconTokens(isMobileOrTablet);
+  const titleButtonSize = isMobileOrTablet
+    ? RUTINA_PICKER_TITLE_BUTTON_SIZE.mobile
+    : RUTINA_PICKER_TITLE_BUTTON_SIZE.desktop;
   const [anchorEl, setAnchorEl] = useState(null);
   const listId = useId();
   const open = Boolean(anchorEl);
@@ -142,6 +153,8 @@ export default function HabitIconPicker({
         groups={groups}
         value={value}
         onSelect={handleSelect}
+        cellSize={pickerTokens.size}
+        cellGlyph={pickerTokens.glyph}
       />
     </PickerPopover>
   );
@@ -158,8 +171,8 @@ export default function HabitIconPicker({
           aria-controls={open ? listId : undefined}
           onClick={handleOpen}
           sx={{
-            width: 36,
-            height: 36,
+            width: titleButtonSize,
+            height: titleButtonSize,
             borderRadius: 2,
             border: 1,
             borderColor: open ? 'primary.main' : error ? 'error.main' : 'divider',
@@ -172,7 +185,7 @@ export default function HabitIconPicker({
           }}
         >
           {SelectedIcon ? (
-            <SelectedIcon sx={{ fontSize: '1.35rem' }} />
+            <SelectedIcon sx={{ fontSize: pickerTokens.glyph }} />
           ) : (
             <Box sx={{ width: 20, height: 20 }} />
           )}

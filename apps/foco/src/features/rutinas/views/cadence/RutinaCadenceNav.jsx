@@ -7,6 +7,7 @@ import {
   CADENCE_BUCKET_ICON_KEYS,
 } from '@shared/habits';
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import { hubSectionBg } from '@shared/styles/hubSectionStyles';
 
 const navItemSx = (selected) => ({
@@ -32,9 +33,11 @@ export default function RutinaCadenceNav({
   habits,
   habitsPreferences = {},
   customSections = [],
+  localDataBySection = {},
   selectedBucket,
   onSelectBucket,
 }) {
+  const { habitChains, prefsReady } = useHabitsPreferences();
   const habitIconsMap = useMemo(
     () => buildHabitSectionIconsMap(habits).iconsMap,
     [habits],
@@ -45,10 +48,12 @@ export default function RutinaCadenceNav({
       rutina,
       habits,
       habitsPreferences,
+      habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
+      localDataBySection,
     }),
-    [rutina, habits, habitsPreferences, customSections, habitIconsMap],
+    [rutina, habits, habitsPreferences, habitChains, prefsReady, customSections, habitIconsMap, localDataBySection],
   );
 
   return (

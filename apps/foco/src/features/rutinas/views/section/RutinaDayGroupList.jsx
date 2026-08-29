@@ -1,5 +1,12 @@
-import React, { useCallback, useMemo } from 'react';
-import { Box, Typography } from '@mui/material';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Box } from '@mui/material';
+import CollapseSectionToggle from '@shared/components/common/CollapseSectionToggle';
+import { CollapseSectionLabel } from '@shared/components/collapse';
+import {
+  collapseSectionStackSx,
+  getCollapseSectionCarouselBodySx,
+} from '@shared/styles/collapseSectionStyles';
+import useResponsive from '@shared/hooks/useResponsive';
 import {
   DndContext,
   closestCenter,
@@ -19,26 +26,97 @@ import {
   isHabitCompletedForHistorial,
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
-  getHabitDisplayLabel,
   groupEntriesIntoDisplayRows,
   reorderFlatEntriesByDisplayRowDnD,
 } from '@shared/habits';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
+import { useRutinas } from '@shared/context';
 
-const GROUP_HEADING_SX = {
-  px: 0.5,
-  py: 0.75,
-  fontWeight: 600,
-  color: 'text.secondary',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  fontSize: '0.7rem',
-};
+function ExpandableCarouselSection({
+  sectionKey,
+  label,
+  items,
+  expandedSections,
+  onToggleExpand,
+  showSectionCounts,
+  franjaKey,
+  activeFranja,
+  rutina,
+  habitsPreferences,
+  readOnly,
+  onCarouselToggle,
+  section,
+  habits,
+  onItemClick,
+  localData,
+  localDataBySection,
+  multiSection,
+  rowKeyPrefix,
+  stackVariant,
+  centerWhenFits,
+  allowPostpone = false,
+  onPostpone,
+}) {
+  const { isMobileOrTablet } = useResponsive();
+  const isExpanded = expandedSections.has(sectionKey);
+  const canExpand = items.length > 0;
 
-const FRANJA_GROUP_HEADING_SX = {
-  ...GROUP_HEADING_SX,
-  fontSize: '0.75rem',
-};
+  if (!canExpand) {
+    return (
+      <RutinaFranjaIconCarousel
+        pending={items}
+        franjaKey={franjaKey}
+        activeFranjaKey={activeFranja}
+        rutina={rutina}
+        habitsPreferences={habitsPreferences}
+        readOnly={readOnly}
+        onToggle={onCarouselToggle}
+        centerWhenFits={centerWhenFits}
+      />
+    );
+  }
+
+  return (
+    <CollapseSectionToggle
+      expanded={isExpanded}
+      onToggle={() => onToggleExpand(sectionKey)}
+      title={label}
+      count={showSectionCounts ? items.length : undefined}
+      showDivider={isExpanded}
+      contentSx={getCollapseSectionCarouselBodySx(isMobileOrTablet, { expanded: isExpanded })}
+    >
+      {isExpanded ? (
+        <HabitRows
+          items={items}
+          section={section}
+          rutina={rutina}
+          habits={habits}
+          readOnly={readOnly}
+          onItemClick={onItemClick}
+          localData={localData}
+          localDataBySection={localDataBySection}
+          sortable={false}
+          rowKeyPrefix={`${rowKeyPrefix}-${sectionKey}`}
+          multiSection={multiSection}
+          stackVariant={stackVariant}
+          allowPostpone={allowPostpone}
+          onPostpone={onPostpone}
+        />
+      ) : (
+        <RutinaFranjaIconCarousel
+          pending={items}
+          franjaKey={franjaKey}
+          activeFranjaKey={activeFranja}
+          rutina={rutina}
+          habitsPreferences={habitsPreferences}
+          readOnly={readOnly}
+          onToggle={onCarouselToggle}
+          centerWhenFits={centerWhenFits}
+        />
+      )}
+    </CollapseSectionToggle>
+  );
+}
 
 function buildSectionReorderIds(sectionHabits = [], reorderedVisibleIds = []) {
   const allIds = (sectionHabits || [])
@@ -99,6 +177,8 @@ function StaticHabitRow({
   stackCell = false,
   hideMeta = false,
   stackVariant = 'inline',
+  allowPostpone = false,
+  onPostpone,
 }) {
   const entrySection = resolveEntrySection(entry, section);
   const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
@@ -139,7 +219,11 @@ function StaticHabitRow({
         focusHorario={focusHorario}
         stackCell={stackCell}
         hideMeta={hideMeta}
+        isCadenciaDebt={entry.isCadenciaDebt}
+        isScheduled={entry.isScheduled}
         iconColumnCompact={stackVariant === 'compact'}
+        allowPostpone={allowPostpone}
+        onPostpone={onPostpone}
       />
     </Box>
   );
@@ -158,6 +242,8 @@ function HabitRows({
   rowKeyPrefix = '',
   multiSection = false,
   stackVariant = 'inline',
+  allowPostpone = false,
+  onPostpone,
 }) {
   const displayRows = useMemo(() => groupEntriesIntoDisplayRows(items), [items]);
 
@@ -181,6 +267,8 @@ function HabitRows({
             rowKeyPrefix={rowKeyPrefix}
             multiSection={multiSection}
             stackVariant={stackVariant}
+            allowPostpone={allowPostpone}
+            onPostpone={onPostpone}
           />
         );
       }
@@ -198,6 +286,8 @@ function HabitRows({
           habits={habits}
           localData={resolveEntryLocalData(entry, section, localData, localDataBySection)}
           stackVariant={stackVariant}
+          allowPostpone={allowPostpone}
+          onPostpone={onPostpone}
         />
       );
     });
@@ -239,13 +329,15 @@ function HabitRows({
         localDataBySection={localDataBySection}
         multiSection={multiSection}
         stackVariant={stackVariant}
+        allowPostpone={allowPostpone}
+        onPostpone={onPostpone}
       />
     );
   });
 }
 
 /**
- * Listado agrupado: Hoy y No toca hoy. Soporta reorden vertical por drag en grupo expandido.
+ * Listado agrupado por franja (Sin hacer / Ahora / Noche / Hecho) o por Hoy/Hecho en buckets sin franja.
  * Con `sectionLabel` + `useFranjaHeadings`, el encabezado es directo: "Esta mañana".
  */
 export default function RutinaDayGroupList({
@@ -277,7 +369,33 @@ export default function RutinaDayGroupList({
   hideDone = false,
   hideGroupHeadings = false,
   stackVariant = 'inline',
+  showSectionCounts = false,
+  expandableCarousels = false,
+  doneHeadingLabel,
+  doneTodayLabel,
+  doneBeforeLabel,
+  doneDefaultExpanded = false,
+  doneCollapsible = false,
 }) {
+  const { postponeHabitFranja } = useRutinas();
+  const [expandedCarouselSections, setExpandedCarouselSections] = useState(() => new Set());
+
+  const handlePostpone = useCallback(async (entrySection, itemId, franja) => {
+    if (!rutina?._id || readOnly) return;
+    await postponeHabitFranja(rutina._id, entrySection, itemId, franja);
+  }, [postponeHabitFranja, readOnly, rutina?._id]);
+
+  const toggleCarouselExpand = useCallback((sectionKey) => {
+    setExpandedCarouselSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) next.delete(sectionKey);
+      else next.add(sectionKey);
+      return next;
+    });
+  }, []);
+
+  const shouldShowCounts = showSectionCounts || useSectionFranjaLayout;
+  const shouldExpandCarousels = expandableCarousels || useSectionFranjaLayout;
   const hasToday = today.length > 0;
   const hasDone = done.length > 0;
   const visibleItems = useMemo(() => [...today, ...notToday], [today, notToday]);
@@ -306,7 +424,35 @@ export default function RutinaDayGroupList({
     return dayGroupLabel;
   };
 
-  const todayHeadingSx = useFranjaHeadings ? FRANJA_GROUP_HEADING_SX : GROUP_HEADING_SX;
+  const resolveTodaySectionTitle = () => {
+    if (useSectionFranjaLayout && activeFranjaLabel) return activeFranjaLabel;
+    if (useFranjaHeadings && sectionLabel) return sectionLabel;
+    if (!hideGroupHeadings && !useFranjaHeadings && !useSectionFranjaLayout) {
+      return formatGroupHeading(RUTINA_DAY_GROUP_COPY.today);
+    }
+    return hideGroupHeadings ? null : RUTINA_DAY_GROUP_COPY.today;
+  };
+
+  const todaySectionTitle = resolveTodaySectionTitle();
+
+  const renderTodayRows = () => (
+    <HabitRows
+      items={today}
+      section={section}
+      rutina={rutina}
+      habits={habits}
+      readOnly={readOnly}
+      onItemClick={onItemClick}
+      localData={localData}
+      localDataBySection={localDataBySection}
+      sortable={canSort}
+      rowKeyPrefix={rowKeyPrefix}
+      multiSection={multiSection}
+      stackVariant={stackVariant}
+      allowPostpone={useSectionFranjaLayout && !readOnly}
+      onPostpone={handlePostpone}
+    />
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -360,80 +506,112 @@ export default function RutinaDayGroupList({
   }, [useSectionFranjaLayout, luego]);
 
   const listBody = (
-    <>
+    <Box sx={collapseSectionStackSx}>
       {useSectionFranjaLayout && sinHacer.length > 0 && (
-        <Box sx={{ mb: hasToday || luegoByFranja.length ? 0.5 : 0 }}>
-          <Typography variant="caption" sx={FRANJA_GROUP_HEADING_SX}>
-            {DAILY_CADENCE_SECTION_COPY.sinHacer}
-          </Typography>
-          <RutinaFranjaIconCarousel
-            pending={sinHacer}
-            franjaKey="SIN_HACER"
-            activeFranjaKey={activeFranja}
+        shouldExpandCarousels ? (
+          <ExpandableCarouselSection
+              sectionKey="sinHacer"
+              label={DAILY_CADENCE_SECTION_COPY.sinHacer}
+              items={sinHacer}
+              expandedSections={expandedCarouselSections}
+              onToggleExpand={toggleCarouselExpand}
+              showSectionCounts={shouldShowCounts}
+              franjaKey="SIN_HACER"
+              activeFranja={activeFranja}
+              rutina={rutina}
+              habitsPreferences={habitsPreferences}
+              readOnly={readOnly}
+              onCarouselToggle={handleCarouselToggle}
+              section={section}
+              habits={habits}
+              onItemClick={onItemClick}
+              localData={localData}
+              localDataBySection={localDataBySection}
+              multiSection={multiSection}
+              rowKeyPrefix={rowKeyPrefix}
+              stackVariant={stackVariant}
+              allowPostpone={useSectionFranjaLayout && !readOnly}
+              onPostpone={handlePostpone}
+            />
+          ) : (
+            <CollapseSectionLabel
+              title={DAILY_CADENCE_SECTION_COPY.sinHacer}
+              count={shouldShowCounts ? sinHacer.length : undefined}
+            >
+              <RutinaFranjaIconCarousel
+                pending={sinHacer}
+                franjaKey="SIN_HACER"
+                activeFranjaKey={activeFranja}
+                rutina={rutina}
+                habitsPreferences={habitsPreferences}
+                readOnly={readOnly}
+                onToggle={handleCarouselToggle}
+              />
+            </CollapseSectionLabel>
+          )
+      )}
+      {hasToday && (
+        todaySectionTitle ? (
+          <CollapseSectionLabel
+            title={todaySectionTitle}
+            count={shouldShowCounts ? today.length : undefined}
+          >
+            {renderTodayRows()}
+          </CollapseSectionLabel>
+        ) : renderTodayRows()
+      )}
+      {luegoByFranja.map(({ franjaKey, items }) => {
+        const franjaLabel = franjaKey === 'MAÑANA' ? 'Mañana' : franjaKey === 'TARDE' ? 'Tarde' : 'Noche';
+        const sectionKey = `luego:${franjaKey}`;
+
+        return shouldExpandCarousels ? (
+          <ExpandableCarouselSection
+            key={franjaKey}
+            sectionKey={sectionKey}
+            label={franjaLabel}
+            items={items}
+            expandedSections={expandedCarouselSections}
+            onToggleExpand={toggleCarouselExpand}
+            showSectionCounts={shouldShowCounts}
+            franjaKey={franjaKey}
+            activeFranja={activeFranja}
             rutina={rutina}
             habitsPreferences={habitsPreferences}
             readOnly={readOnly}
-            onToggle={handleCarouselToggle}
-            centerWhenFits={useSectionFranjaLayout ? false : undefined}
-          />
-        </Box>
-      )}
-      {hasToday && (
-        <Box>
-          {useSectionFranjaLayout && activeFranjaLabel && (
-            <Typography variant="caption" sx={FRANJA_GROUP_HEADING_SX}>
-              {activeFranjaLabel}
-            </Typography>
-          )}
-          {useFranjaHeadings && sectionLabel && (
-            <Typography variant="caption" sx={todayHeadingSx}>
-              {sectionLabel}
-            </Typography>
-          )}
-          {!hideGroupHeadings && !useFranjaHeadings && !useSectionFranjaLayout && (
-            <Typography variant="caption" sx={todayHeadingSx}>
-              {formatGroupHeading(RUTINA_DAY_GROUP_COPY.today)}
-            </Typography>
-          )}
-          <HabitRows
-            items={today}
+            onCarouselToggle={handleCarouselToggle}
             section={section}
-            rutina={rutina}
             habits={habits}
-            readOnly={readOnly}
             onItemClick={onItemClick}
             localData={localData}
             localDataBySection={localDataBySection}
-            sortable={canSort}
-            rowKeyPrefix={rowKeyPrefix}
             multiSection={multiSection}
+            rowKeyPrefix={rowKeyPrefix}
             stackVariant={stackVariant}
+            centerWhenFits={franjaKey === 'NOCHE' ? undefined : false}
+            allowPostpone={useSectionFranjaLayout && !readOnly}
+            onPostpone={handlePostpone}
           />
-        </Box>
-      )}
-      {luegoByFranja.map(({ franjaKey, items }) => (
-        <Box key={franjaKey} sx={{ mt: hasToday || sinHacer.length ? 0.5 : 0 }}>
-          <Typography variant="caption" sx={FRANJA_GROUP_HEADING_SX}>
-            {franjaKey === 'MAÑANA' ? 'Mañana' : franjaKey === 'TARDE' ? 'Tarde' : 'Noche'}
-          </Typography>
-          <RutinaFranjaIconCarousel
-            pending={items}
-            franjaKey={franjaKey}
-            activeFranjaKey={activeFranja}
-            rutina={rutina}
-            habitsPreferences={habitsPreferences}
-            readOnly={readOnly}
-            onToggle={handleCarouselToggle}
-          />
-        </Box>
-      ))}
-      {notToday.length > 0 && (
-        <Box sx={{ mt: hasToday ? 0.5 : 0 }}>
-          {!hideGroupHeadings && (
-            <Typography variant="caption" sx={GROUP_HEADING_SX}>
-              {formatGroupHeading(RUTINA_DAY_GROUP_COPY.notToday)}
-            </Typography>
-          )}
+        ) : (
+          <CollapseSectionLabel
+            key={franjaKey}
+            title={franjaLabel}
+            count={shouldShowCounts ? items.length : undefined}
+          >
+            <RutinaFranjaIconCarousel
+              pending={items}
+              franjaKey={franjaKey}
+              activeFranjaKey={activeFranja}
+              rutina={rutina}
+              habitsPreferences={habitsPreferences}
+              readOnly={readOnly}
+              onToggle={handleCarouselToggle}
+              centerWhenFits={franjaKey === 'NOCHE' ? undefined : false}
+            />
+          </CollapseSectionLabel>
+        );
+      })}
+      {notToday.length > 0 && !useSectionFranjaLayout && (
+        hideGroupHeadings ? (
           <HabitRows
             items={notToday}
             section={section}
@@ -448,7 +626,27 @@ export default function RutinaDayGroupList({
             multiSection={multiSection}
             stackVariant={stackVariant}
           />
-        </Box>
+        ) : (
+          <CollapseSectionLabel
+            title={formatGroupHeading(RUTINA_DAY_GROUP_COPY.notToday)}
+            count={shouldShowCounts ? notToday.length : undefined}
+          >
+            <HabitRows
+              items={notToday}
+              section={section}
+              rutina={rutina}
+              habits={habits}
+              readOnly={readOnly}
+              onItemClick={onItemClick}
+              localData={localData}
+              localDataBySection={localDataBySection}
+              sortable={canSort}
+              rowKeyPrefix={rowKeyPrefix}
+              multiSection={multiSection}
+              stackVariant={stackVariant}
+            />
+          </CollapseSectionLabel>
+        )
       )}
       {!hideDone && hasDone && (
         <RutinaDoneSection
@@ -457,11 +655,16 @@ export default function RutinaDayGroupList({
           habitsPreferences={habitsPreferences}
           readOnly={readOnly}
           onToggle={handleDoneToggle}
-          showDivider={hasToday || notToday.length > 0 || sinHacer.length > 0 || luegoByFranja.length > 0}
           alignIconsLeft={useSectionFranjaLayout}
+          doneHeadingLabel={doneHeadingLabel}
+          doneTodayLabel={doneTodayLabel}
+          doneBeforeLabel={doneBeforeLabel}
+          defaultExpanded={doneDefaultExpanded}
+          collapsible={doneCollapsible}
+          collapseThreshold={doneDefaultExpanded ? 3 : 5}
         />
       )}
-    </>
+    </Box>
   );
 
   if (!canSort) {

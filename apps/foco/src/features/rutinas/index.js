@@ -4,6 +4,7 @@ export { ensureRutinaForDate } from './lib/ensureRutinaForDate.js';
 export { default as useEnsureRutinaForDate } from './hooks/useEnsureRutinaForDate.js';
 export { useRutinasPageController } from './hooks/useRutinasPageController.js';
 export { useRutinaDateNav } from './hooks/useRutinaDateNav.js';
+/** @deprecated Vista por grupo retirada; exports conservados por compatibilidad. */
 export {
   RUTINA_PAGE_VIEW,
   readStoredRutinaPageView,

@@ -1,3 +1,7 @@
+/**
+ * @deprecated Vista por grupo retirada de la UI (ago 2026). RutinaTable usa solo cadencia.
+ * Pendiente: eliminar o readaptar este carrusel por sección (la cadencia usa sus propios carruseles).
+ */
 import React, { useMemo, useCallback } from 'react';
 
 import { Box } from '@mui/material';
@@ -24,7 +28,7 @@ import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 
 import useResponsive from '@shared/hooks/useResponsive';
 
-import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
+import { getRutinaHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
 
 import { hubSectionBg } from '@shared/styles/hubSectionStyles';
 
@@ -76,22 +80,12 @@ export default function RutinaSectionCarousel({
 
   const isMobile = mobileProp ?? isMobileOrTablet;
 
-  const isDense = dense ?? !isMobile;
-
-  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getHabitCarouselSurface(theme, {
-
-    dense: isDense,
-
+  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobile,
-
   });
 
-
-
   const { scrollRef, isDragging, bind, dragRef } = useHorizontalDragScroll({
-
     enabled: enableDragScroll && interactive,
-
   });
 
 
@@ -165,7 +159,7 @@ export default function RutinaSectionCarousel({
 
     justifyContent: 'flex-start',
 
-    gap: isMobile ? 0.5 : (isDense ? 0.25 : 0.5),
+    gap: 0.5,
 
     overflowX: 'auto',
 
@@ -191,7 +185,7 @@ export default function RutinaSectionCarousel({
 
     '&::-webkit-scrollbar': { display: 'none' },
 
-  }), [enableDragScroll, isDense, isDragging, isMobile, size]);
+  }), [enableDragScroll, isDragging, isMobile, size]);
 
 
 
@@ -310,7 +304,7 @@ export default function RutinaSectionCarousel({
 
                   isCadenciaDebt={Boolean(isCadenciaDebt)}
 
-                  dense={isDense && !isMobile}
+                  dense={false}
 
                   interactive={interactive}
 

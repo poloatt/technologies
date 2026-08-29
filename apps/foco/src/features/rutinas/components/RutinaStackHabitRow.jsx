@@ -17,20 +17,16 @@ import {
   rutinaChecklistLabelSx,
   rutinaRoutineChipSx,
   rutinaChecklistIconColumnSx,
-  getRutinaChecklistIconSize,
+  getRutinaChecklistDragHandleSlotSx,
 } from '@shared/styles/rutinaPageStyles';
+import { getRutinaDragHandleGlyph, getRutinaHabitIconTokens } from '@shared/styles/rutinaIconTokens';
+import { useResponsive } from '@shared/hooks';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import { HabitIconButton } from './ChecklistItem';
 
-const DRAG_HANDLE_SX = {
+const DRAG_HANDLE_INNER_SX = {
   display: 'flex',
   alignItems: 'center',
-  color: 'text.disabled',
-  cursor: 'grab',
-  touchAction: 'none',
-  flexShrink: 0,
-  mr: 0.25,
-  '&:active': { cursor: 'grabbing' },
 };
 
 function resolveEntrySection(entry, fallbackSection) {
@@ -65,8 +61,11 @@ export default function RutinaStackHabitRow({
   dragHandleAttributes = null,
   dragHandleListeners = null,
 }) {
+  const { isMobileOrTablet } = useResponsive();
   const isCompact = stackVariant === 'compact';
-  const iconSize = getRutinaChecklistIconSize(isCompact);
+  const iconTokens = getRutinaHabitIconTokens({ mobile: isMobileOrTablet, compact: isCompact });
+  const iconSize = iconTokens.size;
+  const iconGlyph = iconTokens.glyph;
   const routineName = resolveRoutineDisplayName(entries[0]?.chain);
 
   const allCompleted = entries.every((entry) => {
@@ -118,6 +117,7 @@ export default function RutinaStackHabitRow({
       section: entrySection,
       itemId,
       size: iconSize,
+      glyph: iconGlyph,
       mr: 0,
     };
 
@@ -173,22 +173,29 @@ export default function RutinaStackHabitRow({
       data-habit-stack={chainId}
     >
       <Box sx={rutinaChecklistRowSx}>
-        {dragHandleListeners && (
-          <Box
-            {...dragHandleAttributes}
-            {...dragHandleListeners}
-            onClick={(event) => event.stopPropagation()}
-            sx={DRAG_HANDLE_SX}
-            aria-label={`Reordenar rutina ${routineName}`}
-          >
-            <DragIndicatorIcon sx={{ fontSize: 18 }} />
-          </Box>
-        )}
-        <Box sx={rutinaChecklistIconColumnSx({ compact: isCompact })}>
-          {entries.map((entry) => renderStackIcon(entry))}
+        <Box
+          sx={{
+            ...getRutinaChecklistDragHandleSlotSx(isMobileOrTablet),
+            ...(dragHandleListeners ? { cursor: 'grab' } : null),
+          }}
+        >
+          {dragHandleListeners ? (
+            <Box
+              {...dragHandleAttributes}
+              {...dragHandleListeners}
+              onClick={(event) => event.stopPropagation()}
+              sx={DRAG_HANDLE_INNER_SX}
+              aria-label={`Reordenar rutina ${routineName}`}
+            >
+              <DragIndicatorIcon sx={{ fontSize: getRutinaDragHandleGlyph(isMobileOrTablet) }} />
+            </Box>
+          ) : null}
         </Box>
         <Box sx={rutinaChecklistContentSx}>
-          <Box sx={rutinaChecklistTextColumnSx}>
+          <Box sx={rutinaChecklistIconColumnSx({ compact: isCompact, mobile: isMobileOrTablet })}>
+            {entries.map((entry) => renderStackIcon(entry))}
+          </Box>
+          <Box sx={{ ...rutinaChecklistTextColumnSx, flex: 1, minWidth: 0 }}>
             <Typography
               variant="body2"
               sx={rutinaChecklistLabelSx(allCompleted)}

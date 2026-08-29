@@ -1,3 +1,7 @@
+/**
+ * @deprecated Vista por grupo retirada de la UI (ago 2026). RutinaTable usa solo cadencia.
+ * Pendiente: eliminar o readaptar este panel de detalle por sección.
+ */
 import React, { useState, useMemo, useCallback } from 'react';
 
 import { Box, Typography } from '@mui/material';
@@ -7,6 +11,8 @@ import { useHabits, useRutinas } from '@shared/context';
 import RutinaDayGroupList from './RutinaDayGroupList';
 
 import { groupSectionHabitsByFranjaSchedule, isViewingRutinaToday } from '@shared/habits';
+import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
+import { RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
 
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 
@@ -79,6 +85,7 @@ export default function RutinaSectionDetailPanel({
     activeFranjaLabel,
   } = habitGroups;
   const useSectionFranjaLayout = isViewingRutinaToday(rutina);
+  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
 
   const handleReorderHabits = useCallback(async (habitIds) => {
     if (!habitIds?.length || !section) return;
@@ -128,7 +135,15 @@ export default function RutinaSectionDetailPanel({
         habitsPreferences={habitsPreferences}
         useSectionFranjaLayout={useSectionFranjaLayout}
         activeFranja={activeFranja}
-        activeFranjaLabel={activeFranjaLabel}
+        activeFranjaLabel={isHistorical ? RUTINA_HISTORICAL_COPY.unmarked : activeFranjaLabel}
+        useFranjaHeadings={isHistorical}
+        sectionLabel={isHistorical ? RUTINA_HISTORICAL_COPY.unmarked : undefined}
+        showSectionCounts={isHistorical}
+        doneHeadingLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
+        doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
+        doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : undefined}
+        doneDefaultExpanded={isHistorical}
+        doneCollapsible={isHistorical}
         onReorder={handleReorderHabits}
         onItemClick={handleItemClick}
         onDoneToggle={handleItemClick}

@@ -8,7 +8,7 @@ import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScr
 import { RoutineCarouselStackCluster } from '@shared/components/habits/routines';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 import useResponsive from '@shared/hooks/useResponsive';
-import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
+import { getRutinaHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
 import { hubSectionBg } from '@shared/styles/hubSectionStyles';
 
 function resolveEntryHorario(entry) {
@@ -17,6 +17,14 @@ function resolveEntryHorario(entry) {
   const horarios = Array.isArray(entry?.config?.horarios) ? entry.config.horarios : [];
   if (horarios.length === 1) return String(horarios[0]).toUpperCase();
   return null;
+}
+
+function resolveCarouselItemValue(entry, rutina) {
+  if (entry?.itemValue !== undefined) return entry.itemValue;
+  const section = entry?.section;
+  const itemId = entry?.itemId;
+  if (!section || !itemId) return undefined;
+  return rutina?.[section]?.[itemId];
 }
 
 /** Carrusel horizontal de hábitos completados / cuota satisfecha. */
@@ -31,8 +39,7 @@ export default function RutinaDoneCarousel({
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
   const centerWhenFits = centerWhenFitsProp ?? isMobileOrTablet;
-  const { size, bg, hoverBg, rail, iconFontSize } = getHabitCarouselSurface(theme, {
-    dense: !isMobileOrTablet,
+  const { size, bg, hoverBg, rail, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobileOrTablet,
   });
 
@@ -44,7 +51,7 @@ export default function RutinaDoneCarousel({
     display: 'flex',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    gap: isMobileOrTablet ? 0.5 : 0.25,
+    gap: 0.5,
     overflowX: 'auto',
     overflowY: 'hidden',
     touchAction: 'pan-x',
@@ -58,7 +65,7 @@ export default function RutinaDoneCarousel({
     py: 0.25,
     width: '100%',
     '&::-webkit-scrollbar': { display: 'none' },
-  }), [isDragging, isMobileOrTablet, size]);
+  }), [isDragging, size]);
 
   const displayRows = useMemo(
     () => groupEntriesIntoDisplayRows(items),
@@ -78,7 +85,7 @@ export default function RutinaDoneCarousel({
     if (!Icon || !section) return null;
 
     const itemConfig = resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences);
-    const itemValue = rutina?.[section]?.[itemId];
+    const itemValue = resolveCarouselItemValue(entry, rutina);
     const displayHorario = resolveEntryHorario(entry);
     const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
 
@@ -96,7 +103,7 @@ export default function RutinaDoneCarousel({
           mode="ahora"
           displayHorario={displayHorario}
           carouselSlot="ahora"
-          dense={!isMobileOrTablet}
+          dense={false}
           interactive={!readOnly}
           showCompletionState
           bg={bg}

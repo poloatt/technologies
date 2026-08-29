@@ -17,6 +17,7 @@ export {
   TareaFormDeadlineRow,
   TareaFormDeadlineClearButton,
 } from './TareaFormDeadlineField';
+export * from './keyboardAwareFooterSx';
 export { default as TareaFormDialogShell } from './TareaFormDialogShell';
 export { default as TareaFormAttachmentsSection } from './TareaFormAttachmentsSection';
 export { useTareaFormAttachments } from './useTareaFormAttachments';

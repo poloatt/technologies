@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Collapse, IconButton, Stack } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import { Box, Collapse, Stack } from '@mui/material';
+import CollapseChevron from '../common/CollapseChevron';
+import { collapsePanelProps } from '../../styles/collapseSectionStyles';
 import {
   TareaFormRow,
   TareaFormPrimaryLine,
@@ -157,23 +158,17 @@ export default function TareaFormObjetivoSummary({
               <TareaFormSecondaryLine>{secondaryLine}</TareaFormSecondaryLine>
             ) : null}
           </Box>
-          <IconButton
-            size="small"
+          <CollapseChevron
+            expanded={isExpanded}
+            asButton
             onClick={handleSummaryClick}
             aria-label={isExpanded ? 'Ocultar objetivo' : 'Editar objetivo'}
-            sx={{
-              flexShrink: 0,
-              mt: 0.25,
-              transform: isExpanded ? 'rotate(-180deg)' : 'none',
-              transition: 'transform 0.2s ease',
-            }}
-          >
-            <ExpandMoreIcon fontSize="small" />
-          </IconButton>
+            iconButtonSx={{ flexShrink: 0, mt: 0.25 }}
+          />
         </Box>
       </TareaFormRow>
 
-      <Collapse in={isExpanded} timeout={200} unmountOnExit>
+      <Collapse in={isExpanded} {...collapsePanelProps}>
         <Stack
           spacing={1}
           sx={{

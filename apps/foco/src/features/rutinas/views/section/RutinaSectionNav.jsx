@@ -1,3 +1,7 @@
+/**
+ * @deprecated Vista por grupo retirada de la UI (ago 2026). RutinaTable usa solo cadencia.
+ * Pendiente: eliminar o readaptar esta navegación lateral por sección.
+ */
 import React, { useMemo } from 'react';
 
 import { Box, Typography } from '@mui/material';

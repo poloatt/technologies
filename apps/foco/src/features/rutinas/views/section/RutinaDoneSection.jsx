@@ -1,37 +1,95 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import { RUTINA_DAY_GROUP_COPY } from '@shared/copy/agendaTerminology';
-import {
-  rutinaDoneSectionDividerSx,
-  rutinaDoneSectionHeadingSx,
-} from '@shared/styles/rutinaPageStyles';
+import { RUTINA_DAY_GROUP_COPY, RUTINA_DONE_GROUP_COPY } from '@shared/copy/agendaTerminology';
+import { partitionDoneEntriesByRutinaDay } from '@shared/habits';
+import { CollapsibleSection, CollapseSectionLabel } from '@shared/components/collapse';
+import { collapseSectionCountSx, collapseSectionTitleSx } from '@shared/styles/collapseSectionStyles';
 import RutinaDoneCarousel from './RutinaDoneCarousel';
 
-/** Sector Hecho con separador minimalista y carrusel de iconos alineado a la izquierda en vista Grupo. */
+/** Sector Hecho: primero completados hoy, luego cuota del período sin marcar hoy. */
 export default function RutinaDoneSection({
   items = [],
   rutina,
   habitsPreferences = {},
   readOnly = false,
   onToggle,
-  showDivider = true,
   alignIconsLeft = false,
+  collapsible = false,
+  collapseThreshold = 5,
+  defaultExpanded = false,
+  doneHeadingLabel,
+  doneTodayLabel,
+  doneBeforeLabel,
 }) {
+  const shouldCollapse = collapsible && items.length > collapseThreshold;
+  const [expanded, setExpanded] = useState(defaultExpanded || !shouldCollapse);
+
+  const { doneOnDay, doneByQuota } = useMemo(
+    () => partitionDoneEntriesByRutinaDay(items, rutina),
+    [items, rutina],
+  );
+
+  const hasSplitGroups = doneOnDay.length > 0 && doneByQuota.length > 0;
+  const todayLabel = doneTodayLabel || RUTINA_DONE_GROUP_COPY.doneToday;
+  const beforeLabel = doneBeforeLabel || RUTINA_DONE_GROUP_COPY.doneBefore;
+  const headingLabel = doneHeadingLabel || RUTINA_DAY_GROUP_COPY.done;
+
   if (!items.length) return null;
 
-  return (
-    <Box sx={showDivider ? rutinaDoneSectionDividerSx : { pt: 0.25 }}>
-      <Typography variant="caption" sx={rutinaDoneSectionHeadingSx}>
-        {RUTINA_DAY_GROUP_COPY.done}
+  const renderDoneGroup = (groupItems, label, alignLeft = false) => (
+    <Box sx={{ width: '100%', minWidth: 0 }}>
+      <Typography variant="body2" sx={{ ...collapseSectionTitleSx, mb: 0.5 }}>
+        {label}
+        <Box component="span" sx={collapseSectionCountSx}>{groupItems.length}</Box>
       </Typography>
       <RutinaDoneCarousel
-        items={items}
+        items={groupItems}
         rutina={rutina}
         habitsPreferences={habitsPreferences}
         readOnly={readOnly}
         onToggle={onToggle}
-        centerWhenFits={alignIconsLeft ? false : undefined}
+        centerWhenFits={alignLeft ? false : undefined}
       />
     </Box>
+  );
+
+  const doneContent = hasSplitGroups ? (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
+      {doneOnDay.length > 0 && renderDoneGroup(doneOnDay, todayLabel, alignIconsLeft || defaultExpanded)}
+      {doneByQuota.length > 0 && renderDoneGroup(doneByQuota, beforeLabel, true)}
+    </Box>
+  ) : (
+    <RutinaDoneCarousel
+      items={items}
+      rutina={rutina}
+      habitsPreferences={habitsPreferences}
+      readOnly={readOnly}
+      onToggle={onToggle}
+      centerWhenFits={alignIconsLeft || defaultExpanded ? false : undefined}
+    />
+  );
+
+  if (shouldCollapse) {
+    return (
+      <CollapsibleSection
+        title={headingLabel}
+        count={items.length}
+        collapsible
+        expanded={expanded}
+        onToggle={() => setExpanded((prev) => !prev)}
+        animated
+      >
+        {doneContent}
+      </CollapsibleSection>
+    );
+  }
+
+  return (
+    <CollapseSectionLabel
+      title={headingLabel}
+      count={items.length}
+    >
+      {doneContent}
+    </CollapseSectionLabel>
   );
 }

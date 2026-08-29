@@ -2,6 +2,8 @@ import React from 'react';
 import { Box, Button, IconButton } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { taskFormSaveButtonSx } from '@shared/components/forms/tareaFormUi';
+import { keyboardAwareFooterSx } from '@shared/components/forms/keyboardAwareFooterSx';
+import { useKeyboardInset, useResponsive } from '@shared/hooks';
 
 function saveButtonSx(saveActive) {
   return {
@@ -46,7 +48,11 @@ export default function HabitsManagerActionFooter({
   onDelete,
   saveLabel = 'Guardar cambios',
   deleteAriaLabel = 'Eliminar',
+  keyboardAware = true,
 }) {
+  const { isMobile } = useResponsive();
+  const { inset, isKeyboardOpen } = useKeyboardInset({ enabled: keyboardAware && isMobile });
+
   if (detailMode === 'empty') {
     return null;
   }
@@ -55,18 +61,24 @@ export default function HabitsManagerActionFooter({
 
   return (
     <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 2,
-        py: 1.5,
-        borderTop: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.default',
-        flexShrink: 0,
-        pb: 'max(12px, env(safe-area-inset-bottom, 0px))',
-      }}
+      sx={keyboardAwareFooterSx({
+        inset,
+        isKeyboardOpen,
+        pinned: true,
+        sx: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 2,
+          py: 1.5,
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.default',
+          pb: inset > 0
+            ? 1.5
+            : 'max(12px, env(safe-area-inset-bottom, 0px))',
+        },
+      })}
     >
       {showDelete && (
         <IconButton

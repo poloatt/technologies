@@ -53,6 +53,9 @@ export {
   getSectionCarouselItems,
   getDefaultSelectedSection,
   isHabitQuotaOrDayDone,
+  isHabitCompletedOnRutinaDay,
+  isHabitDoneByPeriodQuotaOnly,
+  partitionDoneEntriesByRutinaDay,
   resolveRutinaScheduleBucket,
   isEntryDueOnRutinaDay,
 } from '../desktop/rutinaDesktopUtils.js';
@@ -70,6 +73,8 @@ export {
   getCadenceBucketCompletionStats,
   getDefaultSelectedCadenceBucket,
   groupDailyCadenceByFranja,
+  groupDailyCadenceBucketByFranjaSchedule,
+  dedupeCadenceEntries,
   mergeDailyFranjaGroups,
   buildDailyCadenceDisplaySections,
   groupSectionHabitsByFranjaSchedule,
@@ -87,3 +92,12 @@ export {
   bucketUsesFranjaLayout,
   bucketUsesWeekdayLayout,
 } from '../desktop/rutinaCadenceUtils.js';
+
+export {
+  getPostponedFranjasForItem,
+  isFranjaPostponed,
+  buildPostponedFranjasUpdate,
+  resolvePostponeTargetFranja,
+  canPostponeHabitFranja,
+  getPostponeMenuLabel,
+} from './rutinaPostponeUtils.js';

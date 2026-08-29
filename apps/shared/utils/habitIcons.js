@@ -97,6 +97,22 @@ const CHEESE_WEDGE_ICON_PATH = 'M4 19h16l-8-14-8 14zm8-10.5c.8 0 1.5.7 1.5 1.5s-
 
 const CHEESE_SLICE_ICON_PATH = 'M12 4c-4 0-7 2.5-8 6 1 3.5 4 6 8 6s7-2.5 8-6c-1-3.5-4-6-8-6zm-2.5 5c.8 0 1.5.7 1.5 1.5S10.3 12 9.5 12 8 11.3 8 10.5 8.7 9 9.5 9zm5 1c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1zm-2 3.5c.8 0 1.5.7 1.5 1.5s-.7 1.5-1.5 1.5-1.5-.7-1.5-1.5.7-1.5 1.5-1.5z';
 
+const BANANA_BODY_PATH = 'M10.2 3.2c-1.8.4-3.2 2-3.6 3.9-.6 2.8.6 5.8 3 7.6 1.8 1.3 4 1.6 6 .8 1.4-.6 2.4-1.9 2.7-3.4.4-2-.2-4.2-1.6-5.8-1.2-1.3-3-2-4.5-1.1z';
+const BANANA_TIP_PATH = 'M9.5 4.1c-.3.1-.5.4-.4.7l.4 1.2c.1.3.4.5.7.4.3-.1.5-.4.4-.7l-.4-1.2c-.1-.3-.4-.5-.7-.4z';
+
+const BROCCOLI_STEM_PATH = 'M10.5 16.5h3V21h-3z';
+const BROCCOLI_TOP_PATH = 'M12 4c-2.8 0-5 2-5 4.5 0 1.2.5 2.2 1.3 3 1.2-1.5 3-2.5 5.2-2.5 1.8 0 3.4.7 4.5 1.8.8-.8 1.3-1.8 1.3-3C19.5 6 16.5 4 12 4zm-3.2 6.5c-.9 0-1.7.4-2.2 1.1.6.5 1.3.9 2.2.9.7 0 1.3-.2 1.8-.6-.3-.8-1-.9-1.8-.9zm6.4 0c-.8 0-1.5.1-1.8.9.5.4 1.1.6 1.8.6.9 0 1.6-.4 2.2-.9-.5-.7-1.3-1.1-2.2-1.1z';
+
+const MUSHROOM_CAP_PATH = 'M5 12c0-3.9 3.1-7 7-7s7 3.1 7 7H5z';
+const MUSHROOM_STEM_PATH = 'M10 12h4v8h-4z';
+const MUSHROOM_DOT_PATH = 'M9 9.5c0 .6-.4 1-1 1s-1-.4-1-1 .4-1 1-1 1 .4 1 1zm4 0c0 .6-.4 1-1 1s-1-.4-1-1 .4-1 1-1 1 .4 1 1zm4 0c0 .6-.4 1-1 1s-1-.4-1-1 .4-1 1-1 1 .4 1 1z';
+
+const LEG_PATH = 'M14 3c-.6 0-1 .4-1 1v5.6l-4.2 7.1c-.3.5-.1 1.1.4 1.4.5.3 1.1.1 1.4-.4L15 11.2V4c0-.6-.4-1-1-1zm-6.5 14.5c-.6 0-1 .4-1 1s.4 1 1 1h3c.6 0 1-.4 1-1s-.4-1-1-1h-3z';
+
+const BODY_HEAD_PATH = 'M12 4c1.7 0 3 1.3 3 3s-1.3 3-3 3-3-1.3-3-3 1.3-3 3-3z';
+const BODY_TORSO_PATH = 'M8 11c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v7c0 .6-.4 1-1 1H9c-.6 0-1-.4-1-1v-7z';
+const BODY_ARM_PATH = 'M6 12.5c-.6 0-1 .4-1 1v3c0 .6.4 1 1 1s1-.4 1-1v-3c0-.6-.4-1-1-1zm12 0c-.6 0-1 .4-1 1v3c0 .6.4 1 1 1s1-.4 1-1v-3c0-.6-.4-1-1-1z';
+
 /** Inodoro visto de frente (taza + depósito + tapa abierta). */
 const TOILET_TANK_PATH = 'M7.5 2.5h9c.83 0 1.5.67 1.5 1.5V8H6V4c0-.83.67-1.5 1.5-1.5z';
 const TOILET_LEVER_PATH = 'M16.5 3.75h2v.75h-2V3.75z';
@@ -152,6 +168,52 @@ function CheeseSliceIcon(props) {
     SvgIcon,
     { ...props, viewBox: '0 0 24 24' },
     createElement('path', { d: CHEESE_SLICE_ICON_PATH }),
+  );
+}
+
+function BananaIcon(props) {
+  return createElement(
+    SvgIcon,
+    { ...props, viewBox: '0 0 24 24' },
+    createElement('path', { d: BANANA_BODY_PATH }),
+    createElement('path', { d: BANANA_TIP_PATH }),
+  );
+}
+
+function BroccoliIcon(props) {
+  return createElement(
+    SvgIcon,
+    { ...props, viewBox: '0 0 24 24' },
+    createElement('path', { d: BROCCOLI_TOP_PATH }),
+    createElement('path', { d: BROCCOLI_STEM_PATH }),
+  );
+}
+
+function MushroomIcon(props) {
+  return createElement(
+    SvgIcon,
+    { ...props, viewBox: '0 0 24 24' },
+    createElement('path', { d: MUSHROOM_CAP_PATH }),
+    createElement('path', { d: MUSHROOM_STEM_PATH }),
+    createElement('path', { d: MUSHROOM_DOT_PATH }),
+  );
+}
+
+function LegIcon(props) {
+  return createElement(
+    SvgIcon,
+    { ...props, viewBox: '0 0 24 24' },
+    createElement('path', { d: LEG_PATH }),
+  );
+}
+
+function BodyIcon(props) {
+  return createElement(
+    SvgIcon,
+    { ...props, viewBox: '0 0 24 24' },
+    createElement('path', { d: BODY_HEAD_PATH }),
+    createElement('path', { d: BODY_TORSO_PATH }),
+    createElement('path', { d: BODY_ARM_PATH }),
   );
 }
 
@@ -255,6 +317,11 @@ export const HABIT_ICON_LABELS = {
   CleanHands: 'Higiene de manos',
   Cheese: 'Queso',
   CheeseSlice: 'Queso en rodajas',
+  Banana: 'Banana / plátano',
+  Broccoli: 'Brócoli',
+  Mushroom: 'Champiñón',
+  Leg: 'Pierna',
+  Body: 'Cuerpo',
 };
 
 export const iconMap = {
@@ -353,6 +420,11 @@ export const iconMap = {
   CleanHands: CleanHandsIcon,
   Cheese: CheeseWedgeIcon,
   CheeseSlice: CheeseSliceIcon,
+  Banana: BananaIcon,
+  Broccoli: BroccoliIcon,
+  Mushroom: MushroomIcon,
+  Leg: LegIcon,
+  Body: BodyIcon,
 };
 
 /** Iconos legacy de afeitado → tijeras (hábitos ya guardados). */
@@ -362,6 +434,8 @@ export const HABIT_ICON_LEGACY_ALIASES = {
   Gillette: 'Barba',
   Afeitarse: 'Barba',
   Style: 'BodyTrim',
+  Champignon: 'Mushroom',
+  Hongo: 'Mushroom',
 };
 
 /** Orden temático del picker (solo claves de iconMap). */
@@ -371,7 +445,7 @@ export const HABIT_ICON_GROUP_DEFS = [
     label: 'Cuidado personal',
     icons: [
       'Bathtub', 'Shower', 'Tooth', 'Soap', 'Brush', 'Face', 'Face3',
-      'BodyTrim', 'Unas', 'Barba', 'Salon',
+      'BodyTrim', 'Unas', 'Barba', 'Salon', 'Body',
       'Cream', 'Perfume', 'PersonOutline', 'Nightlight', 'Spa',
       'Healing', 'Medication', 'Bedtime', 'WbSunny',
     ],
@@ -382,7 +456,7 @@ export const HABIT_ICON_GROUP_DEFS = [
     icons: [
       'Kitchen', 'Countertops', 'Microwave', 'Flatware', 'OutdoorGrill',
       'Restaurant', 'RestaurantMenu', 'Dining', 'SetMeal', 'Blender',
-      'EggAlt', 'Egg', 'Fruit', 'Vegetables', 'FoodBank',
+      'EggAlt', 'Egg', 'Fruit', 'Vegetables', 'Banana', 'Broccoli', 'Mushroom', 'FoodBank',
       'BreakfastDining', 'LunchDining', 'RamenDining', 'SoupKitchen',
       'RiceBowl', 'BakeryDining', 'LocalPizza', 'TakeoutDining',
       'Cookie', 'Cake', 'Icecream', 'Cheese', 'CheeseSlice',
@@ -398,7 +472,7 @@ export const HABIT_ICON_GROUP_DEFS = [
     id: 'exercise',
     label: 'Ejercicio y bienestar',
     icons: [
-      'FitnessCenter', 'DirectionsRun', 'DirectionsBike',
+      'FitnessCenter', 'DirectionsRun', 'DirectionsBike', 'Leg',
       'SportsGymnastics', 'Pool', 'SelfImprovement', 'LocalFireDepartment',
     ],
   },

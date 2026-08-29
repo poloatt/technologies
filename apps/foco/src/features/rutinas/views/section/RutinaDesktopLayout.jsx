@@ -8,7 +8,10 @@ import RutinaSectionNav from './RutinaSectionNav';
 import RutinaSectionDetailPanel from './RutinaSectionDetailPanel';
 import useHabitGroupActions from '../../hooks/useHabitGroupActions';
 
-/** Layout master-detail para rutinas en desktop (md+). */
+/**
+ * @deprecated Vista por grupo retirada de la UI (ago 2026). RutinaTable usa solo cadencia.
+ * Pendiente: eliminar o readaptar este layout master-detail por sección.
+ */
 export default function RutinaDesktopLayout({
   rutina,
   readOnly = false,

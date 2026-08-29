@@ -14,6 +14,7 @@ export default function RutinaCadenceDetailPanel({
   habitsPreferences = {},
   customSections = [],
   readOnly = false,
+  localDataBySection = {},
   onItemClick,
 }) {
   const { reorderHabits } = useHabits();
@@ -32,9 +33,10 @@ export default function RutinaCadenceDetailPanel({
       habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
+      localDataBySection,
     });
     return buckets.find((b) => b.id === bucketId) || null;
-  }, [bucketId, rutina, habits, habitsPreferences, habitChains, prefsReady, customSections, habitIconsMap]);
+  }, [bucketId, rutina, habits, habitsPreferences, habitChains, prefsReady, customSections, habitIconsMap, localDataBySection]);
 
   const handleReorderSection = useCallback(async (section, habitIds) => {
     if (!habitIds?.length || !section) return;
@@ -90,8 +92,10 @@ export default function RutinaCadenceDetailPanel({
         sortable
         habits={habits}
         habitsPreferences={habitsPreferences}
+        localDataBySection={localDataBySection}
         onItemClick={handleBucketItemClick}
         onReorderSection={handleReorderSection}
+        useShortFranjaLabels={bucket.id === 'DIARIO'}
       />
     </Box>
   );

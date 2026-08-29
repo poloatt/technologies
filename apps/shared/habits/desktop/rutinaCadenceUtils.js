@@ -20,9 +20,21 @@ import { isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
 import { DAILY_CADENCE_SECTION_COPY, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
+import { isFranjaPostponed } from '../utils/rutinaPostponeUtils.js';
 
 /** Lunes → Domingo. */
 export const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
+
+/** Deduplica entradas multi-sección por section:itemId (p. ej. Hecho global). */
+export function dedupeCadenceEntries(items = []) {
+  const seen = new Set();
+  return items.filter((entry) => {
+    const key = `${entry.section}:${entry.itemId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 /** Solo Diario usa subgrupos por franja horaria. */
 export const CADENCE_BUCKETS_WITH_FRANJA = ['DIARIO'];
@@ -182,8 +194,8 @@ export function resolveGroupViewActiveFranjaLabel(activeFranja, rutina) {
   return getDailyFranjaHeading(activeFranja, rutina);
 }
 
-function splitTodayEntryByFranja(entry, activeFranja) {
-  const { config, itemValue } = entry;
+function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
+  const { config, itemValue, section, itemId } = entry;
   const activeIdx = VALID_TIME_OF_DAY.indexOf(activeFranja);
   const sinHacer = [];
   const ahora = [];
@@ -199,6 +211,13 @@ function splitTodayEntryByFranja(entry, activeFranja) {
 
     const enriched = { ...entry, franjaKey };
     const franjaIdx = VALID_TIME_OF_DAY.indexOf(franjaKey);
+    const postponed = rutina && isFranjaPostponed(rutina, section, itemId, franjaKey);
+
+    if (postponed) {
+      luego.push(enriched);
+      return;
+    }
+
     if (franjaIdx < activeIdx) {
       sinHacer.push(enriched);
     } else if (franjaIdx === activeIdx) {
@@ -209,6 +228,59 @@ function splitTodayEntryByFranja(entry, activeFranja) {
   });
 
   return { sinHacer, ahora, luego };
+}
+
+function sortMultiSectionCadenceEntries(entries = []) {
+  return [...entries].sort((a, b) => {
+    const sectionCmp = String(a.sectionLabel || a.section || '')
+      .localeCompare(String(b.sectionLabel || b.section || ''), 'es');
+    if (sectionCmp !== 0) return sectionCmp;
+    return (a.label || '').localeCompare(b.label || '', 'es');
+  });
+}
+
+/**
+ * Agrupa el bucket Diario (multi-sección) con Sin hacer / Ahora / Luego.
+ * Mismo criterio de franjas que groupSectionHabitsByFranjaSchedule, a nivel cadencia.
+ */
+export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
+  const today = bucket?.today || [];
+  const done = bucket?.done || [];
+  const notToday = bucket?.notToday || [];
+
+  if (!isViewingRutinaToday(rutina)) {
+    return {
+      sinHacer: [],
+      ahora: today,
+      luego: [],
+      done,
+      notToday,
+      activeFranja: resolveActiveDailyFranja(rutina),
+      activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
+    };
+  }
+
+  const activeFranja = resolveActiveDailyFranja(rutina);
+  const sinHacer = [];
+  const ahora = [];
+  const luego = [];
+
+  today.forEach((entry) => {
+    const split = splitTodayEntryByFranja(entry, activeFranja, rutina);
+    sinHacer.push(...split.sinHacer);
+    ahora.push(...split.ahora);
+    luego.push(...split.luego);
+  });
+
+  return {
+    sinHacer: sortMultiSectionCadenceEntries(sinHacer),
+    ahora: sortMultiSectionCadenceEntries(ahora),
+    luego: sortMultiSectionCadenceEntries(luego),
+    done,
+    notToday,
+    activeFranja,
+    activeFranjaLabel: resolveGroupViewActiveFranjaLabel(activeFranja, rutina),
+  };
 }
 
 /**
@@ -237,7 +309,7 @@ export function groupSectionHabitsByFranjaSchedule(params) {
   const luego = [];
 
   grouped.today.forEach((entry) => {
-    const split = splitTodayEntryByFranja(entry, activeFranja);
+    const split = splitTodayEntryByFranja(entry, activeFranja, rutina);
     sinHacer.push(...split.sinHacer);
     ahora.push(...split.ahora);
     luego.push(...split.luego);

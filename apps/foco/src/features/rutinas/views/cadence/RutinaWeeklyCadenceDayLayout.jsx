@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box } from '@mui/material';
 import { groupWeeklyCadenceByWeekday } from '@shared/habits';
+import { collapseSectionStackSx } from '@shared/styles/collapseSectionStyles';
 import RutinaDayGroupList from '../section/RutinaDayGroupList';
 import RutinaDoneSection from '../section/RutinaDoneSection';
 
@@ -29,44 +30,41 @@ export default function RutinaWeeklyCadenceDayLayout({
     [weekdayGroups],
   );
 
-  const hasContentAboveDone = weekdayGroups.some((group) => group.pending.length > 0);
-
   const handleDoneToggle = (entrySection, itemId, horario) => {
     onItemClick(entrySection, itemId, null, horario);
   };
 
   return (
-    <Box>
+    <Box sx={collapseSectionStackSx}>
       {weekdayGroups.map((group) => {
         if (group.pending.length === 0) return null;
 
         return (
-          <Box key={group.weekdayKey} sx={{ mb: 1 }}>
-            <RutinaDayGroupList
-              today={group.pending}
-              done={[]}
-              notToday={[]}
-              rutina={rutina}
-              habits={habits}
-              readOnly={readOnly}
-              sortable={!readOnly && typeof onReorderSection === 'function'}
-              multiSection
-              hideDone
-              hideGroupHeadings
-              useFranjaHeadings
-              sectionLabel={group.weekdayLabel}
-              habitsPreferences={habitsPreferences}
-              localDataBySection={localDataBySection}
-              rowKeyPrefix={`wd-${group.weekdayKey}`}
-              onReorderSection={onReorderSection}
-              onItemClick={(itemId, event, horario, entrySection) => {
-                onItemClick(entrySection, itemId, event, horario);
-              }}
-              onDoneToggle={(entrySection, itemId, event, horario) => {
-                onItemClick(entrySection, itemId, event, horario);
-              }}
-            />
-          </Box>
+          <RutinaDayGroupList
+            key={group.weekdayKey}
+            today={group.pending}
+            done={[]}
+            notToday={[]}
+            rutina={rutina}
+            habits={habits}
+            readOnly={readOnly}
+            sortable={!readOnly && typeof onReorderSection === 'function'}
+            multiSection
+            hideDone
+            hideGroupHeadings
+            useFranjaHeadings
+            sectionLabel={group.weekdayLabel}
+            habitsPreferences={habitsPreferences}
+            localDataBySection={localDataBySection}
+            rowKeyPrefix={`wd-${group.weekdayKey}`}
+            onReorderSection={onReorderSection}
+            onItemClick={(itemId, event, horario, entrySection) => {
+              onItemClick(entrySection, itemId, event, horario);
+            }}
+            onDoneToggle={(entrySection, itemId, event, horario) => {
+              onItemClick(entrySection, itemId, event, horario);
+            }}
+          />
         );
       })}
 
@@ -77,7 +75,6 @@ export default function RutinaWeeklyCadenceDayLayout({
           habitsPreferences={habitsPreferences}
           readOnly={readOnly}
           onToggle={handleDoneToggle}
-          showDivider={hasContentAboveDone}
         />
       )}
     </Box>

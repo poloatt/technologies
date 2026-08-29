@@ -1,65 +1,33 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
-import { useHabits, useRutinas } from '@shared/context';
-import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import {
-  groupRutinaHabitsByCadence,
   groupDailyCadenceByFranja,
   groupWeeklyCadenceByWeekday,
-  resolveHabitSections,
+  dedupeCadenceEntries,
 } from '@shared/habits';
-import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
-import useRutinaItemToggle from '../../hooks/useRutinaItemToggle';
-import useRutinaBucketLocalData from '../../hooks/useRutinaBucketLocalData';
+import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
+import { RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
+import { collapseSectionStackSx } from '@shared/styles/collapseSectionStyles';
 import RutinaDailyCadenceFranjaLayout from './RutinaDailyCadenceFranjaLayout';
 import RutinaWeeklyCadenceDayLayout from './RutinaWeeklyCadenceDayLayout';
 import RutinaCadenceBucketList from './RutinaCadenceBucketList';
 import RutinaDoneSection from '../section/RutinaDoneSection';
+import useRutinaCadenceBucketController from '../../hooks/useRutinaCadenceBucketController';
 
-function dedupeDoneEntries(items = []) {
-  const seen = new Set();
-  return items.filter((entry) => {
-    const key = `${entry.section}:${entry.itemId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/** Vista cadencia plana: Mañana → Tarde → Noche → Hecho → Lunes → … */
+/** Vista cadencia plana (mobile): Sin hacer/Ahora/Luego → semanal → Hecho colapsado al final. */
 export default function RutinaCadenceFlatLayout({
   rutina,
   readOnly = false,
 }) {
-  const { habits, customSections, reorderHabits } = useHabits();
-  const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
-  const { markItemComplete } = useRutinas();
-  const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
-
-  const allSections = useMemo(
-    () => resolveHabitSections(customSections),
-    [customSections],
-  );
-
-  const [localDataBySection, setLocalDataBySection] = useRutinaBucketLocalData(allSections, rutina);
-
-  const habitIconsMap = useMemo(
-    () => buildHabitSectionIconsMap(habits).iconsMap,
-    [habits],
-  );
-
-  const cadenceBuckets = useMemo(
-    () => groupRutinaHabitsByCadence({
-      rutina,
-      habits,
-      habitsPreferences: habitPrefs,
-      habitChains: prefsReady ? habitChains : [],
-      customSections,
-      iconsMap: habitIconsMap,
-      localDataBySection,
-    }),
-    [rutina, habits, habitPrefs, habitChains, prefsReady, customSections, habitIconsMap, localDataBySection],
-  );
+  const {
+    habits,
+    habitPrefs,
+    localDataBySection,
+    cadenceBuckets,
+    handleItemClick,
+    handleDoneToggle,
+    handleReorderSection,
+  } = useRutinaCadenceBucketController({ rutina, readOnly });
 
   const diarioBucket = useMemo(
     () => cadenceBuckets.find((bucket) => bucket.id === 'DIARIO') || null,
@@ -76,6 +44,11 @@ export default function RutinaCadenceFlatLayout({
     [cadenceBuckets],
   );
 
+  const isHistorical = useMemo(
+    () => rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical',
+    [rutina?.fecha],
+  );
+
   const mergedDoneItems = useMemo(() => {
     const dailyDone = diarioBucket
       ? groupDailyCadenceByFranja(diarioBucket, rutina).flatMap((group) => group.done)
@@ -84,69 +57,8 @@ export default function RutinaCadenceFlatLayout({
       ? groupWeeklyCadenceByWeekday(semanalBucket, rutina).flatMap((group) => group.done)
       : [];
     const otherDone = otherBuckets.flatMap((bucket) => bucket.done || []);
-    return dedupeDoneEntries([...dailyDone, ...weeklyDone, ...otherDone]);
+    return dedupeCadenceEntries([...dailyDone, ...weeklyDone, ...otherDone]);
   }, [diarioBucket, semanalBucket, otherBuckets, rutina]);
-
-  const hasContentAboveDone = useMemo(() => {
-    const dailyPending = diarioBucket
-      ? groupDailyCadenceByFranja(diarioBucket, rutina).some(
-        (group) => group.today.length > 0 || group.notToday.length > 0,
-      )
-      : false;
-    const weeklyPending = semanalBucket
-      ? groupWeeklyCadenceByWeekday(semanalBucket, rutina).some((group) => group.pending.length > 0)
-      : false;
-    const otherPending = otherBuckets.some(
-      (bucket) => (bucket.today?.length || 0) > 0 || (bucket.notToday?.length || 0) > 0,
-    );
-    return dailyPending || weeklyPending || otherPending;
-  }, [diarioBucket, semanalBucket, otherBuckets, rutina]);
-
-  const toggleItem = useRutinaItemToggle({
-    rutina,
-    habits,
-    habitsPreferences: habitPrefs,
-    habitChains: prefsReady ? habitChains : [],
-    markItemComplete,
-    readOnly,
-    getSectionOverrides: (section) => localDataBySection[section] || {},
-    getLocalDataBySection: () => localDataBySection,
-    onOptimisticValue: (section, itemId, newValue) => {
-      setLocalDataBySection((prev) => ({
-        ...prev,
-        [section]: { ...(prev[section] || {}), [itemId]: newValue },
-      }));
-    },
-    onRevertValue: (section, itemId, previousValue) => {
-      setLocalDataBySection((prev) => ({
-        ...prev,
-        [section]: { ...(prev[section] || {}), [itemId]: previousValue },
-      }));
-    },
-    onServerValue: (section, itemId, serverValue) => {
-      setLocalDataBySection((prev) => ({
-        ...prev,
-        [section]: { ...(prev[section] || {}), [itemId]: serverValue },
-      }));
-    },
-  });
-
-  const handleItemClick = useCallback((section, itemId, event, horario = null) => {
-    toggleItem(section, itemId, horario, event);
-  }, [toggleItem]);
-
-  const handleDoneToggle = useCallback((entrySection, itemId, horario) => {
-    handleItemClick(entrySection, itemId, null, horario);
-  }, [handleItemClick]);
-
-  const handleReorderSection = useCallback(async (section, habitIds) => {
-    if (!habitIds?.length || !section) return;
-    try {
-      await reorderHabits(section, habitIds);
-    } catch {
-      // feedback en HabitsContext
-    }
-  }, [reorderHabits]);
 
   if (cadenceBuckets.length === 0) {
     return (
@@ -159,7 +71,7 @@ export default function RutinaCadenceFlatLayout({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, width: '100%' }}>
+    <Box sx={collapseSectionStackSx}>
       {diarioBucket && (
         <RutinaDailyCadenceFranjaLayout
           bucket={diarioBucket}
@@ -174,15 +86,6 @@ export default function RutinaCadenceFlatLayout({
           onReorderSection={handleReorderSection}
         />
       )}
-
-      <RutinaDoneSection
-        items={mergedDoneItems}
-        rutina={rutina}
-        habitsPreferences={habitPrefs}
-        readOnly={readOnly}
-        onToggle={handleDoneToggle}
-        showDivider={hasContentAboveDone}
-      />
 
       {semanalBucket && (
         <RutinaWeeklyCadenceDayLayout
@@ -199,9 +102,9 @@ export default function RutinaCadenceFlatLayout({
       )}
 
       {otherBuckets.map((bucket) => (
-        <Box key={bucket.id}>
-          <RutinaCadenceBucketList
-            bucket={bucket}
+        <RutinaCadenceBucketList
+          key={bucket.id}
+          bucket={bucket}
             rutina={rutina}
             readOnly={readOnly}
             sortable
@@ -210,9 +113,22 @@ export default function RutinaCadenceFlatLayout({
             localDataBySection={localDataBySection}
             onItemClick={handleItemClick}
             onReorderSection={handleReorderSection}
-          />
-        </Box>
+        />
       ))}
+
+      <RutinaDoneSection
+        items={mergedDoneItems}
+        rutina={rutina}
+        habitsPreferences={habitPrefs}
+        readOnly={readOnly}
+        onToggle={handleDoneToggle}
+        collapsible
+        collapseThreshold={isHistorical ? 3 : 5}
+        defaultExpanded={isHistorical}
+        doneHeadingLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
+        doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
+        doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : undefined}
+      />
     </Box>
   );
 }

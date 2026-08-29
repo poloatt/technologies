@@ -1,11 +1,7 @@
 import {
-
   registerToolbarModules,
-
   registerAgendaBarSlots,
-
   registerRutinaDateHeroBar,
-
 } from '@shared/navigation/toolbarRegistry';
 
 import { matchTiempoSection } from '@shared/navigation/tiempoToolbarPaths';

@@ -268,6 +268,91 @@ export function isHabitQuotaOrDayDone({
   return isIntervalCadenceResting(fechaRutina, config, historialDates);
 }
 
+/** ¿Marcado completado en el registro de este día (no solo cuota del período)? */
+export function isHabitCompletedOnRutinaDay({
+  config,
+  itemValue,
+  itemId,
+  section,
+  rutina,
+  rutinaForVisibility = rutina,
+}) {
+  if (!config || config.activo === false) return false;
+
+  const resolvedValue = itemValue !== undefined
+    ? itemValue
+    : rutina?.[section]?.[itemId];
+
+  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+
+  // Revisión retroactiva: cualquier franja marcada cuenta como hecho ese día.
+  if (isHistorical) {
+    return isHabitCompletedForHistorial(resolvedValue);
+  }
+
+  if (isDailyMultiHorarioConfig(config)) {
+    const horarios = Array.isArray(config.horarios) ? config.horarios : [];
+    return isHabitFullyCompletedToday(resolvedValue, horarios);
+  }
+
+  return isHabitCompletedForHistorial(resolvedValue);
+}
+
+/** Hecho por cuota/rest del período, sin completar en el día del registro. */
+export function isHabitDoneByPeriodQuotaOnly(params) {
+  return isHabitQuotaOrDayDone(params) && !isHabitCompletedOnRutinaDay(params);
+}
+
+function resolveDoneEntryParams(entry, rutina, rutinaForVisibility) {
+  const section = entry.section;
+  const itemId = entry.itemId;
+  const itemValue = entry.itemValue !== undefined
+    ? entry.itemValue
+    : rutina?.[section]?.[itemId];
+
+  return {
+    config: entry.config,
+    itemValue,
+    itemId,
+    section,
+    rutina,
+    rutinaForVisibility,
+  };
+}
+
+function sortDonePartitionEntries(entries = []) {
+  return [...entries].sort((a, b) => {
+    const sectionCmp = String(a.sectionLabel || a.section || '')
+      .localeCompare(String(b.sectionLabel || b.section || ''), 'es');
+    if (sectionCmp !== 0) return sectionCmp;
+    return (a.label || '').localeCompare(b.label || '', 'es');
+  });
+}
+
+/** Separa Hecho en: completados hoy vs cuota del período cumplida sin marcar hoy. */
+export function partitionDoneEntriesByRutinaDay(
+  entries = [],
+  rutina,
+  rutinaForVisibility = rutina,
+) {
+  const doneOnDay = [];
+  const doneByQuota = [];
+
+  entries.forEach((entry) => {
+    const params = resolveDoneEntryParams(entry, rutina, rutinaForVisibility);
+    if (isHabitCompletedOnRutinaDay(params)) {
+      doneOnDay.push(entry);
+    } else if (isHabitQuotaOrDayDone(params)) {
+      doneByQuota.push(entry);
+    }
+  });
+
+  return {
+    doneOnDay: sortDonePartitionEntries(doneOnDay),
+    doneByQuota: sortDonePartitionEntries(doneByQuota),
+  };
+}
+
 /**
  * ¿El ítem toca hoy (cadencia del día o deuda), más allá de isScheduled del tracker?
  * Cubre semanales/mensuales en día programado cuando debesMostrarHabitoEnFecha falla.
@@ -295,6 +380,12 @@ export function isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility = rutin
 export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility = rutina } = {}) {
   const { config, itemValue, isScheduled, itemId, section } = entry;
   const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
+  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+
+  // Revisión retroactiva: cualquier marca del día va a Hecho, no Sin marcar.
+  if (isHistorical && isHabitCompletedForHistorial(itemValue)) {
+    return 'done';
+  }
 
   if (isDailyMultiHorarioConfig(config)) {
     if (isHabitFullyCompletedToday(itemValue, horarios)) {

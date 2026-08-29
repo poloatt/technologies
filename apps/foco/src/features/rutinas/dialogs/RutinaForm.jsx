@@ -166,6 +166,7 @@ export const RutinaForm = ({ open = true, onClose, initialData, isEditing }) => 
       </Box>
 
       <TareaFormFooter
+        pinned
         onCancel={onClose}
         cancelLabel="Cancelar"
         showCancel

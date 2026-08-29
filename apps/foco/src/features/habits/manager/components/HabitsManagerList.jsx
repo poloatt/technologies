@@ -23,11 +23,14 @@ import { CSS } from '@dnd-kit/utilities';
 import { getOutlineIconByName } from '@shared/utils/iconConfig';
 import { groupHabitsIntoDisplayRows, getChainDisplayLabel } from '@shared/habits';
 import { HUB_SUBSECTION, hubSectionBg } from '@shared/styles/hubSectionStyles';
+import {
+  getRutinaDragHandleGlyph,
+  getRutinaHabitIconTokens,
+} from '@shared/styles/rutinaIconTokens';
 
-const MOBILE_MOSAIC_ICON_SIZE = 36;
 const MOBILE_MOSAIC_GAP = 0.15;
 
-function MosaicIconButton({ habit, isSelected, onSelect }) {
+function MosaicIconButton({ habit, isSelected, onSelect, iconSize, iconGlyph }) {
   const Icon = getOutlineIconByName(habit.icon);
   const inactive = habit.activo === false;
 
@@ -43,8 +46,8 @@ function MosaicIconButton({ habit, isSelected, onSelect }) {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: MOBILE_MOSAIC_ICON_SIZE,
-        height: MOBILE_MOSAIC_ICON_SIZE,
+        width: iconSize,
+        height: iconSize,
         p: 0,
         m: 0,
         border: 'none',
@@ -63,7 +66,7 @@ function MosaicIconButton({ habit, isSelected, onSelect }) {
       }}
     >
       {Icon && (
-        <Icon sx={{ fontSize: '1.35rem', display: 'block' }} />
+        <Icon sx={{ fontSize: iconGlyph, display: 'block' }} />
       )}
     </Box>
   );
@@ -150,7 +153,7 @@ function DraggableHabitItem({
         }}
         aria-label={`Reordenar ${habit.label}`}
       >
-        <DragIndicatorIcon sx={{ fontSize: 18 }} />
+        <DragIndicatorIcon sx={{ fontSize: getRutinaDragHandleGlyph(true) }} />
       </Box>
       {Icon && (
         <Icon
@@ -227,6 +230,8 @@ function MosaicStackCluster({
   entries,
   selectedHabitId,
   onSelect,
+  iconSize,
+  iconGlyph,
 }) {
   return (
     <Box
@@ -244,6 +249,8 @@ function MosaicStackCluster({
           habit={entry.habit}
           isSelected={selectedHabitId === entry.habit.id}
           onSelect={onSelect}
+          iconSize={iconSize}
+          iconGlyph={iconGlyph}
         />
       ))}
     </Box>
@@ -258,6 +265,7 @@ function HabitsManagerMobileMosaic({
   onSelect,
   onCollapse,
 }) {
+  const mobileIconTokens = getRutinaHabitIconTokens({ mobile: true });
   const handleSelect = (habitId, sectionId) => {
     onSelect(habitId, sectionId);
     onCollapse?.();
@@ -321,6 +329,8 @@ function HabitsManagerMobileMosaic({
                       entries={row.entries}
                       selectedHabitId={selectedHabitId}
                       onSelect={(habitId) => handleSelect(habitId, section.value)}
+                      iconSize={mobileIconTokens.size}
+                      iconGlyph={mobileIconTokens.glyph}
                     />
                   );
                 }
@@ -332,6 +342,8 @@ function HabitsManagerMobileMosaic({
                     habit={habit}
                     isSelected={selectedHabitId === habit.id}
                     onSelect={(habitId) => handleSelect(habitId, section.value)}
+                    iconSize={mobileIconTokens.size}
+                    iconGlyph={mobileIconTokens.glyph}
                   />
                 );
               })}

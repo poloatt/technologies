@@ -1,6 +1,7 @@
 import {
   groupRutinaHabitsByCadence,
   groupDailyCadenceByFranja,
+  groupDailyCadenceBucketByFranjaSchedule,
   groupWeeklyCadenceByWeekday,
   resolveRutinaScheduleBucket,
   resolveCadenceViewBucket,
@@ -8,6 +9,7 @@ import {
   buildDailyCadenceDisplaySections,
   reorderFlatEntriesByDisplayRowDnD,
 } from '@shared/habits';
+import { getNormalizedToday } from '@shared/utils/dateUtils.js';
 
 const monday = new Date(2026, 5, 22, 12, 0, 0, 0); // lunes (getDay=1)
 
@@ -109,6 +111,38 @@ describe('cadence view — dynamic Diario promotion', () => {
     expect(resolveCadenceViewBucket(entry, rutina)).toBe('DIARIO');
   });
 
+  it('on historical day resolves partially completed multi-franja to done', () => {
+    const rutina = makeWeeklyRutina({ fecha: new Date(2026, 5, 20).toISOString() });
+    const entry = {
+      section: 'bodyCare',
+      itemId: 'teeth',
+      config: {
+        tipo: 'DIARIO',
+        frecuencia: 1,
+        activo: true,
+        horarios: ['MAÑANA', 'NOCHE'],
+      },
+      itemValue: { MAÑANA: true, NOCHE: false },
+    };
+    expect(resolveRutinaScheduleBucket(entry, { rutina })).toBe('done');
+  });
+
+  it('on today keeps partially completed multi-franja in today', () => {
+    const rutina = makeWeeklyRutina({ fecha: getNormalizedToday().toISOString() });
+    const entry = {
+      section: 'bodyCare',
+      itemId: 'teeth',
+      config: {
+        tipo: 'DIARIO',
+        frecuencia: 1,
+        activo: true,
+        horarios: ['MAÑANA', 'NOCHE'],
+      },
+      itemValue: { MAÑANA: true, NOCHE: false },
+    };
+    expect(resolveRutinaScheduleBucket(entry, { rutina })).toBe('today');
+  });
+
   it('places quota-satisfied weekly habit in Hecho, not notToday, in Semanal bucket', () => {
     const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
     const rutina = makeWeeklyRutina({
@@ -206,6 +240,84 @@ describe('cadence view — dynamic Diario promotion', () => {
 
     expect(notTodayIds).not.toContain('weekly');
     expect(doneIds).not.toContain('weekly');
+  });
+});
+
+describe('groupDailyCadenceBucketByFranjaSchedule', () => {
+  const mondayBucket = {
+    today: [
+      {
+        itemId: 'morning',
+        section: 'bodyCare',
+        config: { tipo: 'DIARIO', frecuencia: 1, activo: true, horarios: ['MAÑANA'] },
+        itemValue: false,
+        franjaKey: 'MAÑANA',
+      },
+      {
+        itemId: 'afternoon',
+        section: 'bodyCare',
+        config: { tipo: 'DIARIO', frecuencia: 1, activo: true, horarios: ['TARDE'] },
+        itemValue: false,
+        franjaKey: 'TARDE',
+      },
+    ],
+    done: [],
+    notToday: [],
+  };
+
+  it('on historical day puts all pending in ahora without sinHacer/luego', () => {
+    const rutina = makeWeeklyRutina({ fecha: new Date(2026, 5, 20).toISOString() });
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(mondayBucket, rutina);
+
+    expect(grouped.sinHacer).toEqual([]);
+    expect(grouped.luego).toEqual([]);
+    expect(grouped.ahora.map((e) => e.itemId).sort()).toEqual(['afternoon', 'morning']);
+  });
+
+  it('on historical day moves marked multi-franja habits to done, not sin marcar', () => {
+    const historicalDate = new Date(2026, 5, 20).toISOString();
+    const rutina = {
+      _id: 'r1',
+      fecha: historicalDate,
+      bodyCare: {
+        teeth: { MAÑANA: true, NOCHE: false },
+        shower: false,
+      },
+      config: {
+        bodyCare: {
+          teeth: {
+            tipo: 'DIARIO',
+            frecuencia: 1,
+            activo: true,
+            horarios: ['MAÑANA', 'NOCHE'],
+          },
+          shower: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+        },
+      },
+    };
+    const habitsMulti = {
+      bodyCare: [
+        { id: 'teeth', label: 'Dientes', icon: 'Brush', activo: true, orden: 0 },
+        { id: 'shower', label: 'Ducha', icon: 'Shower', activo: true, orden: 1 },
+      ],
+    };
+    const iconsMulti = {
+      bodyCare: { teeth: () => null, shower: () => null },
+    };
+
+    const diario = groupRutinaHabitsByCadence({
+      rutina,
+      habits: habitsMulti,
+      iconsMap: iconsMulti,
+    }).find((b) => b.id === 'DIARIO');
+
+    expect(diario?.done.map((e) => e.itemId)).toContain('teeth');
+    expect(diario?.today.map((e) => e.itemId)).not.toContain('teeth');
+    expect(diario?.today.map((e) => e.itemId)).toContain('shower');
+
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
+    expect(grouped.ahora.map((e) => e.itemId)).not.toContain('teeth');
+    expect(grouped.ahora.map((e) => e.itemId)).toContain('shower');
   });
 });
 

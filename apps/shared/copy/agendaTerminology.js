@@ -24,8 +24,9 @@ HÁBITOS PERIÓDICOS — habitVisibilityEngine.js / cadenciaUtils.js
   frecuencia > 1: Ahora si ventana activa (adelanto); Luego si pasó ventana sin marcar hoy.
 
 TRACKER / RUTINA — cadenciaUtils.debesMostrarHabitoEnFecha
-  Grupos del desplegable por sección: "Hoy" (programados para el registro del día:
-  pendientes/atrasados primero, completados después) y "No toca hoy" (sin cadencia hoy).
+  Vista por franja (Sin hacer / Ahora / Noche): solo hábitos del día activos por horario.
+  Buckets semanal/mensual sin franja: "Hoy" + "Hecho"; off-schedule en bucket interno notToday
+  (sin sección propia cuando hay layout por franja).
 `;
 
 /** Grupos del listado expandido en /rutinas (registro diario). */
@@ -35,10 +36,24 @@ export const RUTINA_DAY_GROUP_COPY = {
   done: 'Hecho',
 };
 
+/** Subgrupos dentro de Hecho. */
+export const RUTINA_DONE_GROUP_COPY = {
+  doneToday: 'Hecho hoy',
+  doneBefore: 'Hecho antes',
+};
+
 /** Secciones dinámicas del bucket Diario en vista cadencia. */
 export const DAILY_CADENCE_SECTION_COPY = {
   ahora: 'Ahora',
   sinHacer: 'Sin hacer',
+};
+
+/** Vista de registro histórico (días pasados). */
+export const RUTINA_HISTORICAL_COPY = {
+  unmarked: 'Sin marcar',
+  doneThatDay: 'Completado ese día',
+  doneBeforeThatDay: 'Completado antes',
+  completionTooltip: (done, total) => `${done}/${total} completados ese día`,
 };
 
 /** Configuración y runtime de rutinas. */
@@ -90,7 +105,7 @@ export const HABIT_PERIODIC_COPY = {
   fixed: 'Días fijos: solo los días elegidos',
   ahoraFlexible: 'Pendiente hoy en esta franja',
   luegoFlexible: 'Pendiente hoy, franja ya pasó',
-  cadenciaDebt: 'Pendiente de este período (atrasado)',
+  cadenciaDebt: 'Pendiente',
 };
 
 export function getTaskHorizonCopy(view) {

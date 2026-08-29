@@ -4,6 +4,8 @@ import {
   getSectionCarouselItems,
   sortSectionHabitsByFixedOrder,
   getDefaultSelectedSection,
+  partitionDoneEntriesByRutinaDay,
+  isHabitCompletedOnRutinaDay,
   RUTINA_SECTION_LABELS,
   HABIT_SECTIONS,
   getHabitDisplayLabel,
@@ -516,5 +518,127 @@ describe('rutinaDesktopUtils', () => {
         expect(RUTINA_SECTION_LABELS[section]).toBeTruthy();
       });
     });
+  });
+});
+
+describe('partitionDoneEntriesByRutinaDay', () => {
+  it('places habits completed today in doneOnDay', () => {
+    const rutina = makeRutina({
+      bodyCare: { shower: true },
+    });
+    const entry = {
+      section: 'bodyCare',
+      itemId: 'shower',
+      config: rutina.config.bodyCare.shower,
+      itemValue: true,
+    };
+    const { doneOnDay, doneByQuota } = partitionDoneEntriesByRutinaDay([entry], rutina);
+    expect(doneOnDay.map((e) => e.itemId)).toEqual(['shower']);
+    expect(doneByQuota).toHaveLength(0);
+  });
+
+  it('places weekly quota met without today mark in doneByQuota', () => {
+    const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
+    const rutina = makeRutina({
+      fecha: sunday.toISOString(),
+      bodyCare: { weekly: false },
+      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
+    });
+    const entry = {
+      section: 'bodyCare',
+      itemId: 'weekly',
+      config: rutina.config.bodyCare.weekly,
+      itemValue: false,
+    };
+    const { doneOnDay, doneByQuota } = partitionDoneEntriesByRutinaDay([entry], rutina);
+    expect(doneOnDay).toHaveLength(0);
+    expect(doneByQuota.map((e) => e.itemId)).toEqual(['weekly']);
+  });
+
+  it('orders doneOnDay before doneByQuota when both present', () => {
+    const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
+    const rutina = makeRutina({
+      fecha: sunday.toISOString(),
+      bodyCare: { shower: true, weekly: false },
+      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
+    });
+    const entries = [
+      {
+        section: 'bodyCare',
+        itemId: 'weekly',
+        config: rutina.config.bodyCare.weekly,
+        itemValue: false,
+      },
+      {
+        section: 'bodyCare',
+        itemId: 'shower',
+        config: rutina.config.bodyCare.shower,
+        itemValue: true,
+      },
+    ];
+    const { doneOnDay, doneByQuota } = partitionDoneEntriesByRutinaDay(entries, rutina);
+    expect(doneOnDay.map((e) => e.itemId)).toEqual(['shower']);
+    expect(doneByQuota.map((e) => e.itemId)).toEqual(['weekly']);
+  });
+
+  it('sorts each done partition group by section and label', () => {
+    const rutina = makeRutina({
+      bodyCare: { shower: true, weekly: true },
+      nutricion: { water: true },
+    });
+    const entries = [
+      {
+        section: 'nutricion',
+        sectionLabel: 'Nutrición',
+        itemId: 'water',
+        label: 'Agua',
+        config: rutina.config.nutricion.water,
+        itemValue: true,
+      },
+      {
+        section: 'bodyCare',
+        sectionLabel: 'Cuidado Personal',
+        itemId: 'shower',
+        label: 'Ducha',
+        config: rutina.config.bodyCare.shower,
+        itemValue: true,
+      },
+    ];
+    const { doneOnDay } = partitionDoneEntriesByRutinaDay(entries, rutina);
+    expect(doneOnDay.map((e) => e.itemId)).toEqual(['shower', 'water']);
+  });
+
+  it('on historical day treats partial multi-franja as completed on that day', () => {
+    const historicalDate = new Date(2026, 5, 20).toISOString();
+    const rutina = makeRutina({
+      fecha: historicalDate,
+      bodyCare: {
+        teeth: { MAÑANA: true, NOCHE: false },
+      },
+      config: {
+        ...makeRutina().config,
+        bodyCare: {
+          ...makeRutina().config.bodyCare,
+          teeth: {
+            tipo: 'DIARIO',
+            frecuencia: 1,
+            activo: true,
+            horarios: ['MAÑANA', 'NOCHE'],
+          },
+        },
+      },
+    });
+    const entry = {
+      section: 'bodyCare',
+      itemId: 'teeth',
+      config: rutina.config.bodyCare.teeth,
+      itemValue: { MAÑANA: true, NOCHE: false },
+    };
+    expect(isHabitCompletedOnRutinaDay({
+      ...entry,
+      rutina,
+    })).toBe(true);
+    const { doneOnDay } = partitionDoneEntriesByRutinaDay([entry], rutina);
+    expect(doneOnDay.map((e) => e.itemId)).toEqual(['teeth']);
   });
 });

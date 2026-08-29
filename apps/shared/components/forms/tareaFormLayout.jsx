@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box, Button, IconButton, Typography } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
+import { useKeyboardInset, useResponsive } from '@shared/hooks';
+import { keyboardAwareFooterSx } from './keyboardAwareFooterSx';
 import {
   TASK_FORM_ROW_GAP,
   TASK_FORM_ROW_MIN_HEIGHT,
@@ -204,18 +206,37 @@ export function TareaFormFooter({
   onCancel,
   cancelLabel = 'Cancelar',
   showCancel = false,
+  keyboardAware = true,
+  pinned = false,
 }) {
+  const { isMobile } = useResponsive();
+  const keyboardEnabled = keyboardAware && isMobile;
+  const { inset, isKeyboardOpen } = useKeyboardInset({ enabled: keyboardEnabled });
+
   return (
     <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: 1,
-        px: TASK_FORM_HORIZONTAL_PX,
-        py: 1.5,
-        mt: 0.5,
-      }}
+      sx={keyboardAwareFooterSx({
+        inset,
+        isKeyboardOpen,
+        pinned,
+        sx: {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 1,
+          px: TASK_FORM_HORIZONTAL_PX,
+          py: 1.5,
+          mt: pinned ? 0 : 0.5,
+          ...(pinned
+            ? {
+              borderTop: 1,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              pb: 'max(12px, env(safe-area-inset-bottom, 0px))',
+            }
+            : {}),
+        },
+      })}
     >
       {leftAction && <Box sx={{ mr: 'auto' }}>{leftAction}</Box>}
       {showCancel && onCancel && (

@@ -1,7 +1,8 @@
 import { alpha } from '@mui/material/styles';
+import { getRutinaHabitIconTokens } from './rutinaIconTokens';
 
 /** Tokens de superficie compartidos entre carrusel y panel desktop de rutinas. */
-export function getHabitCarouselSurface(theme, { dense = true, mobile = false } = {}) {
+export function getHabitCarouselSurface(theme, { dense = false, mobile = false } = {}) {
   const surfaceBg = theme.palette.mode === 'dark'
     ? alpha(theme.palette.common.white, 0.035)
     : alpha(theme.palette.common.black, 0.03);
@@ -12,15 +13,20 @@ export function getHabitCarouselSurface(theme, { dense = true, mobile = false } 
     ? alpha(theme.palette.common.white, 0.055)
     : alpha(theme.palette.common.black, 0.045);
 
-  const size = mobile ? 44 : (dense ? 32 : 36);
+  const { size, glyph: iconFontSize } = getRutinaHabitIconTokens({ mobile, dense });
 
   return {
     size,
-    iconFontSize: mobile ? '1.35rem' : (dense ? '1.1rem' : '1.2rem'),
+    iconFontSize,
     bg: surfaceBg,
     hoverBg,
     rail: dividerColor,
     surfaceBg,
     dividerColor,
   };
+}
+
+/** Carruseles de rutinas: mismos tamaños que checklist (mobile/desktop, sin dense). */
+export function getRutinaHabitCarouselSurface(theme, { mobile = false } = {}) {
+  return getHabitCarouselSurface(theme, { mobile, dense: false });
 }

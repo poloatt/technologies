@@ -10,7 +10,7 @@ import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScr
 import { RoutineCarouselStackCluster } from '@shared/components/habits/routines';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 import useResponsive from '@shared/hooks/useResponsive';
-import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
+import { getRutinaHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
 import { hubSectionBg } from '@shared/styles/hubSectionStyles';
 
 function resolveEntryHorario(entry) {
@@ -38,6 +38,14 @@ function resolveViewingTimeOfDay(rutina) {
   }
 }
 
+function resolveCarouselItemValue(entry, rutina) {
+  if (entry?.itemValue !== undefined) return entry.itemValue;
+  const section = entry?.section;
+  const itemId = entry?.itemId;
+  if (!section || !itemId) return undefined;
+  return rutina?.[section]?.[itemId];
+}
+
 /** Carrusel compacto de iconos para franjas no activas (solo pendientes). */
 export default function RutinaFranjaIconCarousel({
   pending = [],
@@ -60,8 +68,7 @@ export default function RutinaFranjaIconCarousel({
     [pending],
   );
 
-  const { size, bg, hoverBg, rail, iconFontSize } = getHabitCarouselSurface(theme, {
-    dense: !isMobileOrTablet,
+  const { size, bg, hoverBg, rail, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobileOrTablet,
   });
 
@@ -73,7 +80,7 @@ export default function RutinaFranjaIconCarousel({
     display: 'flex',
     flexWrap: 'nowrap',
     alignItems: 'center',
-    gap: isMobileOrTablet ? 0.5 : 0.25,
+    gap: 0.5,
     overflowX: 'auto',
     overflowY: 'hidden',
     touchAction: 'pan-x',
@@ -87,7 +94,7 @@ export default function RutinaFranjaIconCarousel({
     py: 0.25,
     width: '100%',
     '&::-webkit-scrollbar': { display: 'none' },
-  }), [isDragging, isMobileOrTablet, size]);
+  }), [isDragging, size]);
 
   const handleToggle = useCallback((section, itemId, horario) => {
     if (dragRef.current.moved) return;
@@ -100,14 +107,11 @@ export default function RutinaFranjaIconCarousel({
     if (!Icon || !section) return null;
 
     const itemConfig = resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences);
-    const itemValue = rutina?.[section]?.[itemId];
+    const itemValue = resolveCarouselItemValue(entry, rutina);
     const displayHorario = resolveEntryHorario(entry);
     const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
-    const isNotToday = entry.isScheduled === false;
     const isActiveFranja = franjaKey === activeFranjaKey;
-    const carouselSlot = isNotToday
-      ? 'notToday'
-      : (isActiveFranja ? 'ahora' : 'inactiveFranja');
+    const carouselSlot = isActiveFranja ? 'ahora' : 'luego';
 
     return (
       <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
@@ -123,8 +127,7 @@ export default function RutinaFranjaIconCarousel({
           mode={carouselMode}
           displayHorario={displayHorario}
           carouselSlot={carouselSlot}
-          isScheduled={!isNotToday}
-          dense={!isMobileOrTablet}
+          dense={false}
           interactive={!readOnly}
           showCompletionState
           bg={bg}

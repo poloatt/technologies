@@ -5,8 +5,6 @@ import {
   DeleteOutlined,
   Google as GoogleIcon,
   TuneOutlined,
-  ViewModuleOutlined,
-  EventRepeatOutlined,
 } from '@mui/icons-material';
 import { SystemButtons } from '@shared/components/common/SystemButtons';
 import { ToolbarAddButton } from '@shared/components/common/ToolbarAddButton';
@@ -17,11 +15,6 @@ import { getIconByKey } from '@shared/navigation/menuIcons';
 import { matchTiempoSection } from '@shared/navigation/tiempoToolbarPaths';
 import { TIEMPO_ICON_KEYS } from '@shared/navigation/tiempoIconKeys';
 import { toggleTareasPageView, useTareasPageView } from '../tasks/list/useTareasPageView';
-import {
-  RUTINA_PAGE_VIEW,
-  readStoredRutinaPageView,
-  toggleRutinaPageView,
-} from '../rutinas';
 import { dispatchOpenHabitsManager } from '../habits/manager';
 
 const ScopedUndoButton = SystemButtons.ScopedUndoButton;
@@ -38,8 +31,6 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
   const [hasSelectedItems, setHasSelectedItems] = useState(false);
   const tareasPageView = useTareasPageView();
   const isTareasAgendaView = section === 'tareas' && tareasPageView === 'agenda';
-  const [rutinaPageView, setRutinaPageView] = useState(readStoredRutinaPageView);
-  const isRutinaCadenceView = section === 'rutinas' && rutinaPageView === RUTINA_PAGE_VIEW.cadence;
   const undoScope = useUndoScope();
   const { actionHistory, getUndoCountForScope } = useActionHistory();
   const undoCount = undoScope ? getUndoCountForScope(undoScope) : 0;
@@ -51,17 +42,6 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     };
     window.addEventListener('selectionChanged', handleSelectionChange);
     return () => window.removeEventListener('selectionChanged', handleSelectionChange);
-  }, []);
-
-  useEffect(() => {
-    const syncRutinaView = (event) => {
-      const next = event.detail?.viewMode;
-      if (next === RUTINA_PAGE_VIEW.group || next === RUTINA_PAGE_VIEW.cadence) {
-        setRutinaPageView(next);
-      }
-    };
-    window.addEventListener('rutinaSetPageView', syncRutinaView);
-    return () => window.removeEventListener('rutinaSetPageView', syncRutinaView);
   }, []);
 
   const commonButtonSx = useMemo(() => ({
@@ -95,22 +75,6 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     if (section === 'rutinas') {
       return [
         ...(undoAction ? [undoAction] : []),
-        {
-          key: 'toggleRutinaView',
-          icon: isRutinaCadenceView ? <ViewModuleOutlined /> : <EventRepeatOutlined />,
-          label: isRutinaCadenceView ? 'Vista por grupo' : 'Vista por cadencia',
-          tooltip: isRutinaCadenceView ? 'Vista por grupo' : 'Vista por cadencia',
-          color: isRutinaCadenceView ? 'primary.main' : 'text.secondary',
-          hoverColor: 'primary.main',
-          buttonSx: {
-            ...commonButtonSx,
-            ...(isRutinaCadenceView && {
-              bgcolor: 'action.selected',
-              '&:hover': { bgcolor: 'action.selected' },
-            }),
-          },
-          onClick: () => toggleRutinaPageView(rutinaPageView),
-        },
         {
           key: 'personalizarRutina',
           icon: <TuneOutlined />,
@@ -212,7 +176,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     });
 
     return list;
-  }, [actionHistory, commonButtonSx, hasSelectedItems, isRutinaCadenceView, isTareasAgendaView, rutinaPageView, section, tareasPageView, undoAction]);
+  }, [actionHistory, commonButtonSx, hasSelectedItems, isTareasAgendaView, section, tareasPageView, undoAction]);
 
   if (!section) return null;
   if (actions.length === 0) return null;

@@ -32,6 +32,10 @@ export function buildRutinaUpdateSetOps(patches, body, currentRutina) {
     };
   }
 
+  if (body.postponedFranjas && typeof body.postponedFranjas === 'object') {
+    $set.postponedFranjas = toPlainValue(body.postponedFranjas);
+  }
+
   return $set;
 }
 

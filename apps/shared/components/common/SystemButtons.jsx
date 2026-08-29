@@ -17,6 +17,7 @@ import { getIconByKey } from '../../navigation/menuIcons';
 import { FORM_HEIGHTS } from '../../config/uiConstants';
 import TooltipSpan from '../TooltipSpan';
 import { DynamicIcon } from './DynamicIcon';
+import CollapseChevron from './CollapseChevron';
 import { ToolbarAddButton } from './ToolbarAddButton';
 import { config } from '../../config/envConfig.js';
 import { navigateToAppPath, prefetchAppForPath } from '../../utils/navigationUtils';
@@ -993,19 +994,13 @@ HeaderAppsButton.isButtonComponent = true;
 
 // Botón reutilizable de colapso/expandir
 export const CollapseIconButton = ({ expanded, onClick, sx = {}, ...props }) => (
-  <IconButton
+  <CollapseChevron
+    expanded={expanded}
+    asButton
     onClick={onClick}
-    size="small"
-    sx={{
-      transition: 'transform 0.2s',
-      transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-      color: 'text.secondary',
-      ...sx
-    }}
+    iconButtonSx={sx}
     {...props}
-  >
-    <ExpandMoreIcon />
-  </IconButton>
+  />
 );
 
 // Exportar subcomponentes

@@ -2,7 +2,7 @@ import React from 'react';
 import { Box } from '@mui/material';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { isHabitCompletedForHistorial } from '@shared/habits';
+import { isHabitCompletedForHistorial, isHabitHorarioCompleted, resolveEntryFranjaFocusHorario } from '@shared/habits';
 import ChecklistItem from './ChecklistItem';
 
 export default function SortableRutinaHabitRow({
@@ -13,12 +13,17 @@ export default function SortableRutinaHabitRow({
   onItemClick,
   localData,
   stackVariant = 'inline',
+  allowPostpone = false,
+  onPostpone,
 }) {
   const { itemId, Icon, label, config } = entry;
+  const focusHorario = resolveEntryFranjaFocusHorario(entry);
   const itemValue = localData?.[itemId] !== undefined
     ? localData[itemId]
     : rutina?.[section]?.[itemId];
-  const isCompleted = isHabitCompletedForHistorial(itemValue);
+  const isCompleted = focusHorario
+    ? isHabitHorarioCompleted(itemValue, focusHorario)
+    : isHabitCompletedForHistorial(itemValue);
 
   const {
     attributes,
@@ -58,6 +63,11 @@ export default function SortableRutinaHabitRow({
         dragHandleAttributes={attributes}
         dragHandleListeners={listeners}
         iconColumnCompact={stackVariant === 'compact'}
+        isCadenciaDebt={entry.isCadenciaDebt}
+        isScheduled={entry.isScheduled}
+        focusHorario={focusHorario}
+        allowPostpone={allowPostpone}
+        onPostpone={onPostpone}
       />
     </Box>
   );

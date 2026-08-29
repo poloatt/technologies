@@ -18,7 +18,7 @@ import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScr
 import { RoutineCarouselStackCluster } from '@shared/components/habits/routines';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 import useResponsive from '@shared/hooks/useResponsive';
-import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
+import { getRutinaHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
 import { hubSectionBg } from '@shared/styles/hubSectionStyles';
 
 /** Carrusel horizontal de hábitos filtrados por bucket de cadencia. */
@@ -41,10 +41,8 @@ export default function RutinaCadenceCarousel({
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
   const isMobile = mobileProp ?? isMobileOrTablet;
-  const isDense = dense ?? !isMobile;
 
-  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getHabitCarouselSurface(theme, {
-    dense: isDense,
+  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobile,
   });
 
@@ -89,7 +87,7 @@ export default function RutinaCadenceCarousel({
     flexWrap: 'nowrap',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: isMobile ? 0.5 : (isDense ? 0.25 : 0.5),
+    gap: 0.5,
     overflowX: 'auto',
     overflowY: 'hidden',
     touchAction: 'pan-x',
@@ -102,7 +100,7 @@ export default function RutinaCadenceCarousel({
     minHeight: size + 4,
     py: isMobile ? 0.25 : 0,
     '&::-webkit-scrollbar': { display: 'none' },
-  }), [enableDragScroll, isDense, isDragging, isMobile, size]);
+  }), [enableDragScroll, isDragging, isMobile, size]);
 
   const handleToggle = useCallback((section, itemId, horario) => {
     if (dragRef.current.moved) return;
@@ -175,7 +173,7 @@ export default function RutinaCadenceCarousel({
                   rutinaHoy={rutina}
                   mode="ahora"
                   isCadenciaDebt={Boolean(isCadenciaDebt)}
-                  dense={isDense && !isMobile}
+                  dense={false}
                   interactive={interactive}
                   requireExpand={requireExpand}
                   onRequireExpand={onRequireExpand}

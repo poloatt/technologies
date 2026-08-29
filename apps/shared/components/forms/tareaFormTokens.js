@@ -175,6 +175,28 @@ export const taskFormDialogPaperSx = (isMobile) => ({
   }),
 });
 
+/**
+ * Centra el diálogo en desktop. contentOffset compensa la sidebar para centrar en el área útil.
+ */
+export function getTaskFormDialogSx(isMobile, { zIndex, contentOffset = 0 } = {}) {
+  const sx = {};
+  if (zIndex != null) sx.zIndex = zIndex;
+  if (isMobile) return sx;
+
+  sx['& .MuiDialog-container'] = {
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  if (contentOffset > 0) {
+    sx['& .MuiDialog-paper'] = {
+      marginLeft: `${contentOffset / 2}px`,
+    };
+  }
+
+  return sx;
+}
+
 export const taskFormGooglePaperSx = taskFormDialogPaperSx;
 
 export const taskFormTitleFieldSx = {
@@ -607,6 +629,7 @@ export { taskFormObjetivoSubtareasPillSelectSx as tareaFormObjetivoSubtareasPill
 export { taskFormTimeSeparatorSx as tareaFormTimeSeparatorSx };
 export { taskFormChipSx as tareaFormChipSx };
 export { taskFormDialogPaperSx as tareaFormDialogPaperSx };
+export { getTaskFormDialogSx as getTareaFormDialogSx };
 export { taskFormGooglePaperSx as tareaFormGooglePaperSx };
 export { taskFormTitleFieldSx as tareaFormTitleFieldSx };
 export { taskFormStandardFieldSx as tareaFormStandardFieldSx };

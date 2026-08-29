@@ -3,9 +3,11 @@ import { Box } from '../utils/materialImports';
 import { useLocation } from 'react-router-dom';
 import { AGENDA_UNIFIED_BAR_CONFIG } from '../config/uiConstants';
 import { SystemButtons, MenuButton } from '../components/common/SystemButtons';
+import CenteredTrack from '../components/common/CenteredTrack.jsx';
 import { useUISettings } from '../context/UISettingsContext';
 import { useSidebar } from '../context/SidebarContext';
 import useResponsive from '../hooks/useResponsive';
+import { useAnchorWidths } from '../hooks/useAnchorWidths';
 import {
   resolveToolbarLeftByPath,
   resolveToolbarCenterByPath,
@@ -13,7 +15,7 @@ import {
   resolveToolbarRightByPath,
 } from './toolbarModules';
 import { resolveCajaBranchHubPath } from './appNavResolver';
-import { isCajaToolbarPath, isPulsoToolbarPath } from './unifiedBarPaths';
+import { isCajaToolbarPath, isFocoToolbarPath, isPulsoToolbarPath } from './unifiedBarPaths';
 
 /**
  * Barra superior unificada (Foco / Caja / Pulso):
@@ -46,14 +48,24 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   const showRightNav = !isMobile || showEntityToolbarNavigation;
   const isCajaPath = isCajaToolbarPath(path);
   const isPulsoPath = isPulsoToolbarPath(path);
+  const isFocoPath = isFocoToolbarPath(path);
   const useCenterActionsOverlay = isCajaPath || isPulsoPath;
   const hideGridCenter = useCenterActionsOverlay;
   const showCajaBranchSwitcher = isCajaPath && !isMobile && RightComp;
+  const showFocoRightNav = isFocoPath && showRightNav && RightComp && !isMobile;
 
   const showRightGridColumn = Boolean(
     showRightNav && RightComp && !showCajaBranchSwitcher && (!isMobile || isCajaPath),
   );
-  const showGridCenter = showCenter && !hideGridCenter;
+  const useFocoCenterOverlay = isFocoPath && showCenter && !useCenterActionsOverlay;
+  const { rightWidthRef, rightWidth } = useAnchorWidths(0, 0, [
+    path,
+    showFocoRightNav,
+    showCenter,
+    isMobileOrTablet,
+  ]);
+  const focoCenterRightInset = collapsedWidth + (showFocoRightNav ? rightWidth : 0);
+  const showGridCenter = showCenter && !hideGridCenter && !useFocoCenterOverlay;
   const gridColumns = showRightGridColumn ? '1fr auto' : '1fr';
 
   const showCajaBranchBack = isCajaPath && !!resolveCajaBranchHubPath(path);
@@ -101,6 +113,19 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
         >
           {isCajaPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
           {isPulsoPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
+        </Box>
+      )}
+      {useFocoCenterOverlay && CenterComp && (
+        <Box sx={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none', '& > *': { pointerEvents: 'auto' } }}>
+          <CenteredTrack
+            isMobileOrTablet={isMobileOrTablet}
+            mainMargin={baseCenterInsetLeft}
+            leftWidth={0}
+            rightWidth={focoCenterRightInset}
+            height={AGENDA_UNIFIED_BAR_CONFIG.height}
+          >
+            <CenterComp hasSelectedItems={hasSelectedItems} />
+          </CenteredTrack>
         </Box>
       )}
       <Box
@@ -207,6 +232,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
 
         {showRightGridColumn && (
           <Box
+            ref={showFocoRightNav ? rightWidthRef : null}
             sx={{
               display: 'flex',
               alignItems: 'center',

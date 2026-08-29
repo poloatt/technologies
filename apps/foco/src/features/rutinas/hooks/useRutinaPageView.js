@@ -1,62 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
-
+/**
+ * @deprecated Vista por grupo retirada de la UI (ago 2026). RutinaTable usa solo cadencia.
+ * Pendiente: eliminar este hook cuando no queden referencias.
+ */
 export const RUTINA_PAGE_VIEW = {
   group: 'group',
   cadence: 'cadence',
 };
 
-const STORAGE_KEY = 'foco.rutinas.pageView';
-
-function readStoredView() {
-  if (typeof window === 'undefined') return RUTINA_PAGE_VIEW.cadence;
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === RUTINA_PAGE_VIEW.group ? RUTINA_PAGE_VIEW.group : RUTINA_PAGE_VIEW.cadence;
+/** @deprecated Siempre devuelve cadencia. */
+export function readStoredRutinaPageView() {
+  return RUTINA_PAGE_VIEW.cadence;
 }
 
-export { readStoredView as readStoredRutinaPageView };
-
-export function toggleRutinaPageView(currentView = RUTINA_PAGE_VIEW.cadence) {
-  const nextView = currentView === RUTINA_PAGE_VIEW.cadence
-    ? RUTINA_PAGE_VIEW.group
-    : RUTINA_PAGE_VIEW.cadence;
-
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, nextView);
-    window.dispatchEvent(new CustomEvent('rutinaSetPageView', { detail: { viewMode: nextView } }));
-  }
-
-  return nextView;
+/** @deprecated No-op; la alternancia de vista ya no está disponible. */
+export function toggleRutinaPageView() {
+  return RUTINA_PAGE_VIEW.cadence;
 }
 
+/** @deprecated Siempre cadencia. */
 export default function useRutinaPageView() {
-  const [viewMode, setViewMode] = useState(readStoredView);
-
-  useEffect(() => {
-    const syncFromStorage = () => setViewMode(readStoredView());
-
-    const handleSetView = (event) => {
-      const next = event.detail?.viewMode;
-      if (next === RUTINA_PAGE_VIEW.group || next === RUTINA_PAGE_VIEW.cadence) {
-        setViewMode(next);
-      }
-    };
-
-    window.addEventListener('rutinaSetPageView', handleSetView);
-    window.addEventListener('storage', syncFromStorage);
-    return () => {
-      window.removeEventListener('rutinaSetPageView', handleSetView);
-      window.removeEventListener('storage', syncFromStorage);
-    };
-  }, []);
-
-  const toggleView = useCallback(() => {
-    setViewMode((current) => toggleRutinaPageView(current));
-  }, []);
-
   return {
-    viewMode,
-    isCadenceView: viewMode === RUTINA_PAGE_VIEW.cadence,
-    isGroupView: viewMode === RUTINA_PAGE_VIEW.group,
-    toggleView,
+    viewMode: RUTINA_PAGE_VIEW.cadence,
+    isCadenceView: true,
+    isGroupView: false,
+    toggleView: () => {},
   };
 }

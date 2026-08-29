@@ -15,6 +15,8 @@ export { default as DynamicIcon } from './DynamicIcon.jsx';
 export { default as EmptyState } from './EmptyState.jsx';
 export { default as EstadoIcon } from './EstadoIcon.jsx';
 export { default as PageContainer } from './PageContainer.jsx';
+export { default as CollapseChevron } from './CollapseChevron.jsx';
+export { default as CollapseSectionToggle } from './CollapseSectionToggle.jsx';
 export { default as SystemButtons } from './SystemButtons.jsx';
 export { ACTIONS, getStandardActions } from './CommonActions.jsx';
 export { default as HabitCrudActions } from './HabitCrudActions.jsx';

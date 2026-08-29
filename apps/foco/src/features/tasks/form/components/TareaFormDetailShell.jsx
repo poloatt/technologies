@@ -81,7 +81,7 @@ export default function TareaFormDetailShell({
         />
         <Box sx={scrollBodySx}>{children}</Box>
         {footer && (
-          <Box sx={{ ...footerOutsideSx, borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+          <Box sx={{ ...footerOutsideSx, bgcolor: 'background.paper' }}>
             {footer}
           </Box>
         )}

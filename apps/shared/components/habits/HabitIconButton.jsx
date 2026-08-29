@@ -3,6 +3,7 @@ import { IconButton } from '@mui/material';
 import { HabitCounterBadge } from '../common/HabitCounterBadge';
 import { getCurrentTimeOfDay } from '../../utils/timeOfDayUtils';
 import { getRutinaHabitIconButtonSx } from '../../styles/rutinaPageStyles';
+import { getRutinaHabitIconTokens, RUTINA_HABIT_ICON_SIZE } from '../../styles/rutinaIconTokens';
 
 /** Botón circular de hábito para listas/checklist de rutina. */
 export default function HabitIconButton({
@@ -10,7 +11,8 @@ export default function HabitIconButton({
   Icon,
   onClick,
   readOnly,
-  size = 38,
+  size = RUTINA_HABIT_ICON_SIZE.desktop,
+  glyph,
   mr = 1,
   config = {},
   currentTimeOfDay,
@@ -22,6 +24,10 @@ export default function HabitIconButton({
   ...props
 }) {
   const timeOfDay = currentTimeOfDay || getCurrentTimeOfDay();
+  const resolvedGlyph = glyph || getRutinaHabitIconTokens({
+    mobile: size >= 44,
+    compact: size <= 32,
+  }).glyph;
 
   return (
     <HabitCounterBadge
@@ -38,10 +44,10 @@ export default function HabitIconButton({
         size="small"
         onClick={onClick}
         disabled={readOnly}
-        sx={getRutinaHabitIconButtonSx({ isCompleted, size, mr })}
+        sx={getRutinaHabitIconButtonSx({ isCompleted, size, glyph: resolvedGlyph, mr })}
         {...props}
       >
-        {Icon && <Icon sx={{ fontSize: size <= 32 ? '1.1rem' : '1.2rem' }} />}
+        {Icon && <Icon sx={{ fontSize: resolvedGlyph }} />}
       </IconButton>
     </HabitCounterBadge>
   );

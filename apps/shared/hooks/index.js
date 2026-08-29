@@ -16,6 +16,8 @@ export * from './usePerformanceOptimizer.js';
 export * from './usePropiedadDatos.js';
 export * from './useRelationalData.js';
 export { default as useResponsive } from './useResponsive.js';
+export { default as useKeyboardInset, measureKeyboardInset, resolveKeyboardAwareInset, KEYBOARD_OPEN_THRESHOLD, MIN_VISIBLE_HEIGHT_FOR_FOOTER } from './useKeyboardInset.js';
+export { default as useHabitItemContextMenu } from './useHabitItemContextMenu.js';
 export { default as useHorizontalDragScroll } from './useHorizontalDragScroll.js';
 export { default as useHabitGroupContextMenu } from './useHabitGroupContextMenu.js';
 export { useHabitSectionCreateOption, HABIT_SECTION_CREATE_LABEL } from './useHabitSectionCreateOption.js';

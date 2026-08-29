@@ -16,6 +16,7 @@ export default function RutinaCadenceBucketList({
   habitsPreferences = {},
   sortable = false,
   localDataBySection = {},
+  useShortFranjaLabels = false,
 }) {
   if (bucketUsesFranjaLayout(bucket.id)) {
     return (
@@ -27,6 +28,8 @@ export default function RutinaCadenceBucketList({
         habits={habits}
         habitsPreferences={habitsPreferences}
         localDataBySection={localDataBySection}
+        useShortFranjaLabels={useShortFranjaLabels}
+        onReorderSection={onReorderSection}
       />
     );
   }

@@ -1,3 +1,7 @@
+/**
+ * @deprecated Vista por grupo retirada de la UI (ago 2026). RutinaTable usa solo cadencia.
+ * Pendiente: eliminar o readaptar esta tarjeta expandible por sección/hábito.
+ */
 import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
 import {
   Box,
@@ -6,9 +10,9 @@ import {
   Collapse,
   List,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import CollapseSectionHeader from '@shared/components/collapse/CollapseSectionHeader';
+import { collapsePanelProps, getCollapseHubHeaderTopRowSx } from '@shared/styles/collapseSectionStyles';
 import { useRutinas, useHabits } from '@shared/context';
 
 import {
@@ -17,6 +21,8 @@ import {
   isViewingRutinaToday,
   habitRequiresExpandedCarouselToggle,
 } from '@shared/habits';
+import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
+import { RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import useResponsive from '@shared/hooks/useResponsive';
@@ -31,15 +37,11 @@ import useHabitGroupContextMenu from '@shared/hooks/useHabitGroupContextMenu';
 import useRutinaItemToggle from '../../hooks/useRutinaItemToggle';
 import useRutinaSectionLocalData from '../../hooks/useRutinaSectionLocalData';
 import {
-  rutinaSectionShellSx,
+  getRutinaSectionShellSx,
   rutinaSectionHeaderSx,
-  rutinaSectionHeaderTopRowSx,
-  rutinaSectionTitleRowSx,
-  rutinaSectionTitleSx,
   rutinaSectionHeaderIconSx,
   rutinaSectionBodySx,
   rutinaSectionEmptySx,
-  rutinaExpandIconSx,
   rutinaBackToListIconSx,
   rutinaCollapsedIconsRowSx,
 } from '@shared/styles/rutinaPageStyles';
@@ -62,7 +64,7 @@ const RutinaCard = ({
   onExpandedSectionChange,
   externalFocusedItemId = null,
 }) => {
-  const { rutina, markItemComplete } = useRutinas();
+  const { rutina, markItemComplete, patchRutinaSection } = useRutinas();
   const { habits, customSections, reorderHabits } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
@@ -125,6 +127,7 @@ const RutinaCard = ({
     rutina,
     habitsPreferences: habitPrefs,
     markItemComplete,
+    patchRutinaSection,
     readOnly,
     getSectionOverrides: () => localData,
     onOptimisticValue: (_section, itemId, newValue) => {
@@ -196,6 +199,7 @@ const RutinaCard = ({
   }, [section, rutina, habits, habitPrefs, habitChains, prefsReady, localData, focusedItemId, habitIconsMap]);
 
   const useSectionFranjaLayout = isViewingRutinaToday(rutina);
+  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
 
   const handleCarouselToggle = useCallback((sec, itemId, horario) => {
     handleItemClick(itemId, null, horario);
@@ -226,21 +230,23 @@ const RutinaCard = ({
   return (
     <>
     <HubSectionShell
-      shellSx={rutinaSectionShellSx}
+      shellSx={getRutinaSectionShellSx(isMobileOrTablet)}
       hideBody={!isExpanded}
       headerContent={(
         <Box
           sx={rutinaSectionHeaderSx(isExpanded)}
-          onClick={(event) => {
-            onGroupContextClick?.(event);
-            if (!event.defaultPrevented) {
-              handleToggle();
-            }
-          }}
           {...restGroupContextHandlers}
         >
-          <Box sx={rutinaSectionHeaderTopRowSx}>
-            {focusedItemId && isExpanded && (
+          <CollapseSectionHeader
+            expanded={isExpanded}
+            onToggle={(event) => {
+              onGroupContextClick?.(event);
+              if (!event.defaultPrevented) {
+                handleToggle();
+              }
+            }}
+            isMobile={isMobileOrTablet}
+            headerLeading={focusedItemId && isExpanded ? (
               <IconButton
                 size="small"
                 onClick={(e) => {
@@ -252,24 +258,17 @@ const RutinaCard = ({
               >
                 <ViewListIcon fontSize="small" />
               </IconButton>
-            )}
-            <Box sx={rutinaSectionTitleRowSx}>
+            ) : null}
+            headerTrailing={(
               <DynamicIcon
                 iconKey={sectionIconKey}
                 size="small"
                 sx={rutinaSectionHeaderIconSx}
               />
-              <Typography variant="body2" sx={rutinaSectionTitleSx}>
-                {capitalizeFirstLetter(title) || section}
-              </Typography>
-            </Box>
-            <IconButton
-              size="small"
-              sx={{ ...rutinaExpandIconSx, ml: 'auto', flexShrink: 0 }}
-            >
-              {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-            </IconButton>
-          </Box>
+            )}
+            title={capitalizeFirstLetter(title) || section}
+            headerSx={getCollapseHubHeaderTopRowSx(isMobileOrTablet)}
+          />
           {showCollapsedCarousel && (
             <Box
               sx={rutinaCollapsedIconsRowSx}
@@ -295,7 +294,7 @@ const RutinaCard = ({
       )}
       bodySx={rutinaSectionBodySx}
     >
-      <Collapse in={isExpanded} unmountOnExit>
+      <Collapse in={isExpanded} {...collapsePanelProps}>
         <Box>
           <List dense disablePadding sx={{ py: 0, my: 0 }}>
             <RutinaDayGroupList
@@ -313,7 +312,15 @@ const RutinaCard = ({
               habitsPreferences={habitPrefs}
               useSectionFranjaLayout={useSectionFranjaLayout}
               activeFranja={habitGroups.activeFranja}
-              activeFranjaLabel={habitGroups.activeFranjaLabel}
+              activeFranjaLabel={isHistorical ? RUTINA_HISTORICAL_COPY.unmarked : habitGroups.activeFranjaLabel}
+              useFranjaHeadings={isHistorical}
+              sectionLabel={isHistorical ? RUTINA_HISTORICAL_COPY.unmarked : undefined}
+              showSectionCounts={isHistorical}
+              doneHeadingLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
+              doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
+              doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : undefined}
+              doneDefaultExpanded={isHistorical}
+              doneCollapsible={isHistorical}
               onReorder={handleReorderHabits}
               onItemClick={handleItemClick}
               onDoneToggle={handleItemClick}

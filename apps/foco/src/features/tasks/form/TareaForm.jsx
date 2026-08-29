@@ -444,6 +444,7 @@ const TareaForm = ({
 
   const footerEl = (
     <TareaFormFooter
+      pinned={footerOutside}
       onSave={handleSubmit}
       saving={saving}
       saveLabel={isEditing ? 'Actualizar' : 'Guardar'}

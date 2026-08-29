@@ -6,9 +6,17 @@ import {
   Collapse,
   List,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import CollapseSectionHeader from '@shared/components/collapse/CollapseSectionHeader';
+import { collapsePanelProps, getCollapseHubHeaderTopRowSx } from '@shared/styles/collapseSectionStyles';
+import {
+  getRutinaSectionShellSx,
+  rutinaSectionHeaderSx,
+  rutinaSectionHeaderIconSx,
+  rutinaSectionBodySx,
+  rutinaBackToListIconSx,
+  rutinaCollapsedIconsRowSx,
+} from '@shared/styles/rutinaPageStyles';
 import { useRutinas, useHabits } from '@shared/context';
 import {
   resolveRutinaItemConfig,
@@ -26,18 +34,6 @@ import HubSectionShell from '@shared/components/hub/HubSectionShell';
 import { DynamicIcon } from '@shared/components/common/DynamicIcon';
 import useRutinaItemToggle from '../../hooks/useRutinaItemToggle';
 import useRutinaBucketLocalData from '../../hooks/useRutinaBucketLocalData';
-import {
-  rutinaSectionShellSx,
-  rutinaSectionHeaderSx,
-  rutinaSectionHeaderTopRowSx,
-  rutinaSectionTitleRowSx,
-  rutinaSectionTitleSx,
-  rutinaSectionHeaderIconSx,
-  rutinaSectionBodySx,
-  rutinaExpandIconSx,
-  rutinaBackToListIconSx,
-  rutinaCollapsedIconsRowSx,
-} from '@shared/styles/rutinaPageStyles';
 
 /** Tarjeta expandible por bucket de cadencia (paridad con RutinaCard). */
 function RutinaCadenceCard({
@@ -192,15 +188,15 @@ function RutinaCadenceCard({
   return (
     <>
       <HubSectionShell
-        shellSx={rutinaSectionShellSx}
+        shellSx={getRutinaSectionShellSx(isMobileOrTablet)}
         hideBody={!isExpanded}
         headerContent={(
-          <Box
-            sx={rutinaSectionHeaderSx(isExpanded)}
-            onClick={handleToggle}
-          >
-            <Box sx={rutinaSectionHeaderTopRowSx}>
-              {focusedItemId && isExpanded && (
+          <Box sx={rutinaSectionHeaderSx(isExpanded)}>
+            <CollapseSectionHeader
+              expanded={isExpanded}
+              onToggle={handleToggle}
+              isMobile={isMobileOrTablet}
+              headerLeading={focusedItemId && isExpanded ? (
                 <IconButton
                   size="small"
                   onClick={(e) => {
@@ -212,27 +208,22 @@ function RutinaCadenceCard({
                 >
                   <ViewListIcon fontSize="small" />
                 </IconButton>
+              ) : null}
+              headerTrailing={(
+                <>
+                  <DynamicIcon
+                    iconKey={bucketIconKey}
+                    size="small"
+                    sx={rutinaSectionHeaderIconSx}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, flexShrink: 0 }}>
+                    {completed}/{total}
+                  </Typography>
+                </>
               )}
-              <Box sx={rutinaSectionTitleRowSx}>
-                <DynamicIcon
-                  iconKey={bucketIconKey}
-                  size="small"
-                  sx={rutinaSectionHeaderIconSx}
-                />
-                <Typography variant="body2" sx={rutinaSectionTitleSx}>
-                  {bucket.label}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                  {completed}/{total}
-                </Typography>
-              </Box>
-              <IconButton
-                size="small"
-                sx={{ ...rutinaExpandIconSx, ml: 'auto', flexShrink: 0 }}
-              >
-                {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-              </IconButton>
-            </Box>
+              title={bucket.label}
+              headerSx={getCollapseHubHeaderTopRowSx(isMobileOrTablet)}
+            />
             {showCollapsedCarousel && (
               <Box
                 sx={rutinaCollapsedIconsRowSx}
@@ -258,7 +249,7 @@ function RutinaCadenceCard({
         )}
         bodySx={rutinaSectionBodySx}
       >
-        <Collapse in={isExpanded} unmountOnExit>
+        <Collapse in={isExpanded} {...collapsePanelProps}>
           <Box>
             <List dense disablePadding sx={{ py: 0, my: 0 }}>
               <RutinaCadenceBucketList

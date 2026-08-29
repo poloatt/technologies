@@ -4,7 +4,7 @@ import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
 import { startOfDay } from 'date-fns';
 import { getNormalizedToday, toISODateString, parseAPIDate, formatDateForAPI } from '../utils/dateUtils';
-import { resolveHabitConfigApplyFrom, getRutinaDayMode, buildHistoricalFranjaMigrationPayload } from '@shared/habits';
+import { resolveHabitConfigApplyFrom, getRutinaDayMode, buildHistoricalFranjaMigrationPayload, buildPostponedFranjasUpdate } from '@shared/habits';
 import { getCachedHabitsPreferences, fetchHabitsPreferencesFromApi } from '../hooks/useHabitsPreferences.js';
 import rutinasService from '../services/rutinasService';
 import { UISettingsContext } from './UISettingsContext';
@@ -96,6 +96,20 @@ const attachHistorial = (rutinasList = []) => {
   const rutinasWithHist = rutinasList.map(r => ({ ...r, historial }));
   return { historial, rutinasWithHist };
 };
+
+function syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina) {
+  const merged = rutinasWithHist.find((r) => r?._id === rutinaId);
+  if (!merged) return;
+
+  setRutina((prev) => {
+    if (!prev || prev._id !== rutinaId) return prev;
+    return {
+      ...merged,
+      _page: prev._page,
+      _totalPages: prev._totalPages,
+    };
+  });
+}
 
 // Crear el contexto
 const RutinasContext = createContext();
@@ -414,13 +428,8 @@ export const RutinasProvider = ({ children }) => {
       });
       // Recalcular historial para PERSONALIZADO y coherencia de completion
       const { rutinasWithHist } = attachHistorial(updated);
+      syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
       return rutinasWithHist;
-    });
-
-    setRutina(prev => {
-      if (!prev || prev._id !== rutinaId) return prev;
-      const prevSection = (prev && prev[section] && typeof prev[section] === 'object') ? prev[section] : {};
-      return { ...prev, [section]: { ...prevSection, ...(nextSectionData || {}) } };
     });
   }, [rutinas, rutina, undoScope, undoRecorder]);
 
@@ -446,18 +455,8 @@ export const RutinasProvider = ({ children }) => {
           if (!Array.isArray(prevList)) return prevList;
           const updated = prevList.map(r => (r && r._id === rutinaId ? { ...r, ...response } : r));
           const { rutinasWithHist } = attachHistorial(updated);
+          syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
           return rutinasWithHist;
-        });
-
-        setRutina(prev => {
-          if (!prev || prev._id !== rutinaId) return prev;
-          // Mantener paginación si existía
-          const next = { ...prev, ...response };
-          if (prev._page !== undefined) next._page = prev._page;
-          if (prev._totalPages !== undefined) next._totalPages = prev._totalPages;
-          // Mantener historial existente si no vino en response (attachHistorial lo recalcula en la lista)
-          if (!next.historial && prev.historial) next.historial = prev.historial;
-          return next;
         });
       } else {
         // Fallback: al menos reflejar el cambio de checkmarks localmente
@@ -509,6 +508,50 @@ export const RutinasProvider = ({ children }) => {
       throw error;
     }
   }, [rutinas, rutina, enqueueSnackbar, patchRutinaSection, undoScope, undoRecorder]);
+
+  const postponeHabitFranja = useCallback(async (rutinaId, section, itemId, franja) => {
+    if (!rutinaId || !section || !itemId || !franja) return null;
+
+    const rutinaBefore = rutinas.find((r) => r._id === rutinaId)
+      || (rutina?._id === rutinaId ? rutina : null);
+    if (!rutinaBefore) return null;
+
+    const postponedFranjas = buildPostponedFranjasUpdate(rutinaBefore, section, itemId, franja);
+
+    try {
+      const response = await rutinasService.updateRutina(rutinaId, { postponedFranjas });
+
+      if (response && typeof response === 'object') {
+        setRutinas((prevList) => {
+          if (!Array.isArray(prevList)) return prevList;
+          const updated = prevList.map((r) => (r && r._id === rutinaId ? { ...r, ...response } : r));
+          const { rutinasWithHist } = attachHistorial(updated);
+          syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
+          return rutinasWithHist;
+        });
+      } else {
+        setRutina((prev) => {
+          if (!prev || prev._id !== rutinaId) return prev;
+          return { ...prev, postponedFranjas };
+        });
+        setRutinas((prevList) => {
+          if (!Array.isArray(prevList)) return prevList;
+          const updated = prevList.map((r) => (
+            r && r._id === rutinaId ? { ...r, postponedFranjas } : r
+          ));
+          const { rutinasWithHist } = attachHistorial(updated);
+          syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
+          return rutinasWithHist;
+        });
+      }
+
+      return response;
+    } catch (error) {
+      console.error('[RutinasContext] Error al posponer hábito:', error);
+      enqueueSnackbar('No se pudo posponer el hábito', { variant: 'error' });
+      throw error;
+    }
+  }, [rutinas, rutina, enqueueSnackbar]);
 
   // Parche local de config para un ítem (refresca SOLO lo necesario sin recargar toda la página)
   const patchRutinaItemConfig = useCallback((rutinaId, section, itemId, nextConfig) => {
@@ -822,6 +865,7 @@ export const RutinasProvider = ({ children }) => {
     fetchRutinas,
     getRutinaById,
     markItemComplete,
+    postponeHabitFranja,
     handlePrevious,
     handleNext,
     updateItemConfiguration,
@@ -843,6 +887,7 @@ export const RutinasProvider = ({ children }) => {
     fetchRutinas,
     getRutinaById,
     markItemComplete,
+    postponeHabitFranja,
     handlePrevious,
     handleNext,
     updateItemConfiguration,

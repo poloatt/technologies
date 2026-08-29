@@ -148,6 +148,7 @@ export default function HabitsManagerCreateDialog({
       </DialogContent>
 
       <TareaFormFooter
+        pinned
         onCancel={onClose}
         showCancel
         onSave={handleSave}

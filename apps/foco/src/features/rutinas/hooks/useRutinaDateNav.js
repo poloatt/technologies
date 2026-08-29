@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { startOfDay } from 'date-fns';
 import { useRutinas, useHabits } from '@shared/context';
 import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
+import { RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
 import {
   getRutinaCompletionStats,
   getRutinaDayMode,
@@ -117,7 +118,9 @@ export function useRutinaDateNav() {
   const totalVisible = completionStats.total;
 
   const completionTooltip = totalVisible > 0
-    ? `${totalCompleted}/${totalVisible} completados`
+    ? (dayMode === 'historical'
+      ? RUTINA_HISTORICAL_COPY.completionTooltip(totalCompleted, totalVisible)
+      : `${totalCompleted}/${totalVisible} completados`)
     : 'Sin ítems activos';
 
   const navHandlers = useMemo(() => ({
