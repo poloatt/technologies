@@ -66,16 +66,13 @@ export {
 export { getRutinaPeriodStart, getRutinaPeriodEnd } from './rutinaPeriodBounds.js';
 
 export {
-  HABIT_CHAIN_TYPES,
+  ROUTINE_CHIP_LABEL,
   normalizeHabitStep,
   stepsEqual,
   generateChainId,
   findChainForHabit,
   getChainStepIndex,
-  getPreviousStep,
-  getNextStep,
-  isStepCompletedToday,
-  isChainStepLocked,
+  resolveRoutineDisplayName,
   resolveHabitChainContext,
   enrichEntryWithChainContext,
   buildManagerHabitListItems,
@@ -94,8 +91,7 @@ export {
   updateHabitChainLabel,
   NEW_HABIT_CHAIN_VALUE,
   validateHabitChains,
-  resolveNextActionableStep,
-  shouldBlockChainToggle,
+  isGroupedRoutineChain,
 } from './habitChainUtils.js';
 
 export {

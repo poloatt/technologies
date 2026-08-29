@@ -74,7 +74,7 @@ describe('rutinaDesktopUtils', () => {
       expect(incomplete.find((h) => h.itemId === 'shower')?.label).toBe('Mi ducha personalizada');
     });
 
-    it('enriches entries with chain lock and next step context', () => {
+    it('enriches entries with routine context without lock state', () => {
       const habits = {
         ...mockHabits,
         bodyCare: [
@@ -84,7 +84,6 @@ describe('rutinaDesktopUtils', () => {
       };
       const habitChains = [{
         id: 'morning',
-        type: 'dependency',
         steps: [
           { section: 'bodyCare', habitId: 'shower' },
           { section: 'bodyCare', habitId: 'skincare' },
@@ -107,10 +106,10 @@ describe('rutinaDesktopUtils', () => {
       });
       const shower = incomplete.find((e) => e.itemId === 'shower');
       const skincare = incomplete.find((e) => e.itemId === 'skincare');
-      expect(shower?.chain?.isLocked).toBe(false);
-      expect(shower?.chain?.isNextInChain).toBe(true);
-      expect(skincare?.chain?.isLocked).toBe(true);
-      expect(skincare?.chain?.isNextInChain).toBe(false);
+      expect(shower?.chain).toMatchObject({ id: 'morning', stepIndex: 0, stepCount: 2 });
+      expect(skincare?.chain).toMatchObject({ id: 'morning', stepIndex: 1, stepCount: 2 });
+      expect(shower?.chain).not.toHaveProperty('isLocked');
+      expect(skincare?.chain).not.toHaveProperty('isLocked');
     });
 
     it('places incomplete scheduled habit in incomplete bucket', () => {

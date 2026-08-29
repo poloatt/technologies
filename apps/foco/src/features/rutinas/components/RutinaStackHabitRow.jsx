@@ -1,21 +1,23 @@
 import React from 'react';
-import { Box, ListItem, Typography, Tooltip } from '@mui/material';
+import { Box, Chip, ListItem, Typography } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import {
   isHabitCompletedForHistorial,
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
-  getHabitDisplayLabel,
-  resolveStackRoutineLabel,
+  resolveRoutineDisplayName,
+  ROUTINE_CHIP_LABEL,
 } from '@shared/habits';
-import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
   rutinaChecklistContentSx,
   rutinaChecklistTextColumnSx,
   rutinaChecklistLabelSx,
+  rutinaRoutineChipSx,
+  rutinaChecklistIconColumnSx,
+  getRutinaChecklistIconSize,
 } from '@shared/styles/rutinaPageStyles';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import { HabitIconButton } from './ChecklistItem';
@@ -47,13 +49,12 @@ function resolveEntryFocusHorario(entry) {
   return resolveEntryFranjaFocusHorario(entry);
 }
 
-/** Fila de rutina apilada: handle + iconos + nombre de rutina. */
+/** Fila de rutina: iconos agrupados + nombre + chip "Rutina". */
 export default function RutinaStackHabitRow({
   entries = [],
   chainId,
   section,
   rutina,
-  habits = null,
   readOnly,
   onItemClick,
   localData,
@@ -65,8 +66,8 @@ export default function RutinaStackHabitRow({
   dragHandleListeners = null,
 }) {
   const isCompact = stackVariant === 'compact';
-  const iconSize = isCompact ? 32 : 38;
-  const routineLabel = resolveStackRoutineLabel(entries[0]?.chain);
+  const iconSize = getRutinaChecklistIconSize(isCompact);
+  const routineName = resolveRoutineDisplayName(entries[0]?.chain);
 
   const allCompleted = entries.every((entry) => {
     const entrySection = resolveEntrySection(entry, section);
@@ -82,23 +83,15 @@ export default function RutinaStackHabitRow({
 
   const renderStackIcon = (entry) => {
     const entrySection = resolveEntrySection(entry, section);
-    const { itemId, Icon, config, chain } = entry;
+    const { itemId, Icon, config } = entry;
     const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
     const focusHorario = resolveEntryFocusHorario(entry);
-    const itemValue = entryLocalData?.[entry.itemId] !== undefined
-      ? entryLocalData[entry.itemId]
-      : rutina?.[entrySection]?.[entry.itemId];
+    const itemValue = entryLocalData?.[itemId] !== undefined
+      ? entryLocalData[itemId]
+      : rutina?.[entrySection]?.[itemId];
     const isCompleted = focusHorario
       ? isHabitHorarioCompleted(itemValue, focusHorario)
       : isHabitCompletedForHistorial(itemValue);
-    const isChainLocked = Boolean(chain?.isLocked);
-    const effectiveReadOnly = readOnly || isChainLocked;
-    const prevStepLabel = chain?.prevStep
-      ? getHabitDisplayLabel(chain.prevStep.section, chain.prevStep.habitId, habits)
-      : '';
-    const lockedTitle = isChainLocked && prevStepLabel
-      ? HABIT_CHAIN_COPY.lockedTooltip(prevStepLabel)
-      : undefined;
 
     const horariosConfig = normalizeTimeOfDay(config?.horarios);
     const normalizedFocusHorario = focusHorario
@@ -118,8 +111,7 @@ export default function RutinaStackHabitRow({
     };
 
     const buttonProps = {
-      readOnly: effectiveReadOnly,
-      title: lockedTitle,
+      readOnly,
       config,
       currentTimeOfDay: getCurrentTimeOfDay(),
       rutina,
@@ -139,43 +131,38 @@ export default function RutinaStackHabitRow({
           {(guardClick) => horariosConfig.map((horario) => {
             const normalizedHorario = String(horario).toUpperCase();
             const franjaCompleted = isHabitHorarioCompleted(itemValue, normalizedHorario);
-            const button = (
+            return (
               <HabitIconButton
+                key={normalizedHorario}
                 isCompleted={franjaCompleted}
                 Icon={Icon}
                 onClick={(e) => {
                   if (guardClick()) return;
                   e.stopPropagation();
-                  if (!effectiveReadOnly) handleClick(e, normalizedHorario);
+                  if (!readOnly) handleClick(e, normalizedHorario);
                 }}
                 displayHorario={normalizedHorario}
                 {...buttonProps}
               />
             );
-            return lockedTitle
-              ? <Tooltip key={normalizedHorario} title={lockedTitle}><span>{button}</span></Tooltip>
-              : <Box key={normalizedHorario} component="span">{button}</Box>;
           })}
         </HabitIconScrollRow>
       );
     }
 
-    const button = (
+    return (
       <HabitIconButton
+        key={`${entrySection}-${itemId}`}
         isCompleted={isCompleted}
         Icon={Icon}
         onClick={(e) => {
           e.stopPropagation();
-          if (!effectiveReadOnly) handleClick(e, singleDisplayHorario);
+          if (!readOnly) handleClick(e, singleDisplayHorario);
         }}
         displayHorario={singleDisplayHorario}
         {...buttonProps}
       />
     );
-
-    return lockedTitle
-      ? <Tooltip key={`${entrySection}-${itemId}`} title={lockedTitle}><span>{button}</span></Tooltip>
-      : <Box key={`${entrySection}-${itemId}`} component="span">{button}</Box>;
   };
 
   return (
@@ -192,21 +179,12 @@ export default function RutinaStackHabitRow({
             {...dragHandleListeners}
             onClick={(event) => event.stopPropagation()}
             sx={DRAG_HANDLE_SX}
-            aria-label={`Reordenar rutina ${routineLabel}`}
+            aria-label={`Reordenar rutina ${routineName}`}
           >
             <DragIndicatorIcon sx={{ fontSize: 18 }} />
           </Box>
         )}
-        <Box
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            flexShrink: 0,
-            gap: isCompact ? 0.15 : 0.25,
-            mr: 0.75,
-            minHeight: iconSize,
-          }}
-        >
+        <Box sx={rutinaChecklistIconColumnSx({ compact: isCompact })}>
           {entries.map((entry) => renderStackIcon(entry))}
         </Box>
         <Box sx={rutinaChecklistContentSx}>
@@ -215,8 +193,13 @@ export default function RutinaStackHabitRow({
               variant="body2"
               sx={rutinaChecklistLabelSx(allCompleted)}
             >
-              {routineLabel}
+              {routineName}
             </Typography>
+            <Chip
+              size="small"
+              label={ROUTINE_CHIP_LABEL}
+              sx={rutinaRoutineChipSx}
+            />
           </Box>
         </Box>
       </Box>

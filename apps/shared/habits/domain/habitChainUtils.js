@@ -1,13 +1,12 @@
 import { getHabitId, findUserHabit, getHabitSectionKeys } from './habitSectionIds.js';
 import { getHabitDisplayLabel } from './habitDisplayLabels.js';
-import { isHabitCompletedForHistorial } from './habitCompletionUtils.js';
-
-export const HABIT_CHAIN_TYPES = ['stack', 'dependency'];
 
 export const NEW_HABIT_CHAIN_VALUE = '__new__';
 
+export const ROUTINE_CHIP_LABEL = 'Rutina';
+
 /** @typedef {{ section: string, habitId: string }} HabitChainStep */
-/** @typedef {{ id: string, label?: string, type: 'stack'|'dependency', steps: HabitChainStep[] }} HabitChain */
+/** @typedef {{ id: string, label?: string, type?: string, steps: HabitChainStep[] }} HabitChain */
 
 export function normalizeHabitStep(step) {
   if (!step?.section || !step?.habitId) return null;
@@ -34,54 +33,28 @@ export function getChainStepIndex(chain, section, habitId) {
   return chain.steps.findIndex((step) => stepsEqual(normalizeHabitStep(step), { section, habitId }));
 }
 
-export function getPreviousStep(chain, stepIndex) {
-  if (!chain?.steps || stepIndex <= 0) return null;
-  return normalizeHabitStep(chain.steps[stepIndex - 1]);
+export function isGroupedRoutineChain(chain) {
+  if (!chain?.id || !Array.isArray(chain.steps)) return false;
+  if (chain.steps.length >= 2) return true;
+  return Boolean((chain.label || '').trim());
 }
 
-export function getNextStep(chain, stepIndex) {
-  if (!chain?.steps || stepIndex < 0 || stepIndex >= chain.steps.length - 1) return null;
-  return normalizeHabitStep(chain.steps[stepIndex + 1]);
+/** Nombre visible de la rutina (etiqueta del usuario o fallback). */
+export function resolveRoutineDisplayName(chain) {
+  const trimmed = (chain?.label || '').trim();
+  if (trimmed) return trimmed;
+  return ROUTINE_CHIP_LABEL;
 }
 
-export function getHabitStepValue(rutina, section, habitId, localDataBySection = null) {
-  if (!rutina || !section || !habitId) return undefined;
-  const local = localDataBySection?.[section]?.[habitId];
-  if (local !== undefined) return local;
-  return rutina?.[section]?.[habitId];
-}
-
-export function isStepCompletedToday(rutina, section, habitId, localDataBySection = null) {
-  const value = getHabitStepValue(rutina, section, habitId, localDataBySection);
-  return isHabitCompletedForHistorial(value);
-}
-
-export function isChainStepLocked(chain, stepIndex, rutina, localDataBySection = null) {
-  if (!chain || chain.type !== 'dependency') return false;
-  if (stepIndex <= 0) return false;
-  const prev = getPreviousStep(chain, stepIndex);
-  if (!prev) return false;
-  return !isStepCompletedToday(rutina, prev.section, prev.habitId, localDataBySection);
-}
-
-function resolveFirstPendingStepIndex(chain, rutina, localDataBySection = null) {
-  if (!chain?.steps?.length) return -1;
-  for (let i = 0; i < chain.steps.length; i += 1) {
-    const step = normalizeHabitStep(chain.steps[i]);
-    if (!step) continue;
-    if (!isStepCompletedToday(rutina, step.section, step.habitId, localDataBySection)) {
-      return i;
-    }
-  }
-  return -1;
+/** @deprecated alias — usar resolveRoutineDisplayName */
+export function resolveStackRoutineLabel(chain) {
+  return resolveRoutineDisplayName(chain);
 }
 
 export function resolveHabitChainContext(
   chains = [],
   section,
   habitId,
-  rutina,
-  localDataBySection = null,
 ) {
   const chain = findChainForHabit(chains, section, habitId);
   if (!chain) return null;
@@ -89,52 +62,34 @@ export function resolveHabitChainContext(
   const stepIndex = getChainStepIndex(chain, section, habitId);
   if (stepIndex < 0) return null;
 
-  const firstPendingIndex = resolveFirstPendingStepIndex(chain, rutina, localDataBySection);
-
   return {
     id: chain.id,
     label: chain.label || '',
-    type: chain.type || 'stack',
     stepIndex,
     stepCount: chain.steps.length,
-    isLocked: isChainStepLocked(chain, stepIndex, rutina, localDataBySection),
-    isNextInChain: firstPendingIndex === stepIndex,
-    prevStep: getPreviousStep(chain, stepIndex),
-    nextStep: getNextStep(chain, stepIndex),
   };
 }
 
-export function enrichEntryWithChainContext(entry, chains, rutina, localDataBySection = null) {
+export function enrichEntryWithChainContext(entry, chains) {
   if (!entry?.section || !entry?.itemId) return entry;
-  const chain = resolveHabitChainContext(
-    chains,
-    entry.section,
-    entry.itemId,
-    rutina,
-    localDataBySection,
-  );
+  const chain = resolveHabitChainContext(chains, entry.section, entry.itemId);
   if (!chain) return entry;
   return { ...entry, chain };
 }
 
 /**
- * Agrupa entradas visibles para render: hábitos apilados (stack) comparten fila.
- * @returns {Array<{ kind: 'single', entry: object } | { kind: 'stack', chainId: string, entries: object[] }>}
- */
-/**
- * Enriquece hábitos del listado del Habits Manager con contexto de cadena (sin rutina).
+ * Enriquece hábitos del listado del Habits Manager con contexto de rutina.
  */
 export function buildManagerHabitListItems(habits = [], section, habitChains = []) {
   return habits.map((habit) => {
     const chain = findChainForHabit(habitChains, section, habit.id);
     let chainContext = null;
-    if (chain?.type === 'stack') {
+    if (chain) {
       const stepIndex = getChainStepIndex(chain, section, habit.id);
       if (stepIndex >= 0) {
         chainContext = {
           id: chain.id,
           label: chain.label || '',
-          type: 'stack',
           stepIndex,
           stepCount: chain.steps.length,
         };
@@ -149,11 +104,15 @@ export function buildManagerHabitListItems(habits = [], section, habitChains = [
   });
 }
 
-/** Agrupa hábitos del Habits Manager en filas simples o apiladas (stack). */
+/** Agrupa hábitos del Habits Manager en filas simples o rutinas. */
 export function groupHabitsIntoDisplayRows(habits = [], section, habitChains = []) {
   return groupEntriesIntoDisplayRows(buildManagerHabitListItems(habits, section, habitChains));
 }
 
+/**
+ * Agrupa entradas visibles: hábitos de la misma rutina comparten fila.
+ * @returns {Array<{ kind: 'single', entry: object } | { kind: 'stack', chainId: string, entries: object[] }>}
+ */
 export function groupEntriesIntoDisplayRows(items = []) {
   if (!Array.isArray(items) || items.length === 0) return [];
 
@@ -161,7 +120,7 @@ export function groupEntriesIntoDisplayRows(items = []) {
 
   items.forEach((entry, index) => {
     const chain = entry?.chain;
-    if (chain?.type === 'stack' && chain.id && chain.stepCount > 1) {
+    if (chain?.id && chain.stepCount > 1) {
       if (!stackGroups.has(chain.id)) {
         stackGroups.set(chain.id, { entries: [], firstIndex: index });
       }
@@ -180,7 +139,7 @@ export function groupEntriesIntoDisplayRows(items = []) {
 
   items.forEach((entry, index) => {
     const chain = entry?.chain;
-    if (chain?.type === 'stack' && chain.id && chain.stepCount > 1) {
+    if (chain?.id && chain.stepCount > 1) {
       if (renderedStacks.has(chain.id)) return;
       const group = stackGroups.get(chain.id);
       if (!group || group.firstIndex !== index) return;
@@ -209,7 +168,7 @@ export function resolveDisplayRowSortableId(row) {
   return row?.entry?.itemId ?? null;
 }
 
-/** Reordena ítems planos moviendo filas simples o stacks completos (drag id activo/soltado). */
+/** Reordena ítems planos moviendo filas simples o rutinas completas (drag id activo/soltado). */
 export function reorderFlatEntriesByDisplayRowDnD(items = [], activeId, overId) {
   if (!activeId || !overId || activeId === overId) return null;
 
@@ -241,14 +200,14 @@ export function removeHabitFromChains(chains = [], section, habitId) {
     if (steps.length >= 2) {
       next.push({ ...chain, steps });
     } else if (steps.length === 1) {
-      // Cadena de un solo paso → disolver
+      // Rutina de un solo paso → disolver
     }
   });
   return next;
 }
 
 /**
- * Aplica configuración del formulario de encadenamiento al guardar un hábito.
+ * Aplica configuración del formulario de rutina al guardar un hábito.
  * @param {object} formChain — { enabled, linkedSteps: [{ section, habitId }] }
  */
 export function applyChainFormSave(chains = [], section, habitId, formChain = {}) {
@@ -302,7 +261,6 @@ export function applyChainFormSave(chains = [], section, habitId, formChain = {}
   next.push({
     id: preferredId || hostChain?.id || generateChainId(),
     label: (formChain.label ?? hostChain?.label ?? '').trim(),
-    type: 'stack',
     steps,
   });
 
@@ -354,27 +312,18 @@ export function listAllUserHabits(habits = {}) {
   return items;
 }
 
-export function resolveStackRoutineLabel(chain) {
-  if (!chain) return 'Rutina';
-  const trimmed = (chain.label || '').trim();
-  if (trimmed) return trimmed;
-  const count = Number(chain.stepCount) || 0;
-  if (count > 1) return `Rutina · ${count} pasos`;
-  return 'Rutina';
-}
-
 export function getChainDisplayLabel(chain, habits = {}) {
   if (chain?.label?.trim()) return chain.label.trim();
   const first = normalizeHabitStep(chain?.steps?.[0]);
-  if (!first) return 'Rutina encadenada';
+  if (!first) return ROUTINE_CHIP_LABEL;
   const count = chain.steps?.length || 0;
   const firstLabel = getHabitDisplayLabel(first.section, first.habitId, habits);
-  return count > 1 ? `${firstLabel} + ${count - 1} pasos` : firstLabel;
+  return count > 1 ? `${firstLabel} + ${count - 1}` : firstLabel;
 }
 
 export function buildChainSelectOptions(habitChains = [], habits = {}) {
   return (habitChains || [])
-    .filter((chain) => chain?.type === 'stack' && Array.isArray(chain.steps) && chain.steps.length >= 2)
+    .filter((chain) => isGroupedRoutineChain(chain))
     .map((chain) => ({
       value: chain.id,
       label: getChainDisplayLabel(chain, habits),
@@ -400,9 +349,6 @@ export function validateHabitChains(chains = [], habits = {}) {
   chains.forEach((chain, chainIndex) => {
     if (!chain?.id) {
       errors.push(`Cadena ${chainIndex}: falta id`);
-    }
-    if (!HABIT_CHAIN_TYPES.includes(chain?.type)) {
-      errors.push(`Cadena ${chain?.id || chainIndex}: type inválido`);
     }
     if (!Array.isArray(chain?.steps) || chain.steps.length < 1) {
       errors.push(`Cadena ${chain?.id || chainIndex}: requiere al menos 1 paso`);
@@ -433,20 +379,4 @@ export function validateHabitChains(chains = [], habits = {}) {
   });
 
   return errors;
-}
-
-export function resolveNextActionableStep(chain, rutina, localDataBySection = null) {
-  if (!chain?.steps?.length) return null;
-  const pendingIndex = resolveFirstPendingStepIndex(chain, rutina, localDataBySection);
-  if (pendingIndex < 0) return null;
-  const step = normalizeHabitStep(chain.steps[pendingIndex]);
-  if (!step) return null;
-  if (isChainStepLocked(chain, pendingIndex, rutina, localDataBySection)) {
-    return null;
-  }
-  return step;
-}
-
-export function shouldBlockChainToggle(chainContext) {
-  return Boolean(chainContext?.isLocked);
 }

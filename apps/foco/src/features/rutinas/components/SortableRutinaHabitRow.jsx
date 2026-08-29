@@ -3,7 +3,6 @@ import { Box } from '@mui/material';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { isHabitCompletedForHistorial } from '@shared/habits';
-import { getHabitDisplayLabel } from '@shared/habits';
 import ChecklistItem from './ChecklistItem';
 
 export default function SortableRutinaHabitRow({
@@ -13,12 +12,9 @@ export default function SortableRutinaHabitRow({
   readOnly,
   onItemClick,
   localData,
-  habits = null,
+  stackVariant = 'inline',
 }) {
-  const { itemId, Icon, label, config, chain } = entry;
-  const prevStepLabel = chain?.prevStep
-    ? getHabitDisplayLabel(chain.prevStep.section, chain.prevStep.habitId, habits)
-    : '';
+  const { itemId, Icon, label, config } = entry;
   const itemValue = localData?.[itemId] !== undefined
     ? localData[itemId]
     : rutina?.[section]?.[itemId];
@@ -59,10 +55,9 @@ export default function SortableRutinaHabitRow({
         config={config}
         habitLabel={label}
         localData={localData}
-        chain={chain}
-        prevStepLabel={prevStepLabel}
         dragHandleAttributes={attributes}
         dragHandleListeners={listeners}
+        iconColumnCompact={stackVariant === 'compact'}
       />
     </Box>
   );

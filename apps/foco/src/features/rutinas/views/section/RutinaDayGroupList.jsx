@@ -97,16 +97,13 @@ function StaticHabitRow({
   rowKey = null,
   multiSection = false,
   stackCell = false,
-  hideChainBadge = false,
   hideMeta = false,
+  stackVariant = 'inline',
 }) {
   const entrySection = resolveEntrySection(entry, section);
   const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
   const focusHorario = resolveEntryFocusHorario(entry);
-  const { itemId, Icon, label, config, chain } = entry;
-  const prevStepLabel = chain?.prevStep
-    ? getHabitDisplayLabel(chain.prevStep.section, chain.prevStep.habitId, habits)
-    : '';
+  const { itemId, Icon, label, config } = entry;
   const itemValue = entryLocalData?.[itemId] !== undefined
     ? entryLocalData[itemId]
     : rutina?.[entrySection]?.[itemId];
@@ -140,11 +137,9 @@ function StaticHabitRow({
         habitLabel={label}
         localData={entryLocalData}
         focusHorario={focusHorario}
-        chain={chain}
-        prevStepLabel={prevStepLabel}
         stackCell={stackCell}
-        hideChainBadge={hideChainBadge}
         hideMeta={hideMeta}
+        iconColumnCompact={stackVariant === 'compact'}
       />
     </Box>
   );
@@ -202,6 +197,7 @@ function HabitRows({
           onItemClick={onItemClick}
           habits={habits}
           localData={resolveEntryLocalData(entry, section, localData, localDataBySection)}
+          stackVariant={stackVariant}
         />
       );
     });
@@ -242,6 +238,7 @@ function HabitRows({
         localData={localData}
         localDataBySection={localDataBySection}
         multiSection={multiSection}
+        stackVariant={stackVariant}
       />
     );
   });

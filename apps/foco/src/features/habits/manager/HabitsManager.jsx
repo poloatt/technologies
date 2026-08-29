@@ -15,7 +15,7 @@ import {
 import { generateHabitId } from '@shared/habits/form';
 import { invalidateHabitsPreferencesCache, updateHabitChainsOnApi } from '@shared/hooks/useHabitsPreferences';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
-import { normalizeHabitStep, removeHabitFromChains, resolveSectionIconKey, updateHabitChainLabel, generateChainId } from '@shared/habits';
+import { normalizeHabitStep, removeHabitFromChains, resolveSectionIconKey, updateHabitChainLabel, generateChainId, isGroupedRoutineChain } from '@shared/habits';
 import { NEW_HABIT_CHAIN_VALUE, createNewRoutineAssignment, applyChainFormSave } from '@shared/habits/routines';
 import { Z_INDEX } from '@shared/config/uiConstants';
 import { DEFAULT_HABIT_CONFIG } from '@shared/habits/form';
@@ -142,18 +142,14 @@ export const HabitsManager = ({ open, onClose }) => {
     [habits, selectedHabitSection],
   );
 
-  const stackChains = useMemo(
-    () => (habitChains || []).filter(
-      (chain) => chain?.type === 'stack'
-        && Array.isArray(chain.steps)
-        && (chain.steps.length >= 2 || Boolean((chain.label || '').trim())),
-    ),
+  const routineChains = useMemo(
+    () => (habitChains || []).filter(isGroupedRoutineChain),
     [habitChains],
   );
 
   const selectedChain = useMemo(
-    () => stackChains.find((chain) => chain.id === selectedChainId) || null,
-    [stackChains, selectedChainId],
+    () => routineChains.find((chain) => chain.id === selectedChainId) || null,
+    [routineChains, selectedChainId],
   );
 
   const activeRoutineSection = showAddForm
@@ -320,19 +316,19 @@ export const HabitsManager = ({ open, onClose }) => {
       setRoutineDraft(null);
       return;
     }
-    const chain = stackChains.find((entry) => entry.id === selectedChainId);
+    const chain = routineChains.find((entry) => entry.id === selectedChainId);
     if (!chain) return;
     setRoutineDraft({
       label: chain.label || '',
       steps: (chain.steps || []).map(normalizeHabitStep).filter(Boolean),
     });
-  }, [managerMode, selectedChainId, stackChains, routineSessionKey]);
+  }, [managerMode, selectedChainId, routineChains, routineSessionKey]);
 
   useEffect(() => {
     if (managerMode !== 'routines') return;
-    if (selectedChainId && stackChains.some((chain) => chain.id === selectedChainId)) return;
-    setSelectedChainId(stackChains[0]?.id || null);
-  }, [managerMode, stackChains, selectedChainId]);
+    if (selectedChainId && routineChains.some((chain) => chain.id === selectedChainId)) return;
+    setSelectedChainId(routineChains[0]?.id || null);
+  }, [managerMode, routineChains, selectedChainId]);
 
   useEffect(() => {
     if (!open || showAddForm || managerMode !== 'habits') return;
@@ -548,7 +544,7 @@ export const HabitsManager = ({ open, onClose }) => {
       const nextChains = (habitChains || [])
         .map((chain) => (
           chain.id === selectedChain.id
-            ? { ...chain, label: trimmedLabel, steps, type: 'stack' }
+            ? { ...chain, label: trimmedLabel, steps }
             : chain
         ))
         .filter((chain) => Array.isArray(chain.steps) && chain.steps.length >= 2);
@@ -604,7 +600,7 @@ export const HabitsManager = ({ open, onClose }) => {
         const newId = generateChainId();
         const nextChains = [
           ...(habitChains || []),
-          { id: newId, label, type: 'stack', steps: [] },
+          { id: newId, label, steps: [] },
         ];
         await updateHabitChainsOnApi(nextChains);
         setManagerMode('routines');
@@ -848,7 +844,7 @@ export const HabitsManager = ({ open, onClose }) => {
 
   const mobilePickerExpanded = managerMode === 'habits' ? mobileListExpanded : mobileRoutineListExpanded;
   const showMobileHabitsChange = isMobile && managerMode === 'habits' && !showAddForm && sortedHabits.length > 0;
-  const showMobileRoutinesChange = isMobile && managerMode === 'routines' && stackChains.length > 0;
+  const showMobileRoutinesChange = isMobile && managerMode === 'routines' && routineChains.length > 0;
 
   const handleMobilePickerToggle = useCallback(() => {
     if (managerMode === 'habits') {
@@ -883,7 +879,7 @@ export const HabitsManager = ({ open, onClose }) => {
       detailMode={detailMode}
       saving={managerMode === 'habits' ? isSavingEdit : isSavingRoutine}
       saveActive={footerSaveActive}
-      canDelete={managerMode === 'habits' ? sortedHabits.length > 1 : stackChains.length > 1}
+      canDelete={managerMode === 'habits' ? sortedHabits.length > 1 : routineChains.length > 1}
       onSave={managerMode === 'habits'
         ? (detailMode === 'create' ? handleSaveCreate : handleSaveEdit)
         : handleSaveRoutine}
@@ -1151,7 +1147,7 @@ export const HabitsManager = ({ open, onClose }) => {
               loading={loading}
               saving={isSavingRoutine}
               isDirty={isRoutineDirty}
-              canDelete={stackChains.length > 1}
+              canDelete={routineChains.length > 1}
               onDraftChange={handleRoutineDraftChange}
               onSave={handleSaveRoutine}
               onDelete={handleDeleteRoutine}

@@ -4,6 +4,7 @@ import {
   isScheduledCadenciaDay,
   contarCompletadosEnPeriodo,
   getCadenciaWeekRange,
+  formatHabitCadenceProgressLabel,
 } from '@shared/habits';
 
 const mondayConfig = {
@@ -89,5 +90,26 @@ describe('cadenciaUtils carry-over', () => {
     expect(isScheduledCadenciaDay(tuesday, personalizadoLunes)).toBe(false);
     expect(debesMostrarHabitoEnFecha(tuesday, personalizadoLunes, [])).toBe(true);
     expect(debesMostrarHabitoEnFecha(tuesday, personalizadoLunes, [tuesday])).toBe(false);
+  });
+});
+
+describe('formatHabitCadenceProgressLabel', () => {
+  it('omits progress fraction when quota is 1', () => {
+    expect(formatHabitCadenceProgressLabel({ tipo: 'SEMANAL', frecuencia: 1, activo: true }, 0)).toBe('Semanal');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'SEMANAL', frecuencia: 1, activo: true }, 1)).toBe('Semanal');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'DIARIO', frecuencia: 1, activo: true }, 1)).toBe('Diario');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'MENSUAL', frecuencia: 1, activo: true }, 0)).toBe('Mensual');
+  });
+
+  it('shows cadence name and single progress for quota > 1', () => {
+    expect(formatHabitCadenceProgressLabel({ tipo: 'SEMANAL', frecuencia: 3, activo: true }, 0)).toBe('Semanal · 0/3');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'SEMANAL', frecuencia: 3, activo: true }, 2)).toBe('Semanal · 2/3');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'DIARIO', frecuencia: 2, activo: true }, 1)).toBe('Diario · 1/2');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'MENSUAL', frecuencia: 4, activo: true }, 1)).toBe('Mensual · 1/4');
+  });
+
+  it('uses cadence name instead of abbreviated frequency label', () => {
+    expect(formatHabitCadenceProgressLabel({ tipo: 'SEMANAL', frecuencia: 3, activo: true }, 0)).not.toContain('x/sem');
+    expect(formatHabitCadenceProgressLabel({ tipo: 'SEMANAL', frecuencia: 3, activo: true }, 0)).not.toContain('•');
   });
 });

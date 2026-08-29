@@ -8,6 +8,7 @@
 import { addDays, isSameDay, isWithinInterval, getDay, getDate, setDate, 
          startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, 
          differenceInDays, isBefore, parseISO, endOfWeek } from 'date-fns';
+import { parseAPIDate, toISODateString } from '../../utils/dateUtils.js';
 
 /** Semana lun–dom; alineado con rutinaPeriodBounds.js. */
 export const CADENCIA_WEEK_STARTS_ON = 1;
@@ -407,45 +408,130 @@ export const obtenerUltimaCompletacion = (historialCompletado) => {
   return fechas[0];
 };
 
+/** Nombre legible del tipo de cadencia (sin cuota ni progreso). */
+export function getCadenceTypeLabel(config = {}) {
+  if (!config || config.activo === false) return 'Inactivo';
+
+  const tipo = (config.tipo || 'DIARIO').toUpperCase();
+  const frecuencia = Number(config.frecuencia || 1);
+  const periodo = (config.periodo || 'CADA_DIA').toUpperCase();
+
+  switch (tipo) {
+    case 'DIARIO':
+      return 'Diario';
+    case 'SEMANAL':
+      return 'Semanal';
+    case 'MENSUAL':
+      return 'Mensual';
+    case 'PERSONALIZADO':
+      if (periodo === 'CADA_DIA') return frecuencia === 1 ? 'Diario' : `Cada ${frecuencia}d`;
+      if (periodo === 'CADA_SEMANA') return frecuencia === 1 ? 'Semanal' : `Cada ${frecuencia}s`;
+      if (periodo === 'CADA_MES') return frecuencia === 1 ? 'Mensual' : `Cada ${frecuencia}m`;
+      return 'Personalizado';
+    default:
+      return 'Diario';
+  }
+}
+
+/** Completados del período actual para un ítem de rutina. */
+export function resolveHabitCompletadosEnPeriodo({
+  itemId,
+  section,
+  rutina,
+  config = {},
+  isCompleted = false,
+}) {
+  const tipo = (config.tipo || 'DIARIO').toUpperCase();
+  const periodo = config.periodo ? config.periodo.toUpperCase() : 'CADA_DIA';
+
+  if (tipo === 'DIARIO') {
+    const horariosConfig = Array.isArray(config.horarios) ? config.horarios : [];
+    const itemValue = rutina?.[section]?.[itemId];
+    const isObjectFormat = typeof itemValue === 'object' && itemValue !== null && !Array.isArray(itemValue);
+
+    if (horariosConfig.length > 1 && isObjectFormat) {
+      return Object.values(itemValue).filter(Boolean).length;
+    }
+    return isCompleted ? 1 : 0;
+  }
+
+  if (tipo === 'SEMANAL' || tipo === 'MENSUAL' || (tipo === 'PERSONALIZADO' && periodo !== 'CADA_DIA')) {
+    if (!rutina) return isCompleted ? 1 : 0;
+
+    const historial = obtenerHistorialCompletados(itemId, section, rutina);
+    const refDate = rutina.fecha ? parseAPIDate(rutina.fecha) : new Date();
+    let completados = contarCompletadosEnPeriodo(refDate, tipo, periodo, historial);
+
+    if (isCompleted) {
+      const refStr = toISODateString(refDate);
+      const yaEstaEnHistorial = historial.some((fecha) => {
+        try {
+          return toISODateString(fecha) === refStr;
+        } catch {
+          return false;
+        }
+      });
+      if (!yaEstaEnHistorial) completados += 1;
+    }
+    return completados;
+  }
+
+  return isCompleted ? 1 : 0;
+}
+
+/**
+ * Etiqueta unificada de cadencia + progreso.
+ * Cuota 1 → solo tipo ("Semanal"). Cuota > 1 → "Semanal · 0/3".
+ */
+export function formatHabitCadenceProgressLabel(config = {}, completados = 0) {
+  if (!config || config.activo === false) return 'Inactivo';
+
+  const tipo = (config.tipo || 'DIARIO').toUpperCase();
+  const frecuencia = Number(config.frecuencia || 1);
+  const periodo = (config.periodo || 'CADA_DIA').toUpperCase();
+  const horarios = Array.isArray(config.horarios) ? config.horarios : [];
+
+  if (tipo === 'DIARIO' && horarios.length > 0) {
+    return getCadenceTypeLabel(config);
+  }
+
+  if (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA') {
+    return getCadenceTypeLabel(config);
+  }
+
+  const typeLabel = getCadenceTypeLabel(config);
+
+  if (frecuencia <= 1) {
+    return typeLabel;
+  }
+
+  const done = Math.max(0, Math.min(Number(completados) || 0, frecuencia));
+  return `${typeLabel} · ${done}/${frecuencia}`;
+}
+
 export const generarMensajeCadencia = (cadenciaConfig, historialCompletado = [], fechaActual = new Date()) => {
   if (!cadenciaConfig || !cadenciaConfig.activo) {
     return 'Hábito inactivo';
   }
 
   const tipo = (cadenciaConfig.tipo || 'DIARIO').toUpperCase();
-  const frecuencia = Number(cadenciaConfig.frecuencia || 1);
   const completadosEnPeriodo = contarCompletadosEnPeriodo(
-    fechaActual, 
-    tipo, 
-    cadenciaConfig.periodo, 
-    historialCompletado
+    fechaActual,
+    tipo,
+    cadenciaConfig.periodo,
+    historialCompletado,
   );
 
-  const ultimaCompletacion = obtenerUltimaCompletacion(historialCompletado);
-  const diasDesdeUltima = ultimaCompletacion ? 
-    differenceInDays(fechaActual, ultimaCompletacion) : 
-    null;
+  let mensaje = formatHabitCadenceProgressLabel(cadenciaConfig, completadosEnPeriodo);
 
-  let mensaje = '';
-
-  switch (tipo) {
-    case 'DIARIO':
-      mensaje = `${completadosEnPeriodo}/${frecuencia} completados hoy`;
-      break;
-    case 'SEMANAL':
-      mensaje = `${completadosEnPeriodo}/${frecuencia} completados esta semana`;
-      break;
-    case 'MENSUAL':
-      mensaje = `${completadosEnPeriodo}/${frecuencia} completados este mes`;
-      break;
-    case 'PERSONALIZADO':
-      mensaje = `${completadosEnPeriodo}/${frecuencia} completados`;
-      if (diasDesdeUltima !== null) {
-        mensaje += `, último hace ${diasDesdeUltima} día(s)`;
-      }
-      break;
-    default:
-      mensaje = `${completadosEnPeriodo}/${frecuencia} completados en período actual`;
+  if (tipo === 'PERSONALIZADO') {
+    const ultimaCompletacion = obtenerUltimaCompletacion(historialCompletado);
+    const diasDesdeUltima = ultimaCompletacion
+      ? differenceInDays(fechaActual, ultimaCompletacion)
+      : null;
+    if (diasDesdeUltima !== null) {
+      mensaje += `, último hace ${diasDesdeUltima} día(s)`;
+    }
   }
 
   return mensaje;
@@ -545,6 +631,9 @@ export default {
   contarCompletadosEnPeriodo,
   obtenerUltimaCompletacion,
   generarMensajeCadencia,
+  getCadenceTypeLabel,
+  resolveHabitCompletadosEnPeriodo,
+  formatHabitCadenceProgressLabel,
   getFrecuenciaLabel,
   formatearSemana,
   getPeriodInterval,

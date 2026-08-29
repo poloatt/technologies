@@ -196,7 +196,7 @@ export function categorizeSectionHabits({
       isScheduled,
       isCadenciaDebt,
       userHabit: findUserHabit(section, itemId, habits),
-    }, chains, rutina, localBySection);
+    }, chains);
 
     if (isCompleted) {
       completed.push(entry);
@@ -440,7 +440,7 @@ export function getSectionCarouselItems({
       isScheduled,
       isCadenciaDebt,
       userHabit: findUserHabit(section, itemId, habits),
-    }, chains, rutina, localBySection);
+    }, chains);
 
     acc.push({
       ...entry,

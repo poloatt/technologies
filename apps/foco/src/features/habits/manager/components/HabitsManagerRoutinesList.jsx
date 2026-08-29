@@ -12,7 +12,7 @@ import {
   useDroppable,
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { getChainDisplayLabel } from '@shared/habits';
+import { getChainDisplayLabel, isGroupedRoutineChain } from '@shared/habits';
 import { HUB_SUBSECTION, hubSectionBg } from '@shared/styles/hubSectionStyles';
 
 function getRoutineListItemSx({ selected = false } = {}) {
@@ -86,7 +86,7 @@ function RoutineMobileChip({
 }
 
 function RoutinesMobileGrid({
-  stackChains,
+  routineChains,
   habits,
   selectedChainId,
   onSelect,
@@ -107,7 +107,7 @@ function RoutinesMobileGrid({
         gap: 0.5,
       }}
     >
-      {stackChains.map((chain) => (
+      {routineChains.map((chain) => (
         <RoutineMobileChip
           key={chain.id}
           chain={chain}
@@ -203,7 +203,7 @@ function DraggableRoutineItem({
 }
 
 function RoutinesListBody({
-  stackChains,
+  routineChains,
   habits,
   selectedChainId,
   onSelect,
@@ -217,7 +217,7 @@ function RoutinesListBody({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const ids = stackChains.map((chain) => chain.id);
+    const ids = routineChains.map((chain) => chain.id);
     const oldIndex = ids.indexOf(active.id);
     const newIndex = ids.indexOf(over.id);
     if (oldIndex < 0 || newIndex < 0) return;
@@ -226,9 +226,9 @@ function RoutinesListBody({
     const [moved] = reordered.splice(oldIndex, 1);
     reordered.splice(newIndex, 0, moved);
     onReorder?.(reordered);
-  }, [stackChains, onReorder]);
+  }, [routineChains, onReorder]);
 
-  const canSort = stackChains.length > 1 && typeof onReorder === 'function';
+  const canSort = routineChains.length > 1 && typeof onReorder === 'function';
 
   return (
     <Box
@@ -246,7 +246,7 @@ function RoutinesListBody({
     >
       {canSort ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          {stackChains.map((chain) => (
+          {routineChains.map((chain) => (
             <DraggableRoutineItem
               key={chain.id}
               chain={chain}
@@ -257,7 +257,7 @@ function RoutinesListBody({
           ))}
         </DndContext>
       ) : (
-        stackChains.map((chain) => {
+        routineChains.map((chain) => {
           const label = getChainDisplayLabel(chain, habits);
           const selected = selectedChainId === chain.id;
           const stepCount = chain.steps?.length || 0;
@@ -307,12 +307,8 @@ export default function HabitsManagerRoutinesList({
   listExpanded = false,
   onToggleListExpanded,
 }) {
-  const stackChains = useMemo(
-    () => (habitChains || []).filter(
-      (chain) => chain?.type === 'stack'
-        && Array.isArray(chain.steps)
-        && (chain.steps.length >= 2 || Boolean((chain.label || '').trim())),
-    ),
+  const routineChains = useMemo(
+    () => (habitChains || []).filter(isGroupedRoutineChain),
     [habitChains],
   );
 
@@ -321,7 +317,7 @@ export default function HabitsManagerRoutinesList({
     onToggleListExpanded?.(false);
   };
 
-  if (loading && stackChains.length === 0) {
+  if (loading && routineChains.length === 0) {
     return (
       <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
         {[1, 2, 3].map((i) => (
@@ -331,7 +327,7 @@ export default function HabitsManagerRoutinesList({
     );
   }
 
-  if (stackChains.length === 0) {
+  if (routineChains.length === 0) {
     return (
       <Box sx={{ p: 2, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
@@ -347,7 +343,7 @@ export default function HabitsManagerRoutinesList({
   if (!isMobile) {
     return (
       <RoutinesListBody
-        stackChains={stackChains}
+        routineChains={routineChains}
         habits={habits}
         selectedChainId={selectedChainId}
         onSelect={onSelect}
@@ -401,7 +397,7 @@ export default function HabitsManagerRoutinesList({
             </Button>
           </Box>
           <RoutinesMobileGrid
-            stackChains={stackChains}
+            routineChains={routineChains}
             habits={habits}
             selectedChainId={selectedChainId}
             onSelect={handleSelect}

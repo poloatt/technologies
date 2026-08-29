@@ -260,6 +260,42 @@ export const rutinaChecklistRowSx = {
   pr: 0,
 };
 
+/** Máximo de iconos visibles en columna fija antes de scroll horizontal. */
+export const RUTINA_CHECKLIST_MAX_ROUTINE_ICONS = 4;
+
+export function getRutinaChecklistIconSize(compact = false) {
+  return compact ? 32 : 38;
+}
+
+/** Ancho fijo de la columna de iconos: alinea textos entre filas simples y rutinas. */
+export function getRutinaChecklistIconColumnWidth({ compact = false, maxIcons = RUTINA_CHECKLIST_MAX_ROUTINE_ICONS } = {}) {
+  const iconSize = getRutinaChecklistIconSize(compact);
+  const gapPx = compact ? 1.2 : 2;
+  return iconSize * maxIcons + gapPx * Math.max(0, maxIcons - 1);
+}
+
+export function rutinaChecklistIconColumnSx({ compact = false } = {}) {
+  const width = getRutinaChecklistIconColumnWidth({ compact });
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    flex: `0 0 ${width}px`,
+    width,
+    minWidth: width,
+    maxWidth: width,
+    flexShrink: 0,
+    gap: compact ? 0.15 : 0.25,
+    mr: 0.75,
+    minHeight: getRutinaChecklistIconSize(compact),
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
+    '&::-webkit-scrollbar': { display: 'none' },
+  };
+}
+
 export const rutinaChecklistContentSx = {
   display: 'flex',
   alignItems: 'center',
@@ -441,6 +477,13 @@ export const rutinaChainChipSx = {
   height: 18,
   ml: 0.5,
   verticalAlign: 'middle',
+};
+
+export const rutinaRoutineChipSx = {
+  fontSize: '0.65rem',
+  height: 18,
+  mt: 0.25,
+  alignSelf: 'flex-start',
 };
 
 export const rutinaChainLockedRowSx = {

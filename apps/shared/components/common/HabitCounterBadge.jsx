@@ -104,8 +104,8 @@ export const HabitCounterBadge = ({
   let isNumber = false;
   let resolvedHorario = null;
 
-  // Periódicos flexibles: siempre badge de cadencia (0, 1, 2…), nunca sol/luna
-  if (flexiblePeriodic) {
+  // Periódicos flexibles: badge numérico solo si cuota > 1 (evita 0/1 y 1/1)
+  if (flexiblePeriodic && frecuencia > 1) {
     const valorAMostrar = completadosEnPeriodo !== null ? completadosEnPeriodo : 0;
     badgeContent = valorAMostrar;
     showBadge = true;

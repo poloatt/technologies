@@ -41,22 +41,18 @@ export const DAILY_CADENCE_SECTION_COPY = {
   sinHacer: 'Sin hacer',
 };
 
-/** Configuración y runtime de rutinas encadenadas. */
+/** Configuración y runtime de rutinas. */
 export const HABIT_CHAIN_COPY = {
-  sectionTitle: 'Encadenamiento',
-  stackButton: 'Apilar',
+  sectionTitle: 'Rutinas',
   noRoutine: 'Sin rutina',
   newRoutine: 'Nueva rutina',
-  stackHint: 'Agrupa hábitos que suelen hacerse juntos',
+  routineHint: 'Agrupa hábitos que suelen hacerse juntos',
   pickLabel: 'Hábitos a agregar',
   routineHabitsLabel: 'Hábitos de la rutina',
   addHabitsLabel: 'Hábitos a agregar',
-  noHabitsAvailable: 'No hay otros hábitos disponibles para apilar.',
+  noHabitsAvailable: 'No hay otros hábitos disponibles para agregar.',
   emptySection: 'No hay hábitos en este grupo',
   selectedCount: (n) => `${n} seleccionado${n === 1 ? '' : 's'}`,
-  lockedTooltip: (prevLabel) => `Completa ${prevLabel} primero`,
-  nextSnackbar: (label) => `Siguiente: ${label}`,
-  stepProgress: (current, total) => `${current}/${total}`,
 };
 
 export const TASK_HORIZON_COPY = {
