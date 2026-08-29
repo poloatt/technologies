@@ -48,18 +48,14 @@
         e.preventDefault();
       });
 
-      // Tras un deploy, un SW cache-first puede servir bundles viejos cuyos lazy chunks ya no existen.
-      // Detectar fallo de import dinámico, limpiar SW/caches y recargar una sola vez.
+      // Tras un deploy, HTML o SW cacheados pueden apuntar a bundles /assets/*.js que ya no existen.
       (function() {
-        var CHUNK_RECOVERY_KEY = 'foco-chunk-recovery';
-        window.addEventListener('unhandledrejection', function(event) {
-          var reason = event.reason && (event.reason.message || String(event.reason));
-          if (!reason || !/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(reason)) {
-            return;
-          }
-          if (sessionStorage.getItem(CHUNK_RECOVERY_KEY)) return;
-          sessionStorage.setItem(CHUNK_RECOVERY_KEY, '1');
-          event.preventDefault();
+        var DEPLOY_RECOVERY_KEY = 'foco-deploy-recovery';
+
+        function recoverFromStaleDeploy() {
+          if (sessionStorage.getItem(DEPLOY_RECOVERY_KEY)) return;
+          sessionStorage.setItem(DEPLOY_RECOVERY_KEY, '1');
+
           var cleanup = Promise.resolve();
           if ('serviceWorker' in navigator) {
             cleanup = navigator.serviceWorker.getRegistrations().then(function(regs) {
@@ -75,6 +71,23 @@
           }).then(function() {
             window.location.reload();
           });
+        }
+
+        window.addEventListener('error', function(event) {
+          var target = event.target;
+          var src = target && (target.src || target.href);
+          if (src && /\/assets\/[^?]+\.(js|css)(\?|$)/i.test(src)) {
+            recoverFromStaleDeploy();
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason && (event.reason.message || String(event.reason));
+          if (!reason || !/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Loading chunk|Failed to fetch/i.test(reason)) {
+            return;
+          }
+          event.preventDefault();
+          recoverFromStaleDeploy();
         });
       })();
 
@@ -83,7 +96,7 @@
         window.addEventListener('load', function() {
           var isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
           if (!isLocalhost) {
-            navigator.serviceWorker.register('/sw.js?v=6')
+            navigator.serviceWorker.register('/sw.js?v=7')
               .then(function(registration) {
                 console.log('SW registered: ', registration);
                 if (registration.update) {
