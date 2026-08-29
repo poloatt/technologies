@@ -9,6 +9,7 @@ import {
   buildDailyCadenceDisplaySections,
   reorderFlatEntriesByDisplayRowDnD,
 } from '@shared/habits';
+import { jest } from '@jest/globals';
 import { getNormalizedToday } from '@shared/utils/dateUtils.js';
 
 const monday = new Date(2026, 5, 22, 12, 0, 0, 0); // lunes (getDay=1)
@@ -318,6 +319,53 @@ describe('groupDailyCadenceBucketByFranjaSchedule', () => {
     const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
     expect(grouped.ahora.map((e) => e.itemId)).not.toContain('teeth');
     expect(grouped.ahora.map((e) => e.itemId)).toContain('shower');
+  });
+
+  it('places periodic habit in luego when carousel mode is luego', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 5, 22, 14, 0, 0)); // lunes tarde
+
+    const rutina = {
+      _id: 'r1',
+      fecha: new Date(2026, 5, 22, 12, 0, 0).toISOString(),
+      ejercicio: { gym: false },
+      config: {
+        ejercicio: {
+          gym: {
+            tipo: 'SEMANAL',
+            frecuencia: 3,
+            activo: true,
+            diasSemana: [1, 2, 3, 4, 5, 6, 0],
+            horarios: ['MAÑANA'],
+          },
+        },
+      },
+      historial: { ejercicio: { gym: {} } },
+    };
+    const habitsGym = {
+      ejercicio: [{ id: 'gym', label: 'Gym', icon: 'Fitness', activo: true, orden: 0 }],
+    };
+    const iconsGym = { ejercicio: { gym: () => null } };
+    const diario = groupRutinaHabitsByCadence({
+      rutina,
+      habits: habitsGym,
+      iconsMap: iconsGym,
+    }).find((b) => b.id === 'DIARIO');
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
+
+    expect(grouped.ahora.map((e) => e.itemId)).not.toContain('gym');
+    expect(grouped.luego.map((e) => e.itemId)).toContain('gym');
+
+    jest.useRealTimers();
+  });
+
+  it('places urgent weekly habit on scheduled day in ahora', () => {
+    const rutina = makeWeeklyRutina();
+    const diario = groupRutinaHabitsByCadence({ rutina, habits, iconsMap }).find((b) => b.id === 'DIARIO');
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
+
+    expect(grouped.ahora.map((e) => e.itemId)).toContain('weekly');
+    expect(grouped.luego.map((e) => e.itemId)).not.toContain('weekly');
   });
 });
 

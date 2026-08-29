@@ -46,6 +46,7 @@ export const RUTINA_DONE_GROUP_COPY = {
 export const DAILY_CADENCE_SECTION_COPY = {
   ahora: 'Ahora',
   sinHacer: 'Sin hacer',
+  luego: 'Luego',
 };
 
 /** Vista de registro histórico (días pasados). */

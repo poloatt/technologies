@@ -308,18 +308,34 @@ export function getRutinaChecklistIconColumnWidth({
   return iconSize * maxIcons + gapPx * Math.max(0, maxIcons - 1);
 }
 
-export function rutinaChecklistIconColumnSx({ compact = false, mobile = false } = {}) {
+export function rutinaChecklistIconColumnSx({ compact = false, mobile = false, fluid = false } = {}) {
+  const gap = compact ? 0.15 : 0.25;
+  const minHeight = getRutinaChecklistIconSize(compact, mobile);
+
+  if (fluid) {
+    return {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      flex: '1 1 auto',
+      minWidth: 0,
+      maxWidth: '100%',
+      gap,
+      minHeight,
+    };
+  }
+
   const width = getRutinaChecklistIconColumnLayoutWidth({ mobile });
   return {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     flex: `0 0 ${width}px`,
     width,
     minWidth: width,
     flexShrink: 0,
-    gap: compact ? 0.15 : 0.25,
-    minHeight: getRutinaChecklistIconSize(compact, mobile),
+    gap,
+    minHeight,
     overflowX: 'auto',
     overflowY: 'hidden',
     scrollbarWidth: 'none',
@@ -526,6 +542,12 @@ export const rutinaRoutineChipSx = {
   height: 18,
   mt: 0.25,
   alignSelf: 'flex-start',
+};
+
+/** Chip de rutina como etiqueta principal (sin meta secundaria). */
+export const rutinaRoutineChipPrimarySx = {
+  ...rutinaRoutineChipSx,
+  mt: 0,
 };
 
 export const rutinaChainLockedRowSx = {

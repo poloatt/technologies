@@ -92,6 +92,7 @@ export {
   NEW_HABIT_CHAIN_VALUE,
   validateHabitChains,
   isGroupedRoutineChain,
+  isEntryGroupedRoutineChain,
 } from './habitChainUtils.js';
 
 export {

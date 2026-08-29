@@ -40,7 +40,7 @@ export function resolveSectionCarouselSlot(entry, { rutina, currentTimeOfDay = '
   const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
   const isDaily = tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
   const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
-  const pendingValue = false;
+  const pendingValue = entry.itemValue ?? false;
 
   if (isDaily) {
     if (horarios.length === 0) return 'ahora';
@@ -50,7 +50,7 @@ export function resolveSectionCarouselSlot(entry, { rutina, currentTimeOfDay = '
     if (getDailyCarouselLuegoHorarios(horarios, currentTimeOfDay, pendingValue).length > 0) {
       return 'luego';
     }
-    return 'ahora';
+    return 'luego';
   }
 
   const rutinaPending = rutina
@@ -70,7 +70,8 @@ export function resolveSectionCarouselSlot(entry, { rutina, currentTimeOfDay = '
     currentTimeOfDay,
   );
   if (mode === 'luego') return 'luego';
-  return 'ahora';
+  if (mode === 'ahora') return 'ahora';
+  return 'notToday';
 }
 
 /**

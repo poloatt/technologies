@@ -105,14 +105,14 @@ export default function RutinaCadenceFlatLayout({
         <RutinaCadenceBucketList
           key={bucket.id}
           bucket={bucket}
-            rutina={rutina}
-            readOnly={readOnly}
-            sortable
-            habits={habits}
-            habitsPreferences={habitPrefs}
-            localDataBySection={localDataBySection}
-            onItemClick={handleItemClick}
-            onReorderSection={handleReorderSection}
+          rutina={rutina}
+          readOnly={readOnly}
+          sortable
+          habits={habits}
+          habitsPreferences={habitPrefs}
+          localDataBySection={localDataBySection}
+          onItemClick={handleItemClick}
+          onReorderSection={handleReorderSection}
         />
       ))}
 

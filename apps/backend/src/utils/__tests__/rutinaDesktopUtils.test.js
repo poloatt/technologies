@@ -414,8 +414,8 @@ describe('rutinaDesktopUtils', () => {
         habits,
         currentTimeOfDay: 'MAÑANA',
       });
-      expect(items.map((h) => h.carouselSlot)).toEqual(['ahora', 'luego', 'luego', 'notToday']);
-      expect(items.map((h) => h.itemId)).toEqual(['shower', 'nightly', 'weekly', 'tuesdayOnly']);
+      expect(items.map((h) => h.carouselSlot)).toEqual(['ahora', 'ahora', 'luego', 'notToday']);
+      expect(items.map((h) => h.itemId)).toEqual(['shower', 'weekly', 'nightly', 'tuesdayOnly']);
     });
 
     it('removes done habits from carousel when marking cadencia debt complete', () => {

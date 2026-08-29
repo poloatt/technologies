@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Chip, ListItem, Typography } from '@mui/material';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Box, Chip, ListItem } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import {
@@ -7,15 +7,13 @@ import {
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
   resolveRoutineDisplayName,
-  ROUTINE_CHIP_LABEL,
 } from '@shared/habits';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
   rutinaChecklistContentSx,
   rutinaChecklistTextColumnSx,
-  rutinaChecklistLabelSx,
-  rutinaRoutineChipSx,
+  rutinaRoutineChipPrimarySx,
   rutinaChecklistIconColumnSx,
   getRutinaChecklistDragHandleSlotSx,
 } from '@shared/styles/rutinaPageStyles';
@@ -28,6 +26,8 @@ const DRAG_HANDLE_INNER_SX = {
   display: 'flex',
   alignItems: 'center',
 };
+
+const MOBILE_STACK_MAX_VISIBLE_ICONS = 2.5;
 
 function resolveEntrySection(entry, fallbackSection) {
   return entry?.section || fallbackSection;
@@ -45,7 +45,13 @@ function resolveEntryFocusHorario(entry) {
   return resolveEntryFranjaFocusHorario(entry);
 }
 
-/** Fila de rutina: iconos agrupados + nombre + chip "Rutina". */
+function entryHasMultipleFranjas(entry) {
+  const horariosConfig = normalizeTimeOfDay(entry.config?.horarios);
+  const focusHorario = resolveEntryFranjaFocusHorario(entry);
+  return horariosConfig.length > 1 && !focusHorario;
+}
+
+/** Fila de rutina: iconos agrupados + chip con nombre de rutina. */
 export default function RutinaStackHabitRow({
   entries = [],
   chainId,
@@ -67,6 +73,21 @@ export default function RutinaStackHabitRow({
   const iconSize = iconTokens.size;
   const iconGlyph = iconTokens.glyph;
   const routineName = resolveRoutineDisplayName(entries[0]?.chain);
+  const [iconsOverflow, setIconsOverflow] = useState(false);
+
+  const hasMultipleEntries = entries.length > 1;
+  const hasNestedFranjaScroll = useMemo(
+    () => entries.some(entryHasMultipleFranjas),
+    [entries],
+  );
+  const useStackIconCarousel = isMobileOrTablet && hasMultipleEntries && !hasNestedFranjaScroll;
+
+  const handleIconsOverflowChange = useCallback((hasOverflow) => {
+    setIconsOverflow(hasOverflow);
+  }, []);
+
+  const hideTextColumn = useStackIconCarousel && iconsOverflow;
+  const useFluidIconColumn = hideTextColumn;
 
   const allCompleted = entries.every((entry) => {
     const entrySection = resolveEntrySection(entry, section);
@@ -80,7 +101,7 @@ export default function RutinaStackHabitRow({
       : isHabitCompletedForHistorial(itemValue);
   });
 
-  const renderStackIcon = (entry) => {
+  const renderStackIcon = (entry, guardClick = null) => {
     const entrySection = resolveEntrySection(entry, section);
     const { itemId, Icon, config } = entry;
     const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
@@ -128,7 +149,7 @@ export default function RutinaStackHabitRow({
           itemCount={horariosConfig.length}
           iconSize={iconSize}
         >
-          {(guardClick) => horariosConfig.map((horario) => {
+          {(innerGuardClick) => horariosConfig.map((horario) => {
             const normalizedHorario = String(horario).toUpperCase();
             const franjaCompleted = isHabitHorarioCompleted(itemValue, normalizedHorario);
             return (
@@ -137,7 +158,7 @@ export default function RutinaStackHabitRow({
                 isCompleted={franjaCompleted}
                 Icon={Icon}
                 onClick={(e) => {
-                  if (guardClick()) return;
+                  if (innerGuardClick()) return;
                   e.stopPropagation();
                   if (!readOnly) handleClick(e, normalizedHorario);
                 }}
@@ -156,6 +177,7 @@ export default function RutinaStackHabitRow({
         isCompleted={isCompleted}
         Icon={Icon}
         onClick={(e) => {
+          if (guardClick?.()) return;
           e.stopPropagation();
           if (!readOnly) handleClick(e, singleDisplayHorario);
         }}
@@ -164,6 +186,27 @@ export default function RutinaStackHabitRow({
       />
     );
   };
+
+  const iconColumnContent = useStackIconCarousel ? (
+    <HabitIconScrollRow
+      itemCount={entries.length}
+      iconSize={iconSize}
+      maxVisibleIcons={iconsOverflow
+        ? Math.min(entries.length, 4)
+        : MOBILE_STACK_MAX_VISIBLE_ICONS}
+      onOverflowChange={handleIconsOverflowChange}
+      sx={{
+        mr: 0,
+        minWidth: 0,
+        flexShrink: iconsOverflow ? 1 : 0,
+        ...(iconsOverflow ? { flex: 1, maxWidth: '100%' } : null),
+      }}
+    >
+      {(guardClick) => entries.map((entry) => renderStackIcon(entry, guardClick))}
+    </HabitIconScrollRow>
+  ) : (
+    entries.map((entry) => renderStackIcon(entry))
+  );
 
   return (
     <ListItem
@@ -191,23 +234,35 @@ export default function RutinaStackHabitRow({
             </Box>
           ) : null}
         </Box>
-        <Box sx={rutinaChecklistContentSx}>
-          <Box sx={rutinaChecklistIconColumnSx({ compact: isCompact, mobile: isMobileOrTablet })}>
-            {entries.map((entry) => renderStackIcon(entry))}
+        <Box
+          sx={{
+            ...rutinaChecklistContentSx,
+            ...(hideTextColumn ? { gap: 0 } : null),
+          }}
+        >
+          <Box sx={rutinaChecklistIconColumnSx({
+            compact: isCompact,
+            mobile: isMobileOrTablet,
+            fluid: useFluidIconColumn,
+          })}
+          >
+            {iconColumnContent}
           </Box>
-          <Box sx={{ ...rutinaChecklistTextColumnSx, flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="body2"
-              sx={rutinaChecklistLabelSx(allCompleted)}
-            >
-              {routineName}
-            </Typography>
-            <Chip
-              size="small"
-              label={ROUTINE_CHIP_LABEL}
-              sx={rutinaRoutineChipSx}
-            />
-          </Box>
+          {!hideTextColumn && (
+            <Box sx={{ ...rutinaChecklistTextColumnSx, flex: 1, minWidth: 0 }}>
+              <Chip
+                size="small"
+                label={routineName}
+                sx={{
+                  ...rutinaRoutineChipPrimarySx,
+                  ...(allCompleted ? {
+                    opacity: 0.55,
+                    '& .MuiChip-label': { textDecoration: 'line-through' },
+                  } : null),
+                }}
+              />
+            </Box>
+          )}
         </Box>
       </Box>
     </ListItem>

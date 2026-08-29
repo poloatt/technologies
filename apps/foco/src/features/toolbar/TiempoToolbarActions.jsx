@@ -32,7 +32,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
   const tareasPageView = useTareasPageView();
   const isTareasAgendaView = section === 'tareas' && tareasPageView === 'agenda';
   const undoScope = useUndoScope();
-  const { actionHistory, getUndoCountForScope } = useActionHistory();
+  const { getUndoCountForScope } = useActionHistory();
   const undoCount = undoScope ? getUndoCountForScope(undoScope) : 0;
   const showUndo = undoCount > 0;
 
@@ -176,7 +176,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
     });
 
     return list;
-  }, [actionHistory, commonButtonSx, hasSelectedItems, isTareasAgendaView, section, tareasPageView, undoAction]);
+  }, [commonButtonSx, hasSelectedItems, isTareasAgendaView, section, tareasPageView, undoAction]);
 
   if (!section) return null;
   if (actions.length === 0) return null;

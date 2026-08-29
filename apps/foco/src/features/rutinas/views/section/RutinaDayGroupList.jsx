@@ -28,7 +28,10 @@ import {
   resolveEntryFranjaFocusHorario,
   groupEntriesIntoDisplayRows,
   reorderFlatEntriesByDisplayRowDnD,
+  habitRequiresExpandedCarouselToggle,
 } from '@shared/habits';
+import { RoutineStackRow } from '@shared/components/habits/routines';
+import { rutinaStackCellCompactSx } from '@shared/styles/rutinaPageStyles';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 import { useRutinas } from '@shared/context';
 
@@ -163,6 +166,44 @@ function resolveEntryFocusHorario(entry) {
   return resolveEntryFranjaFocusHorario(entry);
 }
 
+/** Hábitos simples (1 franja / frecuencia 1) pueden compartir renglón en móvil. */
+function entryCanShareCompactRow(entry) {
+  return Boolean(entry?.config && !habitRequiresExpandedCarouselToggle(entry.config));
+}
+
+/** Agrupa singles consecutivos compartibles en filas compactas (solo móvil). */
+function groupDisplayRowsForCompactSharing(displayRows = []) {
+  const layoutRows = [];
+  let pendingSingles = [];
+
+  const flushSingles = () => {
+    if (pendingSingles.length === 0) return;
+    if (pendingSingles.length === 1) {
+      layoutRows.push({ kind: 'single', entry: pendingSingles[0] });
+    } else {
+      layoutRows.push({ kind: 'compact', entries: [...pendingSingles] });
+    }
+    pendingSingles = [];
+  };
+
+  displayRows.forEach((row) => {
+    if (row.kind === 'stack') {
+      flushSingles();
+      layoutRows.push(row);
+      return;
+    }
+    if (entryCanShareCompactRow(row.entry)) {
+      pendingSingles.push(row.entry);
+      return;
+    }
+    flushSingles();
+    layoutRows.push(row);
+  });
+
+  flushSingles();
+  return layoutRows;
+}
+
 function StaticHabitRow({
   entry,
   section,
@@ -203,6 +244,7 @@ function StaticHabitRow({
   return (
     <Box
       key={rowKey || `${entrySection}-${itemId}`}
+      sx={stackCell ? rutinaStackCellCompactSx : undefined}
       id={stackCell ? undefined : `habit-row-${entrySection}-${itemId}`}
     >
       <ChecklistItem
@@ -221,6 +263,7 @@ function StaticHabitRow({
         hideMeta={hideMeta}
         isCadenciaDebt={entry.isCadenciaDebt}
         isScheduled={entry.isScheduled}
+        chain={entry.chain}
         iconColumnCompact={stackVariant === 'compact'}
         allowPostpone={allowPostpone}
         onPostpone={onPostpone}
@@ -245,9 +288,17 @@ function HabitRows({
   allowPostpone = false,
   onPostpone,
 }) {
-  const displayRows = useMemo(() => groupEntriesIntoDisplayRows(items), [items]);
+  const { isMobileOrTablet } = useResponsive();
+  const effectiveStackVariant = isMobileOrTablet ? 'compact' : stackVariant;
+  const shouldShareRows = isMobileOrTablet && !sortable;
 
-  if (!displayRows.length) return null;
+  const displayRows = useMemo(() => groupEntriesIntoDisplayRows(items), [items]);
+  const layoutRows = useMemo(
+    () => (shouldShareRows ? groupDisplayRowsForCompactSharing(displayRows) : displayRows),
+    [displayRows, shouldShareRows],
+  );
+
+  if (!layoutRows.length) return null;
 
   if (sortable) {
     return displayRows.map((row) => {
@@ -266,7 +317,7 @@ function HabitRows({
             localDataBySection={localDataBySection}
             rowKeyPrefix={rowKeyPrefix}
             multiSection={multiSection}
-            stackVariant={stackVariant}
+            stackVariant={effectiveStackVariant}
             allowPostpone={allowPostpone}
             onPostpone={onPostpone}
           />
@@ -285,7 +336,7 @@ function HabitRows({
           onItemClick={onItemClick}
           habits={habits}
           localData={resolveEntryLocalData(entry, section, localData, localDataBySection)}
-          stackVariant={stackVariant}
+          stackVariant={effectiveStackVariant}
           allowPostpone={allowPostpone}
           onPostpone={onPostpone}
         />
@@ -293,7 +344,39 @@ function HabitRows({
     });
   }
 
-  return displayRows.map((row) => {
+  return layoutRows.map((row, rowIndex) => {
+    if (row.kind === 'compact') {
+      const shareKey = rowKeyPrefix ? `${rowKeyPrefix}-share-${rowIndex}` : `share-${rowIndex}`;
+      return (
+        <RoutineStackRow
+          key={shareKey}
+          chainId={shareKey}
+          rowKeyPrefix={rowKeyPrefix}
+          variant="compact"
+        >
+          {row.entries.map((entry) => (
+            <StaticHabitRow
+              key={`${resolveEntrySection(entry, section)}-${entry.itemId}`}
+              entry={entry}
+              section={section}
+              rutina={rutina}
+              habits={habits}
+              readOnly={readOnly}
+              onItemClick={onItemClick}
+              localData={localData}
+              localDataBySection={localDataBySection}
+              multiSection={multiSection}
+              stackCell
+              hideMeta
+              stackVariant={effectiveStackVariant}
+              allowPostpone={allowPostpone}
+              onPostpone={onPostpone}
+            />
+          ))}
+        </RoutineStackRow>
+      );
+    }
+
     if (row.kind === 'stack') {
       return (
         <RutinaStackHabitRow
@@ -309,7 +392,7 @@ function HabitRows({
           localDataBySection={localDataBySection}
           rowKeyPrefix={rowKeyPrefix}
           multiSection={multiSection}
-          stackVariant={stackVariant}
+          stackVariant={effectiveStackVariant}
         />
       );
     }
@@ -328,7 +411,7 @@ function HabitRows({
         localData={localData}
         localDataBySection={localDataBySection}
         multiSection={multiSection}
-        stackVariant={stackVariant}
+        stackVariant={effectiveStackVariant}
         allowPostpone={allowPostpone}
         onPostpone={onPostpone}
       />
@@ -377,7 +460,9 @@ export default function RutinaDayGroupList({
   doneDefaultExpanded = false,
   doneCollapsible = false,
 }) {
+  const { isMobileOrTablet } = useResponsive();
   const { postponeHabitFranja } = useRutinas();
+  const effectiveStackVariant = isMobileOrTablet ? 'compact' : stackVariant;
   const [expandedCarouselSections, setExpandedCarouselSections] = useState(() => new Set());
 
   const handlePostpone = useCallback(async (entrySection, itemId, franja) => {
@@ -448,7 +533,7 @@ export default function RutinaDayGroupList({
       sortable={canSort}
       rowKeyPrefix={rowKeyPrefix}
       multiSection={multiSection}
-      stackVariant={stackVariant}
+      stackVariant={effectiveStackVariant}
       allowPostpone={useSectionFranjaLayout && !readOnly}
       onPostpone={handlePostpone}
     />
@@ -493,8 +578,13 @@ export default function RutinaDayGroupList({
     onItemClick?.(itemId, null, horario);
   }, [multiSection, onItemClick]);
 
+  const luegoPeriodic = useMemo(() => {
+    if (!useSectionFranjaLayout) return [];
+    return luego.filter((entry) => !entry?.franjaKey);
+  }, [useSectionFranjaLayout, luego]);
+
   const luegoByFranja = useMemo(() => {
-    if (!useSectionFranjaLayout || luego.length === 0) return [];
+    if (!useSectionFranjaLayout) return [];
     const map = Object.fromEntries(VALID_TIME_OF_DAY.map((key) => [key, []]));
     luego.forEach((entry) => {
       const key = entry?.franjaKey;
@@ -529,7 +619,7 @@ export default function RutinaDayGroupList({
               localDataBySection={localDataBySection}
               multiSection={multiSection}
               rowKeyPrefix={rowKeyPrefix}
-              stackVariant={stackVariant}
+              stackVariant={effectiveStackVariant}
               allowPostpone={useSectionFranjaLayout && !readOnly}
               onPostpone={handlePostpone}
             />
@@ -586,8 +676,8 @@ export default function RutinaDayGroupList({
             localDataBySection={localDataBySection}
             multiSection={multiSection}
             rowKeyPrefix={rowKeyPrefix}
-            stackVariant={stackVariant}
-            centerWhenFits={franjaKey === 'NOCHE' ? undefined : false}
+            stackVariant={effectiveStackVariant}
+            centerWhenFits={false}
             allowPostpone={useSectionFranjaLayout && !readOnly}
             onPostpone={handlePostpone}
           />
@@ -605,11 +695,34 @@ export default function RutinaDayGroupList({
               habitsPreferences={habitsPreferences}
               readOnly={readOnly}
               onToggle={handleCarouselToggle}
-              centerWhenFits={franjaKey === 'NOCHE' ? undefined : false}
+              centerWhenFits={false}
             />
           </CollapseSectionLabel>
         );
       })}
+      {useSectionFranjaLayout && luegoPeriodic.length > 0 && (
+        <CollapseSectionLabel
+          title={DAILY_CADENCE_SECTION_COPY.luego}
+          count={shouldShowCounts ? luegoPeriodic.length : undefined}
+        >
+          <HabitRows
+            items={luegoPeriodic}
+            section={section}
+            rutina={rutina}
+            habits={habits}
+            readOnly={readOnly}
+            onItemClick={onItemClick}
+            localData={localData}
+            localDataBySection={localDataBySection}
+            sortable={canSort}
+            rowKeyPrefix={rowKeyPrefix}
+            multiSection={multiSection}
+            stackVariant={effectiveStackVariant}
+            allowPostpone={!readOnly}
+            onPostpone={handlePostpone}
+          />
+        </CollapseSectionLabel>
+      )}
       {notToday.length > 0 && !useSectionFranjaLayout && (
         hideGroupHeadings ? (
           <HabitRows
@@ -624,7 +737,7 @@ export default function RutinaDayGroupList({
             sortable={canSort}
             rowKeyPrefix={rowKeyPrefix}
             multiSection={multiSection}
-            stackVariant={stackVariant}
+            stackVariant={effectiveStackVariant}
           />
         ) : (
           <CollapseSectionLabel
@@ -643,7 +756,7 @@ export default function RutinaDayGroupList({
               sortable={canSort}
               rowKeyPrefix={rowKeyPrefix}
               multiSection={multiSection}
-              stackVariant={stackVariant}
+              stackVariant={effectiveStackVariant}
             />
           </CollapseSectionLabel>
         )

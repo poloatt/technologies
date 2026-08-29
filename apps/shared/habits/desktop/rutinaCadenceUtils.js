@@ -21,6 +21,7 @@ import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
 import { DAILY_CADENCE_SECTION_COPY, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
 import { isFranjaPostponed } from '../utils/rutinaPostponeUtils.js';
+import { getPeriodicCarouselMode } from '../engine/habitVisibilityEngine.js';
 
 /** Lunes → Domingo. */
 export const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
@@ -202,7 +203,9 @@ function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
   const luego = [];
 
   if (!isDailyCadenceConfig(config)) {
-    ahora.push(entry);
+    const mode = getPeriodicCarouselMode(config, rutina, section, itemId, activeFranja);
+    if (mode === 'ahora') ahora.push(entry);
+    else if (mode === 'luego') luego.push(entry);
     return { sinHacer, ahora, luego };
   }
 

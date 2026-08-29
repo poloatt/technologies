@@ -59,7 +59,7 @@ export default function RutinaFranjaIconCarousel({
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
-  const centerWhenFits = centerWhenFitsProp ?? isMobileOrTablet;
+  const centerWhenFits = centerWhenFitsProp ?? false;
   const carouselMode = resolveCarouselMode(franjaKey, activeFranjaKey);
   const currentTimeOfDay = resolveViewingTimeOfDay(rutina);
 

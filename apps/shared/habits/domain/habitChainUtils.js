@@ -39,6 +39,13 @@ export function isGroupedRoutineChain(chain) {
   return Boolean((chain.label || '').trim());
 }
 
+/** True when entry.chain (from resolveHabitChainContext) is a grouped routine. */
+export function isEntryGroupedRoutineChain(chain) {
+  if (!chain?.id) return false;
+  if (chain.stepCount > 1) return true;
+  return Boolean((chain.label || '').trim());
+}
+
 /** Nombre visible de la rutina (etiqueta del usuario o fallback). */
 export function resolveRoutineDisplayName(chain) {
   const trimmed = (chain?.label || '').trim();

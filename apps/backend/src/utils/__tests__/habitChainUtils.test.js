@@ -8,6 +8,7 @@ import {
   groupEntriesIntoDisplayRows,
   groupHabitsIntoDisplayRows,
   resolveRoutineDisplayName,
+  isEntryGroupedRoutineChain,
   ROUTINE_CHIP_LABEL,
 } from '@shared/habits';
 
@@ -67,6 +68,13 @@ describe('habitChainUtils', () => {
   test('resolveRoutineDisplayName prefers label and falls back to chip label', () => {
     expect(resolveRoutineDisplayName(chains[0])).toBe('Rutina mañana');
     expect(resolveRoutineDisplayName({ steps: [{ section: 'a', habitId: 'b' }] })).toBe(ROUTINE_CHIP_LABEL);
+  });
+
+  test('isEntryGroupedRoutineChain mirrors grouped routine rules on entry context', () => {
+    const ctx = resolveHabitChainContext(chains, 'bodyCare', 'shower');
+    expect(isEntryGroupedRoutineChain(ctx)).toBe(true);
+    expect(isEntryGroupedRoutineChain({ id: 'solo', stepCount: 1, label: '' })).toBe(false);
+    expect(isEntryGroupedRoutineChain({ id: 'named', stepCount: 1, label: 'Express' })).toBe(true);
   });
 
   test('applyChainFormSave builds routine from multi-select + current habit', () => {

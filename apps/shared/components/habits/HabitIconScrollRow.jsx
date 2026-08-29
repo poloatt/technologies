@@ -55,6 +55,7 @@ export default function HabitIconScrollRow({
   iconSize = RUTINA_HABIT_ICON_SIZE.desktop,
   gap = 0.35,
   maxVisibleIcons = 2.5,
+  onOverflowChange = null,
   sx = {},
   children,
 }) {
@@ -77,10 +78,20 @@ export default function HabitIconScrollRow({
     if (!node) return;
     const { scrollLeft, scrollWidth, clientWidth } = node;
     const hasOverflow = scrollWidth > clientWidth + 2;
-    setEdgeState({
-      hasOverflow,
-      atStart: scrollLeft <= 4,
-      atEnd: scrollLeft >= scrollWidth - clientWidth - 4,
+    setEdgeState((prev) => {
+      const next = {
+        hasOverflow,
+        atStart: scrollLeft <= 4,
+        atEnd: scrollLeft >= scrollWidth - clientWidth - 4,
+      };
+      if (
+        prev.hasOverflow === next.hasOverflow
+        && prev.atStart === next.atStart
+        && prev.atEnd === next.atEnd
+      ) {
+        return prev;
+      }
+      return next;
     });
   }, []);
 
@@ -98,6 +109,10 @@ export default function HabitIconScrollRow({
       ro?.disconnect();
     };
   }, [itemCount, updateEdgeState]);
+
+  useEffect(() => {
+    onOverflowChange?.(edgeState.hasOverflow);
+  }, [edgeState.hasOverflow, onOverflowChange]);
 
   const scrollByStep = useCallback((direction) => {
     const node = edgeRef.current;

@@ -184,9 +184,6 @@ export default function RutinaDailyCadenceFranjaLayout({
             habitsPreferences={habitsPreferences}
             readOnly={readOnly}
             onToggle={handleCarouselToggle}
-            centerWhenFits={
-              isMobileOrTablet && (section.franjaKey === 'SIN_HACER' || section.franjaKey === 'NOCHE')
-            }
           />
         )}
       </CollapseSectionToggle>

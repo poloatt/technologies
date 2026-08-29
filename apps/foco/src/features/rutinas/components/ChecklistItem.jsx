@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { ListItem, Box, Typography } from '@mui/material';
+import { ListItem, Box, Typography, Chip } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import HabitIconButton from '@shared/components/habits/HabitIconButton';
@@ -13,6 +13,8 @@ import {
   canPostponeHabitFranja,
   resolvePostponeTargetFranja,
   getPostponeMenuLabel,
+  isEntryGroupedRoutineChain,
+  resolveRoutineDisplayName,
 } from '@shared/habits';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HABIT_PERIODIC_COPY } from '@shared/copy/agendaTerminology';
@@ -23,6 +25,7 @@ import {
   rutinaChecklistTextColumnSx,
   rutinaChecklistLabelSx,
   rutinaChecklistMetaSx,
+  rutinaRoutineChipSx,
   rutinaChecklistStackCellItemSx,
   rutinaChecklistStackCellRowSx,
   rutinaChecklistStackCellContentSx,
@@ -53,6 +56,7 @@ const ChecklistItem = ({
   iconColumnCompact = false,
   isCadenciaDebt = false,
   isScheduled = true,
+  chain = null,
   allowPostpone = false,
   onPostpone,
 }) => {
@@ -90,6 +94,10 @@ const ChecklistItem = ({
 
     return baseLabel;
   }, [config, isCompleted, rutina, section, itemId, isCadenciaDebt, isScheduled]);
+
+  const showRoutineMeta = isEntryGroupedRoutineChain(chain) && !isCadenciaDebt;
+  const routineChipLabel = showRoutineMeta ? resolveRoutineDisplayName(chain) : '';
+  const showMetaRow = Boolean(config) && (!hideMeta || showRoutineMeta);
 
   const horariosConfig = useMemo(
     () => normalizeTimeOfDay(config?.horarios),
@@ -291,7 +299,7 @@ const ChecklistItem = ({
             >
               {habitLabel || itemId}
             </Typography>
-            {config && !hideMeta && (
+            {showMetaRow && (
               <Box sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -302,15 +310,23 @@ const ChecklistItem = ({
                 width: '100%',
               }}
               >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    ...rutinaChecklistMetaSx,
-                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left' } : null),
-                  }}
-                >
-                  {secondaryText}
-                </Typography>
+                {showRoutineMeta ? (
+                  <Chip
+                    size="small"
+                    label={routineChipLabel}
+                    sx={rutinaRoutineChipSx}
+                  />
+                ) : (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      ...rutinaChecklistMetaSx,
+                      ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left' } : null),
+                    }}
+                  >
+                    {secondaryText}
+                  </Typography>
+                )}
               </Box>
             )}
           </Box>
@@ -355,6 +371,9 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.iconColumnCompact === nextProps.iconColumnCompact &&
     prevProps.isCadenciaDebt === nextProps.isCadenciaDebt &&
     prevProps.isScheduled === nextProps.isScheduled &&
-    prevProps.allowPostpone === nextProps.allowPostpone
+    prevProps.allowPostpone === nextProps.allowPostpone &&
+    prevProps.chain?.id === nextProps.chain?.id &&
+    prevProps.chain?.label === nextProps.chain?.label &&
+    prevProps.chain?.stepCount === nextProps.chain?.stepCount
   );
 });

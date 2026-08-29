@@ -65,6 +65,7 @@ export default function SortableRutinaHabitRow({
         iconColumnCompact={stackVariant === 'compact'}
         isCadenciaDebt={entry.isCadenciaDebt}
         isScheduled={entry.isScheduled}
+        chain={entry.chain}
         focusHorario={focusHorario}
         allowPostpone={allowPostpone}
         onPostpone={onPostpone}

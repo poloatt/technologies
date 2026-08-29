@@ -38,7 +38,7 @@ export default function RutinaDoneCarousel({
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
-  const centerWhenFits = centerWhenFitsProp ?? isMobileOrTablet;
+  const centerWhenFits = centerWhenFitsProp ?? false;
   const { size, bg, hoverBg, rail, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobileOrTablet,
   });
