@@ -7,7 +7,7 @@ import {
 } from '@shared/styles/rutinaPageStyles';
 import RutinaDoneCarousel from './RutinaDoneCarousel';
 
-/** Sector Hecho con separador minimalista y carrusel de iconos alineado a la izquierda en desktop. */
+/** Sector Hecho con separador minimalista y carrusel de iconos alineado a la izquierda en vista Grupo. */
 export default function RutinaDoneSection({
   items = [],
   rutina,
@@ -15,6 +15,7 @@ export default function RutinaDoneSection({
   readOnly = false,
   onToggle,
   showDivider = true,
+  alignIconsLeft = false,
 }) {
   if (!items.length) return null;
 
@@ -29,6 +30,7 @@ export default function RutinaDoneSection({
         habitsPreferences={habitsPreferences}
         readOnly={readOnly}
         onToggle={onToggle}
+        centerWhenFits={alignIconsLeft ? false : undefined}
       />
     </Box>
   );

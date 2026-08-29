@@ -161,20 +161,6 @@ export default function HabitsManagerRoutineDetail({
             minHeight: 0,
           }}
         >
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{
-              display: 'block',
-              mb: 0.25,
-              fontSize: '0.6875rem',
-              fontWeight: 500,
-              letterSpacing: '0.03em',
-              flexShrink: 0,
-            }}
-          >
-            Hábitos de la rutina
-          </Typography>
           <HabitChainAfterPicker
             habits={habits}
             customSections={customSections}

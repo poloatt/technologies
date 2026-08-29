@@ -20,6 +20,17 @@ function stepKey(section, habitId) {
   return `${section}:${habitId}`;
 }
 
+const PICKER_SECTION_LABEL_SX = {
+  display: 'block',
+  px: 1.25,
+  pb: 0.25,
+  fontSize: '0.6875rem',
+  fontWeight: 500,
+  letterSpacing: '0.03em',
+  color: 'text.secondary',
+  flexShrink: 0,
+};
+
 function HabitPickRow({
   habit,
   selected,
@@ -282,122 +293,215 @@ export default function HabitChainAfterPicker({
         overflow: 'hidden',
       }}
     >
-      {pinSelectedAboveGroups && selectedEntries.length > 0 && (
-        <Box
-          role="listbox"
-          aria-multiselectable="true"
-          aria-label="Hábitos seleccionados de la rutina"
-          sx={{
-            flexShrink: 0,
-            pt: 0.25,
-            pb: 0.75,
-            maxHeight: fillHeight ? 'min(36vh, 280px)' : 240,
-            overflowY: 'auto',
-          }}
-        >
-          {canSortSelected ? (
-            <DndContext
-              sensors={selectedSensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleSelectedDragEnd}
+      {pinSelectedAboveGroups && (
+        <Box sx={{ flexShrink: 0, pt: 0.25 }}>
+          <Typography variant="caption" sx={PICKER_SECTION_LABEL_SX}>
+            {HABIT_CHAIN_COPY.routineHabitsLabel}
+          </Typography>
+          {selectedEntries.length > 0 && (
+            <Box
+              role="listbox"
+              aria-multiselectable="true"
+              aria-label={HABIT_CHAIN_COPY.routineHabitsLabel}
+              sx={{
+                pb: 0.75,
+                maxHeight: fillHeight ? 'min(36vh, 280px)' : 240,
+                overflowY: 'auto',
+              }}
             >
-              {selectedEntries.map(({ habit, section }) => {
-                const habitId = habit.id || habit._id;
-                const id = stepKey(section, habitId);
-                return (
-                  <HabitPickRow
-                    key={id}
-                    habit={habit}
-                    selected
-                    stepId={id}
-                    sortable
-                    onToggle={(hid) => toggleHabit(section, hid)}
-                  />
-                );
-              })}
-            </DndContext>
-          ) : (
-            selectedEntries.map(({ habit, section }) => {
-              const habitId = habit.id || habit._id;
-              return (
-                <HabitPickRow
-                  key={stepKey(section, habitId)}
-                  habit={habit}
-                  selected
-                  onToggle={(id) => toggleHabit(section, id)}
-                />
-              );
-            })
+              {canSortSelected ? (
+                <DndContext
+                  sensors={selectedSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleSelectedDragEnd}
+                >
+                  {selectedEntries.map(({ habit, section }) => {
+                    const habitId = habit.id || habit._id;
+                    const id = stepKey(section, habitId);
+                    return (
+                      <HabitPickRow
+                        key={id}
+                        habit={habit}
+                        selected
+                        stepId={id}
+                        sortable
+                        onToggle={(hid) => toggleHabit(section, hid)}
+                      />
+                    );
+                  })}
+                </DndContext>
+              ) : (
+                selectedEntries.map(({ habit, section }) => {
+                  const habitId = habit.id || habit._id;
+                  return (
+                    <HabitPickRow
+                      key={stepKey(section, habitId)}
+                      habit={habit}
+                      selected
+                      onToggle={(id) => toggleHabit(section, id)}
+                    />
+                  );
+                })
+              )}
+            </Box>
           )}
         </Box>
       )}
 
-      {sectionsForTabs.length > 0 && (
-      <Tabs
-        value={activeSection}
-        onChange={(_, value) => setActiveSection(value)}
-        variant="scrollable"
-        scrollButtons="auto"
-        allowScrollButtonsMobile
-        sx={{
-          position: fillHeight ? 'relative' : 'sticky',
-          top: 0,
-          zIndex: 1,
-          flexShrink: 0,
-          bgcolor: 'background.default',
-          minHeight: 40,
-          borderBottom: 1,
-          borderColor: 'divider',
-          '& .MuiTab-root': {
-            minHeight: 40,
-            py: 1,
-            px: 1.5,
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            textTransform: 'none',
-          },
-        }}
-      >
-        {sectionsForTabs.map(({ value, label }) => (
-          <Tab key={value} label={label} value={value} />
-        ))}
-      </Tabs>
-      )}
-
-      <Box
-        role="listbox"
-        aria-multiselectable="true"
-        aria-label={HABIT_CHAIN_COPY.pickLabel}
-        sx={{
-          pt: 0.75,
-          pb: 0.25,
-          flex: fillHeight ? 1 : undefined,
-          minHeight: fillHeight ? 0 : undefined,
-          maxHeight: fillHeight ? undefined : 200,
-          overflowY: 'auto',
-        }}
-      >
-        {visibleHabits.map((habit) => {
-          const habitId = habit.id || habit._id;
-          const key = stepKey(activeSection, habitId);
-          return (
-            <HabitPickRow
-              key={key}
-              habit={habit}
-              selected={!pinSelectedAboveGroups && selectedKeys.has(key)}
-              onToggle={(id) => toggleHabit(activeSection, id)}
-            />
-          );
-        })}
-
-        {visibleHabits.length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
-            {pinSelectedAboveGroups && selectedEntries.length > 0
-              ? 'Todos los hábitos de este grupo están en la rutina'
-              : HABIT_CHAIN_COPY.emptySection}
+      {pinSelectedAboveGroups && sectionsForTabs.length > 0 ? (
+        <Box
+          sx={{
+            display: fillHeight ? 'flex' : 'block',
+            flexDirection: fillHeight ? 'column' : undefined,
+            flex: fillHeight ? 1 : undefined,
+            minHeight: fillHeight ? 0 : undefined,
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              ...PICKER_SECTION_LABEL_SX,
+              pt: 0.75,
+            }}
+          >
+            {HABIT_CHAIN_COPY.addHabitsLabel}
           </Typography>
-        )}
-      </Box>
+          <Tabs
+            value={activeSection}
+            onChange={(_, value) => setActiveSection(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              position: fillHeight ? 'relative' : 'sticky',
+              top: 0,
+              zIndex: 1,
+              flexShrink: 0,
+              bgcolor: 'background.default',
+              minHeight: 40,
+              borderBottom: 1,
+              borderColor: 'divider',
+              '& .MuiTab-root': {
+                minHeight: 40,
+                py: 1,
+                px: 1.5,
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                textTransform: 'none',
+              },
+            }}
+          >
+            {sectionsForTabs.map(({ value, label }) => (
+              <Tab key={value} label={label} value={value} />
+            ))}
+          </Tabs>
+          <Box
+            role="listbox"
+            aria-multiselectable="true"
+            aria-label={HABIT_CHAIN_COPY.addHabitsLabel}
+            sx={{
+              pt: 0.75,
+              pb: 0.25,
+              flex: fillHeight ? 1 : undefined,
+              minHeight: fillHeight ? 0 : undefined,
+              maxHeight: fillHeight ? undefined : 200,
+              overflowY: 'auto',
+            }}
+          >
+            {visibleHabits.map((habit) => {
+              const habitId = habit.id || habit._id;
+              const key = stepKey(activeSection, habitId);
+              return (
+                <HabitPickRow
+                  key={key}
+                  habit={habit}
+                  selected={false}
+                  onToggle={(id) => toggleHabit(activeSection, id)}
+                />
+              );
+            })}
+
+            {visibleHabits.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
+                {selectedEntries.length > 0
+                  ? 'Todos los hábitos de este grupo están en la rutina'
+                  : HABIT_CHAIN_COPY.emptySection}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      ) : (
+        <>
+          {sectionsForTabs.length > 0 && (
+            <Tabs
+              value={activeSection}
+              onChange={(_, value) => setActiveSection(value)}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+              sx={{
+                position: fillHeight ? 'relative' : 'sticky',
+                top: 0,
+                zIndex: 1,
+                flexShrink: 0,
+                bgcolor: 'background.default',
+                minHeight: 40,
+                borderBottom: 1,
+                borderColor: 'divider',
+                '& .MuiTab-root': {
+                  minHeight: 40,
+                  py: 1,
+                  px: 1.5,
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                },
+              }}
+            >
+              {sectionsForTabs.map(({ value, label }) => (
+                <Tab key={value} label={label} value={value} />
+              ))}
+            </Tabs>
+          )}
+
+          <Box
+            role="listbox"
+            aria-multiselectable="true"
+            aria-label={HABIT_CHAIN_COPY.pickLabel}
+            sx={{
+              pt: 0.75,
+              pb: 0.25,
+              flex: fillHeight ? 1 : undefined,
+              minHeight: fillHeight ? 0 : undefined,
+              maxHeight: fillHeight ? undefined : 200,
+              overflowY: 'auto',
+            }}
+          >
+            {visibleHabits.map((habit) => {
+              const habitId = habit.id || habit._id;
+              const key = stepKey(activeSection, habitId);
+              return (
+                <HabitPickRow
+                  key={key}
+                  habit={habit}
+                  selected={!pinSelectedAboveGroups && selectedKeys.has(key)}
+                  onToggle={(id) => toggleHabit(activeSection, id)}
+                />
+              );
+            })}
+
+            {visibleHabits.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
+                {pinSelectedAboveGroups && selectedEntries.length > 0
+                  ? 'Todos los hábitos de este grupo están en la rutina'
+                  : HABIT_CHAIN_COPY.emptySection}
+              </Typography>
+            )}
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

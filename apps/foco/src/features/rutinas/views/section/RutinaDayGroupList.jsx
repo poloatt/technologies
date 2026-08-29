@@ -377,6 +377,7 @@ export default function RutinaDayGroupList({
             habitsPreferences={habitsPreferences}
             readOnly={readOnly}
             onToggle={handleCarouselToggle}
+            centerWhenFits={useSectionFranjaLayout ? false : undefined}
           />
         </Box>
       )}
@@ -460,6 +461,7 @@ export default function RutinaDayGroupList({
           readOnly={readOnly}
           onToggle={handleDoneToggle}
           showDivider={hasToday || notToday.length > 0 || sinHacer.length > 0 || luegoByFranja.length > 0}
+          alignIconsLeft={useSectionFranjaLayout}
         />
       )}
     </>

@@ -26,9 +26,11 @@ export default function RutinaDoneCarousel({
   habitsPreferences = {},
   readOnly = false,
   onToggle,
+  centerWhenFits: centerWhenFitsProp,
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
+  const centerWhenFits = centerWhenFitsProp ?? isMobileOrTablet;
   const { size, bg, hoverBg, rail, iconFontSize } = getHabitCarouselSurface(theme, {
     dense: !isMobileOrTablet,
     mobile: isMobileOrTablet,
@@ -123,7 +125,7 @@ export default function RutinaDoneCarousel({
         theme={theme}
         scrollTrackSx={scrollTrackSx}
         enableDragScroll={!readOnly}
-        centerWhenFits={isMobileOrTablet}
+        centerWhenFits={centerWhenFits}
         bind={bind}
         mergeScrollRef={(node) => {
           scrollRef.current = node;

@@ -47,9 +47,11 @@ export default function RutinaFranjaIconCarousel({
   habitsPreferences = {},
   readOnly = false,
   onToggle,
+  centerWhenFits: centerWhenFitsProp,
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
+  const centerWhenFits = centerWhenFitsProp ?? isMobileOrTablet;
   const carouselMode = resolveCarouselMode(franjaKey, activeFranjaKey);
   const currentTimeOfDay = resolveViewingTimeOfDay(rutina);
 
@@ -160,7 +162,7 @@ export default function RutinaFranjaIconCarousel({
       theme={theme}
       scrollTrackSx={scrollTrackSx}
       enableDragScroll={!readOnly}
-      centerWhenFits={isMobileOrTablet}
+      centerWhenFits={centerWhenFits}
       bind={bind}
       mergeScrollRef={(node) => {
         scrollRef.current = node;
