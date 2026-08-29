@@ -4,9 +4,10 @@ import { useTheme } from '@mui/material/styles';
 import { isSameDay, startOfDay } from 'date-fns';
 import { getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
 import { getCurrentTimeOfDay, VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
-import { resolveRutinaItemConfig, resolveEntryFranjaFocusHorario } from '@shared/habits';
+import { resolveRutinaItemConfig, resolveEntryFranjaFocusHorario, groupEntriesIntoDisplayRows } from '@shared/habits';
 import HabitCarouselIconButton from '@shared/components/habits/HabitCarouselIconButton';
 import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScrollTrack';
+import { RoutineCarouselStackCluster } from '@shared/components/habits/routines';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 import useResponsive from '@shared/hooks/useResponsive';
 import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
@@ -49,9 +50,13 @@ export default function RutinaFranjaIconCarousel({
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
-  const items = pending;
   const carouselMode = resolveCarouselMode(franjaKey, activeFranjaKey);
   const currentTimeOfDay = resolveViewingTimeOfDay(rutina);
+
+  const displayRows = useMemo(
+    () => groupEntriesIntoDisplayRows(pending),
+    [pending],
+  );
 
   const { size, bg, hoverBg, rail, iconFontSize } = getHabitCarouselSurface(theme, {
     dense: !isMobileOrTablet,
@@ -87,11 +92,70 @@ export default function RutinaFranjaIconCarousel({
     onToggle?.(section, itemId, horario);
   }, [dragRef, onToggle]);
 
-  if (!items.length) return null;
+  const renderEntryIcon = useCallback((entry) => {
+    const section = entry.section;
+    const { itemId, label, Icon } = entry;
+    if (!Icon || !section) return null;
+
+    const itemConfig = resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences);
+    const itemValue = rutina?.[section]?.[itemId];
+    const displayHorario = resolveEntryHorario(entry);
+    const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
+    const isNotToday = entry.isScheduled === false;
+    const isActiveFranja = franjaKey === activeFranjaKey;
+    const carouselSlot = isNotToday
+      ? 'notToday'
+      : (isActiveFranja ? 'ahora' : 'inactiveFranja');
+
+    return (
+      <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
+        <HabitCarouselIconButton
+          section={section}
+          itemId={itemId}
+          Icon={Icon}
+          label={label}
+          itemConfig={itemConfig}
+          itemValue={itemValue}
+          currentTimeOfDay={currentTimeOfDay}
+          rutinaHoy={rutina}
+          mode={carouselMode}
+          displayHorario={displayHorario}
+          carouselSlot={carouselSlot}
+          isScheduled={!isNotToday}
+          dense={!isMobileOrTablet}
+          interactive={!readOnly}
+          showCompletionState
+          bg={bg}
+          hoverBg={hoverBg}
+          rail={rail}
+          size={size}
+          iconFontSize={iconFontSize}
+          onToggle={handleToggle}
+        />
+      </Box>
+    );
+  }, [
+    activeFranjaKey,
+    bg,
+    carouselMode,
+    currentTimeOfDay,
+    franjaKey,
+    habitsPreferences,
+    hoverBg,
+    iconFontSize,
+    isMobileOrTablet,
+    rail,
+    readOnly,
+    rutina,
+    size,
+    handleToggle,
+  ]);
+
+  if (!displayRows.length) return null;
 
   return (
     <HabitCarouselScrollTrack
-      itemCount={items.length}
+      itemCount={displayRows.length}
       fadeColor={hubSectionBg}
       theme={theme}
       scrollTrackSx={scrollTrackSx}
@@ -102,48 +166,15 @@ export default function RutinaFranjaIconCarousel({
         scrollRef.current = node;
       }}
     >
-      {items.map((entry) => {
-        const section = entry.section;
-        const { itemId, label, Icon } = entry;
-        if (!Icon || !section) return null;
-
-        const itemConfig = resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences);
-        const itemValue = rutina?.[section]?.[itemId];
-        const displayHorario = resolveEntryHorario(entry);
-        const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
-        const isNotToday = entry.isScheduled === false;
-        const isActiveFranja = franjaKey === activeFranjaKey;
-        const carouselSlot = isNotToday
-          ? 'notToday'
-          : (isActiveFranja ? 'ahora' : 'inactiveFranja');
-
-        return (
-          <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
-            <HabitCarouselIconButton
-              section={section}
-              itemId={itemId}
-              Icon={Icon}
-              label={label}
-              itemConfig={itemConfig}
-              itemValue={itemValue}
-              currentTimeOfDay={currentTimeOfDay}
-              rutinaHoy={rutina}
-              mode={carouselMode}
-              displayHorario={displayHorario}
-              carouselSlot={carouselSlot}
-              isScheduled={!isNotToday}
-              dense={!isMobileOrTablet}
-              interactive={!readOnly}
-              showCompletionState
-              bg={bg}
-              hoverBg={hoverBg}
-              rail={rail}
-              size={size}
-              iconFontSize={iconFontSize}
-              onToggle={handleToggle}
-            />
-          </Box>
-        );
+      {displayRows.map((row) => {
+        if (row.kind === 'stack') {
+          return (
+            <RoutineCarouselStackCluster key={`stack-${row.chainId}`} chainId={row.chainId}>
+              {row.entries.map((entry) => renderEntryIcon(entry))}
+            </RoutineCarouselStackCluster>
+          );
+        }
+        return renderEntryIcon(row.entry);
       })}
     </HabitCarouselScrollTrack>
   );

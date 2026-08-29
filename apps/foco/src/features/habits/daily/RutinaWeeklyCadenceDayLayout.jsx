@@ -13,7 +13,6 @@ export default function RutinaWeeklyCadenceDayLayout({
   rutina,
   readOnly,
   onItemClick,
-  onEditHabit,
   habitsPreferences = {},
   localDataBySection = {},
 }) {
@@ -60,7 +59,6 @@ export default function RutinaWeeklyCadenceDayLayout({
               onDoneToggle={(entrySection, itemId, event, horario) => {
                 onItemClick(entrySection, itemId, event, horario);
               }}
-              onEditHabit={onEditHabit}
             />
           </Box>
         );

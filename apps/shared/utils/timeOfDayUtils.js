@@ -161,7 +161,7 @@ export const getTimeOfDayLabels = (horarios) => {
     return '';
   }
   
-  return horarios.map(getTimeOfDayLabel).join(', ');
+  return normalizeTimeOfDay(horarios).map(getTimeOfDayLabel).join(', ');
 };
 
 /**
@@ -197,13 +197,14 @@ export const normalizeTimeOfDay = (horarios) => {
     return [];
   }
   
-  // Normalizar a mayúsculas y eliminar duplicados
+  // Normalizar a mayúsculas, eliminar duplicados y ordenar: MAÑANA → TARDE → NOCHE
   const normalized = horarios
     .map(h => String(h).toUpperCase())
     .filter(h => VALID_TIME_OF_DAY.includes(h));
-  
-  // Eliminar duplicados
-  return [...new Set(normalized)];
+
+  return [...new Set(normalized)].sort(
+    (a, b) => VALID_TIME_OF_DAY.indexOf(a) - VALID_TIME_OF_DAY.indexOf(b),
+  );
 };
 
 export default {

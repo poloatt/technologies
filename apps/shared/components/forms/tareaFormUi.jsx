@@ -20,3 +20,4 @@ export {
 export { default as TareaFormDialogShell } from './TareaFormDialogShell';
 export { default as TareaFormAttachmentsSection } from './TareaFormAttachmentsSection';
 export { useTareaFormAttachments } from './useTareaFormAttachments';
+export { default as TareaFormPillSelectRenameRow } from './TareaFormPillSelectRenameRow';

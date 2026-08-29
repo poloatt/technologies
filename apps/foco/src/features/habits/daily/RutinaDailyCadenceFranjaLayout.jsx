@@ -31,7 +31,7 @@ export default function RutinaDailyCadenceFranjaLayout({
   rutina,
   readOnly,
   onItemClick,
-  onEditHabit,
+  habits = null,
   habitsPreferences = {},
   localDataBySection = {},
 }) {
@@ -72,6 +72,7 @@ export default function RutinaDailyCadenceFranjaLayout({
       done={group.done}
       notToday={group.notToday}
       rutina={rutina}
+      habits={habits}
       readOnly={readOnly}
       sortable={false}
       multiSection
@@ -87,7 +88,6 @@ export default function RutinaDailyCadenceFranjaLayout({
       onDoneToggle={(entrySection, itemId, event, horario) => {
         onItemClick(entrySection, itemId, event, horario);
       }}
-      onEditHabit={onEditHabit}
     />
   );
 

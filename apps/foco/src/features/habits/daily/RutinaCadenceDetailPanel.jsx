@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useHabits } from '@shared/context';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import RutinaCadenceBucketList from './RutinaCadenceBucketList';
-import HabitFormDialog from '@shared/components/HabitFormDialog';
 import { groupRutinaHabitsByCadence } from '@shared/habits';
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 
@@ -17,11 +17,7 @@ export default function RutinaCadenceDetailPanel({
   onItemClick,
 }) {
   const { reorderHabits } = useHabits();
-  const [editingHabitDialog, setEditingHabitDialog] = useState({
-    open: false,
-    habit: null,
-    section: null,
-  });
+  const { habitChains, prefsReady } = useHabitsPreferences();
 
   const habitIconsMap = useMemo(
     () => buildHabitSectionIconsMap(habits).iconsMap,
@@ -33,15 +29,12 @@ export default function RutinaCadenceDetailPanel({
       rutina,
       habits,
       habitsPreferences,
+      habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
     });
     return buckets.find((b) => b.id === bucketId) || null;
-  }, [bucketId, rutina, habits, habitsPreferences, customSections, habitIconsMap]);
-
-  const handleEditHabit = useCallback((habit, section) => {
-    setEditingHabitDialog({ open: true, habit, section });
-  }, []);
+  }, [bucketId, rutina, habits, habitsPreferences, habitChains, prefsReady, customSections, habitIconsMap]);
 
   const handleReorderSection = useCallback(async (section, habitIds) => {
     if (!habitIds?.length || !section) return;
@@ -79,37 +72,27 @@ export default function RutinaCadenceDetailPanel({
   }
 
   return (
-    <>
-      <Box
-        role="region"
-        aria-label="Detalle de hábitos por cadencia"
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-        }}
-      >
-        <RutinaCadenceBucketList
-          bucket={bucket}
-          rutina={rutina}
-          readOnly={readOnly}
-          sortable
-          habits={habits}
-          habitsPreferences={habitsPreferences}
-          onItemClick={handleBucketItemClick}
-          onEditHabit={handleEditHabit}
-          onReorderSection={handleReorderSection}
-        />
-      </Box>
-
-      <HabitFormDialog
-        open={editingHabitDialog.open}
-        onClose={() => setEditingHabitDialog({ open: false, habit: null, section: null })}
-        editingHabit={editingHabitDialog.habit}
-        editingSection={editingHabitDialog.section}
+    <Box
+      role="region"
+      aria-label="Detalle de hábitos por cadencia"
+      sx={{
+        flex: 1,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+      }}
+    >
+      <RutinaCadenceBucketList
+        bucket={bucket}
+        rutina={rutina}
+        readOnly={readOnly}
+        sortable
+        habits={habits}
+        habitsPreferences={habitsPreferences}
+        onItemClick={handleBucketItemClick}
+        onReorderSection={handleReorderSection}
       />
-    </>
+    </Box>
   );
 }

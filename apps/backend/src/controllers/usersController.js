@@ -8,7 +8,7 @@ import {
   isValidHabitSection,
   markCustomHabitsSectionModified,
 } from '../utils/habitSectionsUtils.js';
-import { findHabitIndexInSection, getHabitId, generateHabitId } from '@attadia/shared/habits';
+import { findHabitIndexInSection, getHabitId, generateHabitId, validateHabitChains } from '@attadia/shared/habits';
 
 export const usersController = {
   getProfile: async (req, res) => {
@@ -541,9 +541,8 @@ export const usersController = {
    */
   getHabitPreferences: async (req, res) => {
     try {
-      // Obtener el usuario actual
       const user = await Users.findById(req.user.id)
-        .select('preferences.rutinasConfig')
+        .select('preferences.rutinasConfig preferences.habitChains')
         .lean();
       
       if (!user) {
@@ -554,6 +553,7 @@ export const usersController = {
       if (!user.preferences || !user.preferences.rutinasConfig) {
         return res.json({
           habits: {},
+          habitChains: [],
           _metadata: {
             version: 1,
             createdAt: new Date()
@@ -586,6 +586,9 @@ export const usersController = {
 
       res.json({
         habits,
+        habitChains: Array.isArray(user.preferences?.habitChains)
+          ? user.preferences.habitChains
+          : [],
         _metadata: rawConfig._metadata || {
           version: 1,
           createdAt: new Date(),
@@ -1428,6 +1431,57 @@ export const usersController = {
         error: 'Error al reordenar hábitos',
         message: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  },
+
+  /**
+   * Actualiza rutinas encadenadas (habitChains).
+   * PUT /api/users/habit-chains
+   */
+  updateHabitChains: async (req, res) => {
+    try {
+      const { habitChains } = req.body;
+
+      if (!Array.isArray(habitChains)) {
+        return res.status(400).json({
+          error: 'Datos inválidos',
+          message: 'Se requiere un array "habitChains"',
+        });
+      }
+
+      const user = await Users.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      ensureCustomHabits(user, { seedDefaults: false });
+      const validationErrors = validateHabitChains(habitChains, user.customHabits || {});
+      if (validationErrors.length > 0) {
+        return res.status(400).json({
+          error: 'Cadenas inválidas',
+          message: validationErrors.join('; '),
+          details: validationErrors,
+        });
+      }
+
+      if (!user.preferences) {
+        user.preferences = {};
+      }
+      user.preferences.habitChains = habitChains;
+      user.markModified('preferences');
+      user.markModified('preferences.habitChains');
+      await user.save();
+
+      res.json({
+        message: 'Cadenas de hábitos actualizadas',
+        habitChains: user.preferences.habitChains,
+      });
+    } catch (error) {
+      console.error('[usersController] Error al actualizar habitChains:', error);
+      res.status(500).json({
+        error: 'Error al actualizar cadenas de hábitos',
+        message: error.message,
       });
     }
   },

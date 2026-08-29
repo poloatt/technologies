@@ -10,9 +10,11 @@ import {
   resolveRutinaItemConfig,
   getCadenceBucketCarouselItems,
   habitRequiresExpandedCarouselToggle,
+  groupEntriesIntoDisplayRows,
 } from '@shared/habits';
 import HabitCarouselIconButton from '@shared/components/habits/HabitCarouselIconButton';
 import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScrollTrack';
+import { RoutineCarouselStackCluster } from '@shared/components/habits/routines';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 import useResponsive from '@shared/hooks/useResponsive';
 import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
@@ -24,6 +26,7 @@ export default function RutinaCadenceCarousel({
   rutina,
   habits,
   habitsPreferences = {},
+  habitChains = [],
   customSections = [],
   onToggle,
   interactive = true,
@@ -67,11 +70,17 @@ export default function RutinaCadenceCarousel({
       rutina,
       habits,
       habitsPreferences,
+      habitChains,
       iconsMap: sectionIconsMap,
       currentTimeOfDay,
       customSections,
     }),
-    [bucketId, rutina, habits, habitsPreferences, sectionIconsMap, currentTimeOfDay, customSections],
+    [bucketId, rutina, habits, habitsPreferences, habitChains, sectionIconsMap, currentTimeOfDay, customSections],
+  );
+
+  const displayRows = useMemo(
+    () => groupEntriesIntoDisplayRows(carouselItems),
+    [carouselItems],
   );
 
   const scrollTrackSx = useMemo(() => ({
@@ -99,7 +108,7 @@ export default function RutinaCadenceCarousel({
     onToggle?.(section, itemId, horario);
   }, [dragRef, onToggle]);
 
-  if (!carouselItems.length) return null;
+  if (!displayRows.length) return null;
 
   const fadeColor = hubSectionBg;
 
@@ -123,7 +132,7 @@ export default function RutinaCadenceCarousel({
       }}
     >
       <HabitCarouselScrollTrack
-        itemCount={carouselItems.length}
+        itemCount={displayRows.length}
         fadeColor={fadeColor}
         theme={theme}
         scrollTrackSx={scrollTrackSx}
@@ -133,53 +142,65 @@ export default function RutinaCadenceCarousel({
           scrollRef.current = node;
         }}
       >
-        {carouselItems.map(({
-          itemId,
-          section,
-          label,
-          Icon,
-          isCadenciaDebt,
-          isScheduled,
-          isCompleted,
-          carouselSlot,
-        }) => {
-          if (!Icon) return null;
+        {displayRows.map((row) => {
+          const renderItem = (entry) => {
+            const {
+              itemId,
+              section,
+              label,
+              Icon,
+              isCadenciaDebt,
+              isScheduled,
+              carouselSlot,
+            } = entry;
+            if (!Icon) return null;
 
-          const displayLabel = label || getHabitDisplayLabel(section, itemId, habits);
-          const itemConfig = resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences);
-          const itemValue = rutina?.[section]?.[itemId];
-          const requireExpand = embedInHeader && habitRequiresExpandedCarouselToggle(itemConfig);
-          const carouselKey = `${section}-${itemId}`;
+            const displayLabel = label || getHabitDisplayLabel(section, itemId, habits);
+            const itemConfig = resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences);
+            const itemValue = rutina?.[section]?.[itemId];
+            const requireExpand = embedInHeader && habitRequiresExpandedCarouselToggle(itemConfig);
+            const carouselKey = `${section}-${itemId}`;
 
-          return (
-            <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
-              <HabitCarouselIconButton
-                section={section}
-                itemId={itemId}
-                Icon={Icon}
-                label={displayLabel}
-                itemConfig={itemConfig}
-                itemValue={itemValue}
-                currentTimeOfDay={currentTimeOfDay}
-                rutinaHoy={rutina}
-                mode="ahora"
-                isCadenciaDebt={Boolean(isCadenciaDebt)}
-                dense={isDense && !isMobile}
-                interactive={interactive}
-                requireExpand={requireExpand}
-                onRequireExpand={onRequireExpand}
-                showCompletionState
-                isScheduled={isScheduled}
-                carouselSlot={carouselSlot}
-                bg={bg}
-                hoverBg={hoverBg}
-                rail={rail}
-                size={size}
-                iconFontSize={iconFontSize}
-                onToggle={handleToggle}
-              />
-            </Box>
-          );
+            return (
+              <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
+                <HabitCarouselIconButton
+                  section={section}
+                  itemId={itemId}
+                  Icon={Icon}
+                  label={displayLabel}
+                  itemConfig={itemConfig}
+                  itemValue={itemValue}
+                  currentTimeOfDay={currentTimeOfDay}
+                  rutinaHoy={rutina}
+                  mode="ahora"
+                  isCadenciaDebt={Boolean(isCadenciaDebt)}
+                  dense={isDense && !isMobile}
+                  interactive={interactive}
+                  requireExpand={requireExpand}
+                  onRequireExpand={onRequireExpand}
+                  showCompletionState
+                  isScheduled={isScheduled}
+                  carouselSlot={carouselSlot}
+                  bg={bg}
+                  hoverBg={hoverBg}
+                  rail={rail}
+                  size={size}
+                  iconFontSize={iconFontSize}
+                  onToggle={handleToggle}
+                />
+              </Box>
+            );
+          };
+
+          if (row.kind === 'stack') {
+            return (
+              <RoutineCarouselStackCluster key={`stack-${row.chainId}`} chainId={row.chainId}>
+                {row.entries.map((entry) => renderItem(entry))}
+              </RoutineCarouselStackCluster>
+            );
+          }
+
+          return renderItem(row.entry);
         })}
       </HabitCarouselScrollTrack>
     </Box>

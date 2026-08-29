@@ -213,6 +213,7 @@ export function groupRutinaHabitsByCadence({
   rutina,
   habits = null,
   habitsPreferences = null,
+  habitChains = [],
   customSections = [],
   iconsMap = null,
   localDataBySection = {},
@@ -229,6 +230,8 @@ export function groupRutinaHabitsByCadence({
       habits,
       habitsPreferences,
       localData: sectionLocal,
+      localDataBySection,
+      habitChains,
       iconsMap,
     });
 
@@ -293,6 +296,7 @@ export function getCadenceBucketCarouselItems({
   rutina,
   habits = null,
   habitsPreferences = null,
+  habitChains = [],
   iconsMap = null,
   currentTimeOfDay = 'MAÑANA',
   customSections = [],
@@ -305,6 +309,7 @@ export function getCadenceBucketCarouselItems({
       rutina,
       habits,
       habitsPreferences,
+      habitChains,
       iconsMap,
       currentTimeOfDay,
     }).forEach((entry) => {

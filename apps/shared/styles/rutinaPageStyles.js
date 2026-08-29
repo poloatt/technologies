@@ -303,6 +303,150 @@ export const rutinaChecklistMetaSx = {
   whiteSpace: 'nowrap',
 };
 
+export const rutinaChainRowWrapSx = {
+  position: 'relative',
+};
+
+export const rutinaStackRowSx = {
+  display: 'flex',
+  flexDirection: 'row',
+  alignItems: 'stretch',
+  gap: 0.75,
+  width: '100%',
+  minWidth: 0,
+};
+
+/** Fila compacta: hábitos apilados lado a lado, misma altura que filas normales. */
+export const rutinaStackRowInlineSx = {
+  display: 'flex',
+  flexDirection: 'row',
+  alignItems: 'stretch',
+  gap: 0,
+  width: '100%',
+  minWidth: 0,
+};
+
+/** Fila compacta en vista de grupo: ancho según contenido, sin estirar celdas. */
+export const rutinaStackRowCompactSx = {
+  display: 'inline-flex',
+  flexDirection: 'row',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 1.25,
+  maxWidth: '100%',
+};
+
+export const rutinaStackRowWrapCompactSx = {
+  width: '100%',
+  minWidth: 0,
+  mb: 0.5,
+};
+
+export const rutinaStackRowWrapSx = {
+  width: '100%',
+  minWidth: 0,
+  mb: 0.5,
+};
+
+export const rutinaStackRowHeaderSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 0.5,
+  px: 0.5,
+  pb: 0.35,
+  minWidth: 0,
+};
+
+export const rutinaStackCellSx = {
+  flex: '1 1 0',
+  minWidth: 0,
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: 1.5,
+  overflow: 'hidden',
+  bgcolor: 'background.default',
+  position: 'relative',
+};
+
+/** Celda inline sin borde — mismo aspecto que un hábito suelto. */
+export const rutinaStackCellInlineSx = {
+  flex: '1 1 0',
+  minWidth: 0,
+  overflow: 'hidden',
+  position: 'relative',
+};
+
+/** Celda compacta: solo el ancho necesario, sin borde ni meta. */
+export const rutinaStackCellCompactSx = {
+  flex: '0 0 auto',
+  minWidth: 0,
+  maxWidth: 180,
+  overflow: 'hidden',
+  position: 'relative',
+};
+
+export const rutinaChecklistStackCellItemSx = {
+  px: 0.75,
+  py: 0.75,
+  mb: 0,
+  width: '100%',
+  height: '100%',
+};
+
+export const rutinaChecklistStackCellRowSx = {
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'flex-start',
+  gap: 0.35,
+  textAlign: 'center',
+  position: 'relative',
+  width: '100%',
+  py: 0.25,
+};
+
+export const rutinaChecklistStackCellContentSx = {
+  alignItems: 'center',
+  justifyContent: 'center',
+  textAlign: 'center',
+  width: '100%',
+  flexDirection: 'column',
+  gap: 0.15,
+};
+
+export const rutinaChecklistStackCellTextSx = {
+  alignItems: 'center',
+  width: '100%',
+};
+
+export const rutinaChecklistStackCellActionsSx = {
+  position: 'absolute',
+  top: 2,
+  right: 2,
+  zIndex: 1,
+};
+
+export const rutinaChainConnectorSx = {
+  position: 'absolute',
+  left: 19,
+  top: -10,
+  bottom: '50%',
+  width: 2,
+  bgcolor: 'divider',
+  borderRadius: 1,
+  pointerEvents: 'none',
+};
+
+export const rutinaChainChipSx = {
+  fontSize: '0.65rem',
+  height: 18,
+  ml: 0.5,
+  verticalAlign: 'middle',
+};
+
+export const rutinaChainLockedRowSx = {
+  opacity: 0.55,
+};
+
 export const rutinaHorariosRowSx = {
   display: 'flex',
   alignItems: 'center',

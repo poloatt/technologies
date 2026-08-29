@@ -2,6 +2,7 @@
  * Utilidades compartidas para el estado de completitud de hábitos.
  * Soporta formato legacy (boolean) y formato por horario ({ MAÑANA: true, ... }).
  */
+import { normalizeTimeOfDay } from '../../utils/timeOfDayUtils.js';
 
 function isDailyCadence(config = {}) {
   const tipo = (config?.tipo || 'DIARIO').toUpperCase();
@@ -10,8 +11,7 @@ function isDailyCadence(config = {}) {
 }
 
 function normalizeHorarios(horarios) {
-  if (!Array.isArray(horarios)) return [];
-  return horarios.map((h) => String(h).toUpperCase()).filter(Boolean);
+  return normalizeTimeOfDay(horarios);
 }
 
 /** Valor inicial de completado según config (boolean o objeto por franja). */

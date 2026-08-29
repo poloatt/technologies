@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Dialog, DialogContent, Typography, Box, Button } from '@mui/material';
-import { useResponsive, useHabitSectionCreateOption } from '@shared/hooks';
+import { Dialog, DialogContent, Box, Button, Divider } from '@mui/material';
+import { useResponsive, useHabitSectionCreateOption, useRoutineAssignment } from '@shared/hooks';
 import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
 import { useHabits, useRutinas } from '@shared/context';
 import clienteAxios from '@shared/config/axios';
@@ -9,7 +9,11 @@ import {
   TareaFormHeader,
 } from '@shared/components/forms/tareaFormUi';
 import { generateHabitId } from '@shared/habits/form';
-import { invalidateHabitsPreferencesCache } from '@shared/hooks/useHabitsPreferences';
+import { invalidateHabitsPreferencesCache, updateHabitChainsOnApi } from '@shared/hooks/useHabitsPreferences';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
+import { normalizeHabitStep, removeHabitFromChains, resolveSectionIconKey, updateHabitChainLabel } from '@shared/habits';
+import { NEW_HABIT_CHAIN_VALUE } from '@shared/habits/routines';
+import { Z_INDEX } from '@shared/config/uiConstants';
 import { DEFAULT_HABIT_CONFIG } from '@shared/habits/form';
 import { DEFAULT_HABIT_ICON } from '@shared/utils/habitIcons';
 import {
@@ -17,9 +21,11 @@ import {
   getHabitConfig,
   normalizeManagerConfig,
 } from '@shared/habits/form/habitsManagerUtils';
-import HabitsManagerSectionTabs from './HabitsManagerSectionTabs';
 import HabitsManagerList from './HabitsManagerList';
 import HabitsManagerDetail from './HabitsManagerDetail';
+import HabitsManagerSidebarHeader from './HabitsManagerSidebarHeader';
+import HabitsManagerRoutinesList from './HabitsManagerRoutinesList';
+import HabitsManagerRoutineDetail from './HabitsManagerRoutineDetail';
 
 const EMPTY_FORM = {
   label: '',
@@ -38,7 +44,10 @@ export const HabitsManager = ({ open, onClose }) => {
     updateHabit,
     deleteHabit,
     reorderHabits,
+    customSections,
+    updateHabitSection,
   } = useHabits();
+  const { habitChains, prefsReady } = useHabitsPreferences();
   const { updateUserHabitPreference } = useRutinas();
 
   const [currentSection, setCurrentSection] = useState('bodyCare');
@@ -50,8 +59,38 @@ export const HabitsManager = ({ open, onClose }) => {
   const [editDraft, setEditDraft] = useState(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [mobileListExpanded, setMobileListExpanded] = useState(false);
+  const [managerMode, setManagerMode] = useState('habits');
+  const [expandedSection, setExpandedSection] = useState('bodyCare');
   const habitsRef = useRef(habits);
   const editDraftHabitIdRef = useRef(null);
+  const [editSessionKey, setEditSessionKey] = useState(0);
+  const [selectedChainId, setSelectedChainId] = useState(null);
+  const [routineDraft, setRoutineDraft] = useState(null);
+  const [routineErrors, setRoutineErrors] = useState({});
+  const [isSavingRoutine, setIsSavingRoutine] = useState(false);
+  const [routineSessionKey, setRoutineSessionKey] = useState(0);
+
+  const resetManagerState = useCallback(() => {
+    setShowAddForm(false);
+    setSelectedHabitId(null);
+    setEditDraft(null);
+    setFormData(EMPTY_FORM);
+    setErrors({});
+    setIsSavingEdit(false);
+    setSelectedChainId(null);
+    setRoutineDraft(null);
+    setRoutineErrors({});
+    setIsSavingRoutine(false);
+    editDraftHabitIdRef.current = null;
+  }, []);
+
+  const bumpEditSession = useCallback(() => {
+    setEditSessionKey((key) => key + 1);
+  }, []);
+
+  const bumpRoutineSession = useCallback(() => {
+    setRoutineSessionKey((key) => key + 1);
+  }, []);
 
   useEffect(() => {
     habitsRef.current = habits;
@@ -59,6 +98,7 @@ export const HabitsManager = ({ open, onClose }) => {
 
   const handleSectionCreated = useCallback((sectionId) => {
     setCurrentSection(sectionId);
+    setExpandedSection(sectionId);
     setFormData((prev) => ({ ...prev, section: sectionId }));
     setEditDraft((prev) => (prev ? { ...prev, section: sectionId } : prev));
   }, []);
@@ -67,29 +107,77 @@ export const HabitsManager = ({ open, onClose }) => {
     onSectionCreated: handleSectionCreated,
   });
 
-  const currentHabits = habits[currentSection] || [];
+  const sectionLabel = sections.find((s) => s.value === currentSection)?.label || currentSection;
+
+  const selectedHabit = useMemo(() => {
+    if (!selectedHabitId) return null;
+    for (const section of sections) {
+      const habit = (habits[section.value] || []).find((entry) => entry.id === selectedHabitId);
+      if (habit) return habit;
+    }
+    return null;
+  }, [habits, sections, selectedHabitId]);
+
+  const selectedHabitSection = useMemo(() => {
+    if (!selectedHabitId) return currentSection;
+    for (const section of sections) {
+      if ((habits[section.value] || []).some((entry) => entry.id === selectedHabitId)) {
+        return section.value;
+      }
+    }
+    return currentSection;
+  }, [habits, sections, selectedHabitId, currentSection]);
+
+  const selectedSectionLabel = sections.find((s) => s.value === selectedHabitSection)?.label
+    || selectedHabitSection;
+
   const sortedHabits = useMemo(
-    () => [...currentHabits].sort((a, b) => (a.orden || 0) - (b.orden || 0)),
-    [currentHabits],
+    () => [...(habits[selectedHabitSection] || [])].sort((a, b) => (a.orden || 0) - (b.orden || 0)),
+    [habits, selectedHabitSection],
   );
 
-  const sectionLabel = sections.find((s) => s.value === currentSection)?.label || currentSection;
-  const selectedHabit = sortedHabits.find((h) => h.id === selectedHabitId) || null;
+  const stackChains = useMemo(
+    () => (habitChains || []).filter(
+      (chain) => chain?.type === 'stack'
+        && Array.isArray(chain.steps)
+        && chain.steps.length >= 2,
+    ),
+    [habitChains],
+  );
+
+  const selectedChain = useMemo(
+    () => stackChains.find((chain) => chain.id === selectedChainId) || null,
+    [stackChains, selectedChainId],
+  );
+
+  const activeRoutineSection = showAddForm
+    ? (formData.section || currentSection)
+    : selectedHabitSection;
+
+  const routineAssignment = useRoutineAssignment({
+    habitChains,
+    prefsReady,
+    section: activeRoutineSection,
+    habitId: showAddForm ? null : selectedHabit?.id,
+    active: open,
+    mode: showAddForm ? 'create' : 'edit',
+  });
 
   const fetchHabitsConfig = useCallback(async () => {
     try {
       const response = await clienteAxios.get('/api/users/preferences/habits');
       const loadedConfig = response.data?.habits || {};
       const initializedConfig = { ...loadedConfig };
-      const sectionHabits = habitsRef.current[currentSection] || [];
 
-      sectionHabits.forEach((habit) => {
-        if (!initializedConfig[currentSection]) {
-          initializedConfig[currentSection] = {};
-        }
-        if (!initializedConfig[currentSection][habit.id]) {
-          initializedConfig[currentSection][habit.id] = getDefaultHabitConfig(habit);
-        }
+      Object.entries(habitsRef.current || {}).forEach(([sectionId, sectionHabits]) => {
+        (sectionHabits || []).forEach((habit) => {
+          if (!initializedConfig[sectionId]) {
+            initializedConfig[sectionId] = {};
+          }
+          if (!initializedConfig[sectionId][habit.id]) {
+            initializedConfig[sectionId][habit.id] = getDefaultHabitConfig(habit);
+          }
+        });
       });
 
       setHabitsConfig(initializedConfig);
@@ -97,74 +185,179 @@ export const HabitsManager = ({ open, onClose }) => {
       console.error('[HabitsManager] Error al cargar configuraci?n:', error);
       setHabitsConfig({});
     }
-  }, [currentSection]);
+  }, []);
+
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (open) {
-      fetchHabits();
-      fetchHabitsConfig();
-    } else {
-      setMobileListExpanded(false);
+    if (!open) {
+      if (wasOpenRef.current) {
+        resetManagerState();
+        setMobileListExpanded(false);
+        setManagerMode('habits');
+      }
+      wasOpenRef.current = false;
+      return undefined;
     }
-  }, [open, fetchHabits, fetchHabitsConfig]);
+
+    if (wasOpenRef.current) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      invalidateHabitsPreferencesCache();
+      await fetchHabits();
+      await fetchHabitsConfig();
+      if (cancelled) return;
+      setExpandedSection(currentSection);
+      bumpEditSession();
+    })();
+
+    wasOpenRef.current = true;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, fetchHabits, fetchHabitsConfig, bumpEditSession, resetManagerState, currentSection]);
 
   useEffect(() => {
-    if (!open || showAddForm || !selectedHabit) {
+    if (!open || showAddForm || !selectedHabitId) {
       setEditDraft(null);
       editDraftHabitIdRef.current = null;
       return;
     }
-    if (editDraftHabitIdRef.current === selectedHabit.id) return;
 
-    const config = getHabitConfig(habitsConfig, currentSection, selectedHabit.id, selectedHabit);
+    const habit = (habits[selectedHabitSection] || []).find((h) => h.id === selectedHabitId);
+    if (!habit) return;
+
+    const config = getHabitConfig(habitsConfig, selectedHabitSection, habit.id, habit);
     setEditDraft({
-      label: selectedHabit.label,
-      icon: selectedHabit.icon,
-      section: currentSection,
+      label: habit.label,
+      icon: habit.icon,
+      section: selectedHabitSection,
       config: normalizeManagerConfig(config),
     });
-    editDraftHabitIdRef.current = selectedHabit.id;
-  }, [open, showAddForm, selectedHabit, selectedHabitId, habitsConfig, currentSection]);
+    editDraftHabitIdRef.current = selectedHabitId;
+  }, [
+    open,
+    showAddForm,
+    selectedHabitId,
+    selectedHabitSection,
+    habits,
+    habitsConfig,
+    editSessionKey,
+  ]);
+
+  const resetRoutineAssignment = routineAssignment.reset;
+
+  useEffect(() => {
+    if (!open || showAddForm || !selectedHabitId) return;
+    resetRoutineAssignment();
+  }, [editSessionKey, open, showAddForm, selectedHabitId, resetRoutineAssignment]);
+
+  const handleDraftChange = useCallback((patch) => {
+    if (patch.section) {
+      setCurrentSection(patch.section);
+      setExpandedSection(patch.section);
+    }
+    setEditDraft((prev) => {
+      if (prev) return { ...prev, ...patch };
+      const habit = sortedHabits.find((h) => h.id === selectedHabitId);
+      if (!habit) return prev;
+      const config = normalizeManagerConfig(
+        getHabitConfig(habitsConfig, selectedHabitSection, habit.id, habit),
+      );
+      return {
+        label: habit.label,
+        icon: habit.icon,
+        section: selectedHabitSection,
+        config,
+        ...patch,
+      };
+    });
+  }, [sortedHabits, selectedHabitId, habitsConfig, selectedHabitSection]);
 
   const isEditDirty = useMemo(() => {
     if (!editDraft || !selectedHabit) return false;
     const savedConfig = normalizeManagerConfig(
-      getHabitConfig(habitsConfig, currentSection, selectedHabit.id, selectedHabit),
+      getHabitConfig(habitsConfig, selectedHabitSection, selectedHabit.id, selectedHabit),
     );
     return (
       editDraft.label !== selectedHabit.label
       || editDraft.icon !== selectedHabit.icon
-      || editDraft.section !== currentSection
+      || editDraft.section !== selectedHabitSection
       || JSON.stringify(editDraft.config) !== JSON.stringify(savedConfig)
+      || routineAssignment.isDirty
     );
-  }, [editDraft, selectedHabit, habitsConfig, currentSection]);
+  }, [editDraft, selectedHabit, habitsConfig, selectedHabitSection, routineAssignment.isDirty]);
+
+  const isRoutineDirty = useMemo(() => {
+    if (!routineDraft || !selectedChain) return false;
+    const savedSteps = (selectedChain.steps || []).map(normalizeHabitStep).filter(Boolean);
+    const draftSteps = (routineDraft.steps || []).map(normalizeHabitStep).filter(Boolean);
+    return (routineDraft.label || '').trim() !== (selectedChain.label || '').trim()
+      || JSON.stringify(draftSteps) !== JSON.stringify(savedSteps);
+  }, [routineDraft, selectedChain]);
 
   useEffect(() => {
-    if (!open || showAddForm) return;
-    if (sortedHabits.length === 0) {
-      setSelectedHabitId(null);
+    if (managerMode !== 'routines' || !selectedChainId) {
+      setRoutineDraft(null);
       return;
     }
-    if (!selectedHabitId || !sortedHabits.some((h) => h.id === selectedHabitId)) {
-      setSelectedHabitId(sortedHabits[0].id);
+    const chain = stackChains.find((entry) => entry.id === selectedChainId);
+    if (!chain) return;
+    setRoutineDraft({
+      label: chain.label || '',
+      steps: (chain.steps || []).map(normalizeHabitStep).filter(Boolean),
+    });
+  }, [managerMode, selectedChainId, stackChains, routineSessionKey]);
+
+  useEffect(() => {
+    if (managerMode !== 'routines') return;
+    if (selectedChainId && stackChains.some((chain) => chain.id === selectedChainId)) return;
+    setSelectedChainId(stackChains[0]?.id || null);
+  }, [managerMode, stackChains, selectedChainId]);
+
+  useEffect(() => {
+    if (!open || showAddForm || managerMode !== 'habits') return;
+
+    if (selectedHabitId) {
+      const stillExists = sections.some(
+        (section) => (habits[section.value] || []).some((habit) => habit.id === selectedHabitId),
+      );
+      if (stillExists) {
+        if (currentSection !== selectedHabitSection) {
+          setCurrentSection(selectedHabitSection);
+        }
+        return;
+      }
+      setSelectedHabitId(null);
     }
-  }, [open, sortedHabits, selectedHabitId, showAddForm]);
+
+    const sectionToTry = expandedSection || currentSection;
+    const sectionHabits = [...(habits[sectionToTry] || [])].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    if (sectionHabits.length > 0) {
+      setSelectedHabitId(sectionHabits[0].id);
+      setCurrentSection(sectionToTry);
+      return;
+    }
+
+    for (const section of sections) {
+      const list = [...(habits[section.value] || [])].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      if (list.length > 0) {
+        setSelectedHabitId(list[0].id);
+        setCurrentSection(section.value);
+        setExpandedSection(section.value);
+        return;
+      }
+    }
+  }, [open, sortedHabits, selectedHabitId, showAddForm, managerMode, habits, sections, expandedSection, currentSection, selectedHabitSection]);
 
   const resetEditDraft = useCallback(() => {
-    if (!selectedHabit) {
-      setEditDraft(null);
-      editDraftHabitIdRef.current = null;
-      return;
-    }
-    const config = getHabitConfig(habitsConfig, currentSection, selectedHabit.id, selectedHabit);
-    setEditDraft({
-      label: selectedHabit.label,
-      icon: selectedHabit.icon,
-      section: currentSection,
-      config: normalizeManagerConfig(config),
-    });
-    editDraftHabitIdRef.current = selectedHabit.id;
-  }, [selectedHabit, habitsConfig, currentSection]);
+    bumpEditSession();
+  }, [bumpEditSession]);
 
   const handleConfigChange = useCallback(async (habitId, newConfig, sectionOverride = currentSection) => {
     const normalizedConfig = normalizeManagerConfig(newConfig);
@@ -221,6 +414,11 @@ export const HabitsManager = ({ open, onClose }) => {
       setErrors({ label: 'El nombre es requerido' });
       return;
     }
+    const chainError = routineAssignment.validate();
+    if (chainError) {
+      setErrors({ chain: chainError });
+      return;
+    }
     setErrors({});
 
     const habitId = selectedHabit.id;
@@ -258,10 +456,11 @@ export const HabitsManager = ({ open, onClose }) => {
         await handleConfigChange(habitId, normalizedConfig);
       }
 
+      await routineAssignment.persist(targetSection, habitId);
+
       await fetchHabits();
       await fetchHabitsConfig();
-      editDraftHabitIdRef.current = null;
-      resetEditDraft();
+      bumpEditSession();
     } catch {
       // manejado arriba o en contexto
     } finally {
@@ -278,24 +477,96 @@ export const HabitsManager = ({ open, onClose }) => {
     handleUpdateHabit,
     fetchHabits,
     fetchHabitsConfig,
-    resetEditDraft,
+    bumpEditSession,
+    routineAssignment,
   ]);
 
-  const handleSectionChange = (_event, newValue) => {
-    setCurrentSection(newValue);
-    setShowAddForm(false);
-    setSelectedHabitId(null);
-    setMobileListExpanded(false);
-    setFormData({ ...EMPTY_FORM, section: newValue });
+  const handleSectionExpand = useCallback((sectionId) => {
+    setExpandedSection((prev) => (prev === sectionId ? null : sectionId));
+  }, []);
+
+  const handleManagerModeChange = useCallback((nextMode) => {
+    if (nextMode === managerMode) return;
+    const hasUnsaved = nextMode === 'routines' ? isEditDirty : isRoutineDirty;
+    if (hasUnsaved && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
+      return;
+    }
+    setManagerMode(nextMode);
     setErrors({});
-    fetchHabitsConfig();
-  };
+    setRoutineErrors({});
+    if (nextMode === 'routines') {
+      setShowAddForm(false);
+      bumpRoutineSession();
+    } else {
+      setSelectedChainId(null);
+      bumpEditSession();
+    }
+  }, [managerMode, isEditDirty, isRoutineDirty, bumpEditSession, bumpRoutineSession]);
+
+  const handleRoutineDraftChange = useCallback((patch) => {
+    setRoutineDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+    if (patch.label !== undefined && routineErrors.label) {
+      setRoutineErrors((prev) => ({ ...prev, label: undefined }));
+    }
+    if (patch.steps !== undefined && routineErrors.steps) {
+      setRoutineErrors((prev) => ({ ...prev, steps: undefined }));
+    }
+  }, [routineErrors]);
+
+  const handleSaveRoutine = useCallback(async () => {
+    if (!selectedChain || !routineDraft) return;
+    const trimmedLabel = (routineDraft.label || '').trim();
+    const steps = (routineDraft.steps || []).map(normalizeHabitStep).filter(Boolean);
+    const nextErrors = {};
+    if (!trimmedLabel) nextErrors.label = 'El nombre es requerido';
+    if (steps.length < 2) nextErrors.steps = 'Selecciona al menos 2 hábitos';
+    if (Object.keys(nextErrors).length > 0) {
+      setRoutineErrors(nextErrors);
+      return;
+    }
+    setRoutineErrors({});
+    try {
+      setIsSavingRoutine(true);
+      const nextChains = (habitChains || [])
+        .map((chain) => (
+          chain.id === selectedChain.id
+            ? { ...chain, label: trimmedLabel, steps, type: 'stack' }
+            : chain
+        ))
+        .filter((chain) => Array.isArray(chain.steps) && chain.steps.length >= 2);
+      await updateHabitChainsOnApi(nextChains);
+      bumpRoutineSession();
+    } catch {
+      // manejado arriba
+    } finally {
+      setIsSavingRoutine(false);
+    }
+  }, [selectedChain, routineDraft, habitChains, bumpRoutineSession]);
+
+  const handleDeleteRoutine = useCallback(async (chainId) => {
+    if (!window.confirm('?Est?s seguro de que deseas eliminar esta rutina?')) return;
+    try {
+      const nextChains = (habitChains || []).filter((chain) => chain.id !== chainId);
+      await updateHabitChainsOnApi(nextChains);
+      setSelectedChainId(null);
+      bumpRoutineSession();
+    } catch {
+      // manejado arriba
+    }
+  }, [habitChains, bumpRoutineSession]);
 
   const handleAddClick = () => {
+    if (isEditDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
+      return;
+    }
+    bumpEditSession();
     setShowAddForm(true);
     setSelectedHabitId(null);
-    setFormData({ ...EMPTY_FORM, section: currentSection });
+    setEditDraft(null);
+    editDraftHabitIdRef.current = null;
+    setFormData({ ...EMPTY_FORM, section: expandedSection || currentSection, config: { ...DEFAULT_HABIT_CONFIG } });
     setErrors({});
+    routineAssignment.reset();
   };
 
   useEffect(() => {
@@ -325,6 +596,10 @@ export const HabitsManager = ({ open, onClose }) => {
     }
     if (!formData.icon) {
       newErrors.icon = 'Debe seleccionar un icono';
+    }
+    const chainError = routineAssignment.validate();
+    if (chainError) {
+      newErrors.chain = chainError;
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -364,6 +639,8 @@ export const HabitsManager = ({ open, onClose }) => {
         invalidateHabitsPreferencesCache();
       }
 
+      await routineAssignment.persist(targetSection, habitId);
+
       setShowAddForm(false);
       setFormData({ ...EMPTY_FORM, section: targetSection });
       if (targetSection !== currentSection) {
@@ -372,6 +649,7 @@ export const HabitsManager = ({ open, onClose }) => {
       await fetchHabits();
       await fetchHabitsConfig();
       setSelectedHabitId(habitId);
+      bumpEditSession();
     } catch {
       // manejado en contexto
     }
@@ -381,6 +659,10 @@ export const HabitsManager = ({ open, onClose }) => {
     if (!window.confirm('?Est?s seguro de que deseas eliminar este h?bito?')) return;
     try {
       await deleteHabit(habitId, currentSection);
+      if (prefsReady) {
+        const nextChains = removeHabitFromChains(habitChains, currentSection, habitId);
+        await updateHabitChainsOnApi(nextChains);
+      }
       setSelectedHabitId(null);
       await fetchHabitsConfig();
     } catch {
@@ -388,15 +670,30 @@ export const HabitsManager = ({ open, onClose }) => {
     }
   };
 
-  const handleReorder = async (habitIds) => {
+  const handleReorder = async (sectionId, habitIds) => {
     try {
-      await reorderHabits(currentSection, habitIds);
+      await reorderHabits(sectionId, habitIds);
     } catch {
       // manejado en contexto
     }
   };
 
-  const detailMode = showAddForm ? 'create' : (selectedHabit ? 'edit' : 'empty');
+  const handleSectionRenameSave = useCallback(async (sectionId, label) => {
+    const icon = resolveSectionIconKey(sectionId, customSections);
+    await updateHabitSection(sectionId, { label, icon });
+  }, [customSections, updateHabitSection]);
+
+  const handleRoutineRenameSave = useCallback(async (label, currentConfig) => {
+    const chainId = currentConfig?.chainId;
+    if (chainId && chainId !== NEW_HABIT_CHAIN_VALUE && prefsReady) {
+      const nextChains = updateHabitChainLabel(habitChains, chainId, label);
+      await updateHabitChainsOnApi(nextChains);
+    }
+  }, [habitChains, prefsReady]);
+
+  const detailMode = managerMode === 'routines'
+    ? (selectedChain ? 'edit' : 'empty')
+    : (showAddForm ? 'create' : (selectedHabit ? 'edit' : 'empty'));
 
   return (
     <>
@@ -406,28 +703,31 @@ export const HabitsManager = ({ open, onClose }) => {
       fullScreen={isMobile}
       fullWidth
       maxWidth="md"
+      scroll="body"
+      sx={{ zIndex: Z_INDEX.modalOverlay }}
       PaperProps={{
         sx: {
           ...tareaFormDialogPaperSx(isMobile),
           display: 'flex',
           flexDirection: 'column',
           maxHeight: isMobile ? '100vh' : '90vh',
+          overflow: 'hidden',
         },
       }}
     >
-      <TareaFormHeader onClose={onClose} closeLabel="Cerrar">
-        <Typography variant="h6" sx={{ fontWeight: 400, fontSize: '1.25rem', pr: 4 }}>
-          Personalizar mi rutina
-        </Typography>
-      </TareaFormHeader>
+      <Box
+        sx={{
+          flexShrink: 0,
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          bgcolor: 'background.default',
+        }}
+      >
+        <TareaFormHeader onClose={onClose} closeLabel="Cerrar" />
 
-      <HabitsManagerSectionTabs
-        sections={sections}
-        currentSection={currentSection}
-        onSectionChange={handleSectionChange}
-        showAddForm={showAddForm}
-        onAddClick={handleAddClick}
-      />
+        <Divider />
+      </Box>
 
       <DialogContent
         sx={{
@@ -463,31 +763,42 @@ export const HabitsManager = ({ open, onClose }) => {
               flexShrink: 0,
             }}
           >
+            <HabitsManagerSidebarHeader
+              mode={managerMode}
+              onChange={handleManagerModeChange}
+              disabled={loading}
+            />
+            {managerMode === 'habits' ? (
             <HabitsManagerList
-              habits={sortedHabits}
-              habitsConfig={habitsConfig}
-              currentSection={currentSection}
+              sections={sections}
+              allHabits={habits}
+              habitChains={habitChains}
+              expandedSection={expandedSection}
+              onSectionExpand={handleSectionExpand}
               selectedHabitId={showAddForm ? null : selectedHabitId}
+              selectedSectionLabel={selectedSectionLabel}
               loading={loading}
-              sectionLabel={sectionLabel}
               isMobile={isMobile}
               listExpanded={mobileListExpanded}
               onToggleListExpanded={setMobileListExpanded}
               showAddForm={showAddForm}
-              onSelect={(id) => {
+              onSelect={(id, sectionId) => {
                 if (isEditDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
                   return;
                 }
-                editDraftHabitIdRef.current = null;
+                bumpEditSession();
                 setShowAddForm(false);
+                setErrors({});
+                setCurrentSection(sectionId);
+                setExpandedSection(sectionId);
                 setSelectedHabitId(id);
-                const habit = sortedHabits.find((h) => h.id === id);
-                if (habit && !habitsConfig[currentSection]?.[id]) {
+                const habit = (habits[sectionId] || []).find((h) => h.id === id);
+                if (habit && !habitsConfig[sectionId]?.[id]) {
                   const defaultConfig = getDefaultHabitConfig(habit);
                   setHabitsConfig((prev) => ({
                     ...prev,
-                    [currentSection]: {
-                      ...(prev[currentSection] || {}),
+                    [sectionId]: {
+                      ...(prev[sectionId] || {}),
                       [id]: defaultConfig,
                     },
                   }));
@@ -496,6 +807,22 @@ export const HabitsManager = ({ open, onClose }) => {
               onReorder={handleReorder}
               onAddClick={handleAddClick}
             />
+            ) : (
+            <HabitsManagerRoutinesList
+              habitChains={habitChains}
+              habits={habits}
+              selectedChainId={selectedChainId}
+              loading={loading}
+              onSelect={(chainId) => {
+                if (isRoutineDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
+                  return;
+                }
+                bumpRoutineSession();
+                setRoutineErrors({});
+                setSelectedChainId(chainId);
+              }}
+            />
+            )}
           </Box>
 
           <Box
@@ -508,6 +835,7 @@ export const HabitsManager = ({ open, onClose }) => {
               overflow: 'hidden',
             }}
           >
+            {managerMode === 'habits' ? (
             <HabitsManagerDetail
               mode={detailMode}
               habit={selectedHabit}
@@ -524,7 +852,7 @@ export const HabitsManager = ({ open, onClose }) => {
               isDirty={isEditDirty}
               canDelete={sortedHabits.length > 1}
               onFormChange={(patch) => setFormData((prev) => ({ ...prev, ...patch }))}
-              onDraftChange={(patch) => setEditDraft((prev) => (prev ? { ...prev, ...patch } : prev))}
+              onDraftChange={handleDraftChange}
               onSectionChange={(section) => setFormData((prev) => ({ ...prev, section }))}
               onConfigChange={(newConfig) => {
                 if (showAddForm) {
@@ -534,12 +862,33 @@ export const HabitsManager = ({ open, onClose }) => {
                 }
               }}
               onSaveCreate={handleSaveCreate}
-              onCancelCreate={handleCancelCreate}
               onSaveEdit={handleSaveEdit}
-              onCancelEdit={handleCancelEdit}
               onDelete={handleDelete}
               onAddClick={handleAddClick}
+              habits={habits}
+              customSections={customSections}
+              habitChains={habitChains}
+              chainConfig={routineAssignment.config}
+              onChainConfigChange={routineAssignment.setConfig}
+              onSectionRenameSave={handleSectionRenameSave}
+              onRoutineRenameSave={handleRoutineRenameSave}
             />
+            ) : (
+            <HabitsManagerRoutineDetail
+              chainId={selectedChainId}
+              draft={routineDraft}
+              habits={habits}
+              customSections={customSections}
+              loading={loading}
+              saving={isSavingRoutine}
+              isDirty={isRoutineDirty}
+              canDelete={stackChains.length > 1}
+              onDraftChange={handleRoutineDraftChange}
+              onSave={handleSaveRoutine}
+              onDelete={handleDeleteRoutine}
+              errors={routineErrors}
+            />
+            )}
           </Box>
         </Box>
       </DialogContent>
@@ -561,7 +910,7 @@ export const HabitsManager = ({ open, onClose }) => {
         </Button>
       </Box>
     </Dialog>
-    <HabitGroupFormDialog {...groupDialogProps} />
+    <HabitGroupFormDialog {...groupDialogProps} zIndex={Z_INDEX.modalOverlay + 1} />
     </>
   );
 };

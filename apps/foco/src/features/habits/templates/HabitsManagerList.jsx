@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Typography,
   Button,
   Skeleton,
-  Chip,
+  Collapse
 } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -20,14 +20,47 @@ import {
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { getIconByName } from '@shared/utils/iconConfig';
-import { getFrecuenciaLabel } from '@shared/habits';
-import { getTimeOfDayLabels } from '@shared/utils/timeOfDayUtils';
-import { getHubSubsectionSx } from '@shared/styles/hubSectionStyles';
-import { getHabitConfig } from '@shared/habits/form/habitsManagerUtils';
+import { groupHabitsIntoDisplayRows, getChainDisplayLabel } from '@shared/habits';
+import { HUB_SUBSECTION, hubSectionBg } from '@shared/styles/hubSectionStyles';
 
-function CompactSelectedHabit({ habit, habitConfig, onToggleList }) {
+/** Recuadro de ítem en lista — selección sutil, sin brillo ni fill. */
+function getHabitsManagerListItemSx({ selected = false } = {}) {
+  return {
+    borderRadius: HUB_SUBSECTION.borderRadius,
+    bgcolor: hubSectionBg,
+    border: '1px solid',
+    borderColor: selected ? 'text.primary' : 'divider',
+    boxShadow: 'none',
+    backgroundImage: 'none',
+    transition: 'border-color 0.15s ease',
+    '&:hover': {
+      borderColor: selected ? 'text.primary' : 'text.secondary',
+    },
+  };
+}
+
+/** Fila embebida (dentro de stack) — solo el hábito activo con borde sutil. */
+function getHabitsManagerEmbeddedRowSx({ selected = false } = {}) {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1,
+    p: 1,
+    cursor: 'pointer',
+    bgcolor: 'transparent',
+    borderRadius: 1,
+    border: '1px solid',
+    borderColor: selected ? 'text.primary' : 'transparent',
+    boxShadow: 'none',
+    transition: 'border-color 0.15s ease',
+    '&:hover': {
+      borderColor: selected ? 'text.primary' : 'divider',
+    },
+  };
+}
+
+function CompactSelectedHabit({ habit, sectionLabel, onToggleList }) {
   const Icon = getIconByName(habit?.icon);
-  const cadenciaLabel = habit ? getFrecuenciaLabel(habitConfig) : '';
 
   return (
     <Box
@@ -43,6 +76,13 @@ function CompactSelectedHabit({ habit, habitConfig, onToggleList }) {
       )}
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', lineHeight: 1.2 }}
+        >
+          {sectionLabel}
+        </Typography>
+        <Typography
           variant="body2"
           sx={{
             fontWeight: 600,
@@ -53,11 +93,6 @@ function CompactSelectedHabit({ habit, habitConfig, onToggleList }) {
         >
           {habit?.label}
         </Typography>
-        {cadenciaLabel && (
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-            {cadenciaLabel}
-          </Typography>
-        )}
       </Box>
       {onToggleList && (
         <Button
@@ -75,9 +110,9 @@ function CompactSelectedHabit({ habit, habitConfig, onToggleList }) {
 
 function DraggableHabitItem({
   habit,
-  habitConfig,
   isSelected,
   onSelect,
+  embedded = false,
 }) {
   const {
     attributes,
@@ -95,10 +130,6 @@ function DraggableHabitItem({
   };
 
   const Icon = getIconByName(habit.icon);
-  const cadenciaLabel = getFrecuenciaLabel(habitConfig);
-  const horariosLabel = habitConfig?.horarios?.length
-    ? getTimeOfDayLabels(habitConfig.horarios)
-    : null;
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -106,28 +137,8 @@ function DraggableHabitItem({
     zIndex: isDragging ? 1 : 'auto',
   };
 
-  return (
-    <Box
-      ref={setNodeRef}
-      style={style}
-      role="option"
-      aria-selected={isSelected}
-      onClick={() => onSelect(habit.id)}
-      sx={{
-        ...getHubSubsectionSx({ selected: isSelected }),
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        p: 1,
-        mb: 0.75,
-        cursor: 'pointer',
-        opacity: habit.activo === false ? 0.55 : 1,
-        borderColor: isSelected ? 'primary.main' : 'divider',
-        '&:hover': {
-          borderColor: 'primary.main',
-        },
-      }}
-    >
+  const rowContent = (
+    <>
       <Box
         {...attributes}
         {...listeners}
@@ -157,7 +168,7 @@ function DraggableHabitItem({
         <Typography
           variant="body2"
           sx={{
-            fontWeight: 500,
+            fontWeight: isSelected ? 600 : 500,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -167,34 +178,256 @@ function DraggableHabitItem({
         >
           {habit.label}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25, flexWrap: 'wrap' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-            {cadenciaLabel}
-          </Typography>
-          {horariosLabel && (
-            <Chip
-              label={horariosLabel}
-              size="small"
-              sx={{
-                height: 18,
-                fontSize: '0.65rem',
-                '& .MuiChip-label': { px: 0.75 },
-              }}
-            />
-          )}
+      </Box>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <Box
+        ref={setNodeRef}
+        style={style}
+        role="option"
+        aria-selected={isSelected}
+        onClick={() => onSelect(habit.id)}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          opacity: habit.activo === false ? 0.55 : 1,
+        }}
+      >
+        <Box sx={getHabitsManagerEmbeddedRowSx({ selected: isSelected })}>
+          {rowContent}
         </Box>
       </Box>
+    );
+  }
+
+  return (
+    <Box
+      ref={setNodeRef}
+      style={style}
+      role="option"
+      aria-selected={isSelected}
+      onClick={() => onSelect(habit.id)}
+      sx={{
+        ...getHabitsManagerListItemSx({ selected: isSelected }),
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        p: 1,
+        mb: 0.75,
+        cursor: 'pointer',
+        opacity: habit.activo === false ? 0.55 : 1,
+      }}
+    >
+      {rowContent}
+    </Box>
+  );
+}
+
+function HabitsManagerStackGroup({
+  chainId,
+  entries,
+  habitChains,
+  allHabits,
+  selectedHabitId,
+  onSelect,
+}) {
+  const chain = habitChains?.find((item) => item.id === chainId);
+  const chainLabel = chain ? getChainDisplayLabel(chain, allHabits) : null;
+
+  return (
+    <Box
+      data-habit-stack={chainId}
+      sx={{
+        ...getHabitsManagerListItemSx(),
+        mb: 0.75,
+        overflow: 'hidden',
+      }}
+    >
+      {chainLabel && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            display: 'block',
+            px: 1,
+            pt: 0.75,
+            pb: 0.25,
+            fontSize: '0.65rem',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {chainLabel}
+        </Typography>
+      )}
+      {entries.map((entry) => (
+        <DraggableHabitItem
+          key={entry.habit.id}
+          habit={entry.habit}
+          isSelected={selectedHabitId === entry.habit.id}
+          onSelect={onSelect}
+          embedded
+        />
+      ))}
+    </Box>
+  );
+}
+
+function HabitsManagerSectionGroup({
+  sectionId,
+  sectionLabel,
+  habits,
+  expanded,
+  onToggle,
+  allHabits,
+  habitChains,
+  selectedHabitId,
+  onSelect,
+  onReorder,
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  const sortedHabits = useMemo(
+    () => [...habits].sort((a, b) => (a.orden || 0) - (b.orden || 0)),
+    [habits],
+  );
+
+  const displayRows = useMemo(
+    () => groupHabitsIntoDisplayRows(sortedHabits, sectionId, habitChains),
+    [sortedHabits, sectionId, habitChains],
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = sortedHabits.findIndex((h) => h.id === active.id);
+    const newIndex = sortedHabits.findIndex((h) => h.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = [...sortedHabits];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+    onReorder(sectionId, reordered.map((h) => h.id));
+  };
+
+  const handleSelect = (habitId) => {
+    onSelect(habitId, sectionId);
+  };
+
+  return (
+    <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => onToggle(sectionId)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onToggle(sectionId);
+          }
+        }}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          px: 1.5,
+          py: 1,
+          cursor: 'pointer',
+          bgcolor: expanded ? 'action.hover' : 'transparent',
+          transition: 'background-color 0.15s ease',
+          '&:hover': {
+            bgcolor: 'action.hover',
+          },
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.8125rem',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {sectionLabel}
+        </Typography>
+        <ExpandMoreIcon
+          sx={{
+            fontSize: '1.1rem',
+            color: 'text.secondary',
+            flexShrink: 0,
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease',
+          }}
+        />
+      </Box>
+
+      <Collapse in={expanded} timeout={200} unmountOnExit>
+        <Box sx={{ px: 1, pb: 1, pt: 0.25 }}>
+          {sortedHabits.length === 0 ? (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', px: 0.5, py: 0.75 }}
+            >
+              Sin hábitos
+            </Typography>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              {displayRows.map((row) => {
+                if (row.kind === 'stack') {
+                  return (
+                    <HabitsManagerStackGroup
+                      key={`stack-${sectionId}-${row.chainId}`}
+                      chainId={row.chainId}
+                      entries={row.entries}
+                      habitChains={habitChains}
+                      allHabits={allHabits}
+                      selectedHabitId={selectedHabitId}
+                      onSelect={handleSelect}
+                    />
+                  );
+                }
+
+                const habit = row.entry.habit;
+                return (
+                  <DraggableHabitItem
+                    key={habit.id}
+                    habit={habit}
+                    isSelected={selectedHabitId === habit.id}
+                    onSelect={handleSelect}
+                  />
+                );
+              })}
+            </DndContext>
+          )}
+        </Box>
+      </Collapse>
     </Box>
   );
 }
 
 export default function HabitsManagerList({
-  habits,
-  habitsConfig,
-  currentSection,
+  sections = [],
+  allHabits = {},
+  habitChains = [],
+  expandedSection,
+  onSectionExpand,
   selectedHabitId,
+  selectedSectionLabel = '',
   loading,
-  sectionLabel,
   onSelect,
   onReorder,
   onAddClick,
@@ -203,96 +436,73 @@ export default function HabitsManagerList({
   onToggleListExpanded,
   showAddForm = false,
 }) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  const totalHabits = useMemo(
+    () => sections.reduce((count, section) => count + (allHabits[section.value]?.length || 0), 0),
+    [sections, allHabits],
   );
 
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  const selectedHabit = useMemo(() => {
+    if (!selectedHabitId) return null;
+    for (const section of sections) {
+      const habit = (allHabits[section.value] || []).find((entry) => entry.id === selectedHabitId);
+      if (habit) return habit;
+    }
+    return null;
+  }, [allHabits, sections, selectedHabitId]);
 
-    const oldIndex = habits.findIndex((h) => h.id === active.id);
-    const newIndex = habits.findIndex((h) => h.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-
-    const reordered = [...habits];
-    const [moved] = reordered.splice(oldIndex, 1);
-    reordered.splice(newIndex, 0, moved);
-    onReorder(reordered.map((h) => h.id));
-  };
-
-  const selectedHabit = habits.find((h) => h.id === selectedHabitId) || null;
-  const selectedConfig = selectedHabit
-    ? getHabitConfig(habitsConfig, currentSection, selectedHabit.id, selectedHabit)
-    : null;
-  const showMobilePicker = isMobile && habits.length > 0 && !showAddForm;
+  const showMobilePicker = isMobile && totalHabits > 0 && !showAddForm;
   const mobileCollapsed = showMobilePicker && !listExpanded;
 
-  const handleSelect = (id) => {
-    onSelect(id);
-    if (isMobile && listExpanded) {
-      onToggleListExpanded?.(false);
-    }
-  };
+  const accordionContent = sections.map((section) => (
+    <HabitsManagerSectionGroup
+      key={section.value}
+      sectionId={section.value}
+      sectionLabel={section.label}
+      habits={allHabits[section.value] || []}
+      expanded={expandedSection === section.value}
+      onToggle={onSectionExpand}
+      allHabits={allHabits}
+      habitChains={habitChains}
+      selectedHabitId={selectedHabitId}
+      onSelect={onSelect}
+      onReorder={onReorder}
+    />
+  ));
 
-  const listContent = (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      {habits.map((habit) => (
-        <DraggableHabitItem
-          key={habit.id}
-          habit={habit}
-          habitConfig={getHabitConfig(habitsConfig, currentSection, habit.id, habit)}
-          isSelected={selectedHabitId === habit.id}
-          onSelect={handleSelect}
-        />
-      ))}
-    </DndContext>
-  );
-
-  if (loading && habits.length === 0) {
+  if (loading && totalHabits === 0) {
     return (
       <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rounded" height={56} sx={{ borderRadius: 1.5 }} />
+          <Skeleton key={i} variant="rounded" height={44} sx={{ borderRadius: 1.5 }} />
         ))}
       </Box>
     );
   }
 
-  if (habits.length === 0) {
+  if (totalHabits === 0) {
     return (
       <Box
         sx={{
-          p: 2,
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          gap: 1.5,
-          minHeight: 160,
+          minHeight: 0,
+          flex: 1,
         }}
       >
-        <Typography variant="body2" color="text.secondary">
-          No hay hábitos en {sectionLabel}
-        </Typography>
-        <Button size="small" variant="outlined" onClick={onAddClick} sx={{ textTransform: 'none' }}>
-          Agregar hábito
-        </Button>
+        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {accordionContent}
+        </Box>
       </Box>
     );
   }
 
   return (
     <Box
-      role="listbox"
-      aria-label={`Hábitos de ${sectionLabel}`}
       sx={{
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
-        flexShrink: 0,
-        ...(isMobile ? { flex: '0 0 auto' } : { flex: 1 }),
+        flex: 1,
       }}
     >
       {showMobilePicker && (
@@ -310,27 +520,27 @@ export default function HabitsManagerList({
             selectedHabit ? (
               <CompactSelectedHabit
                 habit={selectedHabit}
-                habitConfig={selectedConfig}
+                sectionLabel={selectedSectionLabel}
                 onToggleList={() => onToggleListExpanded?.(true)}
               />
             ) : (
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                 <Typography variant="body2" color="text.secondary">
-                  {habits.length} hábitos en {sectionLabel}
+                  {totalHabits} hábitos
                 </Typography>
                 <Button
                   size="small"
                   onClick={() => onToggleListExpanded?.(true)}
                   sx={{ textTransform: 'none', flexShrink: 0 }}
                 >
-                  Ver todos
+                  Ver grupos
                 </Button>
               </Box>
             )
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                {habits.length} hábitos
+                Grupos de hábitos
               </Typography>
               <Button
                 size="small"
@@ -348,17 +558,16 @@ export default function HabitsManagerList({
       {(!isMobile || listExpanded) && (
         <Box
           sx={{
-            p: 1.5,
             overflowY: 'auto',
             minHeight: 0,
-            ...(isMobile
-              ? { maxHeight: 'min(38vh, 260px)' }
-              : { flex: 1 }),
+            flex: 1,
+            ...(isMobile ? { maxHeight: 'min(42vh, 320px)' } : null),
           }}
         >
-          {listContent}
+          {accordionContent}
         </Box>
       )}
     </Box>
   );
 }
+

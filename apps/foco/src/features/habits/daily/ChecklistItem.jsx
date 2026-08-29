@@ -1,9 +1,9 @@
 import React, { memo, useMemo } from 'react';
-import { ListItem, Box, Typography } from '@mui/material';
+import { ListItem, Box, Typography, Chip, Tooltip } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
-import { HabitCrudActions } from '@shared/components/common';
+import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import HabitIconButton from '@shared/components/habits/HabitIconButton';
+import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import { useRutinas } from '@shared/context';
 import { isHabitHorarioCompleted } from '@shared/habits';
 import { contarCompletadosEnPeriodo, obtenerHistorialCompletados } from '@shared/habits';
@@ -15,9 +15,14 @@ import {
   rutinaChecklistTextColumnSx,
   rutinaChecklistLabelSx,
   rutinaChecklistMetaSx,
-  rutinaRowActionsSx,
-  rutinaSystemButtonsSx,
+  rutinaChainLockedRowSx,
+  rutinaChainChipSx,
+  rutinaChecklistStackCellItemSx,
+  rutinaChecklistStackCellRowSx,
+  rutinaChecklistStackCellContentSx,
+  rutinaChecklistStackCellTextSx,
 } from '@shared/styles/rutinaPageStyles';
+import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
 
 export { default as HabitIconButton } from '@shared/components/habits/HabitIconButton';
 
@@ -29,16 +34,25 @@ const ChecklistItem = ({
   readOnly,
   onItemClick,
   config = {},
-  isCustomHabit = false,
   habitLabel = '',
-  onEditHabit,
   localData = null,
   completionValue = undefined,
   dragHandleAttributes = null,
   dragHandleListeners = null,
   focusHorario = null,
+  chain = null,
+  prevStepLabel = '',
+  stackCell = false,
+  hideChainBadge = false,
+  hideMeta = false,
 }) => {
   const { rutina } = useRutinas();
+
+  const isChainLocked = Boolean(chain?.isLocked);
+  const effectiveReadOnly = readOnly || isChainLocked;
+  const lockedTitle = isChainLocked && prevStepLabel
+    ? HABIT_CHAIN_COPY.lockedTooltip(prevStepLabel)
+    : undefined;
 
   const isHorarioCompleted = (horario) => {
     const itemValue = localData?.[itemId] !== undefined
@@ -46,8 +60,6 @@ const ChecklistItem = ({
       : (completionValue !== undefined ? completionValue : rutina?.[section]?.[itemId]);
     return isHabitHorarioCompleted(itemValue, horario);
   };
-
-  const habitCrudItemName = habitLabel || itemId;
 
   const secondaryText = useMemo(() => {
     if (!config) return '';
@@ -132,7 +144,10 @@ const ChecklistItem = ({
     return `${label} • ${completados}/${frecuencia}`;
   }, [config, isCompleted, rutina, section, itemId]);
 
-  const horariosConfig = Array.isArray(config?.horarios) ? config.horarios : [];
+  const horariosConfig = useMemo(
+    () => normalizeTimeOfDay(config?.horarios),
+    [config?.horarios],
+  );
   const normalizedFocusHorario = focusHorario
     ? String(focusHorario).toUpperCase()
     : null;
@@ -141,41 +156,44 @@ const ChecklistItem = ({
     || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
 
   const renderHabitActionButtons = () => {
-    if (readOnly) return null;
+    if (readOnly && !isChainLocked) return null;
+
+    const buttonProps = {
+      readOnly: effectiveReadOnly,
+      title: lockedTitle,
+    };
 
     if (normalizedFocusHorario && normalizedFocusHorario !== 'GENERAL') {
       const franjaCompleted = isHorarioCompleted(normalizedFocusHorario);
-      return (
+      const button = (
         <HabitIconButton
           isCompleted={franjaCompleted}
           Icon={Icon}
           onClick={(e) => {
             e.stopPropagation();
-            onItemClick(itemId, e, normalizedFocusHorario);
+            if (!effectiveReadOnly) onItemClick(itemId, e, normalizedFocusHorario);
           }}
-          readOnly={readOnly}
           config={config}
           currentTimeOfDay={getCurrentTimeOfDay()}
           displayHorario={normalizedFocusHorario}
           rutina={rutina}
           section={section}
           itemId={itemId}
+          {...buttonProps}
         />
       );
+      return lockedTitle ? <Tooltip title={lockedTitle}>{button}</Tooltip> : button;
     }
 
     if (hasMultipleFranjas) {
+      const iconSize = stackCell ? 32 : 38;
       return (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.35,
-            flexShrink: 0,
-            mr: 0.75,
-          }}
+        <HabitIconScrollRow
+          itemCount={horariosConfig.length}
+          iconSize={iconSize}
+          sx={{ mr: 0.75 }}
         >
-          {horariosConfig.map((horario) => {
+          {(guardClick) => horariosConfig.map((horario) => {
             const normalizedHorario = String(horario).toUpperCase();
             const franjaCompleted = isHorarioCompleted(normalizedHorario);
             return (
@@ -184,47 +202,62 @@ const ChecklistItem = ({
                 isCompleted={franjaCompleted}
                 Icon={Icon}
                 onClick={(e) => {
+                  if (guardClick()) {
+                    e.stopPropagation();
+                    return;
+                  }
                   e.stopPropagation();
-                  onItemClick(itemId, e, normalizedHorario);
+                  if (!effectiveReadOnly) onItemClick(itemId, e, normalizedHorario);
                 }}
-                readOnly={readOnly}
+                readOnly={effectiveReadOnly}
                 config={config}
                 currentTimeOfDay={getCurrentTimeOfDay()}
                 displayHorario={normalizedHorario}
                 rutina={rutina}
                 section={section}
                 itemId={itemId}
-                size={36}
+                size={iconSize}
                 mr={0}
               />
             );
           })}
-        </Box>
+        </HabitIconScrollRow>
       );
     }
 
-    return (
+    const button = (
       <HabitIconButton
         isCompleted={isCompleted}
         Icon={Icon}
         onClick={(e) => {
           e.stopPropagation();
-          onItemClick(itemId, e, singleDisplayHorario);
+          if (!effectiveReadOnly) onItemClick(itemId, e, singleDisplayHorario);
         }}
-        readOnly={readOnly}
+        readOnly={effectiveReadOnly}
         config={config}
         currentTimeOfDay={getCurrentTimeOfDay()}
         displayHorario={singleDisplayHorario}
         rutina={rutina}
         section={section}
         itemId={itemId}
+        size={stackCell ? 32 : undefined}
+        mr={stackCell ? 0 : undefined}
+        title={lockedTitle}
       />
     );
+    return lockedTitle ? <Tooltip title={lockedTitle}><span>{button}</span></Tooltip> : button;
   };
 
   return (
-    <ListItem disablePadding sx={rutinaChecklistItemSx}>
-      <Box sx={rutinaChecklistRowSx}>
+    <ListItem
+      disablePadding
+      sx={{
+        ...rutinaChecklistItemSx,
+        ...(stackCell ? rutinaChecklistStackCellItemSx : null),
+        ...(isChainLocked ? rutinaChainLockedRowSx : null),
+      }}
+    >
+      <Box sx={{ ...rutinaChecklistRowSx, ...(stackCell ? rutinaChecklistStackCellRowSx : null) }}>
         {dragHandleListeners && (
           <Box
             {...dragHandleAttributes}
@@ -246,35 +279,76 @@ const ChecklistItem = ({
           </Box>
         )}
         {renderHabitActionButtons()}
-        <Box sx={rutinaChecklistContentSx}>
-          <Box sx={rutinaChecklistTextColumnSx}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" sx={rutinaChecklistLabelSx(isCompleted)}>
+        <Box sx={{
+          ...rutinaChecklistContentSx,
+          ...(stackCell ? rutinaChecklistStackCellContentSx : null),
+        }}
+        >
+          <Box sx={{
+            ...rutinaChecklistTextColumnSx,
+            ...(stackCell ? rutinaChecklistStackCellTextSx : null),
+          }}
+          >
+            <Box sx={{
+              display: 'flex',
+              alignItems: stackCell ? 'center' : 'center',
+              justifyContent: stackCell ? 'center' : 'flex-start',
+              gap: 0.5,
+              flex: 1,
+              minWidth: 0,
+              width: stackCell ? '100%' : undefined,
+              flexDirection: stackCell ? 'column' : 'row',
+            }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  ...rutinaChecklistLabelSx(isCompleted),
+                  ...(stackCell ? { whiteSpace: 'normal', textAlign: 'center', fontSize: '0.8125rem' } : null),
+                }}
+              >
                 {habitLabel || itemId}
               </Typography>
+              {!stackCell && chain && !hideChainBadge && chain.stepIndex === 0 && chain.stepCount > 1 && (
+                <Chip
+                  size="small"
+                  label={chain.label || HABIT_CHAIN_COPY.stepProgress(chain.stepIndex + 1, chain.stepCount)}
+                  sx={rutinaChainChipSx}
+                />
+              )}
+              {!stackCell && chain && !hideChainBadge && chain.stepIndex > 0 && (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={HABIT_CHAIN_COPY.stepProgress(chain.stepIndex + 1, chain.stepCount)}
+                  sx={rutinaChainChipSx}
+                />
+              )}
             </Box>
-            {config && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2, flexWrap: 'wrap' }}>
-                <Typography variant="caption" sx={rutinaChecklistMetaSx}>
+            {config && !hideMeta && (
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: stackCell ? 'center' : 'flex-start',
+                gap: 0.5,
+                mt: stackCell ? 0.1 : 0.2,
+                flexWrap: 'wrap',
+                width: stackCell ? '100%' : undefined,
+              }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{
+                    ...rutinaChecklistMetaSx,
+                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'center' } : null),
+                  }}
+                >
                   {secondaryText}
                 </Typography>
               </Box>
             )}
           </Box>
         </Box>
-        {!readOnly && isCustomHabit && onEditHabit && (
-          <Box sx={rutinaRowActionsSx}>
-            <HabitCrudActions
-              onEdit={onEditHabit}
-              itemName={habitCrudItemName}
-              showEdit
-              showDelete={false}
-              size="small"
-              gap={0}
-              sx={rutinaSystemButtonsSx}
-            />
-          </Box>
-        )}
       </Box>
     </ListItem>
   );
@@ -295,12 +369,15 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.section === nextProps.section &&
     prevProps.isCompleted === nextProps.isCompleted &&
     prevProps.readOnly === nextProps.readOnly &&
-    prevProps.isCustomHabit === nextProps.isCustomHabit &&
     prevProps.config?.tipo === nextProps.config?.tipo &&
     prevProps.config?.frecuencia === nextProps.config?.frecuencia &&
     prevProps.config?.activo === nextProps.config?.activo &&
     prevHorarios === nextHorarios &&
     prevCompletion === nextCompletion &&
-    prevProps.focusHorario === nextProps.focusHorario
+    prevProps.focusHorario === nextProps.focusHorario &&
+    prevProps.stackCell === nextProps.stackCell &&
+    prevProps.hideChainBadge === nextProps.hideChainBadge &&
+    prevProps.hideMeta === nextProps.hideMeta &&
+    JSON.stringify(prevProps.chain) === JSON.stringify(nextProps.chain)
   );
 });

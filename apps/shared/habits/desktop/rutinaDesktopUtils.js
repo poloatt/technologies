@@ -7,7 +7,7 @@ import {
 import { getHabitDisplayLabel } from '../domain/habitDisplayLabels.js';
 import { resolveItemVisibilityByCadence } from '../domain/resolveItemVisibility.js';
 import { resolveRutinaItemConfig } from '../domain/resolveRutinaItemConfig.js';
-import { isHabitCompletedForHistorial, isHabitFullyCompletedToday, isHabitPartiallyCompletedToday } from '../domain/habitCompletionUtils.js';
+import { isHabitCompletedForHistorial, isHabitFullyCompletedToday } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import {
   hasCadenciaDebt,
@@ -16,6 +16,7 @@ import {
   obtenerHistorialCompletados,
   contarCompletadosEnPeriodo,
 } from '../utils/cadenciaUtils.js';
+import { enrichEntryWithChainContext } from '../domain/habitChainUtils.js';
 import { parseAPIDate } from '../../utils/dateUtils.js';
 import { RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
 import { getPeriodicCarouselMode } from '../engine/habitVisibilityEngine.js';
@@ -132,12 +133,16 @@ export function categorizeSectionHabits({
   habits = null,
   habitsPreferences = null,
   localData = {},
+  localDataBySection = null,
+  habitChains = [],
   iconsMap = null,
 }) {
   const empty = { completed: [], incomplete: [], notScheduled: [] };
   if (!section || !rutina) return empty;
 
   const prefs = habitsPreferences ?? {};
+  const chains = Array.isArray(habitChains) ? habitChains : [];
+  const localBySection = localDataBySection ?? (localData ? { [section]: localData } : null);
   const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
   const sectionIcons = iconsMap?.[section] || {};
   const itemIds = resolveSectionItemIds(section, habits, iconsMap);
@@ -180,7 +185,7 @@ export function categorizeSectionHabits({
       && hasCadenciaDebt(fechaRutina, config, historialDates)
       && !isScheduledCadenciaDay(fechaRutina, config);
 
-    const entry = {
+    const entry = enrichEntryWithChainContext({
       section,
       itemId,
       label: getHabitDisplayLabel(section, itemId, habits),
@@ -191,7 +196,7 @@ export function categorizeSectionHabits({
       isScheduled,
       isCadenciaDebt,
       userHabit: findUserHabit(section, itemId, habits),
-    };
+    }, chains, rutina, localBySection);
 
     if (isCompleted) {
       completed.push(entry);
@@ -271,8 +276,9 @@ export function isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility = rutin
   if (entry.isScheduled || entry.isCadenciaDebt) return true;
 
   const { config, itemId, section, itemValue } = entry;
-  if (!config || isDailyCadenceConfig(config)) {
-    return Boolean(entry.isScheduled);
+  // Cadencia diaria: siempre aplica al día calendario; cuota/franjas se resuelven aparte.
+  if (isDailyCadenceConfig(config)) {
+    return true;
   }
 
   const fechaRutina = parseAPIDate(rutina?.fecha) || new Date();
@@ -294,13 +300,10 @@ export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility
     if (isHabitFullyCompletedToday(itemValue, horarios)) {
       return 'done';
     }
-    if (isHabitPartiallyCompletedToday(itemValue, horarios) || isScheduled) {
-      return 'today';
-    }
     if (isHabitQuotaOrDayDone({ config, itemValue, itemId, section, rutina, rutinaForVisibility })) {
       return 'done';
     }
-    return 'notToday';
+    return 'today';
   }
 
   if (isHabitQuotaOrDayDone({ config, itemValue, itemId, section, rutina, rutinaForVisibility })) {
@@ -385,8 +388,13 @@ export function getSectionCarouselItems({
   iconsMap = null,
   currentTimeOfDay = 'MAÑANA',
   localData = null,
+  localDataBySection = null,
+  habitChains = [],
 }) {
   if (!section || !rutina) return [];
+
+  const chains = Array.isArray(habitChains) ? habitChains : [];
+  const localBySection = localDataBySection ?? (localData ? { [section]: localData } : null);
 
   const { done } = groupSectionHabitsByDaySchedule({
     section,
@@ -395,6 +403,8 @@ export function getSectionCarouselItems({
     habitsPreferences,
     iconsMap,
     localData,
+    localDataBySection: localBySection,
+    habitChains: chains,
   });
   const doneIds = new Set(done.map((entry) => entry.itemId));
 
@@ -419,7 +429,7 @@ export function getSectionCarouselItems({
       && hasCadenciaDebt(fechaRutina, config, historialDates)
       && !isScheduledCadenciaDay(fechaRutina, config);
 
-    const entry = {
+    const entry = enrichEntryWithChainContext({
       section,
       itemId,
       label: getHabitDisplayLabel(section, itemId, habits),
@@ -430,7 +440,7 @@ export function getSectionCarouselItems({
       isScheduled,
       isCadenciaDebt,
       userHabit: findUserHabit(section, itemId, habits),
-    };
+    }, chains, rutina, localBySection);
 
     acc.push({
       ...entry,

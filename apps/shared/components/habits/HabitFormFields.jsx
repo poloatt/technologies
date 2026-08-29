@@ -23,6 +23,7 @@ export default function HabitFormFields({
   showSection = true,
   showIconPicker = true,
   showCadence = true,
+  hideCadenceTopDivider = false,
   sectionMinimal = false,
   sectionOptions = HABIT_SECTION_OPTIONS,
   onCreateSection,
@@ -65,6 +66,7 @@ export default function HabitFormFields({
           itemId="new-habit-inline"
           sectionId={section}
           hideActions
+          hideTopDivider={hideCadenceTopDivider}
         />
       )}
     </Box>

@@ -1,16 +1,13 @@
 import { DEFAULT_HABIT_ITEM_CONFIG } from './habitSectionIds.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
-import { VALID_TIME_OF_DAY } from '../../utils/timeOfDayUtils.js';
+import { normalizeTimeOfDay, VALID_TIME_OF_DAY } from '../../utils/timeOfDayUtils.js';
 
 function isTrueDailyTipo(config = {}) {
   return (config?.tipo || 'DIARIO').toUpperCase() === 'DIARIO';
 }
 
 function normalizeHorariosList(horarios) {
-  if (!Array.isArray(horarios)) return [];
-  return horarios
-    .map((horario) => String(horario).toUpperCase())
-    .filter(Boolean);
+  return normalizeTimeOfDay(horarios);
 }
 
 /**

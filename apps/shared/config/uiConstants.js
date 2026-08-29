@@ -99,7 +99,9 @@ export const Z_INDEX = {
   footer: 1300,
   sidebarResizer: 1300,
   sidebar: 1100,
-  main: 1
+  main: 1,
+  /** Modales sobre header, date hero y barras fijas (MUI default modal = 1300). */
+  modalOverlay: 1500,
 };
 
 // ===== TRANSITIONS =====

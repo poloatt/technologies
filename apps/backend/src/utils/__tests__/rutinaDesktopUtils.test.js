@@ -74,6 +74,45 @@ describe('rutinaDesktopUtils', () => {
       expect(incomplete.find((h) => h.itemId === 'shower')?.label).toBe('Mi ducha personalizada');
     });
 
+    it('enriches entries with chain lock and next step context', () => {
+      const habits = {
+        ...mockHabits,
+        bodyCare: [
+          { id: 'shower', label: 'Ducha', icon: 'Shower', activo: true, orden: 0 },
+          { id: 'skincare', label: 'Skincare', icon: 'Spa', activo: true, orden: 1 },
+        ],
+      };
+      const habitChains = [{
+        id: 'morning',
+        type: 'dependency',
+        steps: [
+          { section: 'bodyCare', habitId: 'shower' },
+          { section: 'bodyCare', habitId: 'skincare' },
+        ],
+      }];
+      const rutina = makeRutina({
+        bodyCare: { shower: false, skincare: false },
+        config: {
+          bodyCare: {
+            shower: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+            skincare: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+          },
+        },
+      });
+      const { incomplete } = categorizeSectionHabits({
+        section: 'bodyCare',
+        rutina,
+        habits,
+        habitChains,
+      });
+      const shower = incomplete.find((e) => e.itemId === 'shower');
+      const skincare = incomplete.find((e) => e.itemId === 'skincare');
+      expect(shower?.chain?.isLocked).toBe(false);
+      expect(shower?.chain?.isNextInChain).toBe(true);
+      expect(skincare?.chain?.isLocked).toBe(true);
+      expect(skincare?.chain?.isNextInChain).toBe(false);
+    });
+
     it('places incomplete scheduled habit in incomplete bucket', () => {
       const rutina = makeRutina();
       const { incomplete } = categorizeSectionHabits({
@@ -276,6 +315,55 @@ describe('rutinaDesktopUtils', () => {
       expect(notToday.map((h) => h.itemId)).not.toContain('shave');
       const shaveEntry = done.find((h) => h.itemId === 'shave');
       expect(shaveEntry?.config?.horarios || []).toHaveLength(0);
+    });
+
+    it('keeps pending daily multi-franja habits in Hoy even when isScheduled is false', () => {
+      const rutina = makeRutina({
+        fecha: getNormalizedToday().toISOString(),
+        bodyCare: {
+          haircare: { MAÑANA: false, NOCHE: false },
+          skincare: { MAÑANA: false, NOCHE: false },
+        },
+        config: {
+          bodyCare: {
+            shower: { tipo: 'DIARIO', frecuencia: 1, activo: true, diasSemana: [1] },
+            weekly: { tipo: 'SEMANAL', frecuencia: 1, activo: true, diasSemana: [1] },
+            haircare: {
+              tipo: 'DIARIO',
+              frecuencia: 2,
+              activo: true,
+              horarios: ['MAÑANA', 'NOCHE'],
+              progresoActual: 2,
+            },
+            skincare: {
+              tipo: 'DIARIO',
+              frecuencia: 2,
+              activo: true,
+              horarios: ['MAÑANA', 'NOCHE'],
+              progresoActual: 2,
+            },
+          },
+          nutricion: {
+            water: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+          },
+        },
+      });
+      const habits = {
+        ...mockHabits,
+        bodyCare: [
+          ...mockHabits.bodyCare,
+          { id: 'haircare', label: 'Hair care', icon: 'Face', activo: true, orden: 3 },
+          { id: 'skincare', label: 'Skin Care', icon: 'Spa', activo: true, orden: 4 },
+        ],
+      };
+      const { today, notToday } = groupSectionHabitsByDaySchedule({
+        section: 'bodyCare',
+        rutina,
+        habits,
+      });
+      expect(today.map((h) => h.itemId)).toEqual(expect.arrayContaining(['haircare', 'skincare']));
+      expect(notToday.map((h) => h.itemId)).not.toContain('haircare');
+      expect(notToday.map((h) => h.itemId)).not.toContain('skincare');
     });
   });
 

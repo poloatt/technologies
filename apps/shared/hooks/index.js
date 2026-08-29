@@ -1,5 +1,5 @@
 // Exportar hooks personalizados (usar named exports cuando corresponde)
-export { default as useHabitsPreferences, invalidateHabitsPreferencesCache, setHabitsPreferencesCache } from './useHabitsPreferences.js';
+export { default as useHabitsPreferences, invalidateHabitsPreferencesCache, setHabitsPreferencesCache, setHabitChainsCache, getCachedHabitChains, updateHabitChainsOnApi } from './useHabitsPreferences.js';
 export * from './useActionHistory.js';
 export * from './useAPI.js';
 export * from './useAppDetection.js';
@@ -19,6 +19,7 @@ export { default as useResponsive } from './useResponsive.js';
 export { default as useHorizontalDragScroll } from './useHorizontalDragScroll.js';
 export { default as useHabitGroupContextMenu } from './useHabitGroupContextMenu.js';
 export { useHabitSectionCreateOption, HABIT_SECTION_CREATE_LABEL } from './useHabitSectionCreateOption.js';
+export { default as useRoutineAssignment } from '../habits/routines/useRoutineAssignment.js';
 export { default as usePwaInstall, isStandalonePwa, isPwaInstallDismissed, dismissPwaInstall } from './usePwaInstall.js';
 export * from './useStatusOptimizer.js';
 export * from './useTimezone.js';

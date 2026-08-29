@@ -1,5 +1,6 @@
 import { getSectionCarouselItems } from '../desktop/rutinaDesktopUtils.js';
 import { isHabitHorarioCompleted } from './habitCompletionUtils.js';
+import { normalizeTimeOfDay } from '../../utils/timeOfDayUtils.js';
 
 function isDailyCadence(config) {
   const tipo = (config?.tipo || 'DIARIO').toUpperCase();
@@ -27,7 +28,7 @@ export function getRutinaFranjaItems({
   const expanded = [];
 
   baseItems.forEach((entry) => {
-    const horarios = Array.isArray(entry.config?.horarios) ? entry.config.horarios : [];
+    const horarios = normalizeTimeOfDay(entry.config?.horarios);
 
     if (isDailyCadence(entry.config) && horarios.length > 0) {
       horarios.forEach((horario) => {

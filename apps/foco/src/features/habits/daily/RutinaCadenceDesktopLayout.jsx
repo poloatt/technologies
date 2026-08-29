@@ -19,7 +19,7 @@ export default function RutinaCadenceDesktopLayout({
   readOnly = false,
 }) {
   const { habits, customSections } = useHabits();
-  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const { markItemComplete, patchRutinaSection } = useRutinas();
   const dragRef = useRef({ moved: false });
   const prefs = prefsReady ? (habitsPreferences || {}) : {};
@@ -34,10 +34,11 @@ export default function RutinaCadenceDesktopLayout({
       rutina,
       habits,
       habitsPreferences: prefs,
+      habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
     }),
-    [rutina, habits, prefs, customSections, habitIconsMap],
+    [rutina, habits, prefs, habitChains, prefsReady, customSections, habitIconsMap],
   );
 
   const [selectedBucket, setSelectedBucket] = useState(() =>
@@ -50,6 +51,7 @@ export default function RutinaCadenceDesktopLayout({
       rutina,
       habits,
       habitsPreferences: prefs,
+      habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
     });
@@ -58,7 +60,7 @@ export default function RutinaCadenceDesktopLayout({
         ? prev
         : getDefaultSelectedCadenceBucket(buckets)
     ));
-  }, [rutina?._id, habits, prefsReady, habitsPreferences, customSections, habitIconsMap]);
+  }, [rutina?._id, habits, prefsReady, habitsPreferences, habitChains, customSections, habitIconsMap]);
 
   const handleToggle = useHabitCarouselToggle({
     mode: 'ahora',

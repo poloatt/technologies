@@ -66,6 +66,35 @@ export {
 export { getRutinaPeriodStart, getRutinaPeriodEnd } from './rutinaPeriodBounds.js';
 
 export {
+  HABIT_CHAIN_TYPES,
+  normalizeHabitStep,
+  stepsEqual,
+  generateChainId,
+  findChainForHabit,
+  getChainStepIndex,
+  getPreviousStep,
+  getNextStep,
+  isStepCompletedToday,
+  isChainStepLocked,
+  resolveHabitChainContext,
+  enrichEntryWithChainContext,
+  buildManagerHabitListItems,
+  groupHabitsIntoDisplayRows,
+  groupEntriesIntoDisplayRows,
+  removeHabitFromChains,
+  applyChainFormSave,
+  buildChainFormState,
+  listAllUserHabits,
+  getChainDisplayLabel,
+  buildChainSelectOptions,
+  updateHabitChainLabel,
+  NEW_HABIT_CHAIN_VALUE,
+  validateHabitChains,
+  resolveNextActionableStep,
+  shouldBlockChainToggle,
+} from './habitChainUtils.js';
+
+export {
   getCarouselItemsForMode,
   getCarouselAhoraItems,
   getCarouselLuegoItems,

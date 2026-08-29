@@ -65,14 +65,14 @@ export function TareaFormSecondaryLine({ children, sx }) {
   );
 }
 
-export function TareaFormRow({ icon: Icon, children, showDivider = false, align = 'flex-start' }) {
+export function TareaFormRow({ icon: Icon, children, showDivider = false, align = 'flex-start', compact = false }) {
   return (
     <Box
       sx={{
         display: 'flex',
         alignItems: align === 'center' ? 'center' : 'flex-start',
         gap: Icon ? TASK_FORM_ROW_GAP : 0,
-        py: TASK_FORM_ROW_PY,
+        py: compact ? 0 : TASK_FORM_ROW_PY,
         minHeight: TASK_FORM_ROW_MIN_HEIGHT,
         borderBottom: showDivider ? 1 : 0,
         borderColor: 'divider',

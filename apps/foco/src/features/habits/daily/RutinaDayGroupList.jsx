@@ -11,8 +11,10 @@ import {
 import ChecklistItem from './ChecklistItem';
 import SortableRutinaHabitRow from './SortableRutinaHabitRow';
 import RutinaDoneSection from './RutinaDoneSection';
-import { RUTINA_DAY_GROUP_COPY } from '@shared/copy/agendaTerminology';
-import { isHabitCompletedForHistorial, isHabitHorarioCompleted, resolveEntryFranjaFocusHorario } from '@shared/habits';
+import { RUTINA_DAY_GROUP_COPY, HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
+import { isHabitCompletedForHistorial, isHabitHorarioCompleted, resolveEntryFranjaFocusHorario, getHabitDisplayLabel, groupEntriesIntoDisplayRows } from '@shared/habits';
+import { rutinaStackCellSx, rutinaStackCellInlineSx, rutinaStackCellCompactSx } from '@shared/styles/rutinaPageStyles';
+import { RoutineStackRow } from '@shared/components/habits/routines';
 
 const GROUP_HEADING_SX = {
   px: 0.5,
@@ -60,18 +62,24 @@ function StaticHabitRow({
   entry,
   section,
   rutina,
+  habits = null,
   readOnly,
   onItemClick,
-  onEditHabit,
   localData,
   localDataBySection = null,
   rowKey = null,
   multiSection = false,
+  stackCell = false,
+  hideChainBadge = false,
+  hideMeta = false,
 }) {
   const entrySection = resolveEntrySection(entry, section);
   const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
   const focusHorario = resolveEntryFocusHorario(entry);
-  const { itemId, Icon, label, config, userHabit } = entry;
+  const { itemId, Icon, label, config, chain } = entry;
+  const prevStepLabel = chain?.prevStep
+    ? getHabitDisplayLabel(chain.prevStep.section, chain.prevStep.habitId, habits)
+    : '';
   const itemValue = entryLocalData?.[itemId] !== undefined
     ? entryLocalData[itemId]
     : rutina?.[entrySection]?.[itemId];
@@ -89,7 +97,10 @@ function StaticHabitRow({
   };
 
   return (
-    <Box key={rowKey || `${entrySection}-${itemId}`} id={`habit-row-${entrySection}-${itemId}`}>
+    <Box
+      key={rowKey || `${entrySection}-${itemId}`}
+      id={stackCell ? undefined : `habit-row-${entrySection}-${itemId}`}
+    >
       <ChecklistItem
         itemId={itemId}
         section={entrySection}
@@ -100,12 +111,77 @@ function StaticHabitRow({
         onItemClick={handleItemClick}
         config={config}
         habitLabel={label}
-        isCustomHabit={Boolean(userHabit)}
         localData={entryLocalData}
         focusHorario={focusHorario}
-        onEditHabit={userHabit && onEditHabit ? () => onEditHabit(userHabit, entrySection) : undefined}
+        chain={chain}
+        prevStepLabel={prevStepLabel}
+        stackCell={stackCell}
+        hideChainBadge={hideChainBadge}
+        hideMeta={hideMeta}
       />
     </Box>
+  );
+}
+
+function RutinaStackHabitRow({
+  entries = [],
+  chainId,
+  section,
+  rutina,
+  habits = null,
+  readOnly,
+  onItemClick,
+  localData,
+  localDataBySection = null,
+  rowKeyPrefix = '',
+  multiSection = false,
+  stackVariant = 'inline',
+}) {
+  const chain = entries[0]?.chain;
+  const isCompact = stackVariant === 'compact';
+  const isInline = stackVariant === 'inline';
+  const isCard = stackVariant === 'card';
+  const chainLabel = isCard && (chain?.label
+    || (chain?.stepCount > 1 ? HABIT_CHAIN_COPY.stepProgress(1, chain.stepCount) : null));
+
+  const cellSx = isCompact
+    ? rutinaStackCellCompactSx
+    : (isInline ? rutinaStackCellInlineSx : rutinaStackCellSx);
+
+  return (
+    <RoutineStackRow
+      chainId={chainId}
+      chainLabel={chainLabel}
+      rowKeyPrefix={rowKeyPrefix}
+      variant={stackVariant}
+    >
+      {entries.map((entry) => {
+        const entrySection = resolveEntrySection(entry, section);
+        const itemId = entry.itemId;
+        return (
+          <Box
+            key={`${entrySection}-${itemId}`}
+            sx={cellSx}
+            id={`habit-row-${entrySection}-${itemId}`}
+          >
+            <StaticHabitRow
+              entry={entry}
+              section={section}
+              rutina={rutina}
+              habits={habits}
+              readOnly={readOnly}
+              onItemClick={onItemClick}
+              localData={localData}
+              localDataBySection={localDataBySection}
+              multiSection={multiSection}
+              stackCell={isCard}
+              hideChainBadge
+              hideMeta={isCompact}
+            />
+          </Box>
+        );
+      })}
+    </RoutineStackRow>
   );
 }
 
@@ -113,19 +189,43 @@ function HabitRows({
   items,
   section,
   rutina,
+  habits = null,
   readOnly,
   onItemClick,
-  onEditHabit,
   localData,
   localDataBySection = null,
   sortable = false,
   rowKeyPrefix = '',
   multiSection = false,
+  stackVariant = 'inline',
 }) {
-  if (!items.length) return null;
+  const displayRows = useMemo(() => groupEntriesIntoDisplayRows(items), [items]);
+
+  if (!displayRows.length) return null;
 
   if (sortable) {
-    return items.map((entry) => {
+    return displayRows.map((row) => {
+      if (row.kind === 'stack') {
+        return (
+          <RutinaStackHabitRow
+            key={rowKeyPrefix ? `${rowKeyPrefix}-stack-${row.chainId}` : `stack-${row.chainId}`}
+            chainId={row.chainId}
+            entries={row.entries}
+            section={section}
+            rutina={rutina}
+            habits={habits}
+            readOnly={readOnly}
+            onItemClick={onItemClick}
+            localData={localData}
+            localDataBySection={localDataBySection}
+            rowKeyPrefix={rowKeyPrefix}
+            multiSection={multiSection}
+            stackVariant={stackVariant}
+          />
+        );
+      }
+
+      const entry = row.entry;
       const entrySection = resolveEntrySection(entry, section);
       return (
         <SortableRutinaHabitRow
@@ -135,28 +235,51 @@ function HabitRows({
           rutina={rutina}
           readOnly={readOnly}
           onItemClick={onItemClick}
-          onEditHabit={onEditHabit}
+          habits={habits}
           localData={resolveEntryLocalData(entry, section, localData, localDataBySection)}
         />
       );
     });
   }
 
-  return items.map((entry) => (
-    <StaticHabitRow
-      key={rowKeyPrefix ? `${rowKeyPrefix}-${resolveEntrySection(entry, section)}-${entry.itemId}` : `${resolveEntrySection(entry, section)}-${entry.itemId}`}
-      rowKey={rowKeyPrefix ? `${rowKeyPrefix}-${resolveEntrySection(entry, section)}-${entry.itemId}` : null}
-      entry={entry}
-      section={section}
-      rutina={rutina}
-      readOnly={readOnly}
-      onItemClick={onItemClick}
-      onEditHabit={onEditHabit}
-      localData={localData}
-      localDataBySection={localDataBySection}
-      multiSection={multiSection}
-    />
-  ));
+  return displayRows.map((row) => {
+    if (row.kind === 'stack') {
+      return (
+        <RutinaStackHabitRow
+          key={rowKeyPrefix ? `${rowKeyPrefix}-stack-${row.chainId}` : `stack-${row.chainId}`}
+          chainId={row.chainId}
+          entries={row.entries}
+          section={section}
+          rutina={rutina}
+          habits={habits}
+          readOnly={readOnly}
+          onItemClick={onItemClick}
+          localData={localData}
+          localDataBySection={localDataBySection}
+          rowKeyPrefix={rowKeyPrefix}
+          multiSection={multiSection}
+          stackVariant={stackVariant}
+        />
+      );
+    }
+
+    const entry = row.entry;
+    return (
+      <StaticHabitRow
+        key={rowKeyPrefix ? `${rowKeyPrefix}-${resolveEntrySection(entry, section)}-${entry.itemId}` : `${resolveEntrySection(entry, section)}-${entry.itemId}`}
+        rowKey={rowKeyPrefix ? `${rowKeyPrefix}-${resolveEntrySection(entry, section)}-${entry.itemId}` : null}
+        entry={entry}
+        section={section}
+        rutina={rutina}
+        habits={habits}
+        readOnly={readOnly}
+        onItemClick={onItemClick}
+        localData={localData}
+        localDataBySection={localDataBySection}
+        multiSection={multiSection}
+      />
+    );
+  });
 }
 
 /**
@@ -171,10 +294,10 @@ export default function RutinaDayGroupList({
   rutina,
   readOnly = false,
   sortable = false,
+  habits = null,
   sectionHabits = [],
   onReorder,
   onItemClick,
-  onEditHabit,
   onDoneToggle,
   localData = null,
   localDataBySection = null,
@@ -184,6 +307,7 @@ export default function RutinaDayGroupList({
   useFranjaHeadings = false,
   rowKeyPrefix = '',
   hideDone = false,
+  stackVariant = 'inline',
 }) {
   const hasToday = today.length > 0;
   const hasDone = done.length > 0;
@@ -256,14 +380,15 @@ export default function RutinaDayGroupList({
             items={today}
             section={section}
             rutina={rutina}
+            habits={habits}
             readOnly={readOnly}
             onItemClick={onItemClick}
-            onEditHabit={onEditHabit}
             localData={localData}
             localDataBySection={localDataBySection}
             sortable={canSort}
             rowKeyPrefix={rowKeyPrefix}
             multiSection={multiSection}
+            stackVariant={stackVariant}
           />
         </Box>
       )}
@@ -276,14 +401,15 @@ export default function RutinaDayGroupList({
             items={notToday}
             section={section}
             rutina={rutina}
+            habits={habits}
             readOnly={readOnly}
             onItemClick={onItemClick}
-            onEditHabit={onEditHabit}
             localData={localData}
             localDataBySection={localDataBySection}
             sortable={canSort}
             rowKeyPrefix={rowKeyPrefix}
             multiSection={multiSection}
+            stackVariant={stackVariant}
           />
         </Box>
       )}

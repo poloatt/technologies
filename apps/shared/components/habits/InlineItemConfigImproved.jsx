@@ -14,6 +14,10 @@ import {
 
   Chip,
 
+  Tabs,
+
+  Tab,
+
 } from '@mui/material';
 
 import CheckIcon from '@mui/icons-material/Check';
@@ -178,6 +182,8 @@ const InlineItemConfigImproved = ({
   sectionId,
 
   hideActions = false,
+
+  hideTopDivider = false,
 
 }) => {
 
@@ -409,7 +415,7 @@ const InlineItemConfigImproved = ({
 
     } else if (currentHorarios.length < maxHorarios) {
 
-      handleConfigChange({ horarios: [...currentHorarios, horario].sort() });
+      handleConfigChange({ horarios: normalizeTimeOfDay([...currentHorarios, horario]) });
 
     }
 
@@ -467,63 +473,47 @@ const InlineItemConfigImproved = ({
 
     <ConfigContainer>
 
-      <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.06)', mb: 0.3 }} />
+      {!hideTopDivider && <Divider sx={{ mb: 0.3 }} />}
 
       <Box sx={{ display: 'flex', flexDirection: 'row', minHeight: 22 }}>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.04, mr: 0.1, minWidth: 22 }}>
-
-          {tipoOptions.map((option, idx) => (
-
-            <React.Fragment key={option.value}>
-
-              <Box
-
-                onClick={() => handleConfigChange({ tipo: option.value })}
-
-                sx={{
-
-                  cursor: 'pointer',
-
-                  px: 0.2,
-
-                  py: 0.08,
-
-                  fontWeight: 600,
-
-                  fontSize: '0.78em',
-
-                  color: configState.tipo === option.value ? '#fff' : 'rgba(255,255,255,0.5)',
-
-                  background: configState.tipo === option.value ? 'rgba(255,255,255,0.08)' : 'none',
-
-                  borderLeft: configState.tipo === option.value ? '3px solid #1976d2' : '3px solid transparent',
-
-                  '&:hover': { background: 'rgba(255,255,255,0.12)', color: '#fff' },
-
-                }}
-
-              >
-
-                {option.label}
-
-              </Box>
-
-              {idx < tipoOptions.length - 1 && (
-
-                <Divider orientation="horizontal" flexItem sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.08)' }} />
-
-              )}
-
-            </React.Fragment>
-
+        <Tabs
+          orientation="vertical"
+          value={configState.tipo}
+          onChange={(_, value) => handleConfigChange({ tipo: value })}
+          sx={{
+            flexShrink: 0,
+            minWidth: 108,
+            borderRight: 1,
+            borderColor: 'divider',
+            '& .MuiTabs-indicator': {
+              left: 0,
+              right: 'auto',
+              width: 3,
+            },
+            '& .MuiTab-root': {
+              alignItems: 'flex-start',
+              textAlign: 'left',
+              minHeight: 36,
+              minWidth: 108,
+              py: 0.75,
+              px: 1.5,
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              textTransform: 'none',
+              color: 'text.secondary',
+              '&.Mui-selected': {
+                color: 'text.primary',
+              },
+            },
+          }}
+        >
+          {tipoOptions.map((option) => (
+            <Tab key={option.value} label={option.label} value={option.value} />
           ))}
+        </Tabs>
 
-        </Box>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3, borderColor: 'rgba(255,255,255,0.08)' }} />
-
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, pl: 1 }}>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.7, flexWrap: 'wrap', minWidth: 0, justifyContent: 'center', py: 0.12 }}>
 
@@ -533,7 +523,7 @@ const InlineItemConfigImproved = ({
 
                 <IconButton size="small" onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia - 1) })} sx={{ width: 18, height: 18, fontSize: '0.95rem' }}>-</IconButton>
 
-                <Typography variant="h6" sx={{ fontWeight: 700, color: '#fff', minWidth: 24, textAlign: 'center', fontSize: '1.1rem' }}>{configState.frecuencia}</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', minWidth: 24, textAlign: 'center', fontSize: '1.1rem' }}>{configState.frecuencia}</Typography>
 
                 <IconButton size="small" onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia + 1) })} sx={{ width: 18, height: 18, fontSize: '0.95rem' }}>+</IconButton>
 
@@ -555,7 +545,7 @@ const InlineItemConfigImproved = ({
 
                 SelectProps={{ native: true }}
 
-                sx={{ minWidth: 140, '& select': { color: '#fff' } }}
+                sx={{ minWidth: 140, '& select': { color: 'text.primary' } }}
 
               >
 

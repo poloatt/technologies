@@ -475,6 +475,7 @@ export function TareaFormPillSelect({
         anchorEl={anchor}
         open={open}
         onClose={close}
+        disablePortal
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
         slotProps={{

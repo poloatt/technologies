@@ -4,6 +4,11 @@ import {
   getHabitItemValue,
   persistRutinaItemToggle,
   rutinaItemValuesDiffer,
+  isHabitCompletedForHistorial,
+  resolveHabitChainContext,
+  shouldBlockChainToggle,
+  isStepCompletedToday,
+  getHabitDisplayLabel,
 } from '@shared/habits';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
 
@@ -13,14 +18,18 @@ import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
  */
 export default function useRutinaItemToggle({
   rutina,
+  habits = null,
   habitsPreferences = {},
+  habitChains = [],
   markItemComplete,
   patchRutinaSection,
   readOnly = false,
   getSectionOverrides,
+  getLocalDataBySection,
   onOptimisticValue,
   onRevertValue,
   onServerValue,
+  onChainStepComplete,
 }) {
   return useCallback(async (section, itemId, horario = null, event = null) => {
     event?.stopPropagation?.();
@@ -28,6 +37,7 @@ export default function useRutinaItemToggle({
     if (readOnly || !markItemComplete || !rutina?._id) return undefined;
 
     const overrides = getSectionOverrides?.(section) || {};
+    const localDataBySection = getLocalDataBySection?.() || null;
     const previousValue = getHabitItemValue(rutina, section, itemId, overrides);
     const rutinaForToggle = {
       ...rutina,
@@ -41,6 +51,20 @@ export default function useRutinaItemToggle({
       horario,
       currentTimeOfDay: getCurrentTimeOfDay(),
     });
+
+    const wasCompleted = isHabitCompletedForHistorial(previousValue);
+    const willComplete = isHabitCompletedForHistorial(newValue) && !wasCompleted;
+    const chainContext = resolveHabitChainContext(
+      habitChains,
+      section,
+      itemId,
+      rutinaForToggle,
+      localDataBySection,
+    );
+
+    if (willComplete && shouldBlockChainToggle(chainContext)) {
+      return undefined;
+    }
 
     onOptimisticValue?.(section, itemId, newValue);
 
@@ -60,6 +84,25 @@ export default function useRutinaItemToggle({
         onServerValue?.(section, itemId, serverValue);
       }
 
+      if (willComplete && chainContext?.nextStep) {
+        const { nextStep } = chainContext;
+        const nextPending = !isStepCompletedToday(
+          rutinaForToggle,
+          nextStep.section,
+          nextStep.habitId,
+          localDataBySection,
+        );
+        if (nextPending) {
+          const nextLabel = getHabitDisplayLabel(nextStep.section, nextStep.habitId, habits);
+          onChainStepComplete?.({
+            chainContext,
+            completedStep: { section, habitId: itemId },
+            nextStep,
+            nextLabel,
+          });
+        }
+      }
+
       return response;
     } catch (error) {
       onRevertValue?.(section, itemId, previousValue);
@@ -67,13 +110,17 @@ export default function useRutinaItemToggle({
     }
   }, [
     rutina,
+    habits,
     habitsPreferences,
+    habitChains,
     markItemComplete,
     patchRutinaSection,
     readOnly,
     getSectionOverrides,
+    getLocalDataBySection,
     onOptimisticValue,
     onRevertValue,
     onServerValue,
+    onChainStepComplete,
   ]);
 }

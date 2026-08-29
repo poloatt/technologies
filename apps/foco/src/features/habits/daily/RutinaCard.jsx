@@ -1,16 +1,17 @@
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
 import {
   Box,
   Typography,
   IconButton,
   Collapse,
   List,
+  Button,
 } from '@mui/material';
+import { useSnackbar } from 'notistack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import { useRutinas, useHabits } from '@shared/context';
-import HabitFormDialog from '@shared/components/HabitFormDialog';
 
 import {
   resolveRutinaItemConfig,
@@ -25,7 +26,8 @@ import RutinaSectionCarousel from './RutinaSectionCarousel';
 import HubSectionShell from '@shared/components/hub/HubSectionShell';
 import { DynamicIcon } from '@shared/components/common/DynamicIcon';
 import { getRutinaSectionIconKey } from '@shared/navigation/rutinaSectionIcons';
-import { resolveSectionIconKey, isCustomHabitSection } from '@shared/habits';
+import { resolveSectionIconKey, isCustomHabitSection, resolveSectionLabel } from '@shared/habits';
+import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
 import HabitGroupContextMenu from '@shared/components/habits/HabitGroupContextMenu';
 import useHabitGroupContextMenu from '@shared/hooks/useHabitGroupContextMenu';
 import useRutinaItemToggle from '@foco/features/habits/hooks/useRutinaItemToggle';
@@ -60,10 +62,13 @@ const RutinaCard = ({
   onDeleteGroup,
   expandedSection = null,
   onExpandedSectionChange,
+  externalFocusedItemId = null,
+  onChainAdvance,
 }) => {
   const { rutina, markItemComplete } = useRutinas();
   const { habits, customSections, reorderHabits } = useHabits();
-  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
+  const { enqueueSnackbar } = useSnackbar();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
   const { isMobileOrTablet } = useResponsive();
   
@@ -107,20 +112,71 @@ const RutinaCard = ({
   const isExpanded = expandedSection === section;
   const [localData, setLocalData] = useRutinaSectionLocalData(section, data, rutina);
 
-  const [editingHabitDialog, setEditingHabitDialog] = useState({ open: false, habit: null, section: null });
-
   const [focusedItemId, setFocusedItemId] = useState(null);
 
-  const handleEditHabit = useCallback((habit, habitSection) => {
-    setEditingHabitDialog({ open: true, habit, section: habitSection });
-  }, []);
+  useEffect(() => {
+    if (externalFocusedItemId) {
+      setFocusedItemId(externalFocusedItemId);
+    }
+  }, [externalFocusedItemId]);
+
+  useEffect(() => {
+    if (externalFocusedItemId) {
+      setFocusedItemId(externalFocusedItemId);
+    }
+  }, [externalFocusedItemId]);
+
+  const openExpandedForHabit = useCallback((itemId) => {
+    onExpandedSectionChange?.(section);
+    setFocusedItemId(itemId);
+  }, [onExpandedSectionChange, section]);
+
+  const handleChainStepComplete = useCallback(({ nextStep, nextLabel }) => {
+    const scrollToRow = () => {
+      const el = document.getElementById(`habit-row-${nextStep.section}-${nextStep.habitId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    if (nextStep.section === section) {
+      openExpandedForHabit(nextStep.habitId);
+      scrollToRow();
+    } else {
+      onChainAdvance?.(nextStep);
+      scrollToRow();
+    }
+
+    enqueueSnackbar(HABIT_CHAIN_COPY.nextSnackbar(nextLabel), {
+      variant: 'info',
+      autoHideDuration: 3500,
+      action: (key) => (
+        <Button
+          size="small"
+          color="inherit"
+          onClick={() => {
+            if (nextStep.section === section) {
+              openExpandedForHabit(nextStep.habitId);
+            } else {
+              onChainAdvance?.(nextStep);
+            }
+            scrollToRow();
+            enqueueSnackbar.closeSnackbar(key);
+          }}
+        >
+          Ir
+        </Button>
+      ),
+    });
+  }, [section, onChainAdvance, enqueueSnackbar, openExpandedForHabit]);
 
   const toggleItem = useRutinaItemToggle({
     rutina,
+    habits,
     habitsPreferences: habitPrefs,
+    habitChains: prefsReady ? habitChains : [],
     markItemComplete,
     readOnly,
     getSectionOverrides: () => localData,
+    getLocalDataBySection: () => ({ [section]: localData }),
     onOptimisticValue: (_section, itemId, newValue) => {
       setLocalData((prevData) => ({ ...prevData, [itemId]: newValue }));
     },
@@ -130,6 +186,7 @@ const RutinaCard = ({
     onServerValue: (_section, itemId, serverValue) => {
       setLocalData((prevData) => ({ ...prevData, [itemId]: serverValue }));
     },
+    onChainStepComplete: handleChainStepComplete,
   });
 
   const handleToggle = () => {
@@ -139,11 +196,6 @@ const RutinaCard = ({
       setFocusedItemId(null);
     }
   };
-
-  const openExpandedForHabit = useCallback((itemId) => {
-    onExpandedSectionChange?.(section);
-    setFocusedItemId(itemId);
-  }, [onExpandedSectionChange, section]);
 
   const handleItemClick = useCallback((itemId, event, horario = null) => {
     const itemConfig = resolvedSectionConfig[itemId]
@@ -173,6 +225,7 @@ const RutinaCard = ({
       rutina,
       habits,
       habitsPreferences: habitPrefs,
+      habitChains: prefsReady ? habitChains : [],
       localData,
       iconsMap: habitIconsMap,
     });
@@ -187,7 +240,7 @@ const RutinaCard = ({
       done: matchFocused(grouped.done),
       notToday: matchFocused(grouped.notToday),
     };
-  }, [section, rutina, habits, habitPrefs, localData, focusedItemId, habitIconsMap]);
+  }, [section, rutina, habits, habitPrefs, habitChains, prefsReady, localData, focusedItemId, habitIconsMap]);
 
   const handleCarouselToggle = useCallback((sec, itemId, horario) => {
     handleItemClick(itemId, null, horario);
@@ -298,24 +351,19 @@ const RutinaCard = ({
               readOnly={readOnly}
               sortable={isExpanded}
               sectionHabits={sectionHabits}
+              habits={habits}
               habitsPreferences={habitPrefs}
               onReorder={handleReorderHabits}
               onItemClick={handleItemClick}
               onDoneToggle={handleItemClick}
-              onEditHabit={handleEditHabit}
               localData={localData}
+              stackVariant="compact"
             />
           </List>
         </Box>
       </Collapse>
     </HubSectionShell>
 
-    <HabitFormDialog
-      open={editingHabitDialog.open}
-      onClose={() => setEditingHabitDialog({ open: false, habit: null, section: null })}
-      editingHabit={editingHabitDialog.habit}
-      editingSection={editingHabitDialog.section}
-    />
     {canManageGroup && (
       <HabitGroupContextMenu
         open={menuState.open}

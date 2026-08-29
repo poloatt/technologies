@@ -13,6 +13,7 @@ import {
   PriorityHigh,
   TimerOutlined,
   TrackChangesOutlined,
+  LinearScaleOutlined,
 } from '@mui/icons-material';
 import { getIconByKey } from '@shared/navigation/menuIcons';
 
@@ -38,4 +39,5 @@ export const TareaFormIcons = {
   completed: CheckCircleOutlined,
   attach: AttachFileOutlined,
   folder: getIconByKey('folder'),
+  rutina: LinearScaleOutlined,
 };

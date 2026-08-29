@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { useResponsive } from '@shared/hooks';
 import { DEFAULT_HABIT_ICON } from '@shared/utils/habitIcons';
+import { Z_INDEX } from '@shared/config/uiConstants';
 import {
   tareaFormDialogPaperSx,
   TareaFormHeader,
@@ -21,6 +22,7 @@ export default function HabitGroupFormDialog({
   saving = false,
   mode = 'create',
   initialSection = null,
+  zIndex = Z_INDEX.modalOverlay,
 }) {
   const { isMobile } = useResponsive();
   const [label, setLabel] = useState('');
@@ -64,6 +66,7 @@ export default function HabitGroupFormDialog({
       fullScreen={isMobile}
       fullWidth
       maxWidth="xs"
+      sx={{ zIndex }}
       PaperProps={{
         sx: {
           ...tareaFormDialogPaperSx(isMobile),

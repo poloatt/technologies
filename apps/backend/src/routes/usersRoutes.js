@@ -16,6 +16,7 @@ router.put('/rutinas-config', checkAuth, usersController.updateDefaultRutinaConf
 // Rutas para preferencias de hábitos
 router.get('/preferences/habits', checkAuth, usersController.getHabitPreferences);
 router.put('/preferences/habits', checkAuth, usersController.updateHabitPreferences);
+router.put('/habit-chains', checkAuth, usersController.updateHabitChains);
 
 // Rutas para gestión de hábitos personalizados
 // IMPORTANTE: Las rutas específicas (reorder) deben ir ANTES de las rutas con parámetros (:habitId)

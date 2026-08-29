@@ -10,7 +10,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import { useRutinas, useHabits } from '@shared/context';
-import HabitFormDialog from '@shared/components/HabitFormDialog';
 import {
   resolveRutinaItemConfig,
   groupRutinaHabitsByCadence,
@@ -50,7 +49,7 @@ function RutinaCadenceCard({
 }) {
   const { markItemComplete } = useRutinas();
   const { habits, customSections, reorderHabits } = useHabits();
-  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
   const { isMobileOrTablet } = useResponsive();
 
@@ -60,7 +59,6 @@ function RutinaCadenceCard({
   );
 
   const [localDataBySection, setLocalDataBySection] = useRutinaBucketLocalData(sectionsInBucket, rutina);
-  const [editingHabitDialog, setEditingHabitDialog] = useState({ open: false, habit: null, section: null });
   const [focusedItemId, setFocusedItemId] = useState(null);
 
   const isExpanded = expandedCadence === bucket.id;
@@ -86,6 +84,7 @@ function RutinaCadenceCard({
       rutina,
       habits,
       habitsPreferences: habitPrefs,
+      habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
       localDataBySection,
@@ -102,7 +101,7 @@ function RutinaCadenceCard({
       done: matchFocused(current.done),
       notToday: matchFocused(current.notToday),
     };
-  }, [bucket, rutina, habits, habitPrefs, customSections, habitIconsMap, localDataBySection, focusedItemId]);
+  }, [bucket, rutina, habits, habitPrefs, habitChains, prefsReady, customSections, habitIconsMap, localDataBySection, focusedItemId]);
 
   const displayBucket = useMemo(
     () => ({
@@ -116,10 +115,13 @@ function RutinaCadenceCard({
 
   const toggleItem = useRutinaItemToggle({
     rutina,
+    habits,
     habitsPreferences: habitPrefs,
+    habitChains: prefsReady ? habitChains : [],
     markItemComplete,
     readOnly,
     getSectionOverrides: (section) => localDataBySection[section] || {},
+    getLocalDataBySection: () => localDataBySection,
     onOptimisticValue: (section, itemId, newValue) => {
       setLocalDataBySection((prev) => ({
         ...prev,
@@ -139,10 +141,6 @@ function RutinaCadenceCard({
       }));
     },
   });
-
-  const handleEditHabit = useCallback((habit, section) => {
-    setEditingHabitDialog({ open: true, habit, section });
-  }, []);
 
   const handleToggle = () => {
     const next = !isExpanded;
@@ -245,6 +243,7 @@ function RutinaCadenceCard({
                   rutina={rutina}
                   habits={habits}
                   habitsPreferences={habitPrefs}
+                  habitChains={prefsReady ? habitChains : []}
                   customSections={customSections}
                   onToggle={handleCarouselToggle}
                   onRequireExpand={(_, itemId) => openExpandedForHabit(itemId)}
@@ -271,20 +270,12 @@ function RutinaCadenceCard({
                 habitsPreferences={habitPrefs}
                 localDataBySection={localDataBySection}
                 onItemClick={handleItemClick}
-                onEditHabit={handleEditHabit}
                 onReorderSection={handleReorderSection}
               />
             </List>
           </Box>
         </Collapse>
       </HubSectionShell>
-
-      <HabitFormDialog
-        open={editingHabitDialog.open}
-        onClose={() => setEditingHabitDialog({ open: false, habit: null, section: null })}
-        editingHabit={editingHabitDialog.habit}
-        editingSection={editingHabitDialog.section}
-      />
     </>
   );
 }

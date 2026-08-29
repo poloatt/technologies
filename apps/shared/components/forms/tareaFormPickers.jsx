@@ -35,6 +35,7 @@ export function PickerPopover({ open, anchorEl, onClose, children }) {
       open={open}
       anchorEl={anchorEl}
       onClose={onClose}
+      disablePortal
       anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       PaperProps={{ sx: taskFormPickerPopoverPaperSx }}

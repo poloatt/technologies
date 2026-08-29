@@ -35,6 +35,22 @@ export const RUTINA_DAY_GROUP_COPY = {
   done: 'Hecho',
 };
 
+/** Configuración y runtime de rutinas encadenadas. */
+export const HABIT_CHAIN_COPY = {
+  sectionTitle: 'Encadenamiento',
+  stackButton: 'Apilar',
+  noRoutine: 'Sin rutina',
+  newRoutine: 'Nueva rutina',
+  stackHint: 'Agrupa hábitos que suelen hacerse juntos',
+  pickLabel: 'Hábitos de la rutina',
+  noHabitsAvailable: 'No hay otros hábitos disponibles para apilar.',
+  emptySection: 'No hay hábitos en este grupo',
+  selectedCount: (n) => `${n} seleccionado${n === 1 ? '' : 's'}`,
+  lockedTooltip: (prevLabel) => `Completa ${prevLabel} primero`,
+  nextSnackbar: (label) => `Siguiente: ${label}`,
+  stepProgress: (current, total) => `${current}/${total}`,
+};
+
 export const TASK_HORIZON_COPY = {
   ahora: {
     label: 'Ahora',

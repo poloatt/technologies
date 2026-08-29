@@ -11,7 +11,6 @@ export default function RutinaCadenceBucketList({
   rutina,
   readOnly,
   onItemClick,
-  onEditHabit,
   onReorderSection,
   habits,
   habitsPreferences = {},
@@ -25,7 +24,7 @@ export default function RutinaCadenceBucketList({
         rutina={rutina}
         readOnly={readOnly}
         onItemClick={onItemClick}
-        onEditHabit={onEditHabit}
+        habits={habits}
         habitsPreferences={habitsPreferences}
         localDataBySection={localDataBySection}
       />
@@ -39,7 +38,6 @@ export default function RutinaCadenceBucketList({
         rutina={rutina}
         readOnly={readOnly}
         onItemClick={onItemClick}
-        onEditHabit={onEditHabit}
         habitsPreferences={habitsPreferences}
         localDataBySection={localDataBySection}
       />
@@ -65,7 +63,6 @@ export default function RutinaCadenceBucketList({
         onReorder={(habitIds) => onReorderSection?.(section, habitIds)}
         onItemClick={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
         onDoneToggle={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
-        onEditHabit={onEditHabit}
       />
     );
   }
@@ -95,7 +92,6 @@ export default function RutinaCadenceBucketList({
           onReorder={(habitIds) => onReorderSection?.(section, habitIds)}
           onItemClick={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
           onDoneToggle={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
-          onEditHabit={onEditHabit}
         />
       </Box>
     );

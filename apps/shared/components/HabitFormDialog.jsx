@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 import {
 
@@ -20,7 +20,7 @@ import clienteAxios from '@shared/config/axios';
 
 import { DEFAULT_HABIT_ICON } from '@shared/utils/habitIcons';
 
-import { useResponsive, useHabitSectionCreateOption } from '@shared/hooks';
+import { useResponsive, useHabitSectionCreateOption, useRoutineAssignment } from '@shared/hooks';
 import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
 
 import {
@@ -40,7 +40,11 @@ import {
 import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
 
 import { DEFAULT_HABIT_CONFIG, normalizeHabitConfig, saveHabitFromForm } from '@shared/habits/form';
-import { isCustomHabitSection, resolveSectionLabel } from '@shared/habits';
+import { isCustomHabitSection, resolveSectionLabel, removeHabitFromChains } from '@shared/habits';
+import { updateHabitChainsOnApi } from '@shared/hooks/useHabitsPreferences';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
+import HabitFormMetaRows from '@shared/components/habits/HabitFormMetaRows.jsx';
+import HabitChainAfterPicker from '@shared/components/habits/HabitChainAfterPicker.jsx';
 
 import { normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 
@@ -60,6 +64,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
   });
 
   const { updateUserHabitPreference, rutina } = useRutinas();
+  const { habitChains, prefsReady } = useHabitsPreferences();
 
 
 
@@ -80,6 +85,18 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
   const [errors, setErrors] = useState({});
 
   const [isSaving, setIsSaving] = useState(false);
+
+  const editingHabitId = editingHabit?.id || editingHabit?._id || null;
+  const isEditing = Boolean(editingHabit && editingSection);
+
+  const routineAssignment = useRoutineAssignment({
+    habitChains,
+    prefsReady,
+    section: formData.section,
+    habitId: isEditing ? editingHabitId : null,
+    active: open,
+    mode: isEditing ? 'edit' : 'create',
+  });
 
 
 
@@ -153,6 +170,11 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
     }
 
+    const chainError = routineAssignment.validate();
+    if (chainError) {
+      newErrors.chain = chainError;
+    }
+
     setErrors(newErrors);
 
     return Object.keys(newErrors).length === 0;
@@ -172,8 +194,6 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
     try {
 
       let habitId;
-
-
 
       if (editingHabit && editingSection) {
 
@@ -275,7 +295,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
       } else {
 
-        await saveHabitFromForm({
+        habitId = await saveHabitFromForm({
 
           label: formData.label,
 
@@ -295,6 +315,12 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
         });
 
+      }
+
+
+
+      if (prefsReady && habitId) {
+        await routineAssignment.persist(formData.section, habitId);
       }
 
 
@@ -347,7 +373,6 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
   }, []);
 
-  const isEditing = Boolean(editingHabit && editingSection);
   const sectionHabitCount = (habits[editingSection] || []).length;
   const isCustomSourceSection = isCustomHabitSection(editingSection);
   const canDelete = isEditing && (sectionHabitCount > 1 || isCustomSourceSection);
@@ -371,6 +396,11 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
       }
 
       await deleteHabit(habitId, editingSection);
+
+      if (prefsReady) {
+        const nextChains = removeHabitFromChains(habitChains, editingSection, habitId);
+        await updateHabitChainsOnApi(nextChains);
+      }
 
       if (deleteSourceGroup) {
         await deleteHabitSection(editingSection);
@@ -448,61 +478,89 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
               autoFocus
 
-              showSection
+            />
 
+            <HabitFormMetaRows
               section={formData.section}
-
               onSectionChange={(section) => setFormData((prev) => ({ ...prev, section }))}
-
               sectionOptions={sectionOptions}
-
               sectionError={errors.section}
-
               onCreateSection={sectionSelectProps.onCreate}
-
               createSectionLabel={sectionSelectProps.createLabel}
-
+              chainConfig={routineAssignment.config}
+              onChainConfigChange={routineAssignment.setConfig}
+              habitChains={habitChains}
+              habits={habits}
+              currentSection={formData.section}
+              currentHabitId={editingHabit?.id || editingHabit?._id || null}
+              customSections={customSections}
+              chainError={errors.chain}
+              showRoutine={false}
             />
 
           </Box>
+
+          <Box sx={{ px: TASK_FORM_HORIZONTAL_PX, pb: 1 }}>
+            <HabitFormFields
+              section={formData.section}
+              onSectionChange={(section) => setFormData((prev) => ({ ...prev, section }))}
+              icon={formData.icon}
+              onIconChange={(icon) => setFormData((prev) => ({ ...prev, icon }))}
+              config={config}
+              onConfigChange={handleConfigChange}
+              errors={errors}
+              showSection={false}
+              showIconPicker={false}
+              showCadence
+              sectionOptions={sectionOptions}
+              onCreateSection={sectionSelectProps.onCreate}
+              createSectionLabel={sectionSelectProps.createLabel}
+            />
+          </Box>
+
+          <Box sx={{ px: TASK_FORM_HORIZONTAL_PX, pb: 0.5 }}>
+            <HabitFormMetaRows
+              section={formData.section}
+              onSectionChange={(section) => setFormData((prev) => ({ ...prev, section }))}
+              sectionOptions={sectionOptions}
+              sectionError={errors.section}
+              onCreateSection={sectionSelectProps.onCreate}
+              createSectionLabel={sectionSelectProps.createLabel}
+              chainConfig={routineAssignment.config}
+              onChainConfigChange={routineAssignment.setConfig}
+              habitChains={habitChains}
+              habits={habits}
+              currentSection={formData.section}
+              currentHabitId={editingHabit?.id || editingHabit?._id || null}
+              customSections={customSections}
+              chainError={errors.chain}
+              showGroup={false}
+              routinePickerInline={false}
+            />
+          </Box>
+
+          {routineAssignment.config.enabled && (
+            <Box sx={{ px: TASK_FORM_HORIZONTAL_PX, pb: 1 }}>
+              <HabitChainAfterPicker
+                habits={habits}
+                customSections={customSections}
+                linkedSteps={routineAssignment.config.linkedSteps || []}
+                excludeSection={formData.section}
+                excludeHabitId={editingHabit?.id || editingHabit?._id || null}
+                onChange={(linkedSteps) => routineAssignment.setConfig({
+                  ...routineAssignment.config,
+                  linkedSteps,
+                })}
+                flat
+              />
+            </Box>
+          )}
 
         </TareaFormHeader>
 
 
 
         <Box sx={{ px: TASK_FORM_HORIZONTAL_PX, pb: 1 }}>
-
-          <HabitFormFields
-
-            section={formData.section}
-
-            onSectionChange={(section) => setFormData((prev) => ({ ...prev, section }))}
-
-            icon={formData.icon}
-
-            onIconChange={(icon) => setFormData((prev) => ({ ...prev, icon }))}
-
-            config={config}
-
-            onConfigChange={handleConfigChange}
-
-            errors={errors}
-
-            showSection={false}
-
-            showIconPicker={false}
-
-            showCadence
-
-            sectionOptions={sectionOptions}
-
-            onCreateSection={sectionSelectProps.onCreate}
-
-            createSectionLabel={sectionSelectProps.createLabel}
-
-          />
-
-
 
           {errors.submit && (
 

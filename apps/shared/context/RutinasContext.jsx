@@ -255,7 +255,11 @@ export const RutinasProvider = ({ children }) => {
       let migrated = false;
 
       if (rutinaData?.fecha && getRutinaDayMode(rutinaData.fecha) === 'historical') {
-        const prefs = getCachedHabitsPreferences() ?? await fetchHabitsPreferencesFromApi();
+        let prefs = getCachedHabitsPreferences();
+        if (!prefs) {
+          const fetched = await fetchHabitsPreferencesFromApi();
+          prefs = fetched?.habits ?? fetched ?? {};
+        }
         const migrationPayload = buildHistoricalFranjaMigrationPayload(rutinaData, prefs);
         if (migrationPayload) {
           try {

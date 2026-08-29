@@ -1,4 +1,4 @@
-import React, { useMemo, memo, useEffect, useState } from 'react';
+import React, { useMemo, memo, useEffect, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress, Grid } from '@mui/material';
 import RutinaCard from './RutinaCard';
 import RutinaCadenceLayout from './RutinaCadenceLayout';
@@ -61,10 +61,17 @@ export const RutinaTable = ({
 
   const [expandedSection, setExpandedSection] = useState(null);
   const [expandedCadence, setExpandedCadence] = useState(null);
+  const [chainFocus, setChainFocus] = useState(null);
+
+  const handleChainAdvance = useCallback((nextStep) => {
+    setExpandedSection(nextStep.section);
+    setChainFocus(nextStep);
+  }, []);
 
   useEffect(() => {
     setExpandedSection(null);
     setExpandedCadence(null);
+    setChainFocus(null);
   }, [rutinaDateKey]);
 
   if (loadingProp) {
@@ -111,6 +118,8 @@ export const RutinaTable = ({
                   onDeleteGroup={handleDeleteGroup}
                   expandedSection={expandedSection}
                   onExpandedSectionChange={setExpandedSection}
+                  externalFocusedItemId={chainFocus?.section === key ? chainFocus.habitId : null}
+                  onChainAdvance={handleChainAdvance}
                 />
               </Grid>
             ))}

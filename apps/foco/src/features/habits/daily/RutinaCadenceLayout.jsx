@@ -21,7 +21,7 @@ export default function RutinaCadenceLayout({
   onExpandedCadenceChange,
 }) {
   const { habits, customSections } = useHabits();
-  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
   const { isDesktop } = useResponsive();
 
@@ -35,10 +35,11 @@ export default function RutinaCadenceLayout({
       rutina,
       habits,
       habitsPreferences: habitPrefs,
+      habitChains: prefsReady ? habitChains : [],
       customSections,
       iconsMap: habitIconsMap,
     }),
-    [rutina, habits, habitPrefs, customSections, habitIconsMap],
+    [rutina, habits, habitPrefs, habitChains, prefsReady, customSections, habitIconsMap],
   );
 
   if (cadenceBuckets.length === 0) {

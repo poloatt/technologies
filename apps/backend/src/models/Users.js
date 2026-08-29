@@ -200,6 +200,11 @@ const userSchema = new mongoose.Schema({
       }],
       default: [],
     },
+    /** Rutinas encadenadas (apilamiento / dependencia entre hábitos). */
+    habitChains: {
+      type: Schema.Types.Mixed,
+      default: () => [],
+    },
   },
   // Hábitos personalizados del usuario (Mixed permite secciones dinámicas)
   customHabits: {

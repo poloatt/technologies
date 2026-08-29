@@ -24,6 +24,8 @@ export default function HabitFormTitleField({
   autoFocus = false,
   inputRef,
   onKeyDown,
+  onBlur,
+  disabled = false,
   action = null,
   sx,
   section,
@@ -34,6 +36,7 @@ export default function HabitFormTitleField({
   sectionEmptyLabel = 'Seleccionar grupo',
   onCreateSection,
   createSectionLabel = 'Nuevo grupo',
+  sectionTrailing = null,
 }) {
   return (
     <Box>
@@ -61,6 +64,8 @@ export default function HabitFormTitleField({
           autoFocus={autoFocus}
           inputRef={inputRef}
           onKeyDown={onKeyDown}
+          onBlur={onBlur}
+          disabled={disabled}
           sx={{ flex: 1, minWidth: 0, ...tareaFormTitleFieldSx, ...sx }}
         />
       </TareaFormHeaderTitleRow>
@@ -70,18 +75,24 @@ export default function HabitFormTitleField({
           sx={{
             mt: 1,
             pl: (theme) => `calc(${HABIT_TITLE_LEADING_WIDTH}px + ${theme.spacing(TASK_FORM_ROW_GAP)})`,
-            maxWidth: 360,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            maxWidth: '100%',
           }}
         >
-          <TareaFormPillSelect
-            value={section}
-            onChange={(e) => onSectionChange?.(e.target.value)}
-            options={sectionOptions}
-            emptyLabel={sectionEmptyLabel}
-            error={sectionError}
-            onCreate={onCreateSection}
-            createLabel={createSectionLabel}
-          />
+          <Box sx={{ flex: 1, minWidth: 0, maxWidth: 360 }}>
+            <TareaFormPillSelect
+              value={section}
+              onChange={(e) => onSectionChange?.(e.target.value)}
+              options={sectionOptions}
+              emptyLabel={sectionEmptyLabel}
+              error={sectionError}
+              onCreate={onCreateSection}
+              createLabel={createSectionLabel}
+            />
+          </Box>
+          {sectionTrailing}
         </Box>
       )}
     </Box>
