@@ -356,7 +356,7 @@ export const iconMap = {
 };
 
 /** Iconos legacy de afeitado → tijeras (hábitos ya guardados). */
-const HABIT_ICON_LEGACY_ALIASES = {
+export const HABIT_ICON_LEGACY_ALIASES = {
   Razor: 'BodyTrim',
   Shave: 'BodyTrim',
   Gillette: 'Barba',

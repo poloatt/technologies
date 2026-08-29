@@ -77,7 +77,11 @@ export function applyRoutineSelectChange(value, {
 }
 
 export function validateRoutineAssignment(config = EMPTY_ROUTINE_ASSIGNMENT) {
-  if (config.enabled && !(config.linkedSteps?.length)) {
+  if (!config.enabled) return null;
+  if (config.chainId === NEW_HABIT_CHAIN_VALUE && (config.label || '').trim()) {
+    return null;
+  }
+  if (!(config.linkedSteps?.length)) {
     return 'Selecciona al menos un hábito para apilar';
   }
   return null;

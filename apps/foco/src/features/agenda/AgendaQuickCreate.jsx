@@ -38,7 +38,7 @@ import TareaActions from '../tasks/components/TareaActions';
 import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
 import HabitGroupFormDialog from '@shared/components/habits/HabitGroupFormDialog';
 import { useHabitSectionCreateOption } from '@shared/hooks';
-import { useHabitFormState } from '../habits/templates/useHabitFormState';
+import { useHabitFormState } from '../habits/manager';
 import { useQuickCreateAdvancedAdapter } from './useQuickCreateFormState';
 
 const INITIAL_ADVANCED = {

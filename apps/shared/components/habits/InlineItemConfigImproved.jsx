@@ -1,38 +1,31 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-
   Box,
-
   Typography,
-
   TextField,
-
-  IconButton,
-
   Divider,
-
-  Chip,
-
   Tabs,
-
   Tab,
-
 } from '@mui/material';
-
 import CheckIcon from '@mui/icons-material/Check';
-
 import { styled } from '@mui/material/styles';
-
 import './InlineItemConfigImproved.css';
-
 import { CancelarTabButton, GuardarTabButton } from '@shared/components/common/SystemButtons';
-
 import { getTimeOfDayLabels, normalizeTimeOfDay, VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
-
 import { DIAS_SEMANA } from '@shared/habits';
-
 import { HABIT_PERIODIC_COPY } from '@shared/copy/agendaTerminology';
+import {
+  TASK_FORM_PILL_HEIGHT,
+  TASK_FORM_PILL_BORDER_RADIUS,
+  TASK_FORM_PILL_GAP,
+  TASK_FORM_PILL_OUTLINE_BORDER,
+  TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+  TASK_FORM_PILL_OUTLINED_BG,
+  TASK_FORM_PILL_OUTLINED_BG_HOVER,
+  TASK_FORM_PILL_FILL_BG,
+  TASK_FORM_PILL_BORDER_WIDTH,
+  taskFormPillTextSx,
+} from '@shared/components/forms/tareaFormUi';
 
 
 
@@ -47,14 +40,89 @@ const normalizeFrecuencia = (value) => {
 
 
 const getDiaSemanaLetra = (diaValue) => {
-
   const letras = { 0: 'D', 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S' };
-
   return letras[diaValue] || '';
-
 };
 
+function getCadenceToggleSx({ selected = false, disabled = false, circular = false } = {}) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: `${TASK_FORM_PILL_BORDER_WIDTH} solid ${selected ? TASK_FORM_PILL_OUTLINE_BORDER_HOVER : TASK_FORM_PILL_OUTLINE_BORDER}`,
+    bgcolor: selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG,
+    color: selected ? 'text.primary' : 'text.secondary',
+    fontWeight: selected ? 500 : 400,
+    ...taskFormPillTextSx,
+    borderRadius: circular ? '50%' : TASK_FORM_PILL_BORDER_RADIUS,
+    width: circular ? TASK_FORM_PILL_HEIGHT : 'auto',
+    height: TASK_FORM_PILL_HEIGHT,
+    minWidth: circular ? TASK_FORM_PILL_HEIGHT : undefined,
+    minHeight: TASK_FORM_PILL_HEIGHT,
+    px: circular ? 0 : 1.25,
+    py: 0,
+    m: 0,
+    boxSizing: 'border-box',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+    flexShrink: 0,
+    transition: 'background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+    '&:hover:not(:disabled)': {
+      bgcolor: selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG_HOVER,
+      borderColor: TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+      color: 'text.primary',
+    },
+  };
+}
 
+function CadenceCircleToggle({
+  label,
+  selected = false,
+  disabled = false,
+  onClick,
+  ariaLabel,
+}) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-label={ariaLabel || label}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      sx={getCadenceToggleSx({ selected, disabled, circular: true })}
+    >
+      {label}
+    </Box>
+  );
+}
+
+function CadencePillToggle({
+  label,
+  selected = false,
+  disabled = false,
+  onClick,
+  ariaLabel,
+}) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-label={ariaLabel || label}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      sx={getCadenceToggleSx({ selected, disabled, circular: false })}
+    >
+      {label}
+    </Box>
+  );
+}
+
+
+
+/** Ancho mínimo de la columna de tabs en el editor de cadencia/frecuencia. */
+export const HABIT_CADENCE_TAB_COLUMN_MIN_WIDTH = 108;
 
 const ConfigContainer = styled(Box)(() => ({
   paddingTop: 0.3,
@@ -483,7 +551,7 @@ const InlineItemConfigImproved = ({
           onChange={(_, value) => handleConfigChange({ tipo: value })}
           sx={{
             flexShrink: 0,
-            minWidth: 108,
+            minWidth: HABIT_CADENCE_TAB_COLUMN_MIN_WIDTH,
             borderRight: 1,
             borderColor: 'divider',
             '& .MuiTabs-indicator': {
@@ -495,7 +563,7 @@ const InlineItemConfigImproved = ({
               alignItems: 'flex-start',
               textAlign: 'left',
               minHeight: 36,
-              minWidth: 108,
+              minWidth: HABIT_CADENCE_TAB_COLUMN_MIN_WIDTH,
               py: 0.75,
               px: 1.5,
               fontSize: '0.8125rem',
@@ -519,13 +587,21 @@ const InlineItemConfigImproved = ({
 
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.12 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: TASK_FORM_PILL_GAP }}>
 
-                <IconButton size="small" onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia - 1) })} sx={{ width: 18, height: 18, fontSize: '0.95rem' }}>-</IconButton>
+                <CadenceCircleToggle
+                  label="-"
+                  ariaLabel="Disminuir frecuencia"
+                  onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia - 1) })}
+                />
 
                 <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', minWidth: 24, textAlign: 'center', fontSize: '1.1rem' }}>{configState.frecuencia}</Typography>
 
-                <IconButton size="small" onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia + 1) })} sx={{ width: 18, height: 18, fontSize: '0.95rem' }}>+</IconButton>
+                <CadenceCircleToggle
+                  label="+"
+                  ariaLabel="Aumentar frecuencia"
+                  onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia + 1) })}
+                />
 
               </Box>
 
@@ -561,7 +637,7 @@ const InlineItemConfigImproved = ({
 
           </Box>
 
-          <Box sx={{ mt: 0.5, display: 'flex', gap: 0.8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Box sx={{ mt: 0.5, display: 'flex', gap: TASK_FORM_PILL_GAP, flexWrap: 'wrap', justifyContent: 'center' }}>
 
             {VALID_TIME_OF_DAY.map((horario) => {
 
@@ -575,18 +651,13 @@ const InlineItemConfigImproved = ({
 
               return (
 
-                <Chip
-
+                <CadencePillToggle
                   key={horario}
-
                   label={label}
-
-                  onClick={() => !isDisabled && handleHorarioToggle(horario)}
-
+                  selected={isChecked}
                   disabled={isDisabled}
-
-                  size="small"
-
+                  onClick={() => handleHorarioToggle(horario)}
+                  ariaLabel={`Franja ${label}`}
                 />
 
               );
@@ -597,7 +668,7 @@ const InlineItemConfigImproved = ({
 
           {(configState.tipo === 'SEMANAL' || (configState.tipo === 'PERSONALIZADO' && configState.periodo === 'CADA_SEMANA')) && (
 
-            <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Box sx={{ mt: 0.5, display: 'flex', gap: TASK_FORM_PILL_GAP, flexWrap: 'wrap', justifyContent: 'center' }}>
 
               {[...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]].map((dia) => {
 
@@ -605,7 +676,13 @@ const InlineItemConfigImproved = ({
 
                 return (
 
-                  <Chip key={dia.value} label={getDiaSemanaLetra(dia.value)} onClick={() => handleDiaSemanaToggle(dia.value)} size="small" color={isChecked ? 'primary' : 'default'} variant={isChecked ? 'filled' : 'outlined'} />
+                  <CadenceCircleToggle
+                    key={dia.value}
+                    label={getDiaSemanaLetra(dia.value)}
+                    selected={isChecked}
+                    onClick={() => handleDiaSemanaToggle(dia.value)}
+                    ariaLabel={dia.label}
+                  />
 
                 );
 

@@ -1,4 +1,4 @@
-import { ensureRutinaForDate } from '@foco/features/habits/daily/ensureRutinaForDate.js';
+import { ensureRutinaForDate } from '@foco/features/rutinas/lib/ensureRutinaForDate.js';
 
 const mockGet = jest.fn();
 const mockPost = jest.fn();

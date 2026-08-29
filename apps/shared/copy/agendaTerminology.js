@@ -35,6 +35,12 @@ export const RUTINA_DAY_GROUP_COPY = {
   done: 'Hecho',
 };
 
+/** Secciones dinámicas del bucket Diario en vista cadencia. */
+export const DAILY_CADENCE_SECTION_COPY = {
+  ahora: 'Ahora',
+  sinHacer: 'Sin hacer',
+};
+
 /** Configuración y runtime de rutinas encadenadas. */
 export const HABIT_CHAIN_COPY = {
   sectionTitle: 'Encadenamiento',

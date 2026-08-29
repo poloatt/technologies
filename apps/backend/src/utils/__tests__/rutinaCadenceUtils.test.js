@@ -5,6 +5,8 @@ import {
   resolveRutinaScheduleBucket,
   resolveCadenceViewBucket,
   isEntryDueOnRutinaDay,
+  buildDailyCadenceDisplaySections,
+  reorderFlatEntriesByDisplayRowDnD,
 } from '@shared/habits';
 
 const monday = new Date(2026, 5, 22, 12, 0, 0, 0); // lunes (getDay=1)
@@ -204,5 +206,79 @@ describe('cadence view — dynamic Diario promotion', () => {
 
     expect(notTodayIds).not.toContain('weekly');
     expect(doneIds).not.toContain('weekly');
+  });
+});
+
+describe('buildDailyCadenceDisplaySections', () => {
+  const groupsByKey = {
+    MAÑANA: { franjaKey: 'MAÑANA', franjaLabel: 'Mañana', today: [{ itemId: 'a' }], notToday: [], done: [] },
+    TARDE: { franjaKey: 'TARDE', franjaLabel: 'Tarde', today: [{ itemId: 'b' }], notToday: [], done: [] },
+    NOCHE: { franjaKey: 'NOCHE', franjaLabel: 'Noche', today: [{ itemId: 'c' }], notToday: [], done: [] },
+  };
+
+  it('mañana activa: Mañana (lista), Tarde y Noche (carrusel)', () => {
+    const sections = buildDailyCadenceDisplaySections({
+      groupsByKey,
+      activeFranja: 'MAÑANA',
+      isViewingToday: true,
+    });
+    expect(sections.map((s) => s.id)).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
+    expect(sections.find((s) => s.id === 'MAÑANA').isActive).toBe(true);
+    expect(sections.find((s) => s.id === 'TARDE').isActive).toBe(false);
+  });
+
+  it('tarde activa: Mañana, Ahora (lista), Noche', () => {
+    const sections = buildDailyCadenceDisplaySections({
+      groupsByKey,
+      activeFranja: 'TARDE',
+      isViewingToday: true,
+      labels: { ahora: 'Ahora', sinHacer: 'Sin hacer' },
+    });
+    expect(sections.map((s) => ({ id: s.id, label: s.label, isActive: s.isActive }))).toEqual([
+      { id: 'MAÑANA', label: 'Mañana', isActive: false },
+      { id: 'AHORA', label: 'Ahora', isActive: true },
+      { id: 'NOCHE', label: 'Noche', isActive: false },
+    ]);
+  });
+
+  it('noche activa: Sin hacer (merge mañana+tarde), Noche (lista)', () => {
+    const sections = buildDailyCadenceDisplaySections({
+      groupsByKey,
+      activeFranja: 'NOCHE',
+      isViewingToday: true,
+      labels: { ahora: 'Ahora', sinHacer: 'Sin hacer' },
+    });
+    expect(sections.map((s) => s.id)).toEqual(['SIN_HACER', 'NOCHE']);
+    expect(sections[0].group.today.map((e) => e.itemId)).toEqual(['a', 'b']);
+    expect(sections[1].isActive).toBe(true);
+  });
+
+  it('día histórico: orden fijo Mañana → Tarde → Noche sin sección activa', () => {
+    const sections = buildDailyCadenceDisplaySections({
+      groupsByKey,
+      activeFranja: 'TARDE',
+      isViewingToday: false,
+    });
+    expect(sections.every((s) => !s.isActive)).toBe(true);
+    expect(sections.map((s) => s.id)).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
+  });
+});
+
+describe('reorderFlatEntriesByDisplayRowDnD', () => {
+  const items = [
+    { itemId: 'a', chain: null },
+    { itemId: 'b', chain: { type: 'stack', id: 'c1', stepCount: 2, stepIndex: 0 } },
+    { itemId: 'c', chain: { type: 'stack', id: 'c1', stepCount: 2, stepIndex: 1 } },
+    { itemId: 'd', chain: null },
+  ];
+
+  it('mueve una rutina apilada como bloque', () => {
+    const result = reorderFlatEntriesByDisplayRowDnD(items, 'stack:c1', 'a');
+    expect(result).toEqual(['b', 'c', 'a', 'd']);
+  });
+
+  it('intercambia hábito suelto con rutina', () => {
+    const result = reorderFlatEntriesByDisplayRowDnD(items, 'd', 'stack:c1');
+    expect(result).toEqual(['a', 'd', 'b', 'c']);
   });
 });

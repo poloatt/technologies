@@ -8,7 +8,7 @@ import { useTasksForList } from '../hooks/useTasksForList';
 import { isInAhora, isInLuego, isTaskCompleted, isTaskCancelled } from '@shared/utils/agendaRules';
 import { useRutinas, useHabits } from '@shared/context';
 import { getNormalizedToday } from '@shared/utils/dateUtils';
-import { ensureRutinaForDate } from '../../habits/daily/ensureRutinaForDate';
+import { ensureRutinaForDate } from '../../rutinas';
 import { buildTareaPayload, syncTareaToGoogleInBackground } from '../form';
 
 /**

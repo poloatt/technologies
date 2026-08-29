@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { Box } from '@mui/material';
-import InlineItemConfigImproved from './InlineItemConfigImproved.jsx';
+import InlineItemConfigImproved, { HABIT_CADENCE_TAB_COLUMN_MIN_WIDTH } from './InlineItemConfigImproved.jsx';
+import HabitFormSectionLabel from './HabitFormSectionLabel.jsx';
 import {
   TareaFormRow,
   TareaFormPillSelect,
@@ -23,6 +24,7 @@ export default function HabitFormFields({
   showSection = true,
   showIconPicker = true,
   showCadence = true,
+  showCadenceLabel = false,
   hideCadenceTopDivider = false,
   sectionMinimal = false,
   sectionOptions = HABIT_SECTION_OPTIONS,
@@ -60,14 +62,23 @@ export default function HabitFormFields({
       )}
 
       {showCadence && (
-        <InlineItemConfigImproved
-          config={config}
-          onConfigChange={handleConfigChange}
-          itemId="new-habit-inline"
-          sectionId={section}
-          hideActions
-          hideTopDivider={hideCadenceTopDivider}
-        />
+        <Box sx={{ width: '100%' }}>
+          {showCadenceLabel && (
+            <Box sx={{ display: 'flex', width: '100%' }}>
+              <Box sx={{ minWidth: HABIT_CADENCE_TAB_COLUMN_MIN_WIDTH, flexShrink: 0 }}>
+                <HabitFormSectionLabel inset="tab">Frecuencia</HabitFormSectionLabel>
+              </Box>
+            </Box>
+          )}
+          <InlineItemConfigImproved
+            config={config}
+            onConfigChange={handleConfigChange}
+            itemId="new-habit-inline"
+            sectionId={section}
+            hideActions
+            hideTopDivider={hideCadenceTopDivider}
+          />
+        </Box>
       )}
     </Box>
   );

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box } from '../utils/materialImports';
 import { useLocation } from 'react-router-dom';
-import { AGENDA_UNIFIED_BAR_CONFIG, isRutinasPath } from '../config/uiConstants';
+import { AGENDA_UNIFIED_BAR_CONFIG } from '../config/uiConstants';
 import { SystemButtons, MenuButton } from '../components/common/SystemButtons';
 import { useUISettings } from '../context/UISettingsContext';
 import { useSidebar } from '../context/SidebarContext';
@@ -12,7 +12,6 @@ import {
   resolveToolbarCenterDesktop,
   resolveToolbarRightByPath,
 } from './toolbarModules';
-import { getAgendaBarSlot } from './toolbarRegistry';
 import { resolveCajaBranchHubPath } from './appNavResolver';
 import { isCajaToolbarPath, isPulsoToolbarPath } from './unifiedBarPaths';
 
@@ -33,7 +32,6 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   const CenterComp = resolveToolbarCenterByPath(path);
   const showCenterOnDesktop = resolveToolbarCenterDesktop(path);
   const mainMargin = getMainMargin(isMobileOrTablet, showSidebarCollapsed);
-  const FocoCenterActions = getAgendaBarSlot('focoCenterActions');
 
   const showCenter = CenterComp && (isMobileOrTablet || showCenterOnDesktop);
 
@@ -48,8 +46,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   const showRightNav = !isMobile || showEntityToolbarNavigation;
   const isCajaPath = isCajaToolbarPath(path);
   const isPulsoPath = isPulsoToolbarPath(path);
-  const showRutinasActions = isRutinasPath(path);
-  const useCenterActionsOverlay = isCajaPath || isPulsoPath || showRutinasActions;
+  const useCenterActionsOverlay = isCajaPath || isPulsoPath;
   const hideGridCenter = useCenterActionsOverlay;
   const showCajaBranchSwitcher = isCajaPath && !isMobile && RightComp;
 
@@ -63,13 +60,10 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
   const TOOLBAR_BACK_SLOT_WIDTH = 34;
   const showBranchBack = showCajaBranchBack && !isMobile;
   const MOBILE_LEFT_INSET = 0;
-  const rutinasFullBleedLeft = showRutinasActions && isMobileOrTablet;
-  const baseCenterInsetLeft = rutinasFullBleedLeft
-    ? 0
-    : isMobileOrTablet
-      ? MOBILE_LEFT_INSET
-      : (mainMargin < collapsedWidth ? collapsedWidth : mainMargin);
-  const centerActionsInsetLeft = showBranchBack && !showRutinasActions
+  const baseCenterInsetLeft = isMobileOrTablet
+    ? MOBILE_LEFT_INSET
+    : (mainMargin < collapsedWidth ? collapsedWidth : mainMargin);
+  const centerActionsInsetLeft = showBranchBack
     ? baseCenterInsetLeft + TOOLBAR_BACK_SLOT_WIDTH
     : baseCenterInsetLeft;
   const gridMarginRight = collapsedWidth;
@@ -105,19 +99,6 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
             '& > *': { pointerEvents: 'auto' },
           }}
         >
-          {showRutinasActions && FocoCenterActions && (
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: isMobileOrTablet ? 'flex-start' : 'center',
-                width: isMobileOrTablet ? '100%' : 'auto',
-                pointerEvents: 'none',
-                '& > *': { pointerEvents: 'auto' },
-              }}
-            >
-              <FocoCenterActions section="rutinas" dense />
-            </Box>
-          )}
           {isCajaPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
           {isPulsoPath && CenterComp && <CenterComp hasSelectedItems={hasSelectedItems} />}
         </Box>

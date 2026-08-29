@@ -7,6 +7,7 @@ import {
   TASK_FORM_ROW_PY,
   TASK_FORM_HORIZONTAL_PX,
   TASK_FORM_HEADER_ACTION_COLUMN_WIDTH,
+  TASK_FORM_PILL_HEIGHT,
   taskFormBodyTextSx,
   taskFormCaptionTextSx,
   taskFormHeaderContentRowSx,
@@ -73,7 +74,7 @@ export function TareaFormRow({ icon: Icon, children, showDivider = false, align 
         alignItems: align === 'center' ? 'center' : 'flex-start',
         gap: Icon ? TASK_FORM_ROW_GAP : 0,
         py: compact ? 0 : TASK_FORM_ROW_PY,
-        minHeight: TASK_FORM_ROW_MIN_HEIGHT,
+        minHeight: compact ? TASK_FORM_PILL_HEIGHT : TASK_FORM_ROW_MIN_HEIGHT,
         borderBottom: showDivider ? 1 : 0,
         borderColor: 'divider',
       }}

@@ -2,14 +2,22 @@ export { default as HabitCarouselRow } from './carousel/HabitCarouselRow';
 export { default as HabitCarouselStrip } from './carousel/HabitCarouselStrip';
 export { default as HabitCarouselAhora } from './carousel/HabitCarouselAhora';
 export { default as HabitCarouselLuego } from './carousel/HabitCarouselLuego';
-export { default as HabitsManagerHost } from './HabitsManagerHost';
-export { HabitsManager } from './templates/HabitsManager';
-export { useHabitFormState } from './templates/useHabitFormState';
-export { default as RutinasPage } from './daily/RutinasPage';
-export { ensureRutinaForDate } from './daily/ensureRutinaForDate';
-export { default as useEnsureRutinaForDate } from './daily/useEnsureRutinaForDate';
-export { useHabitsAgendaView } from './hooks/useHabitsAgendaView';
-export { default as useHabitCompletion } from './hooks/useHabitCompletion';
-export { default as useRutinaItemToggle } from './hooks/useRutinaItemToggle';
-export { default as useRutinaSectionLocalData } from './hooks/useRutinaSectionLocalData';
 export { default as HabitCarouselEmptyState } from './carousel/HabitCarouselEmptyState';
+export {
+  HabitsManager,
+  HabitsManagerHost,
+  useHabitFormState,
+  dispatchOpenHabitsManager,
+  listenOpenHabitsManager,
+} from './manager';
+export { useHabitsAgendaView } from './hooks/useHabitsAgendaView';
+
+// Re-exports de compatibilidad — preferir `@foco/features/rutinas`
+export {
+  RutinasPage,
+  ensureRutinaForDate,
+  useEnsureRutinaForDate,
+  useRutinaItemToggle,
+  useRutinaSectionLocalData,
+  useRutinaBucketLocalData,
+} from '../rutinas';

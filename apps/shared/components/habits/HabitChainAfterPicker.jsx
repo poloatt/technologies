@@ -1,5 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Box, Tabs, Tab, Typography } from '@mui/material';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { getIconByName } from '@shared/utils/iconConfig';
 import { buildHabitManagerSections } from '@shared/habits/form/habitsManagerUtils';
 import { normalizeHabitStep, stepsEqual } from '@shared/habits';
@@ -9,12 +20,46 @@ function stepKey(section, habitId) {
   return `${section}:${habitId}`;
 }
 
-function HabitPickRow({ habit, selected, onToggle }) {
+function HabitPickRow({
+  habit,
+  selected,
+  onToggle,
+  sortable = false,
+  stepId = null,
+}) {
   const Icon = getIconByName(habit.icon);
   const habitId = habit.id || habit._id;
+  const dragId = stepId || habitId;
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    transform,
+    isDragging,
+  } = useDraggable({ id: dragId, disabled: !sortable });
+
+  const { setNodeRef: setDropRef } = useDroppable({ id: dragId, disabled: !sortable });
+
+  const setNodeRef = sortable
+    ? (node) => {
+      setDragRef(node);
+      setDropRef(node);
+    }
+    : undefined;
+
+  const style = sortable
+    ? {
+      transform: CSS.Translate.toString(transform),
+      opacity: isDragging ? 0.85 : 1,
+      zIndex: isDragging ? 1 : 'auto',
+    }
+    : undefined;
 
   return (
     <Box
+      ref={setNodeRef}
+      style={style}
       role="option"
       aria-selected={selected}
       onClick={() => onToggle(habitId)}
@@ -38,6 +83,24 @@ function HabitPickRow({ habit, selected, onToggle }) {
         },
       }}
     >
+      {sortable && (
+        <Box
+          {...attributes}
+          {...listeners}
+          onClick={(event) => event.stopPropagation()}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            color: 'text.disabled',
+            cursor: 'grab',
+            touchAction: 'none',
+            flexShrink: 0,
+          }}
+          aria-label={`Reordenar ${habit.label}`}
+        >
+          <DragIndicatorIcon sx={{ fontSize: 18 }} />
+        </Box>
+      )}
       {Icon && (
         <Icon
           sx={{
@@ -77,6 +140,9 @@ export default function HabitChainAfterPicker({
   excludeSection = '',
   excludeHabitId = null,
   flat = false,
+  fillHeight = false,
+  pinSelectedAboveGroups = false,
+  sortableSelected = false,
 }) {
   const sections = useMemo(
     () => buildHabitManagerSections(customSections),
@@ -104,26 +170,62 @@ export default function HabitChainAfterPicker({
     [sections, habitsBySection],
   );
 
-  const selectedKeys = useMemo(
-    () => new Set(
-      (linkedSteps || [])
-        .map((step) => normalizeHabitStep(step))
-        .filter(Boolean)
-        .map((step) => stepKey(step.section, step.habitId)),
-    ),
+  const normalizedSteps = useMemo(
+    () => (linkedSteps || []).map(normalizeHabitStep).filter(Boolean),
     [linkedSteps],
   );
 
-  const [activeSection, setActiveSection] = useState(
-    () => sectionsWithHabits[0]?.value || sections[0]?.value || 'bodyCare',
+  const selectedKeys = useMemo(
+    () => new Set(normalizedSteps.map((step) => stepKey(step.section, step.habitId))),
+    [normalizedSteps],
   );
 
-  const visibleHabits = habitsBySection[activeSection] || [];
+  const selectedEntries = useMemo(
+    () => normalizedSteps.map((step) => {
+      const sectionHabits = habitsBySection[step.section] || [];
+      const habit = sectionHabits.find((entry) => (entry.id || entry._id) === step.habitId);
+      if (!habit) return null;
+      return { habit, section: step.section };
+    }).filter(Boolean),
+    [normalizedSteps, habitsBySection],
+  );
+
+  const unselectedHabitsBySection = useMemo(() => {
+    const map = {};
+    sections.forEach(({ value }) => {
+      map[value] = (habitsBySection[value] || []).filter((habit) => {
+        const habitId = habit.id || habit._id;
+        return !selectedKeys.has(stepKey(value, habitId));
+      });
+    });
+    return map;
+  }, [habitsBySection, sections, selectedKeys]);
+
+  const sectionsForTabs = useMemo(
+    () => (pinSelectedAboveGroups
+      ? sections.filter(({ value }) => (unselectedHabitsBySection[value]?.length || 0) > 0)
+      : sectionsWithHabits),
+    [pinSelectedAboveGroups, sections, unselectedHabitsBySection, sectionsWithHabits],
+  );
+
+  const [activeSection, setActiveSection] = useState(
+    () => sectionsForTabs[0]?.value || sectionsWithHabits[0]?.value || sections[0]?.value || 'bodyCare',
+  );
+
+  React.useEffect(() => {
+    if (!sectionsForTabs.some(({ value }) => value === activeSection)) {
+      setActiveSection(sectionsForTabs[0]?.value || sectionsWithHabits[0]?.value || sections[0]?.value || 'bodyCare');
+    }
+  }, [activeSection, sectionsForTabs, sectionsWithHabits, sections]);
+
+  const visibleHabits = pinSelectedAboveGroups
+    ? (unselectedHabitsBySection[activeSection] || [])
+    : (habitsBySection[activeSection] || []);
 
   const toggleHabit = (section, habitId) => {
     const step = { section, habitId };
     const key = stepKey(section, habitId);
-    const current = (linkedSteps || []).map(normalizeHabitStep).filter(Boolean);
+    const current = normalizedSteps;
 
     if (selectedKeys.has(key)) {
       onChange?.(current.filter((s) => !stepsEqual(s, step)));
@@ -131,6 +233,27 @@ export default function HabitChainAfterPicker({
     }
     onChange?.([...current, step]);
   };
+
+  const selectedSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
+  const handleSelectedDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const ids = normalizedSteps.map((step) => stepKey(step.section, step.habitId));
+    const oldIndex = ids.indexOf(active.id);
+    const newIndex = ids.indexOf(over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = [...normalizedSteps];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+    onChange?.(reordered);
+  }, [normalizedSteps, onChange]);
+
+  const canSortSelected = sortableSelected && pinSelectedAboveGroups && selectedEntries.length > 1;
 
   if (sectionsWithHabits.length === 0) {
     return (
@@ -144,6 +267,10 @@ export default function HabitChainAfterPicker({
     <Box
       sx={{
         width: '100%',
+        display: fillHeight ? 'flex' : 'block',
+        flexDirection: fillHeight ? 'column' : undefined,
+        flex: fillHeight ? 1 : undefined,
+        minHeight: fillHeight ? 0 : undefined,
         ...(flat
           ? { bgcolor: 'transparent', border: 'none', borderRadius: 0 }
           : {
@@ -155,6 +282,57 @@ export default function HabitChainAfterPicker({
         overflow: 'hidden',
       }}
     >
+      {pinSelectedAboveGroups && selectedEntries.length > 0 && (
+        <Box
+          role="listbox"
+          aria-multiselectable="true"
+          aria-label="Hábitos seleccionados de la rutina"
+          sx={{
+            flexShrink: 0,
+            pt: 0.25,
+            pb: 0.75,
+            maxHeight: fillHeight ? 'min(36vh, 280px)' : 240,
+            overflowY: 'auto',
+          }}
+        >
+          {canSortSelected ? (
+            <DndContext
+              sensors={selectedSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleSelectedDragEnd}
+            >
+              {selectedEntries.map(({ habit, section }) => {
+                const habitId = habit.id || habit._id;
+                const id = stepKey(section, habitId);
+                return (
+                  <HabitPickRow
+                    key={id}
+                    habit={habit}
+                    selected
+                    stepId={id}
+                    sortable
+                    onToggle={(hid) => toggleHabit(section, hid)}
+                  />
+                );
+              })}
+            </DndContext>
+          ) : (
+            selectedEntries.map(({ habit, section }) => {
+              const habitId = habit.id || habit._id;
+              return (
+                <HabitPickRow
+                  key={stepKey(section, habitId)}
+                  habit={habit}
+                  selected
+                  onToggle={(id) => toggleHabit(section, id)}
+                />
+              );
+            })
+          )}
+        </Box>
+      )}
+
+      {sectionsForTabs.length > 0 && (
       <Tabs
         value={activeSection}
         onChange={(_, value) => setActiveSection(value)}
@@ -162,9 +340,10 @@ export default function HabitChainAfterPicker({
         scrollButtons="auto"
         allowScrollButtonsMobile
         sx={{
-          position: 'sticky',
+          position: fillHeight ? 'relative' : 'sticky',
           top: 0,
           zIndex: 1,
+          flexShrink: 0,
           bgcolor: 'background.default',
           minHeight: 40,
           borderBottom: 1,
@@ -179,10 +358,11 @@ export default function HabitChainAfterPicker({
           },
         }}
       >
-        {sectionsWithHabits.map(({ value, label }) => (
+        {sectionsForTabs.map(({ value, label }) => (
           <Tab key={value} label={label} value={value} />
         ))}
       </Tabs>
+      )}
 
       <Box
         role="listbox"
@@ -191,7 +371,9 @@ export default function HabitChainAfterPicker({
         sx={{
           pt: 0.75,
           pb: 0.25,
-          maxHeight: 200,
+          flex: fillHeight ? 1 : undefined,
+          minHeight: fillHeight ? 0 : undefined,
+          maxHeight: fillHeight ? undefined : 200,
           overflowY: 'auto',
         }}
       >
@@ -202,7 +384,7 @@ export default function HabitChainAfterPicker({
             <HabitPickRow
               key={key}
               habit={habit}
-              selected={selectedKeys.has(key)}
+              selected={!pinSelectedAboveGroups && selectedKeys.has(key)}
               onToggle={(id) => toggleHabit(activeSection, id)}
             />
           );
@@ -210,7 +392,9 @@ export default function HabitChainAfterPicker({
 
         {visibleHabits.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
-            {HABIT_CHAIN_COPY.emptySection}
+            {pinSelectedAboveGroups && selectedEntries.length > 0
+              ? 'Todos los hábitos de este grupo están en la rutina'
+              : HABIT_CHAIN_COPY.emptySection}
           </Typography>
         )}
       </Box>

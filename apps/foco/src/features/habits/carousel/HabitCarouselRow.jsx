@@ -7,7 +7,7 @@ import { getNormalizedToday } from '@shared/utils/dateUtils';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import { isSameDay } from 'date-fns';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
-import useEnsureRutinaForDate from '../daily/useEnsureRutinaForDate';
+import { useEnsureRutinaForDate } from '../../rutinas';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import useHabitCarouselItems from './useHabitCarouselItems';
 import useHabitCarouselToggle from './useHabitCarouselToggle';

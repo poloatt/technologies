@@ -19,6 +19,7 @@ export { default as useResponsive } from './useResponsive.js';
 export { default as useHorizontalDragScroll } from './useHorizontalDragScroll.js';
 export { default as useHabitGroupContextMenu } from './useHabitGroupContextMenu.js';
 export { useHabitSectionCreateOption, HABIT_SECTION_CREATE_LABEL } from './useHabitSectionCreateOption.js';
+export { useHabitRoutineCreateOption } from './useHabitRoutineCreateOption.js';
 export { default as useRoutineAssignment } from '../habits/routines/useRoutineAssignment.js';
 export { default as usePwaInstall, isStandalonePwa, isPwaInstallDismissed, dismissPwaInstall } from './usePwaInstall.js';
 export * from './useStatusOptimizer.js';

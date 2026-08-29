@@ -13,7 +13,10 @@ export {
   getHabitIconLabel,
   DEFAULT_HABIT_ICON,
   HABIT_ICON_LABELS,
+  HABIT_ICON_LEGACY_ALIASES,
 } from './habitIcons.js';
+
+export { getOutlineIconByName } from './habitOutlineIcons.js';
 
 export const iconConfig = {
   bodyCare: {

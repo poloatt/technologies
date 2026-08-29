@@ -22,9 +22,11 @@ import {
 
   TiempoToolbarActions,
 
+  RutinasToolbarCenter,
+
 } from './features/toolbar';
 
-import RutinaDateHeroBar from './features/habits/daily/RutinaDateHeroBar.jsx';
+import { RutinaDateHeroBar } from './features/rutinas';
 
 
 
@@ -65,9 +67,9 @@ registerToolbarModules([
     match: (path) => path === '/rutinas' || path.startsWith('/rutinas/'),
 
     // Navegación diaria (date hero) vive en RutinaPageNavigationBar vía registerRutinaDateHeroBar.
-    center: null,
+    center: RutinasToolbarCenter,
 
-    centerDesktop: false,
+    centerDesktop: true,
 
     right: TiempoToolbarRight,
 

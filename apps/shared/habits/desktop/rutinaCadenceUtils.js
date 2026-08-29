@@ -12,12 +12,14 @@ import {
   getSectionCarouselItems,
   groupSectionHabitsByDaySchedule,
   sortSectionCarouselBySlot,
+  sortSectionHabitsByFixedOrder,
   resolveRutinaScheduleBucket,
   isEntryDueOnRutinaDay,
 } from './rutinaDesktopUtils.js';
 import { isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
+import { DAILY_CADENCE_SECTION_COPY, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
 
 /** Lunes → Domingo. */
 export const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
@@ -47,6 +49,12 @@ const DAILY_FRANJA_HEADINGS = {
   NOCHE: 'Esta noche',
   GENERAL: 'Todo el día',
 };
+
+function isDailyCadenceConfig(config = {}) {
+  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
+  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
+  return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
+}
 
 function resolveEntryDailyFranjas(config = {}, activeFranja = 'MAÑANA') {
   const horarios = Array.isArray(config.horarios) ? config.horarios : [];
@@ -147,6 +155,164 @@ export function groupDailyCadenceByFranja(bucket, rutina) {
       notToday: franjaMap[franjaKey].notToday,
     }))
     .filter((group) => group.today.length > 0 || group.done.length > 0 || group.notToday.length > 0);
+}
+
+/** Combina grupos de franjas (p. ej. Mañana + Tarde pendientes en la noche). */
+export function mergeDailyFranjaGroups(...groups) {
+  const valid = groups.filter(Boolean);
+  if (!valid.length) return null;
+
+  return {
+    franjaKey: valid[0].franjaKey,
+    franjaLabel: valid[0].franjaLabel,
+    today: valid.flatMap((group) => group.today || []),
+    notToday: valid.flatMap((group) => group.notToday || []),
+    done: valid.flatMap((group) => group.done || []),
+  };
+}
+
+/** Etiqueta de la franja activa en la vista por grupo (alineada con cadencia). */
+export function resolveGroupViewActiveFranjaLabel(activeFranja, rutina) {
+  if (!isViewingRutinaToday(rutina)) {
+    return RUTINA_DAY_GROUP_COPY.today;
+  }
+  if (activeFranja === 'TARDE') {
+    return DAILY_CADENCE_SECTION_COPY.ahora;
+  }
+  return getDailyFranjaHeading(activeFranja, rutina);
+}
+
+function splitTodayEntryByFranja(entry, activeFranja) {
+  const { config, itemValue } = entry;
+  const activeIdx = VALID_TIME_OF_DAY.indexOf(activeFranja);
+  const sinHacer = [];
+  const ahora = [];
+  const luego = [];
+
+  if (!isDailyCadenceConfig(config)) {
+    ahora.push(entry);
+    return { sinHacer, ahora, luego };
+  }
+
+  resolveEntryDailyFranjas(config, activeFranja).forEach((franjaKey) => {
+    if (isHabitHorarioCompleted(itemValue, franjaKey)) return;
+
+    const enriched = { ...entry, franjaKey };
+    const franjaIdx = VALID_TIME_OF_DAY.indexOf(franjaKey);
+    if (franjaIdx < activeIdx) {
+      sinHacer.push(enriched);
+    } else if (franjaIdx === activeIdx) {
+      ahora.push(enriched);
+    } else {
+      luego.push(enriched);
+    }
+  });
+
+  return { sinHacer, ahora, luego };
+}
+
+/**
+ * Agrupa hábitos de una sección para la vista Grupo con Sin hacer / Ahora / Luego.
+ * Extiende groupSectionHabitsByDaySchedule con el mismo criterio de franjas que cadencia.
+ */
+export function groupSectionHabitsByFranjaSchedule(params) {
+  const grouped = groupSectionHabitsByDaySchedule(params);
+  const { rutina, section, habits = null } = params;
+  const sortOpts = { section, habits };
+
+  if (!isViewingRutinaToday(rutina)) {
+    return {
+      ...grouped,
+      sinHacer: [],
+      ahora: grouped.today,
+      luego: [],
+      activeFranja: resolveActiveDailyFranja(rutina),
+      activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
+    };
+  }
+
+  const activeFranja = resolveActiveDailyFranja(rutina);
+  const sinHacer = [];
+  const ahora = [];
+  const luego = [];
+
+  grouped.today.forEach((entry) => {
+    const split = splitTodayEntryByFranja(entry, activeFranja);
+    sinHacer.push(...split.sinHacer);
+    ahora.push(...split.ahora);
+    luego.push(...split.luego);
+  });
+
+  return {
+    ...grouped,
+    sinHacer: sortSectionHabitsByFixedOrder(sinHacer, sortOpts),
+    ahora: sortSectionHabitsByFixedOrder(ahora, sortOpts),
+    luego: sortSectionHabitsByFixedOrder(luego, sortOpts),
+    activeFranja,
+    activeFranjaLabel: resolveGroupViewActiveFranjaLabel(activeFranja, rutina),
+  };
+}
+
+/**
+ * Secciones visibles del bucket Diario según la franja activa del día.
+ * Mañana → Mañana, Tarde, Noche | Tarde → Mañana, Ahora, Noche | Noche → Sin hacer, Noche.
+ */
+export function buildDailyCadenceDisplaySections({
+  groupsByKey = {},
+  activeFranja = 'MAÑANA',
+  isViewingToday = true,
+  labels = {},
+}) {
+  const ahoraLabel = labels.ahora || 'Ahora';
+  const sinHacerLabel = labels.sinHacer || 'Sin hacer';
+
+  const group = (key) => groupsByKey[key] || null;
+  const labelOf = (key) => group(key)?.franjaLabel || getTimeOfDayLabel(key);
+
+  const staticSection = (key, { isActive = false } = {}) => ({
+    id: key,
+    label: labelOf(key),
+    group: group(key),
+    isActive,
+    franjaKey: key,
+  });
+
+  if (!isViewingToday) {
+    return VALID_TIME_OF_DAY.map((key) => staticSection(key));
+  }
+
+  switch (activeFranja) {
+    case 'TARDE':
+      return [
+        staticSection('MAÑANA'),
+        {
+          id: 'AHORA',
+          label: ahoraLabel,
+          group: group('TARDE'),
+          isActive: true,
+          franjaKey: 'TARDE',
+        },
+        staticSection('NOCHE'),
+      ];
+    case 'NOCHE':
+      return [
+        {
+          id: 'SIN_HACER',
+          label: sinHacerLabel,
+          group: mergeDailyFranjaGroups(group('MAÑANA'), group('TARDE')),
+          isActive: false,
+          franjaKey: 'SIN_HACER',
+        },
+        staticSection('NOCHE', { isActive: true }),
+      ];
+    case 'MAÑANA':
+    default:
+      return [
+        staticSection('MAÑANA', { isActive: true }),
+        staticSection('TARDE'),
+        staticSection('NOCHE'),
+      ];
+  }
 }
 
 function isWeeklyCadenceConfig(config = {}) {

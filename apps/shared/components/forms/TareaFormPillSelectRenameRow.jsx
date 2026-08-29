@@ -36,6 +36,7 @@ export default function TareaFormPillSelectRenameRow({
   renameValue = '',
   canRename = false,
   onRenameSave,
+  onEditClick,
   renamePlaceholder = 'Nombre',
   renameDisabled = false,
   pillSelectProps = {},
@@ -77,6 +78,14 @@ export default function TareaFormPillSelectRenameRow({
       setSaving(false);
     }
   }, [draft, onRenameSave, renameValue]);
+
+  const handleEditAction = useCallback(() => {
+    if (onEditClick) {
+      onEditClick();
+      return;
+    }
+    handleStartEdit();
+  }, [handleStartEdit, onEditClick]);
 
   const handleKeyDown = useCallback((event) => {
     if (event.key === 'Enter') {
@@ -123,7 +132,7 @@ export default function TareaFormPillSelectRenameRow({
       {showAction && (
         <IconButton
           size="small"
-          onClick={editing ? handleSave : handleStartEdit}
+          onClick={editing ? handleSave : handleEditAction}
           disabled={saving || (editing && !(draft || '').trim())}
           aria-label={editing ? 'Guardar nombre' : 'Editar nombre'}
           sx={pillRenameActionSx(saving)}

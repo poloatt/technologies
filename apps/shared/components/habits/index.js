@@ -1,5 +1,6 @@
 export { default as HabitFormFields } from './HabitFormFields.jsx';
 export { default as HabitGroupFormDialog } from './HabitGroupFormDialog.jsx';
+export { default as HabitRoutineFormDialog } from './HabitRoutineFormDialog.jsx';
 export { default as HabitFormMetaRows } from './HabitFormMetaRows.jsx';
 export { default as HabitFormSectionLabel } from './HabitFormSectionLabel.jsx';
 export { default as InlineItemConfigImproved } from './InlineItemConfigImproved.jsx';
@@ -9,4 +10,5 @@ export { default as HabitIconButton } from './HabitIconButton.jsx';
 export { default as HabitIconScrollRow } from './HabitIconScrollRow.jsx';
 export { default as AddHabitGroupButton, AddHabitGroupButtonWrap } from './AddHabitGroupButton.jsx';
 export { default as HabitGroupContextMenu } from './HabitGroupContextMenu.jsx';
+export { default as HabitChainAfterPicker } from './HabitChainAfterPicker.jsx';
 export * from './routines/index.js';

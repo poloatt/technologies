@@ -13,6 +13,7 @@ import HabitCarouselIconButton from '@shared/components/habits/HabitCarouselIcon
 import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScrollTrack';
 import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
+import { dispatchOpenHabitsManager } from '../manager';
 
 const MotionBox = motion.create(Box);
 
@@ -140,7 +141,7 @@ function HabitCarouselIconRow({
       onConfigure();
       return;
     }
-    window.dispatchEvent(new CustomEvent('openHabitTemplates'));
+    dispatchOpenHabitsManager();
   }, [onConfigure]);
 
   const handleCompletedToggle = useCallback((section, itemId, horario) => {

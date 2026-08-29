@@ -16,7 +16,7 @@ import { useObjetivosLight } from '../tasks/hooks/useObjetivosLight';
 import { useTasksForCalendar } from '../tasks/hooks/useTasksForCalendar';
 import { HabitsManagerHost } from '../habits';
 import HabitFormDialog from '@shared/components/HabitFormDialog';
-import { ensureRutinaForDate } from '../habits/daily/ensureRutinaForDate';
+import { ensureRutinaForDate } from '../rutinas';
 import AgendaDayView from './AgendaDayView';
 import AgendaWeekView from './AgendaWeekView';
 import { useAgendaCalendar } from './useAgendaCalendar';

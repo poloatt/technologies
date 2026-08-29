@@ -198,6 +198,39 @@ export function groupEntriesIntoDisplayRows(items = []) {
   return rows;
 }
 
+export const RUTINA_STACK_SORTABLE_PREFIX = 'stack:';
+
+export function getRutinaStackSortableId(chainId) {
+  return `${RUTINA_STACK_SORTABLE_PREFIX}${chainId}`;
+}
+
+export function resolveDisplayRowSortableId(row) {
+  if (row?.kind === 'stack') return getRutinaStackSortableId(row.chainId);
+  return row?.entry?.itemId ?? null;
+}
+
+/** Reordena ítems planos moviendo filas simples o stacks completos (drag id activo/soltado). */
+export function reorderFlatEntriesByDisplayRowDnD(items = [], activeId, overId) {
+  if (!activeId || !overId || activeId === overId) return null;
+
+  const displayRows = groupEntriesIntoDisplayRows(items);
+  const sortIds = displayRows.map(resolveDisplayRowSortableId);
+  const oldIndex = sortIds.indexOf(activeId);
+  const newIndex = sortIds.indexOf(overId);
+  if (oldIndex < 0 || newIndex < 0) return null;
+
+  const reorderedRows = [...displayRows];
+  const [moved] = reorderedRows.splice(oldIndex, 1);
+  reorderedRows.splice(newIndex, 0, moved);
+
+  return reorderedRows.flatMap((row) => {
+    if (row.kind === 'stack') {
+      return row.entries.map((entry) => entry.itemId);
+    }
+    return [row.entry.itemId];
+  });
+}
+
 export function removeHabitFromChains(chains = [], section, habitId) {
   const next = [];
   (chains || []).forEach((chain) => {
@@ -225,7 +258,14 @@ export function applyChainFormSave(chains = [], section, habitId, formChain = {}
     .map(normalizeHabitStep)
     .filter(Boolean);
 
-  if (!formChain.enabled || linkedSteps.length === 0) {
+  const isNewNamedRoutine = formChain.chainId === NEW_HABIT_CHAIN_VALUE
+    && (formChain.label || '').trim();
+
+  if (!formChain.enabled) {
+    return next;
+  }
+
+  if (linkedSteps.length === 0 && !isNewNamedRoutine) {
     return next;
   }
 
@@ -244,11 +284,17 @@ export function applyChainFormSave(chains = [], section, habitId, formChain = {}
     steps.push(step);
   });
 
-  if (steps.length < 2) {
+  if (steps.length < 1) {
     return next;
   }
 
-  const hostChain = findChainForHabit(chains, linkedSteps[0].section, linkedSteps[0].habitId);
+  if (steps.length < 2 && !isNewNamedRoutine) {
+    return next;
+  }
+
+  const hostChain = linkedSteps.length > 0
+    ? findChainForHabit(chains, linkedSteps[0].section, linkedSteps[0].habitId)
+    : null;
   const preferredId = formChain.chainId && formChain.chainId !== NEW_HABIT_CHAIN_VALUE
     ? formChain.chainId
     : null;
@@ -260,7 +306,11 @@ export function applyChainFormSave(chains = [], section, habitId, formChain = {}
     steps,
   });
 
-  return next.filter((chain) => Array.isArray(chain.steps) && chain.steps.length >= 2);
+  return next.filter((chain) => {
+    if (!Array.isArray(chain.steps) || chain.steps.length < 1) return false;
+    if (chain.steps.length >= 2) return true;
+    return Boolean((chain.label || '').trim());
+  });
 }
 
 export function buildChainFormState(chains = [], section, habitId) {
@@ -304,6 +354,15 @@ export function listAllUserHabits(habits = {}) {
   return items;
 }
 
+export function resolveStackRoutineLabel(chain) {
+  if (!chain) return 'Rutina';
+  const trimmed = (chain.label || '').trim();
+  if (trimmed) return trimmed;
+  const count = Number(chain.stepCount) || 0;
+  if (count > 1) return `Rutina · ${count} pasos`;
+  return 'Rutina';
+}
+
 export function getChainDisplayLabel(chain, habits = {}) {
   if (chain?.label?.trim()) return chain.label.trim();
   const first = normalizeHabitStep(chain?.steps?.[0]);
@@ -345,8 +404,12 @@ export function validateHabitChains(chains = [], habits = {}) {
     if (!HABIT_CHAIN_TYPES.includes(chain?.type)) {
       errors.push(`Cadena ${chain?.id || chainIndex}: type inválido`);
     }
-    if (!Array.isArray(chain?.steps) || chain.steps.length < 2) {
-      errors.push(`Cadena ${chain?.id || chainIndex}: requiere al menos 2 pasos`);
+    if (!Array.isArray(chain?.steps) || chain.steps.length < 1) {
+      errors.push(`Cadena ${chain?.id || chainIndex}: requiere al menos 1 paso`);
+      return;
+    }
+    if (chain.steps.length < 2 && !(chain.label || '').trim()) {
+      errors.push(`Cadena ${chain?.id || chainIndex}: requiere al menos 2 pasos o un nombre`);
       return;
     }
 

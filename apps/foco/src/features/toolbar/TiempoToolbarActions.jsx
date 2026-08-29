@@ -17,7 +17,12 @@ import { getIconByKey } from '@shared/navigation/menuIcons';
 import { matchTiempoSection } from '@shared/navigation/tiempoToolbarPaths';
 import { TIEMPO_ICON_KEYS } from '@shared/navigation/tiempoIconKeys';
 import { toggleTareasPageView, useTareasPageView } from '../tasks/list/useTareasPageView';
-import { RUTINA_PAGE_VIEW, readStoredRutinaPageView, toggleRutinaPageView } from '../habits/daily/useRutinaPageView';
+import {
+  RUTINA_PAGE_VIEW,
+  readStoredRutinaPageView,
+  toggleRutinaPageView,
+} from '../rutinas';
+import { dispatchOpenHabitsManager } from '../habits/manager';
 
 const ScopedUndoButton = SystemButtons.ScopedUndoButton;
 
@@ -112,7 +117,7 @@ export default function TiempoToolbarActions({ section: sectionProp, dense = fal
           label: 'Personalizar hábitos',
           tooltip: 'Personalizar hábitos',
           buttonSx: commonButtonSx,
-          onClick: () => window.dispatchEvent(new CustomEvent('openHabitTemplates')),
+          onClick: () => dispatchOpenHabitsManager(),
         },
         {
           key: 'add',

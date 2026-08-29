@@ -24,7 +24,7 @@ import TareaDelegateDialog from '../components/TareaDelegateDialog';
 import TareaFormDetailShell from './components/TareaFormDetailShell';
 import HabitFormFields from '@shared/components/habits/HabitFormFields.jsx';
 import { saveHabitFromForm } from '@shared/habits/form';
-import { useHabitFormState } from '../../habits/templates/useHabitFormState';
+import { useHabitFormState } from '../../habits/manager';
 import { useResponsive } from '@shared/hooks';
 import { useHabits, useRutinas } from '@shared/context';
 import { useSnackbar } from 'notistack';

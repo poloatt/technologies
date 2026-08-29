@@ -1,1 +1,1 @@
-export { default } from '../features/habits/daily/RutinasPage';
+export { RutinasPage as default } from '../features/rutinas';
