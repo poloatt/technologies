@@ -2,7 +2,8 @@
  * Utilidades compartidas para el estado de completitud de hábitos.
  * Soporta formato legacy (boolean) y formato por horario ({ MAÑANA: true, ... }).
  */
-import { normalizeTimeOfDay } from '../../utils/timeOfDayUtils.js';
+import { normalizeTimeOfDay, VALID_TIME_OF_DAY } from '../../utils/timeOfDayUtils.js';
+import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 
 function isDailyCadence(config = {}) {
   const tipo = (config?.tipo || 'DIARIO').toUpperCase();
@@ -159,6 +160,48 @@ export function isHabitFullyCompletedToday(itemValue, horarios = []) {
   }
 
   return normalizedHorarios.every((h) => itemValue[h] === true);
+}
+
+/** Diario con repetición por franjas (frecuencia>1 o 2+ horarios). */
+export function isDailyMultiFranjaConfig(config = {}) {
+  if (!isDailyCadence(config)) return false;
+  const horarios = normalizeHorarios(config.horarios);
+  const frecuencia = Number(config.frecuencia || 1);
+  return horarios.length > 1 || frecuencia > 1;
+}
+
+/** Franjas configuradas completadas, en orden MAÑANA → TARDE → NOCHE. */
+export function resolveCompletedDailyFranjas(itemValue, config = {}) {
+  const horarios = normalizeHorarios(config.horarios);
+  if (horarios.length === 0) return [];
+  return horarios.filter((horario) => isHabitHorarioCompleted(itemValue, horario));
+}
+
+/**
+ * Insignias de franja para Hecho histórico: un solo icono con todas las franjas satisfechas.
+ * @returns {string[]|null} null si no aplica (no histórico o no multi-franja).
+ */
+export function resolveHistoricalDoneFranjaBadges({
+  rutina,
+  config,
+  itemValue,
+  franjaKey = null,
+} = {}) {
+  if (!rutina?.fecha || getRutinaDayMode(rutina.fecha) !== 'historical') return null;
+  if (!isDailyMultiFranjaConfig(config)) return null;
+
+  const horarios = normalizeHorarios(config.horarios);
+  if (horarios.length === 0) return null;
+
+  const focus = franjaKey && franjaKey !== 'GENERAL'
+    ? String(franjaKey).toUpperCase()
+    : null;
+  if (focus && VALID_TIME_OF_DAY.includes(focus) && isHabitHorarioCompleted(itemValue, focus)) {
+    return [focus];
+  }
+
+  const completed = resolveCompletedDailyFranjas(itemValue, config);
+  return completed.length > 0 ? completed : null;
 }
 
 /** ¿Alguna franja completada pero aún quedan pendientes hoy? */

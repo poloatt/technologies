@@ -142,8 +142,9 @@ export default function RutinaSectionDetailPanel({
         doneHeadingLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
         doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
         doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : undefined}
-        doneDefaultExpanded={isHistorical}
+        doneDefaultExpanded={false}
         doneCollapsible={isHistorical}
+        doneCollapsePreviewMode={isHistorical ? 'carousel' : 'hide'}
         onReorder={handleReorderHabits}
         onItemClick={handleItemClick}
         onDoneToggle={handleItemClick}

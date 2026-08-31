@@ -2,7 +2,7 @@
  * Vista focalizada de rutinas: cuota única por día y preview futuro (Node-safe).
  */
 import { addDays, differenceInDays, isAfter, isBefore, isSameDay, startOfDay } from 'date-fns';
-import { formatDateForAPI, parseAPIDate } from '../../utils/dateUtils.js';
+import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '../../utils/dateUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import {
   contarCompletadosEnPeriodo,
@@ -166,8 +166,78 @@ export function resolveFlexibleQuotaForDay(fechaObjetivo, config, rutinaForPlan,
   };
 }
 
+/** Historial recortado al día que se está evaluando (sin completados futuros). */
+function clipHistorialCompletado(historialCompletado = [], fechaObjetivo) {
+  const end = normalizeCadenciaDate(fechaObjetivo);
+  return (historialCompletado || []).filter((fecha) => {
+    const d = normalizeCadenciaDate(fecha);
+    return !isAfter(d, end);
+  });
+}
+
+const HIDDEN_DAY_LINK = {
+  visible: false,
+  quotaSlot: null,
+  linkReason: null,
+  isCadenciaDebt: false,
+};
+
+/** Cuota/deuda abierta anclada al «hoy» real (una sola superficie activa). */
+function resolveOpenQuotaAtAnchor(
+  config,
+  historialCompletado,
+  anchorDate,
+  rutinaForPlan,
+  section,
+  itemId,
+) {
+  const anchor = normalizeCadenciaDate(anchorDate);
+  const historialAtAnchor = clipHistorialCompletado(historialCompletado, anchor);
+
+  if (isFlexiblePeriodic(config) && rutinaForPlan && section && itemId) {
+    const rutinaAtAnchor = {
+      ...rutinaForPlan,
+      fecha: formatDateForAPI(anchor),
+    };
+    const plan = resolveFlexiblePeriodicPlan(config, rutinaAtAnchor, section, itemId);
+    const show = Boolean(plan?.showToday && (plan?.remainingQuota ?? 0) > 0);
+    return { show, quotaSlot: plan?.todayQuotaSlot ?? null, reason: show ? 'scheduled' : null };
+  }
+
+  return resolveActiveQuotaForDay(anchor, config, historialAtAnchor);
+}
+
+/** Si la cuota/deuda está abierta en el ancla, no se repite en otros días. */
+function shouldSuppressForSingleActiveSurface(
+  fechaObjetivo,
+  anchorDate,
+  openOnAnchor,
+  dayMode,
+  config,
+) {
+  if (!openOnAnchor?.show) return false;
+  const fecha = normalizeCadenciaDate(fechaObjetivo);
+  const anchor = normalizeCadenciaDate(anchorDate);
+  if (isSameDay(fecha, anchor)) return false;
+
+  if (dayMode === 'historical') {
+    if (isDailyConfig(config)) {
+      return openOnAnchor.reason === 'debt';
+    }
+    if (isFlexiblePeriodic(config)) {
+      return true;
+    }
+    return openOnAnchor.reason === 'debt';
+  }
+  if (dayMode === 'future') {
+    return openOnAnchor.reason === 'debt';
+  }
+  return false;
+}
+
 /**
  * ¿El hábito está vinculado al día del registro (vista focalizada)?
+ * @param {Date|string|null} [anchorDate] — «hoy» real; default getNormalizedToday()
  */
 export function resolveDayLinkedQuota({
   fechaObjetivo,
@@ -177,16 +247,42 @@ export function resolveDayLinkedQuota({
   section = null,
   itemId = null,
   dayMode = 'today',
+  anchorDate = null,
 }) {
   if (!config || config.activo === false) {
-    return { visible: false, quotaSlot: null, linkReason: null, isCadenciaDebt: false };
+    return HIDDEN_DAY_LINK;
   }
 
+  const anchorToday = normalizeCadenciaDate(anchorDate || getNormalizedToday());
+  const fecha = normalizeCadenciaDate(fechaObjetivo);
+  const historialAtView = clipHistorialCompletado(historialCompletado, fecha);
+  const historialAtAnchor = clipHistorialCompletado(historialCompletado, anchorToday);
+
+  const openOnAnchor = resolveOpenQuotaAtAnchor(
+    config,
+    historialCompletado,
+    anchorToday,
+    rutinaForPlan,
+    section,
+    itemId,
+  );
+  const suppressed = shouldSuppressForSingleActiveSurface(
+    fecha,
+    anchorToday,
+    openOnAnchor,
+    dayMode,
+    config,
+  );
+
   if (dayMode === 'historical') {
+    if (suppressed) {
+      return HIDDEN_DAY_LINK;
+    }
+
     if (isFlexiblePeriodic(config) && rutinaForPlan && section && itemId) {
       const rutinaAtDate = {
         ...rutinaForPlan,
-        fecha: formatDateForAPI(normalizeCadenciaDate(fechaObjetivo)),
+        fecha: formatDateForAPI(fecha),
       };
       const plan = resolveFlexiblePeriodicPlan(config, rutinaAtDate, section, itemId);
       const visible = Boolean(plan?.showToday);
@@ -199,11 +295,7 @@ export function resolveDayLinkedQuota({
     }
 
     if (isPersonalizedIntervalConfig(config)) {
-      const visible = debesMostrarHabitoEnFecha(
-        fechaObjetivo,
-        config,
-        historialCompletado,
-      );
+      const visible = debesMostrarHabitoEnFecha(fecha, config, historialAtView);
       return {
         visible,
         quotaSlot: null,
@@ -212,13 +304,19 @@ export function resolveDayLinkedQuota({
       };
     }
 
-    const visible = isScheduledCadenciaDay(fechaObjetivo, config);
+    const quotaAtView = resolveActiveQuotaForDay(fecha, config, historialAtView);
+    const visible = isScheduledCadenciaDay(fecha, config)
+      || (quotaAtView.show && quotaAtView.reason === 'scheduled');
     return {
       visible,
-      quotaSlot: null,
+      quotaSlot: visible ? quotaAtView.quotaSlot : null,
       linkReason: visible ? 'scheduled' : null,
       isCadenciaDebt: false,
     };
+  }
+
+  if (dayMode === 'future' && suppressed) {
+    return HIDDEN_DAY_LINK;
   }
 
   if (isFlexiblePeriodic(config) && rutinaForPlan && section && itemId) {
@@ -231,7 +329,10 @@ export function resolveDayLinkedQuota({
     };
   }
 
-  const quota = resolveActiveQuotaForDay(fechaObjetivo, config, historialCompletado);
+  const historialForQuota = dayMode === 'today'
+    ? historialAtAnchor
+    : historialAtView;
+  const quota = resolveActiveQuotaForDay(fecha, config, historialForQuota);
   return {
     visible: quota.show,
     quotaSlot: quota.quotaSlot,

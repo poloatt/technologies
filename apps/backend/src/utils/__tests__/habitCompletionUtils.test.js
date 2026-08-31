@@ -1,66 +1,66 @@
+import { describe, it, expect } from '@jest/globals';
 import {
-  buildEmptyHabitCompletionValue,
-  ensureHabitCompletionShape,
-  getHabitCompletionSlotCount,
-  getHabitCompletedSlotCount,
+  isDailyMultiFranjaConfig,
+  resolveCompletedDailyFranjas,
+  resolveHistoricalDoneFranjaBadges,
 } from '@shared/habits';
 
-describe('buildEmptyHabitCompletionValue', () => {
-  it('returns boolean false for daily habit without horarios', () => {
-    expect(buildEmptyHabitCompletionValue({ tipo: 'DIARIO', frecuencia: 2 })).toBe(false);
+describe('historical done multi-franja badges', () => {
+  const multiFranjaConfig = {
+    tipo: 'DIARIO',
+    periodo: 'CADA_DIA',
+    frecuencia: 1,
+    activo: true,
+    horarios: ['MAÑANA', 'TARDE', 'NOCHE'],
+  };
+
+  const historicalRutina = {
+    fecha: new Date(2026, 7, 30, 12, 0, 0).toISOString(),
+    bodyCare: {
+      skincare: { MAÑANA: true, TARDE: true, NOCHE: true },
+    },
+  };
+
+  it('detects daily multi-franja config', () => {
+    expect(isDailyMultiFranjaConfig(multiFranjaConfig)).toBe(true);
+    expect(isDailyMultiFranjaConfig({ tipo: 'DIARIO', horarios: ['MAÑANA'] })).toBe(false);
   });
 
-  it('returns object with one key per franja for daily habits', () => {
-    expect(buildEmptyHabitCompletionValue({
-      tipo: 'DIARIO',
-      frecuencia: 2,
-      horarios: ['MAÑANA', 'NOCHE'],
-    })).toEqual({ MAÑANA: false, NOCHE: false });
+  it('returns all completed franjas for consolidated historical done', () => {
+    const badges = resolveHistoricalDoneFranjaBadges({
+      rutina: historicalRutina,
+      config: multiFranjaConfig,
+      itemValue: historicalRutina.bodyCare.skincare,
+    });
+    expect(badges).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
   });
 
-  it('returns boolean false for weekly habits even with horarios', () => {
-    expect(buildEmptyHabitCompletionValue({
-      tipo: 'SEMANAL',
-      horarios: ['MAÑANA'],
-    })).toBe(false);
-  });
-});
-
-describe('ensureHabitCompletionShape', () => {
-  it('migrates boolean false to object when horarios are configured', () => {
-    expect(ensureHabitCompletionShape(false, {
-      tipo: 'DIARIO',
-      horarios: ['MAÑANA', 'TARDE'],
-    })).toEqual({ MAÑANA: false, TARDE: false });
+  it('returns single franja badge for partial historical done entry', () => {
+    const badges = resolveHistoricalDoneFranjaBadges({
+      rutina: historicalRutina,
+      config: multiFranjaConfig,
+      itemValue: { MAÑANA: true, TARDE: false, NOCHE: false },
+      franjaKey: 'MAÑANA',
+    });
+    expect(badges).toEqual(['MAÑANA']);
   });
 
-  it('migrates boolean true to all franjas completed', () => {
-    expect(ensureHabitCompletionShape(true, {
-      tipo: 'DIARIO',
-      horarios: ['MAÑANA', 'NOCHE'],
-    })).toEqual({ MAÑANA: true, NOCHE: true });
+  it('does not apply on today view', () => {
+    const todayRutina = {
+      ...historicalRutina,
+      fecha: new Date(2026, 7, 31, 12, 0, 0).toISOString(),
+    };
+    expect(resolveHistoricalDoneFranjaBadges({
+      rutina: todayRutina,
+      config: multiFranjaConfig,
+      itemValue: todayRutina.bodyCare.skincare,
+    })).toBeNull();
   });
 
-  it('adds missing franjas to existing object', () => {
-    expect(ensureHabitCompletionShape({ MAÑANA: true }, {
-      tipo: 'DIARIO',
-      horarios: ['MAÑANA', 'NOCHE'],
-    })).toEqual({ MAÑANA: true, NOCHE: false });
-  });
-});
-
-describe('habit completion slot metrics', () => {
-  const config = { tipo: 'DIARIO', horarios: ['MAÑANA', 'NOCHE'] };
-
-  it('counts franjas from config when value is boolean', () => {
-    expect(getHabitCompletionSlotCount(false, config)).toBe(2);
-    expect(getHabitCompletedSlotCount(false, config)).toBe(0);
-    expect(getHabitCompletedSlotCount(true, config)).toBe(2);
-  });
-
-  it('counts franjas from object keys', () => {
-    const value = { MAÑANA: true, NOCHE: false };
-    expect(getHabitCompletionSlotCount(value, config)).toBe(2);
-    expect(getHabitCompletedSlotCount(value, config)).toBe(1);
+  it('resolveCompletedDailyFranjas preserves schedule order', () => {
+    expect(resolveCompletedDailyFranjas(
+      { NOCHE: true, MAÑANA: true, TARDE: false },
+      multiFranjaConfig,
+    )).toEqual(['MAÑANA', 'NOCHE']);
   });
 });

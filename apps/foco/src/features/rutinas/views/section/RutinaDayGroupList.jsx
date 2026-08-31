@@ -365,6 +365,7 @@ function HabitRows({
           onItemClick={onItemClick}
           habits={habits}
           localData={resolveEntryLocalData(entry, section, localData, localDataBySection)}
+          multiSection={multiSection}
           stackVariant={effectiveStackVariant}
           allowPostpone={allowPostpone}
           onPostpone={onPostpone}
@@ -512,6 +513,7 @@ export default function RutinaDayGroupList({
   doneBeforeLabel,
   doneDefaultExpanded = false,
   doneCollapsible = false,
+  doneCollapsePreviewMode = 'hide',
 }) {
   const { isMobileOrTablet } = useResponsive();
   const { postponeHabitFranja } = useRutinas();
@@ -877,7 +879,10 @@ export default function RutinaDayGroupList({
           doneBeforeLabel={doneBeforeLabel}
           defaultExpanded={doneDefaultExpanded}
           collapsible={doneCollapsible}
-          collapseThreshold={doneDefaultExpanded ? 3 : 5}
+          collapsePreviewMode={doneCollapsePreviewMode}
+          collapseThreshold={doneCollapsible && doneCollapsePreviewMode === 'carousel' ? 0 : 5}
+          habits={habits}
+          stackVariant={effectiveStackVariant}
         />
       )}
     </Box>

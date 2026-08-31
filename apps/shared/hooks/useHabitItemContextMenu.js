@@ -68,7 +68,7 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
     return dx > MOVE_CANCEL_PX || dy > MOVE_CANCEL_PX;
   }, []);
 
-  const getRowHandlers = useCallback((entry, { canPostpone, postponeLabel, franja }) => {
+  const getTextColumnHandlers = useCallback((entry, { canPostpone, postponeLabel, franja }) => {
     if (!enabled || !canPostpone || !postponeLabel) {
       return {};
     }
@@ -121,6 +121,8 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
   return {
     menuState,
     closeMenu,
-    getRowHandlers,
+    getTextColumnHandlers,
+    /** @deprecated use getTextColumnHandlers */
+    getRowHandlers: getTextColumnHandlers,
   };
 }

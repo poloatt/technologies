@@ -5,6 +5,7 @@ import {
   getHorarioForCarousel,
   isHabitFullyCompletedToday,
   resolveHabitIconPresentation,
+  resolveHistoricalDoneFranjaBadges,
 } from '../../habits';
 import { getRutinaDayMode, isRutinaFuturePreview } from '../../utils/rutinaDayMode.js';
 import { getPeriodicCarouselCopy, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology';
@@ -73,6 +74,14 @@ export default function HabitCarouselIconButton({
   }
 
   const isHistoricalDay = rutinaHoy?.fecha && getRutinaDayMode(rutinaHoy.fecha) === 'historical';
+  const completedFranjaBadges = (showCompletionState && isHistoricalDay)
+    ? resolveHistoricalDoneFranjaBadges({
+      rutina: rutinaHoy,
+      config: itemConfig,
+      itemValue: completadoHoy,
+      franjaKey: displayHorario,
+    })
+    : null;
   const fullyCompleted = !showCompletionState
     || !hasMultipleDaily
     || !isObjectFormat
@@ -166,6 +175,7 @@ export default function HabitCarouselIconButton({
         if (!canQuickToggle) return;
         onToggle(section, itemId, displayHorario || horarioToShow);
       }}
+      onPointerDown={(e) => e.stopPropagation()}
       sx={buttonSx}
     >
       {DisplayIcon && <DisplayIcon />}
@@ -176,7 +186,8 @@ export default function HabitCarouselIconButton({
     <HabitCounterBadge
       config={itemConfig}
       currentTimeOfDay={currentTimeOfDay}
-      displayHorario={horarioToShow}
+      displayHorario={completedFranjaBadges ? null : (displayHorario || horarioToShow)}
+      completedHorarios={completedFranjaBadges}
       size={dense && !iconFontSize ? 'small' : 'medium'}
       overlap="subtle"
       reserveBadgeSpace={reserveBadgeSpace}
@@ -205,9 +216,7 @@ export default function HabitCarouselIconButton({
         sx={{
           display: 'inline-flex',
           flex: '0 0 auto',
-          width: size,
-          height: size,
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center',
           verticalAlign: 'middle',
         }}

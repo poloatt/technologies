@@ -101,7 +101,9 @@ describe('resolveHabitBadgeChrome', () => {
     assert.equal(resolveHabitBadgeChrome({ variant: 'activePending' }).outline, true);
     assert.equal(resolveHabitBadgeChrome({ variant: 'deferredPending' }).opacity, 0.4);
     assert.equal(resolveHabitBadgeChrome({ variant: 'completedBefore' }).opacity, 0.45);
+    assert.equal(resolveHabitBadgeChrome({ variant: 'completedBefore' }).outline, true);
     assert.equal(resolveHabitBadgeChrome({ variant: 'completedToday' }).opacity, 1);
+    assert.equal(resolveHabitBadgeChrome({ variant: 'completedToday' }).outline, true);
   });
 });
 

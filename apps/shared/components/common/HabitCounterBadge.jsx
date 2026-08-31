@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Badge } from '@mui/material';
+import { Badge, Box } from '@mui/material';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import WbTwilightIcon from '@mui/icons-material/WbTwilight';
@@ -24,8 +24,66 @@ function resolveFranjaIcon(horario, { outline = true } = {}) {
   return outline ? pair.outlined : pair.filled;
 }
 
+/** Altura reservada bajo el icono para insignias de franja (flow, sin overlay). */
+export const HABIT_FRANJA_STRIP_HEIGHT = {
+  small: 12,
+  medium: 14,
+};
+
+function FranjaBadgeStrip({
+  horariosInSlots,
+  outline,
+  size,
+  color,
+  opacity,
+  visible,
+}) {
+  const franjaIconFont = size === 'small' ? '0.75rem' : '0.875rem';
+  const stripHeight = HABIT_FRANJA_STRIP_HEIGHT[size] || HABIT_FRANJA_STRIP_HEIGHT.small;
+
+  return (
+    <Box
+      component="span"
+      aria-hidden={!visible}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr',
+        alignItems: 'center',
+        width: '100%',
+        minHeight: stripHeight,
+        mt: '-2px',
+        pointerEvents: 'none',
+        lineHeight: 0,
+        color,
+        opacity: visible ? opacity : 0,
+        visibility: visible ? 'visible' : 'hidden',
+      }}
+    >
+      {VALID_TIME_OF_DAY.map((horario, idx) => {
+        const IconComp = horariosInSlots.includes(horario)
+          ? resolveFranjaIcon(horario, { outline })
+          : null;
+
+        return (
+          <Box
+            key={horario}
+            component="span"
+            sx={{
+              display: 'flex',
+              justifyContent: idx === 0 ? 'flex-start' : idx === 1 ? 'center' : 'flex-end',
+            }}
+          >
+            {IconComp ? <IconComp sx={{ fontSize: franjaIconFont }} /> : null}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 /**
  * Badge de frecuencia (cuota N del período) o icono de franja.
+ * Franjas: MAÑANA izquierda, TARDE centro, NOCHE derecha, siempre bajo el icono.
  * Color / outline siguen la presentación canónica del icono padre.
  */
 export const HabitCounterBadge = ({
@@ -42,6 +100,8 @@ export const HabitCounterBadge = ({
   quotaSlot = null,
   /** Presentación canónica del icono (outline / variant / doneTone). */
   iconPresentation = null,
+  /** Franjas ya completadas — insignias en sus slots (Hecho histórico multi-franja). */
+  completedHorarios = null,
   children,
 }) => {
   const tipo = (config?.tipo || 'DIARIO').toUpperCase();
@@ -120,21 +180,24 @@ export const HabitCounterBadge = ({
     return Math.min(done + 1, frecuencia);
   };
 
-  const franjaIconFont = size === 'small' ? '0.75rem' : '0.875rem';
-  const renderFranjaIcon = (horario) => {
-    const IconComp = resolveFranjaIcon(horario, { outline: badgeChrome.outline });
-    if (!IconComp) return null;
-    return <IconComp sx={{ fontSize: franjaIconFont }} />;
-  };
+  const normalizedCompletedHorarios = Array.isArray(completedHorarios)
+    ? completedHorarios
+      .map((horario) => String(horario).toUpperCase())
+      .filter((horario) => VALID_TIME_OF_DAY.includes(horario))
+    : [];
 
-  let badgeContent = null;
-  let showBadge = false;
+  let horariosInSlots = [];
+  let showFranjaStrip = false;
   let isNumber = false;
+  let quotaBadgeContent = null;
   let resolvedHorario = null;
 
-  if (isPeriodicMulti) {
-    badgeContent = resolvePeriodicQuotaBadge();
-    showBadge = true;
+  if (normalizedCompletedHorarios.length > 0) {
+    horariosInSlots = normalizedCompletedHorarios;
+    showFranjaStrip = true;
+    resolvedHorario = normalizedCompletedHorarios[normalizedCompletedHorarios.length - 1];
+  } else if (isPeriodicMulti) {
+    quotaBadgeContent = resolvePeriodicQuotaBadge();
     isNumber = true;
   } else if (tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && config?.periodo === 'CADA_DIA')) {
     if (horarios.length > 0) {
@@ -142,7 +205,6 @@ export const HabitCounterBadge = ({
       const normalizedTimeOfDay = String(currentTimeOfDay).toUpperCase();
       const itemValue = rutina?.[section]?.[itemId];
       const isHorarioCompleted = (horario) => isHabitHorarioCompleted(itemValue, horario);
-      const HORARIOS_ORDER = VALID_TIME_OF_DAY;
 
       let horarioAMostrar = displayHorario ? String(displayHorario).toUpperCase() : null;
 
@@ -152,9 +214,9 @@ export const HabitCounterBadge = ({
             horarioAMostrar = normalizedTimeOfDay;
           }
         } else if (frecuencia > 1 || normalizedHorarios.length > 1) {
-          const currentIndex = HORARIOS_ORDER.indexOf(normalizedTimeOfDay);
+          const currentIndex = VALID_TIME_OF_DAY.indexOf(normalizedTimeOfDay);
           for (let i = currentIndex - 1; i >= 0; i -= 1) {
-            const horarioAnterior = HORARIOS_ORDER[i];
+            const horarioAnterior = VALID_TIME_OF_DAY[i];
             if (normalizedHorarios.includes(horarioAnterior) && !isHorarioCompleted(horarioAnterior)) {
               horarioAMostrar = horarioAnterior;
               break;
@@ -165,86 +227,108 @@ export const HabitCounterBadge = ({
 
       if (horarioAMostrar) {
         resolvedHorario = horarioAMostrar;
-        badgeContent = renderFranjaIcon(horarioAMostrar);
-        showBadge = Boolean(badgeContent);
-        isNumber = false;
+        horariosInSlots = [horarioAMostrar];
+        showFranjaStrip = true;
       }
     } else {
       const horarioAMostrar = displayHorario ? String(displayHorario).toUpperCase() : null;
       if (horarioAMostrar && VALID_TIME_OF_DAY.includes(horarioAMostrar)) {
         resolvedHorario = horarioAMostrar;
-        badgeContent = renderFranjaIcon(horarioAMostrar);
-        showBadge = Boolean(badgeContent);
-        isNumber = false;
+        horariosInSlots = [horarioAMostrar];
+        showFranjaStrip = true;
       }
     }
   }
+
+  const showBadge = isNumber || showFranjaStrip;
 
   if (!showBadge && !reserveBadgeSpace) {
     return <>{children}</>;
   }
 
-  const badgeVisible = showBadge;
-  const renderedBadgeContent = badgeVisible ? badgeContent : '\u00a0';
-
-  const getTransform = () => {
-    if (overlap === 'subtle') {
-      return size === 'medium'
-        ? 'translate(8%, 8%) scale(1)'
-        : 'translate(15%, 15%) scale(1)';
-    }
-    return 'translate(25%, 25%) scale(1)';
-  };
-
-  // Franja completada en un slot concreto: filled + primary, sin romper el resto del chrome.
   const itemValue = rutina?.[section]?.[itemId];
-  const franjaDone = Boolean(
+  const franjaDone = normalizedCompletedHorarios.length > 0 || Boolean(
     resolvedHorario && isHabitHorarioCompleted(itemValue, resolvedHorario),
   );
-  const badgeColor = (!isNumber && franjaDone)
+  const stripColor = (!isNumber && franjaDone)
     ? 'primary.main'
     : badgeChrome.colorToken;
-  const badgeOpacity = (!isNumber && franjaDone)
-    ? 1
-    : badgeChrome.opacity;
+  const stripOpacity = badgeChrome.opacity;
+  const stripOutline = badgeChrome.outline;
+
+  if (isNumber) {
+    const badgeVisible = showBadge;
+    const renderedBadgeContent = badgeVisible ? quotaBadgeContent : '\u00a0';
+
+    const getTransform = () => {
+      if (overlap === 'subtle') {
+        return size === 'medium'
+          ? 'translate(8%, 8%) scale(1)'
+          : 'translate(15%, 15%) scale(1)';
+      }
+      return 'translate(25%, 25%) scale(1)';
+    };
+
+    return (
+      <Badge
+        badgeContent={renderedBadgeContent}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        overlap={overlap === 'circular' ? 'circular' : 'rectangular'}
+        sx={{
+          position: 'relative',
+          display: 'inline-flex',
+          '& .MuiBadge-badge': {
+            minWidth: size === 'small' ? 12 : 14,
+            height: size === 'small' ? 12 : 14,
+            fontSize: size === 'small' ? '0.6rem' : '0.65rem',
+            fontWeight: 600,
+            padding: size === 'small' ? '1px 3px' : '2px 4px',
+            bgcolor: 'transparent',
+            color: badgeChrome.colorToken,
+            opacity: badgeChrome.opacity,
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transform: getTransform(),
+            zIndex: 1,
+            ...(!badgeVisible && {
+              opacity: 0,
+              visibility: 'hidden',
+            }),
+          },
+        }}
+      >
+        {children}
+      </Badge>
+    );
+  }
+
+  const stripVisible = showFranjaStrip;
 
   return (
-    <Badge
-      badgeContent={renderedBadgeContent}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      overlap={overlap === 'circular' ? 'circular' : 'rectangular'}
+    <Box
       sx={{
-        position: 'relative',
         display: 'inline-flex',
-        '& .MuiBadge-badge': {
-          minWidth: size === 'small' ? 12 : 14,
-          height: size === 'small' ? 12 : 14,
-          fontSize: size === 'small' ? '0.6rem' : '0.65rem',
-          fontWeight: isNumber ? 600 : 400,
-          padding: size === 'small' ? '1px 3px' : '2px 4px',
-          bgcolor: 'transparent',
-          color: badgeColor,
-          opacity: badgeOpacity,
-          border: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transform: getTransform(),
-          zIndex: 1,
-          ...(!badgeVisible && {
-            opacity: 0,
-            visibility: 'hidden',
-          }),
-          '& svg': {
-            fontSize: size === 'small' ? '0.65rem' : '0.7rem',
-            color: 'inherit',
-            opacity: 1,
-          },
-        },
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        verticalAlign: 'middle',
       }}
     >
-      {children}
-    </Badge>
+      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+        {children}
+      </Box>
+      {(stripVisible || reserveBadgeSpace) && (
+        <FranjaBadgeStrip
+          horariosInSlots={horariosInSlots}
+          outline={stripOutline}
+          size={size}
+          color={stripColor}
+          opacity={stripOpacity}
+          visible={stripVisible}
+        />
+      )}
+    </Box>
   );
 };
 

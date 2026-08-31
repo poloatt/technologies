@@ -658,23 +658,30 @@ describe('rutinaDesktopUtils', () => {
     }
 
     it('shows unmarked habit only on historical scheduled day, not on intermediate days', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 7, 15, 12, 0, 0));
+
       const scheduledDay = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina: makePeluqueriaRutina(new Date(2026, 7, 15, 12, 0, 0).toISOString()),
         habits: peluqueriaHabits,
         iconsMap: peluqueriaIcons,
       });
+      expect(scheduledDay.today.map((h) => h.itemId)).toContain('peluqueria');
+      expect(scheduledDay.today.find((h) => h.itemId === 'peluqueria')?.isCadenciaDebt).toBeFalsy();
+
+      jest.setSystemTime(new Date(2026, 7, 31, 12, 0, 0));
+
       const intermediateDay = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina: makePeluqueriaRutina(new Date(2026, 7, 20, 12, 0, 0).toISOString()),
         habits: peluqueriaHabits,
         iconsMap: peluqueriaIcons,
       });
-
-      expect(scheduledDay.today.map((h) => h.itemId)).toContain('peluqueria');
-      expect(scheduledDay.today.find((h) => h.itemId === 'peluqueria')?.isCadenciaDebt).toBeFalsy();
       expect(intermediateDay.today.map((h) => h.itemId)).not.toContain('peluqueria');
       expect(intermediateDay.notToday.map((h) => h.itemId)).toContain('peluqueria');
+
+      jest.useRealTimers();
     });
 
     it('flexible monthly: hidden on historical Aug 30, visible in DIARIO on today Aug 31', () => {
@@ -791,7 +798,7 @@ describe('rutinaDesktopUtils', () => {
       jest.useRealTimers();
     });
 
-    it('fixed monthly day-30: visible on historical 30th and debt in DIARIO on 31st', () => {
+    it('fixed monthly day-30: hidden on historical 30th when debt surfaces only on today 31st', () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date(2026, 7, 31, 12, 0, 0));
 
@@ -821,7 +828,7 @@ describe('rutinaDesktopUtils', () => {
         habits: habitsPelu,
         iconsMap: iconsPelu,
       });
-      expect(historicalGrouped.today.map((h) => h.itemId)).toContain('peluqueria');
+      expect(historicalGrouped.today.map((h) => h.itemId)).not.toContain('peluqueria');
 
       const todayRutina = {
         ...historicalRutina,

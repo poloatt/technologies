@@ -2,14 +2,16 @@ import React, { useMemo } from 'react';
 import { Box, Chip, ListItem, Typography } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
+import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
 import {
   isHabitCompletedForHistorial,
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
   resolveRoutineDisplayName,
-  isEntryFranjaSinHacer,
   resolveActiveDailyFranja,
+  isEntryFranjaSinHacer,
   resolveRutinaStackScheduleLegend,
+  resolveHistoricalDoneFranjaBadges,
 } from '@shared/habits';
 import {
   rutinaChecklistItemSx,
@@ -126,6 +128,15 @@ export default function RutinaStackHabitRow({
     const hasMultipleFranjas = horariosConfig.length > 1 && !normalizedFocusHorario;
     const singleDisplayHorario = normalizedFocusHorario
       || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
+    const isHistoricalDay = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+    const completedFranjaBadges = (isHistoricalDay && isCompleted)
+      ? resolveHistoricalDoneFranjaBadges({
+        rutina,
+        config,
+        itemValue,
+        franjaKey: normalizedFocusHorario,
+      })
+      : null;
 
     const handleClick = (event, horario) => {
       const resolvedHorario = horario ?? focusHorario ?? null;
@@ -152,6 +163,23 @@ export default function RutinaStackHabitRow({
     };
 
     if (hasMultipleFranjas) {
+      if (completedFranjaBadges?.length) {
+        return (
+          <HabitIconButton
+            key={`${entrySection}-${itemId}`}
+            isCompleted={isCompleted}
+            Icon={Icon}
+            onClick={(e) => {
+              if (guardClick?.()) return;
+              e.stopPropagation();
+              if (!readOnly) handleClick(e, singleDisplayHorario);
+            }}
+            completedHorarios={completedFranjaBadges}
+            {...buttonProps}
+          />
+        );
+      }
+
       return (
         <HabitIconScrollRow
           key={`${entrySection}-${itemId}`}

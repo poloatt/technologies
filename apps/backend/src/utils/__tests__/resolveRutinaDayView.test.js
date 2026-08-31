@@ -90,6 +90,7 @@ describe('resolveDayLinkedQuota cadencia debt is dynamic', () => {
       config: PELUQUERIA_CONFIG,
       historialCompletado: [],
       dayMode: 'historical',
+      anchorDate: day15,
     });
     assert.equal(result.visible, true);
     assert.equal(result.isCadenciaDebt, false);
@@ -103,22 +104,47 @@ describe('resolveDayLinkedQuota cadencia debt is dynamic', () => {
       config: PELUQUERIA_CONFIG,
       historialCompletado: [],
       dayMode: 'historical',
+      anchorDate: day20,
     });
     assert.equal(result.visible, false);
     assert.equal(result.isCadenciaDebt, false);
   });
 
   it('today after missed monthly slot: single debt surface on current day only', () => {
+    const day15 = dateAt(2026, 8, 15);
     const day31 = dateAt(2026, 8, 31);
+    const historical = resolveDayLinkedQuota({
+      fechaObjetivo: day15,
+      config: PELUQUERIA_CONFIG,
+      historialCompletado: [],
+      dayMode: 'historical',
+      anchorDate: day31,
+    });
+    assert.equal(historical.visible, false);
+
     const result = resolveDayLinkedQuota({
       fechaObjetivo: day31,
       config: PELUQUERIA_CONFIG,
       historialCompletado: [],
       dayMode: 'today',
+      anchorDate: day31,
     });
     assert.equal(result.visible, true);
     assert.equal(result.isCadenciaDebt, true);
     assert.equal(result.linkReason, 'debt');
+  });
+
+  it('future days hide debt when quota is open on anchor today', () => {
+    const day31 = dateAt(2026, 8, 31);
+    const day1Sep = dateAt(2026, 9, 1);
+    const future = resolveDayLinkedQuota({
+      fechaObjetivo: day1Sep,
+      config: PELUQUERIA_CONFIG,
+      historialCompletado: [],
+      dayMode: 'future',
+      anchorDate: day31,
+    });
+    assert.equal(future.visible, false);
   });
 
   it('interval personalizado 30d: historical mid-rest hidden, today due with debt', () => {
@@ -131,6 +157,7 @@ describe('resolveDayLinkedQuota cadencia debt is dynamic', () => {
       config: PELUQUERIA_INTERVAL_CONFIG,
       historialCompletado: [lastDone],
       dayMode: 'historical',
+      anchorDate: day31,
     });
     assert.equal(historical.visible, false);
 
@@ -139,6 +166,7 @@ describe('resolveDayLinkedQuota cadencia debt is dynamic', () => {
       config: PELUQUERIA_INTERVAL_CONFIG,
       historialCompletado: [lastDone],
       dayMode: 'today',
+      anchorDate: day31,
     });
     assert.equal(today.visible, true);
     assert.equal(today.isCadenciaDebt, true);

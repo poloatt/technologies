@@ -32,6 +32,8 @@ export default function HabitIconButton({
   section = null,
   itemId = null,
   quotaSlot = null,
+  /** Franjas completadas en Hecho histórico multi-franja (un icono, varias insignias). */
+  completedHorarios = null,
   ...props
 }) {
   const timeOfDay = currentTimeOfDay || getCurrentTimeOfDay();
@@ -55,7 +57,8 @@ export default function HabitIconButton({
     <HabitCounterBadge
       config={config}
       currentTimeOfDay={timeOfDay}
-      displayHorario={displayHorario}
+      displayHorario={completedHorarios ? null : displayHorario}
+      completedHorarios={completedHorarios}
       size={size <= 32 ? 'small' : 'medium'}
       overlap={overlap}
       rutina={rutina}
@@ -67,7 +70,6 @@ export default function HabitIconButton({
     >
       <IconButton
         size="small"
-        onClick={onClick}
         disabled={readOnly}
         sx={getHabitIconButtonSx({
           isCompleted: Boolean(isCompleted) || presentation.doneTone != null,
@@ -80,6 +82,18 @@ export default function HabitIconButton({
           outline: presentation.outline,
         })}
         {...props}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick?.(event);
+        }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          props.onPointerDown?.(event);
+        }}
+        onContextMenu={(event) => {
+          event.stopPropagation();
+          props.onContextMenu?.(event);
+        }}
       >
         {DisplayIcon && <DisplayIcon />}
       </IconButton>

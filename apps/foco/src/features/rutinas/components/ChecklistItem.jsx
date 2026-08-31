@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { ListItem, Box, Typography, Chip } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
+import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
 import HabitIconButton from '@shared/components/habits/HabitIconButton';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import { useRutinas } from '@shared/context';
@@ -13,6 +14,7 @@ import {
   getPostponeMenuLabel,
   isEntryGroupedRoutineChain,
   resolveRoutineDisplayName,
+  resolveHistoricalDoneFranjaBadges,
 } from '@shared/habits';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
@@ -33,6 +35,18 @@ import {
 } from '@shared/styles/rutinaPageStyles';
 import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
+
+const postponeTextColumnSx = {
+  cursor: 'context-menu',
+  WebkitTouchCallout: 'none',
+  userSelect: 'none',
+  touchAction: 'manipulation',
+};
+
+const habitIconColumnGuardHandlers = {
+  onPointerDown: (event) => event.stopPropagation(),
+  onContextMenu: (event) => event.stopPropagation(),
+};
 
 export { default as HabitIconButton } from '@shared/components/habits/HabitIconButton';
 
@@ -66,7 +80,7 @@ const ChecklistItem = ({
   const { rutina: contextRutina } = useRutinas();
   const rutina = rutinaProp ?? contextRutina;
   const { isMobileOrTablet } = useResponsive();
-  const { menuState, closeMenu, getRowHandlers } = useHabitItemContextMenu({
+  const { menuState, closeMenu, getTextColumnHandlers } = useHabitItemContextMenu({
     enabled: allowPostpone && !readOnly,
   });
 
@@ -94,6 +108,7 @@ const ChecklistItem = ({
   const hasMultipleFranjas = horariosConfig.length > 1 && !normalizedFocusHorario;
   const singleDisplayHorario = normalizedFocusHorario
     || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
+  const isHistoricalDay = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
 
   const iconTokens = getHabitIconTokens({
     mobile: isMobileOrTablet,
@@ -106,6 +121,15 @@ const ChecklistItem = ({
   const itemValue = localData?.[itemId] !== undefined
     ? localData[itemId]
     : (completionValue !== undefined ? completionValue : rutina?.[section]?.[itemId]);
+
+  const completedFranjaBadges = (isHistoricalDay && isCompleted)
+    ? resolveHistoricalDoneFranjaBadges({
+      rutina,
+      config,
+      itemValue,
+      franjaKey: normalizedFocusHorario,
+    })
+    : null;
 
   const postponeFranja = normalizedFocusHorario || singleDisplayHorario || getCurrentTimeOfDay();
   const nextPostponeFranja = resolvePostponeTargetFranja({
@@ -127,7 +151,7 @@ const ChecklistItem = ({
     allowPostpone,
   });
   const postponeEntry = { section, itemId, config, itemValue, label: habitLabel || itemId };
-  const postponeRowHandlers = getRowHandlers(postponeEntry, {
+  const postponeTextHandlers = getTextColumnHandlers(postponeEntry, {
     canPostpone,
     postponeLabel,
     franja: postponeFranja,
@@ -162,6 +186,32 @@ const ChecklistItem = ({
     }
 
     if (hasMultipleFranjas) {
+      if (completedFranjaBadges?.length) {
+        return (
+          <HabitIconButton
+            isCompleted={isCompleted}
+            Icon={Icon}
+            hideBorder={hideIconBorder}
+            deferredPending={deferredPending}
+            quotaSlot={quotaSlot}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!readOnly) onItemClick(itemId, e, singleDisplayHorario);
+            }}
+            readOnly={readOnly}
+            config={config}
+            currentTimeOfDay={getCurrentTimeOfDay()}
+            completedHorarios={completedFranjaBadges}
+            rutina={rutina}
+            section={section}
+            itemId={itemId}
+            size={iconSize}
+            glyph={iconGlyph}
+            mr={0}
+          />
+        );
+      }
+
       return (
         <HabitIconScrollRow
           itemCount={horariosConfig.length}
@@ -262,25 +312,21 @@ const ChecklistItem = ({
           sx={{
             ...rutinaChecklistContentSx,
             ...(stackCell ? rutinaChecklistStackCellContentSx : null),
-            ...(canPostpone
-              ? {
-                cursor: 'context-menu',
-                WebkitTouchCallout: 'none',
-                userSelect: 'none',
-                touchAction: 'manipulation',
-              }
-              : null),
           }}
-          {...(canPostpone ? postponeRowHandlers : {})}
         >
-          <Box sx={rutinaChecklistIconColumnSx({ compact: iconColumnCompact, mobile: isMobileOrTablet })}>
+          <Box
+            sx={rutinaChecklistIconColumnSx({ compact: iconColumnCompact, mobile: isMobileOrTablet })}
+            {...habitIconColumnGuardHandlers}
+          >
             {habitActionButtons}
           </Box>
           <Box
             sx={{
               ...rutinaChecklistTextColumnSx,
               ...(stackCell ? rutinaChecklistStackCellTextSx : null),
+              ...(canPostpone ? postponeTextColumnSx : null),
             }}
+            {...(canPostpone ? postponeTextHandlers : {})}
           >
             <Box sx={{
               display: 'flex',
@@ -385,6 +431,9 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.chain?.id === nextProps.chain?.id &&
     prevProps.chain?.label === nextProps.chain?.label &&
     prevProps.chain?.stepCount === nextProps.chain?.stepCount &&
+    prevProps.onItemClick === nextProps.onItemClick &&
+    prevProps.onPostpone === nextProps.onPostpone &&
+    prevProps.rutina?._id === nextProps.rutina?._id &&
     prevProps.rutina?.fecha === nextProps.rutina?.fecha &&
     Boolean(prevProps.rutina?.isPreview) === Boolean(nextProps.rutina?.isPreview)
   );

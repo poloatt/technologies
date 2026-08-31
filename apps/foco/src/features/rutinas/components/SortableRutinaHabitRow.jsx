@@ -12,6 +12,7 @@ export default function SortableRutinaHabitRow({
   readOnly,
   onItemClick,
   localData,
+  multiSection = false,
   stackVariant = 'inline',
   allowPostpone = false,
   onPostpone,
@@ -26,6 +27,15 @@ export default function SortableRutinaHabitRow({
     ? isHabitHorarioCompleted(itemValue, focusHorario)
     : isHabitCompletedForHistorial(itemValue);
   const hideIconBorder = isEntryFranjaSinHacer(entry, resolveActiveDailyFranja(rutina));
+
+  const handleItemClick = (clickedItemId, event, horario) => {
+    const resolvedHorario = horario ?? focusHorario ?? null;
+    if (multiSection) {
+      onItemClick(clickedItemId, event, resolvedHorario, section);
+      return;
+    }
+    onItemClick(clickedItemId, event, resolvedHorario);
+  };
 
   const {
     attributes,
@@ -58,7 +68,7 @@ export default function SortableRutinaHabitRow({
         isCompleted={isCompleted}
         completionValue={itemValue}
         readOnly={readOnly}
-        onItemClick={onItemClick}
+        onItemClick={handleItemClick}
         config={config}
         habitLabel={label}
         localData={localData}

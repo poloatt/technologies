@@ -264,9 +264,12 @@ export function getRutinaChecklistIconColumnWidth({
   return iconSize * maxIcons + gapPx * Math.max(0, maxIcons - 1);
 }
 
+/** Espacio extra bajo iconos para insignias de franja (HabitCounterBadge). */
+const RUTINA_FRANJA_STRIP_RESERVE_PX = 14;
+
 export function rutinaChecklistIconColumnSx({ compact = false, mobile = false, fluid = false } = {}) {
   const gap = compact ? 0.15 : 0.25;
-  const minHeight = getRutinaChecklistIconSize(compact, mobile);
+  const minHeight = getRutinaChecklistIconSize(compact, mobile) + RUTINA_FRANJA_STRIP_RESERVE_PX;
 
   if (fluid) {
     return {
@@ -284,7 +287,7 @@ export function rutinaChecklistIconColumnSx({ compact = false, mobile = false, f
   const width = getRutinaChecklistIconColumnLayoutWidth({ mobile });
   return {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'flex-start',
     flex: `0 0 ${width}px`,
     width,
@@ -293,7 +296,7 @@ export function rutinaChecklistIconColumnSx({ compact = false, mobile = false, f
     gap,
     minHeight,
     overflowX: 'auto',
-    overflowY: 'hidden',
+    overflowY: 'visible',
     scrollbarWidth: 'none',
     msOverflowStyle: 'none',
     '&::-webkit-scrollbar': { display: 'none' },

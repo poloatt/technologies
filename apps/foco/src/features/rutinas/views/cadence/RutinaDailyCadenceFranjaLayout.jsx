@@ -264,6 +264,7 @@ export default function RutinaDailyCadenceFranjaLayout({
           sectionLabel={RUTINA_HISTORICAL_COPY.unmarked}
           showSectionCounts
           expandableCarousels
+          defaultExpandedCarouselKeys={['today']}
           activeFranja={activeFranja}
           habitsPreferences={habitsPreferences}
           localDataBySection={localDataBySection}
@@ -328,9 +329,11 @@ export default function RutinaDailyCadenceFranjaLayout({
           }
           doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : RUTINA_DONE_GROUP_COPY.doneToday}
           doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : RUTINA_DONE_GROUP_COPY.doneBefore}
-          defaultExpanded={isHistorical}
+          defaultExpanded={false}
           collapsible={isHistorical}
-          collapseThreshold={isHistorical ? 3 : 5}
+          collapsePreviewMode={isHistorical ? 'carousel' : 'hide'}
+          collapseThreshold={isHistorical ? 0 : 5}
+          habits={habits}
         />
       )}
     </Box>

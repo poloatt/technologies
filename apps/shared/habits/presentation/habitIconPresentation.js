@@ -8,9 +8,10 @@
  * - Luego / diferido → outline plano con menos brillo (no tienta el click).
  *
  * Hechos:
- * - Siempre filled planos (sin borde circular).
- * - Hecho hoy → brillo pleno.
- * - Hecho antes (cuota del período aún vigente) → filled con brillo más sutil.
+ * - Icono principal: filled plano (sin borde circular).
+ * - Insignia de franja horaria: outline (sol/atardecer/luna), no filled.
+ * - Hecho hoy → brillo pleno; hecho antes → brillo más sutil.
+ * - Multi-franja completado: MAÑANA izquierda, TARDE centro, NOCHE derecha (bajo el icono).
  */
 
 /** Slots de carrusel: pendiente plano sin borde (sinHacer u overdue visible). */
@@ -144,9 +145,9 @@ export function resolveHabitBadgeChrome(presentation = {}) {
   const variant = presentation.variant || 'activePending';
   switch (variant) {
     case 'completedToday':
-      return { outline: false, colorToken: 'primary.main', opacity: 1 };
+      return { outline: true, colorToken: 'primary.main', opacity: 1 };
     case 'completedBefore':
-      return { outline: false, colorToken: 'primary.main', opacity: 0.45 };
+      return { outline: true, colorToken: 'primary.main', opacity: 0.45 };
     case 'deferredPending':
       return { outline: true, colorToken: 'text.disabled', opacity: 0.4 };
     case 'plainPending':

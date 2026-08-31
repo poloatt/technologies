@@ -157,8 +157,10 @@ export default function RutinaCadenceFlatLayout({
         readOnly={readOnly}
         onToggle={handleDoneToggle}
         collapsible
-        collapseThreshold={isHistorical ? 3 : 5}
-        defaultExpanded={isHistorical}
+        collapseThreshold={isHistorical ? 0 : 5}
+        defaultExpanded={false}
+        collapsePreviewMode={isHistorical ? 'carousel' : 'hide'}
+        habits={habits}
         doneHeadingLabel={
           isHistorical
             ? RUTINA_HISTORICAL_COPY.doneThatDay
