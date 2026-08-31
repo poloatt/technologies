@@ -144,24 +144,22 @@ export function categorizeSectionHabits({
   const prefs = habitsPreferences ?? {};
   const chains = Array.isArray(habitChains) ? habitChains : [];
   const localBySection = localDataBySection ?? (localData ? { [section]: localData } : null);
-  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
   const sectionIcons = iconsMap?.[section] || {};
   const itemIds = resolveSectionItemIds(section, habits, iconsMap);
 
-  const rutinaForVisibility = isHistorical
-    ? rutina
-    : {
-      ...rutina,
-      config: {
-        ...(rutina.config || {}),
-        [section]: Object.fromEntries(
-          itemIds.map((itemId) => [
-            itemId,
-            resolveRutinaItemConfig(section, itemId, rutina, prefs),
-          ]),
-        ),
-      },
-    };
+  // Histórico y hoy: misma config resuelta (snapshot + prefs de cadencia faltantes).
+  const rutinaForVisibility = {
+    ...rutina,
+    config: {
+      ...(rutina.config || {}),
+      [section]: Object.fromEntries(
+        itemIds.map((itemId) => [
+          itemId,
+          resolveRutinaItemConfig(section, itemId, rutina, prefs),
+        ]),
+      ),
+    },
+  };
 
   const completed = [];
   const incomplete = [];
@@ -213,12 +211,6 @@ export function categorizeSectionHabits({
 
 /** Etiquetas de agrupación del tracker diario (registro del día). */
 export const RUTINA_DAY_GROUP_LABELS = RUTINA_DAY_GROUP_COPY;
-
-function isDailyCadenceConfig(config = {}) {
-  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
-  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
-  return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
-}
 
 /** Multi-franja real solo para DIARIO (p. ej. mañana + noche). */
 function isDailyMultiHorarioConfig(config = {}) {
@@ -304,6 +296,16 @@ export function isHabitDoneByPeriodQuotaOnly(params) {
   return isHabitQuotaOrDayDone(params) && !isHabitCompletedOnRutinaDay(params);
 }
 
+/**
+ * Tono visual de hecho para iconos (Hábitos presentation).
+ * @returns {'today'|'before'|null}
+ */
+export function resolveHabitDoneTone(params) {
+  if (isHabitCompletedOnRutinaDay(params)) return 'today';
+  if (isHabitQuotaOrDayDone(params)) return 'before';
+  return null;
+}
+
 function resolveDoneEntryParams(entry, rutina, rutinaForVisibility) {
   const section = entry.section;
   const itemId = entry.itemId;
@@ -359,15 +361,17 @@ export function partitionDoneEntriesByRutinaDay(
  * Cubre semanales/mensuales en día programado cuando debesMostrarHabitoEnFecha falla.
  */
 export function isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility = rutina) {
-  if (entry.isScheduled || entry.isCadenciaDebt) return true;
-
   const { config, itemId, section, itemValue } = entry;
-  // Cadencia diaria: siempre aplica al día calendario; cuota/franjas se resuelven aparte.
-  if (isDailyCadenceConfig(config)) {
-    return true;
+  const fechaRutina = parseAPIDate(rutina?.fecha) || new Date();
+  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+
+  // Histórico: solo lo que tocaba ese día calendario (sin catch-up de deuda semanal/mensual).
+  if (isHistorical) {
+    return isScheduledCadenciaDay(fechaRutina, config);
   }
 
-  const fechaRutina = parseAPIDate(rutina?.fecha) || new Date();
+  if (entry.isScheduled || entry.isCadenciaDebt) return true;
+
   if (isScheduledCadenciaDay(fechaRutina, config)) return true;
 
   const historialDates = [...obtenerHistorialCompletados(itemId, section, rutinaForVisibility)];
@@ -418,27 +422,24 @@ export function groupSectionHabitsByDaySchedule(params) {
   const sortOpts = { section, habits };
 
   const prefs = params.habitsPreferences ?? {};
-  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
   const itemIds = [...new Set([
     ...incomplete.map((e) => e.itemId),
     ...completed.map((e) => e.itemId),
     ...notScheduled.map((e) => e.itemId),
   ])];
 
-  const rutinaForVisibility = isHistorical
-    ? rutina
-    : {
-      ...rutina,
-      config: {
-        ...(rutina.config || {}),
-        [section]: Object.fromEntries(
-          itemIds.map((itemId) => [
-            itemId,
-            resolveRutinaItemConfig(section, itemId, rutina, prefs),
-          ]),
-        ),
-      },
-    };
+  const rutinaForVisibility = {
+    ...rutina,
+    config: {
+      ...(rutina.config || {}),
+      [section]: Object.fromEntries(
+        itemIds.map((itemId) => [
+          itemId,
+          resolveRutinaItemConfig(section, itemId, rutina, prefs),
+        ]),
+      ),
+    },
+  };
 
   const today = [];
   const done = [];

@@ -1,12 +1,25 @@
 import React, { useMemo } from 'react';
 import { Box } from '@mui/material';
-import { groupWeeklyCadenceByWeekday } from '@shared/habits';
+import { groupWeeklyCadenceByWeekday, resolveActiveDailyFranja, mergeLuegoWeekdayGroups } from '@shared/habits';
 import { collapseSectionStackSx } from '@shared/styles/collapseSectionStyles';
 import RutinaDayGroupList from '../section/RutinaDayGroupList';
 import RutinaDoneSection from '../section/RutinaDoneSection';
 
+/** Datos de pendientes semanales para incrustar en Luego del Diario. */
+export function useWeeklyCadenceLuegoGroups(bucket, rutina) {
+  return useMemo(() => {
+    if (!bucket) return { pendingWeekdayGroups: [], allDoneItems: [] };
+    const weekdayGroups = groupWeeklyCadenceByWeekday(bucket, rutina);
+    return {
+      pendingWeekdayGroups: weekdayGroups.filter((group) => group.pending.length > 0),
+      allDoneItems: weekdayGroups.flatMap((group) => group.done),
+    };
+  }, [bucket, rutina]);
+}
+
 /**
- * Bucket Semanal: subgrupos por día (Lunes, Martes, …) + Hecho.
+ * Bucket Semanal (standalone): pendientes por día dentro de «Luego»
+ * con subsecciones floating (Lunes, Martes, …) + Hecho.
  * Los hábitos que tocan hoy se muestran en Diario, no aquí.
  */
 export default function RutinaWeeklyCadenceDayLayout({
@@ -19,15 +32,12 @@ export default function RutinaWeeklyCadenceDayLayout({
   localDataBySection = {},
   includeDoneSection = true,
   onReorderSection,
+  luegoWeekdayGroupsExtra = [],
 }) {
-  const weekdayGroups = useMemo(
-    () => groupWeeklyCadenceByWeekday(bucket, rutina),
-    [bucket, rutina],
-  );
-
-  const allDoneItems = useMemo(
-    () => weekdayGroups.flatMap((group) => group.done),
-    [weekdayGroups],
+  const { pendingWeekdayGroups, allDoneItems } = useWeeklyCadenceLuegoGroups(bucket, rutina);
+  const luegoWeekdayGroups = useMemo(
+    () => mergeLuegoWeekdayGroups(pendingWeekdayGroups, luegoWeekdayGroupsExtra),
+    [pendingWeekdayGroups, luegoWeekdayGroupsExtra],
   );
 
   const handleDoneToggle = (entrySection, itemId, horario) => {
@@ -36,37 +46,35 @@ export default function RutinaWeeklyCadenceDayLayout({
 
   return (
     <Box sx={collapseSectionStackSx}>
-      {weekdayGroups.map((group) => {
-        if (group.pending.length === 0) return null;
-
-        return (
-          <RutinaDayGroupList
-            key={group.weekdayKey}
-            today={group.pending}
-            done={[]}
-            notToday={[]}
-            rutina={rutina}
-            habits={habits}
-            readOnly={readOnly}
-            sortable={!readOnly && typeof onReorderSection === 'function'}
-            multiSection
-            hideDone
-            hideGroupHeadings
-            useFranjaHeadings
-            sectionLabel={group.weekdayLabel}
-            habitsPreferences={habitsPreferences}
-            localDataBySection={localDataBySection}
-            rowKeyPrefix={`wd-${group.weekdayKey}`}
-            onReorderSection={onReorderSection}
-            onItemClick={(itemId, event, horario, entrySection) => {
-              onItemClick(entrySection, itemId, event, horario);
-            }}
-            onDoneToggle={(entrySection, itemId, event, horario) => {
-              onItemClick(entrySection, itemId, event, horario);
-            }}
-          />
-        );
-      })}
+      {luegoWeekdayGroups.length > 0 && (
+        <RutinaDayGroupList
+          today={[]}
+          done={[]}
+          notToday={[]}
+          luego={[]}
+          luegoWeekdayGroups={luegoWeekdayGroups}
+          rutina={rutina}
+          habits={habits}
+          readOnly={readOnly}
+          sortable={!readOnly && typeof onReorderSection === 'function'}
+          multiSection
+          hideDone
+          hideGroupHeadings
+          showSectionCounts
+          expandableCarousels
+          activeFranja={resolveActiveDailyFranja(rutina)}
+          habitsPreferences={habitsPreferences}
+          localDataBySection={localDataBySection}
+          rowKeyPrefix="weekly-cadence"
+          onReorderSection={onReorderSection}
+          onItemClick={(itemId, event, horario, entrySection) => {
+            onItemClick(entrySection, itemId, event, horario);
+          }}
+          onDoneToggle={(entrySection, itemId, event, horario) => {
+            onItemClick(entrySection, itemId, event, horario);
+          }}
+        />
+      )}
 
       {includeDoneSection && (
         <RutinaDoneSection

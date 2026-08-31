@@ -1,7 +1,9 @@
 import { alpha } from '@mui/material/styles';
-import { getRutinaHabitIconTokens } from './rutinaIconTokens';
+import { getHabitIconCarouselTokens } from './habitIconStyles';
 
-/** Tokens de superficie compartidos entre carrusel y panel desktop de rutinas. */
+/** Tokens de superficie del carril (track), no del chrome del icono.
+ * El icono usa habitIconStyles / resolveHabitIconPresentation.
+ */
 export function getHabitCarouselSurface(theme, { dense = false, mobile = false } = {}) {
   const surfaceBg = theme.palette.mode === 'dark'
     ? alpha(theme.palette.common.white, 0.035)
@@ -13,7 +15,7 @@ export function getHabitCarouselSurface(theme, { dense = false, mobile = false }
     ? alpha(theme.palette.common.white, 0.055)
     : alpha(theme.palette.common.black, 0.045);
 
-  const { size, glyph: iconFontSize } = getRutinaHabitIconTokens({ mobile, dense });
+  const { size, glyph: iconFontSize } = getHabitIconCarouselTokens({ mobile, dense });
 
   return {
     size,

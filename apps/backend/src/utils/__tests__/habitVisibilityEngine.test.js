@@ -5,6 +5,7 @@ import {
   shouldShowInTracker,
   isFlexiblePeriodic,
   getPeriodicCarouselMode,
+  resolveFlexiblePeriodicPlan,
   resolveCarouselItemConfig,
   resolveRutinaItemConfig,
 } from '@shared/habits';
@@ -350,7 +351,7 @@ describe('habitVisibilityEngine', () => {
       expect(getCarouselLuegoItems(params)).toEqual([]);
     });
 
-    it('shows gym in Luego after MAÑANA window if not completed today', () => {
+    it('shows gym in Ahora even after MAÑANA window (flexible ignores franja exile)', () => {
       const rutinaHoy = buildFlexibleGymRutina();
       const params = {
         rutinaHoy,
@@ -365,9 +366,9 @@ describe('habitVisibilityEngine', () => {
         'ejercicio',
         'gym',
         'TARDE',
-      )).toBe('luego');
-      expect(getCarouselAhoraItems(params)).toEqual([]);
-      expect(getCarouselLuegoItems(params)).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      )).toBe('ahora');
+      expect(getCarouselAhoraItems(params)).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      expect(getCarouselLuegoItems(params)).toEqual([]);
     });
 
     it('hides gym when weekly quota is met', () => {
@@ -390,6 +391,28 @@ describe('habitVisibilityEngine', () => {
       expect(getCarouselAhoraItems(params)).toEqual([]);
       expect(getCarouselLuegoItems(params)).toEqual([]);
     });
+
+    it('builds a forward template of future weekdays for flexible gym', () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 5, 22, 10, 0, 0)); // lunes
+
+      const rutinaHoy = buildFlexibleGymRutina();
+      const plan = resolveFlexiblePeriodicPlan(
+        buildGymConfig(),
+        rutinaHoy,
+        'ejercicio',
+        'gym',
+      );
+
+      expect(plan.showToday).toBe(true);
+      expect(plan.remainingQuota).toBe(3);
+      expect(plan.todayQuotaSlot).toBe(1);
+      expect(plan.futureSlots.length).toBeGreaterThan(0);
+      expect(plan.futureSlots.every((slot) => slot.quotaSlot > 1)).toBe(true);
+      expect(plan.suggestedWeekdayKeys).toContain(1); // lunes
+
+      jest.useRealTimers();
+    });
   });
 
   describe('periodic frequency placement', () => {
@@ -401,7 +424,7 @@ describe('habitVisibilityEngine', () => {
       bodyCare: [{ id: 'peluqueria', label: 'Peluquería', icon: 'Cut', activo: true, orden: 0 }],
     };
 
-    it('shows monthly 1x habit in Luego mid-month (not urgent)', () => {
+    it('keeps monthly 1x flexible out of Ahora mid-month (soft until urgent)', () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date(2026, 5, 15, 10, 0, 0));
 
@@ -432,9 +455,9 @@ describe('habitVisibilityEngine', () => {
         'bodyCare',
         'peluqueria',
         'MAÑANA',
-      )).toBe('luego');
+      )).toBeNull();
       expect(getCarouselAhoraItems(params)).toEqual([]);
-      expect(getCarouselLuegoItems(params)).toEqual([{ section: 'bodyCare', itemId: 'peluqueria' }]);
+      expect(getCarouselLuegoItems(params)).toEqual([]);
 
       jest.useRealTimers();
     });
@@ -477,7 +500,7 @@ describe('habitVisibilityEngine', () => {
       jest.useRealTimers();
     });
 
-    it('shows weekly 1x habit in Luego when not urgent', () => {
+    it('keeps weekly 1x flexible out of Ahora mid-week (soft until urgent)', () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date(2026, 5, 16, 10, 0, 0));
 
@@ -502,8 +525,15 @@ describe('habitVisibilityEngine', () => {
         currentTimeOfDay: 'MAÑANA',
       };
 
+      expect(getPeriodicCarouselMode(
+        rutinaHoy.config.ejercicio.gym,
+        rutinaHoy,
+        'ejercicio',
+        'gym',
+        'MAÑANA',
+      )).toBeNull();
       expect(getCarouselAhoraItems(params)).toEqual([]);
-      expect(getCarouselLuegoItems(params)).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      expect(getCarouselLuegoItems(params)).toEqual([]);
 
       jest.useRealTimers();
     });
@@ -627,7 +657,7 @@ describe('habitVisibilityEngine', () => {
       expect(getCarouselLuegoItems(params)).toEqual([]);
     });
 
-    it('gym 3x/week with future NOCHE franja shows in Luego during MAÑANA', () => {
+    it('gym 3x/week flexible with NOCHE franja still shows in Ahora (franja is preference)', () => {
       const rutinaHoy = buildFlexibleGymRutina({
         config: {
           ejercicio: {
@@ -654,9 +684,9 @@ describe('habitVisibilityEngine', () => {
         'ejercicio',
         'gym',
         'MAÑANA',
-      )).toBe('luego');
-      expect(getCarouselAhoraItems(params)).toEqual([]);
-      expect(getCarouselLuegoItems(params)).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      )).toBe('ahora');
+      expect(getCarouselAhoraItems(params)).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      expect(getCarouselLuegoItems(params)).toEqual([]);
     });
   });
 
@@ -693,7 +723,7 @@ describe('habitVisibilityEngine', () => {
       expect(resolved.horarios).toEqual(['NOCHE']);
     });
 
-    it('uses rutina snapshot only for historical days', () => {
+    it('keeps explicit historical snapshot tipo over preferences', () => {
       const historicalDate = new Date('2020-01-15T12:00:00.000Z');
       const rutinaHistorica = buildRutina({
         fecha: historicalDate.toISOString(),
@@ -729,6 +759,43 @@ describe('habitVisibilityEngine', () => {
       );
       expect(resolved.tipo).toBe('DIARIO');
       expect(resolved.horarios).toEqual(['MAÑANA']);
+    });
+
+    it('fills historical cadence tipo from preferences when snapshot omits it', () => {
+      const historicalDate = new Date('2020-01-15T12:00:00.000Z');
+      const rutinaHistorica = buildRutina({
+        fecha: historicalDate.toISOString(),
+        config: {
+          nutricion: {
+            farmacia: {
+              activo: true,
+              horarios: [],
+            },
+          },
+        },
+      });
+      const habitsPreferences = {
+        nutricion: {
+          farmacia: {
+            tipo: 'SEMANAL',
+            frecuencia: 1,
+            periodo: 'CADA_SEMANA',
+            diasSemana: [1],
+            horarios: ['TARDE'],
+            activo: true,
+          },
+        },
+      };
+
+      const resolved = resolveRutinaItemConfig(
+        'nutricion',
+        'farmacia',
+        rutinaHistorica,
+        habitsPreferences,
+      );
+      expect(resolved.tipo).toBe('SEMANAL');
+      expect(resolved.diasSemana).toEqual([1]);
+      expect(resolved.horarios).toEqual(['TARDE']);
     });
 
     it('fills historical horarios from preferences when snapshot has none', () => {

@@ -184,3 +184,37 @@ export function getOutlineIconByName(iconName) {
   const resolved = HABIT_ICON_LEGACY_ALIASES[iconName] || iconName;
   return outlineIconMap[resolved] || iconMap[resolved] || null;
 }
+
+const filledIconToName = new Map();
+for (const [name, Comp] of Object.entries(iconMap)) {
+  if (Comp && !filledIconToName.has(Comp)) {
+    filledIconToName.set(Comp, name);
+  }
+}
+
+function resolveIconBaseName(Icon, iconName) {
+  if (iconName && typeof iconName === 'string') {
+    return HABIT_ICON_LEGACY_ALIASES[iconName] || iconName;
+  }
+  if (Icon && filledIconToName.has(Icon)) {
+    return filledIconToName.get(Icon);
+  }
+  const displayName = Icon?.displayName || Icon?.name;
+  if (typeof displayName !== 'string') return null;
+  return displayName.replace(/(Outlined|Rounded|TwoTone|Sharp)?Icon$/u, '') || null;
+}
+
+/**
+ * Icono de lista/checklist: outline fino si pendiente, filled si completado.
+ * @param {React.ElementType|null} Icon
+ * @param {{ iconName?: string|null, outline?: boolean }} [opts]
+ */
+export function resolveHabitDisplayIcon(Icon, { iconName = null, outline = false } = {}) {
+  if (!outline) return Icon || null;
+  const baseName = resolveIconBaseName(Icon, iconName);
+  if (baseName) {
+    const Outline = outlineIconMap[baseName] || getOutlineIconByName(baseName);
+    if (Outline) return Outline;
+  }
+  return Icon || null;
+}

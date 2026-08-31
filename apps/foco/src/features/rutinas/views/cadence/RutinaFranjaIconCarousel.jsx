@@ -68,7 +68,7 @@ export default function RutinaFranjaIconCarousel({
     [pending],
   );
 
-  const { size, bg, hoverBg, rail, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
+  const { size, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobileOrTablet,
   });
 
@@ -110,8 +110,16 @@ export default function RutinaFranjaIconCarousel({
     const itemValue = resolveCarouselItemValue(entry, rutina);
     const displayHorario = resolveEntryHorario(entry);
     const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
-    const isActiveFranja = franjaKey === activeFranjaKey;
-    const carouselSlot = isActiveFranja ? 'ahora' : 'luego';
+    const entryFranjaKey = entry.franjaKey || franjaKey;
+    const entryIdx = VALID_TIME_OF_DAY.indexOf(entryFranjaKey);
+    const activeIdx = VALID_TIME_OF_DAY.indexOf(activeFranjaKey);
+    let carouselSlot = 'ahora';
+    if (entryIdx >= 0 && activeIdx >= 0) {
+      if (entryIdx < activeIdx) carouselSlot = 'sinHacer';
+      else if (entryIdx > activeIdx) carouselSlot = 'luego';
+    } else if (franjaKey !== activeFranjaKey) {
+      carouselSlot = 'luego';
+    }
 
     return (
       <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
@@ -130,9 +138,7 @@ export default function RutinaFranjaIconCarousel({
           dense={false}
           interactive={!readOnly}
           showCompletionState
-          bg={bg}
-          hoverBg={hoverBg}
-          rail={rail}
+          quotaSlot={entry.quotaSlot ?? null}
           size={size}
           iconFontSize={iconFontSize}
           onToggle={handleToggle}
@@ -141,15 +147,12 @@ export default function RutinaFranjaIconCarousel({
     );
   }, [
     activeFranjaKey,
-    bg,
     carouselMode,
     currentTimeOfDay,
     franjaKey,
     habitsPreferences,
-    hoverBg,
     iconFontSize,
     isMobileOrTablet,
-    rail,
     readOnly,
     rutina,
     size,

@@ -16,7 +16,7 @@ export {
   HABIT_ICON_LEGACY_ALIASES,
 } from './habitIcons.js';
 
-export { getOutlineIconByName } from './habitOutlineIcons.js';
+export { getOutlineIconByName, resolveHabitDisplayIcon } from './habitOutlineIcons.js';
 
 export const iconConfig = {
   bodyCare: {

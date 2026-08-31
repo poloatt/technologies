@@ -10,6 +10,59 @@ function normalizeHorariosList(horarios) {
   return normalizeTimeOfDay(horarios);
 }
 
+function hasOwnCadenceField(cfg, key) {
+  if (!cfg || typeof cfg !== 'object') return false;
+  const value = cfg[key];
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (Array.isArray(value)) return true;
+  return true;
+}
+
+/**
+ * Snapshot histórico puede venir incompleto: rellena cadencia desde prefs
+ * sin pisar campos explícitos del día.
+ */
+function mergeHistoricalHabitConfig(snapshotCfg = {}, prefCfg = null) {
+  const prefs = prefCfg && typeof prefCfg === 'object' ? prefCfg : {};
+  const snapshot = snapshotCfg && typeof snapshotCfg === 'object' ? snapshotCfg : {};
+
+  const pick = (key, fallback) => {
+    if (hasOwnCadenceField(snapshot, key)) return snapshot[key];
+    if (hasOwnCadenceField(prefs, key)) return prefs[key];
+    return fallback;
+  };
+
+  const merged = {
+    ...DEFAULT_HABIT_ITEM_CONFIG,
+    ...prefs,
+    ...snapshot,
+    tipo: pick('tipo', DEFAULT_HABIT_ITEM_CONFIG.tipo),
+    periodo: pick('periodo', DEFAULT_HABIT_ITEM_CONFIG.periodo),
+    frecuencia: pick('frecuencia', DEFAULT_HABIT_ITEM_CONFIG.frecuencia),
+    diasSemana: pick('diasSemana', prefs.diasSemana ?? snapshot.diasSemana),
+    diasMes: pick('diasMes', prefs.diasMes ?? snapshot.diasMes),
+    activo: snapshot.activo ?? prefs.activo ?? true,
+  };
+
+  const snapshotHorarios = normalizeHorariosList(snapshot.horarios);
+  const prefHorarios = normalizeHorariosList(prefs.horarios);
+  if (snapshotHorarios.length > 0) {
+    merged.horarios = snapshotHorarios;
+  } else if (prefHorarios.length > 0) {
+    merged.horarios = prefHorarios;
+    merged.frecuencia = Math.max(
+      Number(merged.frecuencia || 1),
+      prefHorarios.length,
+      Number(prefs.frecuencia || 1),
+    );
+  } else {
+    merged.horarios = [];
+  }
+
+  return merged;
+}
+
 /**
  * Deriva franjas horarias solo para tipo DIARIO con frecuencia > 1.
  * PERSONALIZADO CADA_DIA usa frecuencia como intervalo en días, no como veces/día.
@@ -58,7 +111,7 @@ export function resolveCarouselItemConfig(section, itemId, rutinaHoy, habitsPref
 
 /**
  * Config efectiva para la UI de rutinas.
- * Histórico: snapshot del día; si no tiene franjas, usa prefs actuales para visualización.
+ * Histórico: snapshot del día; campos de cadencia faltantes se rellenan desde prefs.
  * Hoy/futuro: fusiona plantilla del usuario sobre rutina.config.
  */
 export function resolveRutinaItemConfig(section, itemId, rutina, habitsPreferences = {}) {
@@ -68,27 +121,7 @@ export function resolveRutinaItemConfig(section, itemId, rutina, habitsPreferenc
   const prefCfg = habitsPreferences?.[section]?.[itemId];
 
   if (rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical') {
-    const snapshot = {
-      ...DEFAULT_HABIT_ITEM_CONFIG,
-      ...(rutinaCfg || {}),
-    };
-
-    const snapshotHorarios = normalizeHorariosList(snapshot.horarios);
-    const prefHorarios = normalizeHorariosList(prefCfg?.horarios);
-
-    if (snapshotHorarios.length === 0 && prefHorarios.length > 0) {
-      return withEffectiveHorarios({
-        ...snapshot,
-        frecuencia: Math.max(
-          Number(prefCfg?.frecuencia || 1),
-          prefHorarios.length,
-          Number(snapshot.frecuencia || 1),
-        ),
-        horarios: prefHorarios,
-      });
-    }
-
-    return withEffectiveHorarios(snapshot);
+    return withEffectiveHorarios(mergeHistoricalHabitConfig(rutinaCfg, prefCfg));
   }
 
   return resolveCarouselItemConfig(section, itemId, rutina, habitsPreferences);

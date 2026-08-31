@@ -21,7 +21,7 @@ import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
 import { DAILY_CADENCE_SECTION_COPY, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
 import { isFranjaPostponed } from '../utils/rutinaPostponeUtils.js';
-import { getPeriodicCarouselMode } from '../engine/habitVisibilityEngine.js';
+import { getPeriodicCarouselMode, isFlexiblePeriodic, resolveFlexiblePeriodicPlan } from '../engine/habitVisibilityEngine.js';
 
 /** Lunes → Domingo. */
 export const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
@@ -189,10 +189,8 @@ export function resolveGroupViewActiveFranjaLabel(activeFranja, rutina) {
   if (!isViewingRutinaToday(rutina)) {
     return RUTINA_DAY_GROUP_COPY.today;
   }
-  if (activeFranja === 'TARDE') {
-    return DAILY_CADENCE_SECTION_COPY.ahora;
-  }
-  return getDailyFranjaHeading(activeFranja, rutina);
+  // Hoy: una sola sección operativa «Ahora» (incluye pendientes de franjas anteriores).
+  return DAILY_CADENCE_SECTION_COPY.ahora;
 }
 
 function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
@@ -204,33 +202,69 @@ function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
 
   if (!isDailyCadenceConfig(config)) {
     const mode = getPeriodicCarouselMode(config, rutina, section, itemId, activeFranja);
-    if (mode === 'ahora') ahora.push(entry);
-    else if (mode === 'luego') luego.push(entry);
+    if (mode === 'ahora') {
+      const plan = isFlexiblePeriodic(config)
+        ? resolveFlexiblePeriodicPlan(config, rutina, section, itemId)
+        : null;
+      ahora.push({
+        ...entry,
+        ...(plan?.todayQuotaSlot != null ? { quotaSlot: plan.todayQuotaSlot } : {}),
+      });
+    } else if (mode === 'luego') {
+      luego.push(entry);
+    }
     return { sinHacer, ahora, luego };
   }
 
   resolveEntryDailyFranjas(config, activeFranja).forEach((franjaKey) => {
     if (isHabitHorarioCompleted(itemValue, franjaKey)) return;
 
-    const enriched = { ...entry, franjaKey };
     const franjaIdx = VALID_TIME_OF_DAY.indexOf(franjaKey);
     const postponed = rutina && isFranjaPostponed(rutina, section, itemId, franjaKey);
-
+    let franjaScheduleSlot = 'luego';
     if (postponed) {
+      franjaScheduleSlot = 'luego';
+    } else if (franjaIdx < activeIdx) {
+      franjaScheduleSlot = 'sinHacer';
+    } else if (franjaIdx === activeIdx) {
+      franjaScheduleSlot = 'ahora';
+    }
+
+    const enriched = { ...entry, franjaKey, franjaScheduleSlot };
+
+    if (postponed || franjaScheduleSlot === 'luego') {
       luego.push(enriched);
       return;
     }
-
-    if (franjaIdx < activeIdx) {
+    if (franjaScheduleSlot === 'sinHacer') {
       sinHacer.push(enriched);
-    } else if (franjaIdx === activeIdx) {
-      ahora.push(enriched);
-    } else {
-      luego.push(enriched);
+      return;
     }
+    ahora.push(enriched);
   });
 
   return { sinHacer, ahora, luego };
+}
+
+/**
+ * Slot de franja relativo a la activa: sinHacer (pasada) / ahora / luego.
+ * Usa `franjaScheduleSlot` si ya viene en la entrada; si no, lo deriva de `franjaKey`.
+ */
+export function resolveEntryFranjaScheduleSlot(entry, activeFranja = null) {
+  if (entry?.franjaScheduleSlot) return entry.franjaScheduleSlot;
+  const franjaKey = entry?.franjaKey;
+  if (!franjaKey || franjaKey === 'GENERAL' || !activeFranja) return null;
+  const franjaIdx = VALID_TIME_OF_DAY.indexOf(franjaKey);
+  const activeIdx = VALID_TIME_OF_DAY.indexOf(activeFranja);
+  if (franjaIdx < 0 || activeIdx < 0) return null;
+  if (franjaIdx < activeIdx) return 'sinHacer';
+  if (franjaIdx === activeIdx) return 'ahora';
+  return 'luego';
+}
+
+/** Pendiente de una franja anterior a la activa (mostrado dentro de Ahora). */
+export function isEntryFranjaSinHacer(entry, activeFranja = null) {
+  return resolveEntryFranjaScheduleSlot(entry, activeFranja) === 'sinHacer';
 }
 
 function sortMultiSectionCadenceEntries(entries = []) {
@@ -243,8 +277,9 @@ function sortMultiSectionCadenceEntries(entries = []) {
 }
 
 /**
- * Agrupa el bucket Diario (multi-sección) con Sin hacer / Ahora / Luego.
- * Mismo criterio de franjas que groupSectionHabitsByFranjaSchedule, a nivel cadencia.
+ * Agrupa el bucket Diario (multi-sección) con Ahora / Luego.
+ * Hoy: franjas atrasadas + franja activa se fusionan en «Ahora» (una sola lista, stacks por rutina).
+ * Luego: franjas futuras (y periódicos luego).
  */
 export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
   const today = bucket?.today || [];
@@ -275,9 +310,15 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
     luego.push(...split.luego);
   });
 
+  // UX: Ahora = franja activa primero (círculo), atrasados después (sin círculo).
+  const ahoraMerged = [
+    ...sortMultiSectionCadenceEntries(ahora),
+    ...sortMultiSectionCadenceEntries(sinHacer),
+  ];
+
   return {
-    sinHacer: sortMultiSectionCadenceEntries(sinHacer),
-    ahora: sortMultiSectionCadenceEntries(ahora),
+    sinHacer: [],
+    ahora: ahoraMerged,
     luego: sortMultiSectionCadenceEntries(luego),
     done,
     notToday,
@@ -287,8 +328,8 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
 }
 
 /**
- * Agrupa hábitos de una sección para la vista Grupo con Sin hacer / Ahora / Luego.
- * Extiende groupSectionHabitsByDaySchedule con el mismo criterio de franjas que cadencia.
+ * Agrupa hábitos de una sección para la vista Grupo con Ahora / Luego.
+ * Hoy: pendientes de franjas anteriores + franja activa → «Ahora».
  */
 export function groupSectionHabitsByFranjaSchedule(params) {
   const grouped = groupSectionHabitsByDaySchedule(params);
@@ -318,10 +359,15 @@ export function groupSectionHabitsByFranjaSchedule(params) {
     luego.push(...split.luego);
   });
 
+  const ahoraMerged = [
+    ...sortSectionHabitsByFixedOrder(ahora, sortOpts),
+    ...sortSectionHabitsByFixedOrder(sinHacer, sortOpts),
+  ];
+
   return {
     ...grouped,
-    sinHacer: sortSectionHabitsByFixedOrder(sinHacer, sortOpts),
-    ahora: sortSectionHabitsByFixedOrder(ahora, sortOpts),
+    sinHacer: [],
+    ahora: ahoraMerged,
     luego: sortSectionHabitsByFixedOrder(luego, sortOpts),
     activeFranja,
     activeFranjaLabel: resolveGroupViewActiveFranjaLabel(activeFranja, rutina),
@@ -330,7 +376,8 @@ export function groupSectionHabitsByFranjaSchedule(params) {
 
 /**
  * Secciones visibles del bucket Diario según la franja activa del día.
- * Mañana → Mañana, Tarde, Noche | Tarde → Mañana, Ahora, Noche | Noche → Sin hacer, Noche.
+ * Hoy: «Ahora» = franja activa (+ pendientes anteriores); luego franjas futuras.
+ * Histórico: Mañana → Tarde → Noche estáticos.
  */
 export function buildDailyCadenceDisplaySections({
   groupsByKey = {},
@@ -339,7 +386,6 @@ export function buildDailyCadenceDisplaySections({
   labels = {},
 }) {
   const ahoraLabel = labels.ahora || 'Ahora';
-  const sinHacerLabel = labels.sinHacer || 'Sin hacer';
 
   const group = (key) => groupsByKey[key] || null;
   const labelOf = (key) => group(key)?.franjaLabel || getTimeOfDayLabel(key);
@@ -356,38 +402,57 @@ export function buildDailyCadenceDisplaySections({
     return VALID_TIME_OF_DAY.map((key) => staticSection(key));
   }
 
-  switch (activeFranja) {
-    case 'TARDE':
-      return [
-        staticSection('MAÑANA'),
-        {
-          id: 'AHORA',
-          label: ahoraLabel,
-          group: group('TARDE'),
-          isActive: true,
-          franjaKey: 'TARDE',
-        },
-        staticSection('NOCHE'),
-      ];
-    case 'NOCHE':
-      return [
-        {
-          id: 'SIN_HACER',
-          label: sinHacerLabel,
-          group: mergeDailyFranjaGroups(group('MAÑANA'), group('TARDE')),
-          isActive: false,
-          franjaKey: 'SIN_HACER',
-        },
-        staticSection('NOCHE', { isActive: true }),
-      ];
-    case 'MAÑANA':
-    default:
-      return [
-        staticSection('MAÑANA', { isActive: true }),
-        staticSection('TARDE'),
-        staticSection('NOCHE'),
-      ];
-  }
+  const pastKeys = VALID_TIME_OF_DAY.filter(
+    (key) => VALID_TIME_OF_DAY.indexOf(key) < VALID_TIME_OF_DAY.indexOf(activeFranja),
+  );
+  const futureKeys = VALID_TIME_OF_DAY.filter(
+    (key) => VALID_TIME_OF_DAY.indexOf(key) > VALID_TIME_OF_DAY.indexOf(activeFranja),
+  );
+
+  const activeGroup = group(activeFranja);
+  const pastGroups = pastKeys.map((key) => group(key)).filter(Boolean);
+
+  const tagFranjaEntries = (entries, franjaKey, slot) => (entries || []).map((entry) => ({
+    ...entry,
+    franjaKey: entry.franjaKey || franjaKey,
+    franjaScheduleSlot: entry.franjaScheduleSlot || slot,
+  }));
+
+  const ahoraToday = [
+    ...tagFranjaEntries(activeGroup?.today, activeFranja, 'ahora'),
+    ...pastGroups.flatMap((g) => tagFranjaEntries(g.today, g.franjaKey, 'sinHacer')),
+  ];
+  const ahoraNotToday = [
+    ...(activeGroup?.notToday || []),
+    ...pastGroups.flatMap((g) => g.notToday || []),
+  ];
+  const ahoraDone = [
+    ...(activeGroup?.done || []),
+    ...pastGroups.flatMap((g) => g.done || []),
+  ];
+
+  const hasAhoraContent = ahoraToday.length > 0
+    || ahoraNotToday.length > 0
+    || ahoraDone.length > 0;
+
+  return [
+    {
+      id: 'AHORA',
+      label: ahoraLabel,
+      group: hasAhoraContent
+        ? {
+          franjaKey: activeFranja,
+          franjaLabel: ahoraLabel,
+          today: ahoraToday,
+          notToday: ahoraNotToday,
+          done: ahoraDone,
+        }
+        : null,
+      isActive: true,
+      franjaKey: activeFranja,
+    },
+    ...futureKeys.map((key) => staticSection(key)),
+  ];
 }
 
 function isWeeklyCadenceConfig(config = {}) {
@@ -401,6 +466,8 @@ export function resolveEntryWeekdays(config = {}) {
   const diasSemana = Array.isArray(config?.diasSemana) ? config.diasSemana : [];
   const normalized = diasSemana.filter((d) => typeof d === 'number' && d >= 0 && d <= 6);
   if (normalized.length > 0) return [...new Set(normalized)].sort((a, b) => a - b);
+  // Flexibles: sin fan-out a 7 días; la plantilla viene de resolveFlexiblePeriodicPlan.
+  if (isFlexiblePeriodic(config)) return [];
   return WEEKDAY_ORDER.map((d) => d.value);
 }
 
@@ -416,7 +483,8 @@ export function resolveCadenceViewBucket(entry, rutina) {
 }
 
 /**
- * Agrupa ítems del bucket Semanal por día de la semana (solo hábitos que no tocan hoy).
+ * Agrupa ítems del bucket Semanal por día de la semana (solo hábitos con días fijos
+ * que no tocan hoy). Flexibles no se expanden aquí.
  */
 export function groupWeeklyCadenceByWeekday(bucket, rutina) {
   const weekdayMap = Object.fromEntries(
@@ -425,6 +493,7 @@ export function groupWeeklyCadenceByWeekday(bucket, rutina) {
 
   bucket.items.forEach((entry) => {
     if (!isWeeklyCadenceConfig(entry.config)) return;
+    if (isFlexiblePeriodic(entry.config)) return;
 
     const scheduleBucket = resolveRutinaScheduleBucket(entry, { rutina });
     const targetKey = scheduleBucket === 'done' ? 'done' : 'pending';
@@ -443,6 +512,82 @@ export function groupWeeklyCadenceByWeekday(bucket, rutina) {
       pending: weekdayMap[value].pending,
       done: weekdayMap[value].done,
     }))
+    .filter((group) => group.pending.length > 0 || group.done.length > 0);
+}
+
+/**
+ * Plantilla de días futuros para semanales/mensuales flexibles (cuota abierta).
+ * Solo no-diarios; diarios no se proyectan.
+ */
+export function buildFlexibleLuegoWeekdayGroups(entries = [], rutina) {
+  if (!rutina || !Array.isArray(entries) || entries.length === 0) return [];
+
+  const weekdayMap = Object.fromEntries(
+    WEEKDAY_ORDER.map(({ value }) => [value, []]),
+  );
+  const seen = new Set();
+
+  entries.forEach((entry) => {
+    const config = entry?.config;
+    if (!config || !isFlexiblePeriodic(config)) return;
+    if (isDailyCadenceConfig(config)) return;
+
+    const section = entry.section;
+    const itemId = entry.itemId;
+    if (!section || !itemId) return;
+    const dedupeKey = `${section}:${itemId}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+
+    const plan = resolveFlexiblePeriodicPlan(config, rutina, section, itemId);
+    if (!plan?.futureSlots?.length) return;
+
+    plan.futureSlots.forEach(({ weekdayKey, quotaSlot }) => {
+      const list = weekdayMap[weekdayKey];
+      if (!list) return;
+      list.push({
+        ...entry,
+        weekdayKey,
+        quotaSlot,
+        isFlexibleSuggestion: true,
+        franjaScheduleSlot: 'luego',
+      });
+    });
+  });
+
+  return WEEKDAY_ORDER
+    .map(({ value, label }) => ({
+      weekdayKey: value,
+      weekdayLabel: label,
+      pending: weekdayMap[value],
+      done: [],
+    }))
+    .filter((group) => group.pending.length > 0);
+}
+
+/** Fusiona grupos por weekdayKey (pending concatenado, dedupe section:itemId). */
+export function mergeLuegoWeekdayGroups(...groupLists) {
+  const weekdayMap = Object.fromEntries(
+    WEEKDAY_ORDER.map(({ value, label }) => [value, { weekdayKey: value, weekdayLabel: label, pending: [], done: [] }]),
+  );
+
+  groupLists.flat().forEach((group) => {
+    const target = weekdayMap[group?.weekdayKey];
+    if (!target) return;
+    const seen = new Set(target.pending.map((e) => `${e.section}:${e.itemId}`));
+    (group.pending || []).forEach((entry) => {
+      const key = `${entry.section}:${entry.itemId}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      target.pending.push(entry);
+    });
+    (group.done || []).forEach((entry) => {
+      target.done.push(entry);
+    });
+  });
+
+  return WEEKDAY_ORDER
+    .map(({ value }) => weekdayMap[value])
     .filter((group) => group.pending.length > 0 || group.done.length > 0);
 }
 

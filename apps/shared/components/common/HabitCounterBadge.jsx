@@ -1,29 +1,35 @@
 import React, { useMemo } from 'react';
 import { Badge } from '@mui/material';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import WbTwilightIcon from '@mui/icons-material/WbTwilight';
+import WbTwilightOutlinedIcon from '@mui/icons-material/WbTwilightOutlined';
 import NightlightIcon from '@mui/icons-material/Nightlight';
+import NightlightOutlinedIcon from '@mui/icons-material/NightlightOutlined';
 import { contarCompletadosEnPeriodo, isFlexiblePeriodic } from '@shared/habits';
 import { isHabitCompletedForHistorial, isHabitHorarioCompleted } from '@shared/habits';
+import { resolveHabitBadgeChrome } from '@shared/habits/presentation';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 import { getNormalizedToday, parseAPIDate, toISODateString } from '@shared/utils/dateUtils';
 
+const FRANJA_ICONS = {
+  MAÑANA: { filled: WbSunnyIcon, outlined: WbSunnyOutlinedIcon },
+  TARDE: { filled: WbTwilightIcon, outlined: WbTwilightOutlinedIcon },
+  NOCHE: { filled: NightlightIcon, outlined: NightlightOutlinedIcon },
+};
+
+function resolveFranjaIcon(horario, { outline = true } = {}) {
+  const pair = FRANJA_ICONS[horario];
+  if (!pair) return null;
+  return outline ? pair.outlined : pair.filled;
+}
+
 /**
- * Componente Badge que muestra la frecuencia o el icono de horario de un hábito
- * 
- * @param {Object} props
- * @param {Object} props.config - Configuración del hábito (tipo, frecuencia, horarios)
- * @param {string} props.currentTimeOfDay - Horario actual ('MAÑANA', 'TARDE', 'NOCHE')
- * @param {string} props.size - Tamaño del badge ('small' | 'medium')
- * @param {string} props.overlap - Tipo de superposición ('circular' | 'rectangular' | 'subtle')
- * @param {Object} props.rutina - Rutina actual (opcional, para calcular progreso del período)
- * @param {string} props.section - Sección del hábito (opcional, para calcular progreso)
- * @param {string} props.itemId - ID del ítem (opcional, para calcular progreso)
- * @param {boolean} [props.reserveBadgeSpace] — mantiene el hueco del badge aunque no haya contenido (carrusel)
- * @param {React.ReactNode} props.children - Elemento hijo (generalmente un IconButton)
+ * Badge de frecuencia (cuota N del período) o icono de franja.
+ * Color / outline siguen la presentación canónica del icono padre.
  */
-export const HabitCounterBadge = ({ 
-  config = {}, 
+export const HabitCounterBadge = ({
+  config = {},
   currentTimeOfDay = 'MAÑANA',
   displayHorario = null,
   size = 'small',
@@ -32,63 +38,62 @@ export const HabitCounterBadge = ({
   section = null,
   itemId = null,
   reserveBadgeSpace = false,
-  children 
+  isCompleted = false,
+  quotaSlot = null,
+  /** Presentación canónica del icono (outline / variant / doneTone). */
+  iconPresentation = null,
+  children,
 }) => {
   const tipo = (config?.tipo || 'DIARIO').toUpperCase();
   const frecuencia = Number(config?.frecuencia || 1);
   const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
   const periodo = config?.periodo ? config.periodo.toUpperCase() : null;
 
-  // Calcular completados del período actual para hábitos semanales/mensuales
+  const badgeChrome = resolveHabitBadgeChrome(
+    iconPresentation || {
+      variant: isCompleted ? 'completedToday' : 'activePending',
+      outline: !isCompleted,
+    },
+  );
+
   const completadosEnPeriodo = useMemo(() => {
     if (!rutina || !section || !itemId) return null;
-    
-    // Solo calcular para SEMANAL/MENSUAL/PERSONALIZADO (no DIARIO)
-    if (tipo !== 'SEMANAL' && tipo !== 'MENSUAL' && 
-        !(tipo === 'PERSONALIZADO' && periodo && periodo !== 'CADA_DIA')) {
+
+    if (tipo !== 'SEMANAL' && tipo !== 'MENSUAL'
+        && !(tipo === 'PERSONALIZADO' && periodo && periodo !== 'CADA_DIA')) {
       return null;
     }
 
     try {
-      // Obtener historial de completados desde rutina.historial[section][itemId]
-      // El historial se estructura como: historial[section][itemId][YYYY-MM-DD] = true
       const historialSection = rutina?.historial?.[section];
-      
-      // Convertir historial a array de fechas
-      // El historial viene como objeto { 'YYYY-MM-DD': true }
+
       let historialCompletado = [];
       if (historialSection && historialSection[itemId]) {
         const historialItem = historialSection[itemId];
         if (typeof historialItem === 'object' && !Array.isArray(historialItem)) {
           historialCompletado = Object.keys(historialItem)
-            .filter(fecha => historialItem[fecha] === true)
-            .map(fecha => {
-              // Parsear fecha YYYY-MM-DD a Date
+            .filter((fecha) => historialItem[fecha] === true)
+            .map((fecha) => {
               const [year, month, day] = fecha.split('-').map(Number);
               return new Date(year, month - 1, day, 12, 0, 0, 0);
             });
         } else if (Array.isArray(historialItem)) {
-          // Fallback: si viene como array de fechas
           historialCompletado = historialItem.map((fecha) => parseAPIDate(fecha) || new Date(fecha));
         }
       }
 
-      // Calcular completados del período actual (día de la rutina o hoy prefs)
       const hoy = rutina?.fecha ? (parseAPIDate(rutina.fecha) || getNormalizedToday()) : getNormalizedToday();
       let completados = contarCompletadosEnPeriodo(hoy, tipo, periodo || 'CADA_DIA', historialCompletado);
-      
-      // Verificar si el hábito está completado hoy y agregarlo si no está en el historial
+
       const completadoHoy = isHabitCompletedForHistorial(rutina?.[section]?.[itemId]);
       if (completadoHoy) {
         const hoyStr = toISODateString(hoy);
         const yaEstaEnHistorial = historialCompletado.some((fecha) => toISODateString(fecha) === hoyStr);
-        
-        // Si no está en el historial, agregarlo al conteo
         if (!yaEstaEnHistorial) {
           completados++;
         }
       }
-      
+
       return completados;
     } catch (error) {
       console.error('[HabitCounterBadge] Error calculando completados en período:', error);
@@ -97,48 +102,51 @@ export const HabitCounterBadge = ({
   }, [rutina, section, itemId, tipo, periodo]);
 
   const flexiblePeriodic = isFlexiblePeriodic(config);
+  const isPeriodicMulti = frecuencia > 1 && (
+    flexiblePeriodic
+    || tipo === 'SEMANAL'
+    || tipo === 'MENSUAL'
+    || (tipo === 'PERSONALIZADO' && periodo && periodo !== 'CADA_DIA')
+  );
 
-  // Determinar qué mostrar en el badge
+  const resolvePeriodicQuotaBadge = () => {
+    if (quotaSlot != null && Number.isFinite(Number(quotaSlot))) {
+      return Math.max(1, Math.min(Number(quotaSlot), frecuencia));
+    }
+    const done = completadosEnPeriodo !== null ? completadosEnPeriodo : 0;
+    if (isCompleted || done >= frecuencia) {
+      return Math.max(1, Math.min(done || frecuencia, frecuencia));
+    }
+    return Math.min(done + 1, frecuencia);
+  };
+
+  const franjaIconFont = size === 'small' ? '0.75rem' : '0.875rem';
+  const renderFranjaIcon = (horario) => {
+    const IconComp = resolveFranjaIcon(horario, { outline: badgeChrome.outline });
+    if (!IconComp) return null;
+    return <IconComp sx={{ fontSize: franjaIconFont }} />;
+  };
+
   let badgeContent = null;
   let showBadge = false;
   let isNumber = false;
   let resolvedHorario = null;
 
-  // Periódicos flexibles: badge numérico solo si cuota > 1 (evita 0/1 y 1/1)
-  if (flexiblePeriodic && frecuencia > 1) {
-    const valorAMostrar = completadosEnPeriodo !== null ? completadosEnPeriodo : 0;
-    badgeContent = valorAMostrar;
+  if (isPeriodicMulti) {
+    badgeContent = resolvePeriodicQuotaBadge();
     showBadge = true;
     isNumber = true;
-  }
-  // Para hábitos periódicos con días fijos: mostrar completados del período actual
-  else if (tipo === 'SEMANAL' || tipo === 'MENSUAL' || (tipo === 'PERSONALIZADO' && periodo !== 'CADA_DIA')) {
-    if (frecuencia > 1) {
-      // Mostrar completados del período actual si está disponible, sino mostrar frecuencia como fallback
-      const valorAMostrar = completadosEnPeriodo !== null ? completadosEnPeriodo : frecuencia;
-      badgeContent = valorAMostrar;
-      showBadge = true;
-      isNumber = true; // Es un número, necesita borde
-    }
-  }
-  // Para hábitos diarios con frecuencia > 1 o con horarios específicos: mostrar icono de horario
-  else if (tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && config?.periodo === 'CADA_DIA')) {
-    // Si tiene horarios configurados, mostrar icono del horario actual o último no completado
+  } else if (tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && config?.periodo === 'CADA_DIA')) {
     if (horarios.length > 0) {
-      const normalizedHorarios = horarios.map(h => String(h).toUpperCase());
+      const normalizedHorarios = horarios.map((h) => String(h).toUpperCase());
       const normalizedTimeOfDay = String(currentTimeOfDay).toUpperCase();
       const itemValue = rutina?.[section]?.[itemId];
-
-      // Función helper para verificar si un horario específico está completado
       const isHorarioCompleted = (horario) => isHabitHorarioCompleted(itemValue, horario);
-      
-      // Orden de horarios del día (de más temprano a más tarde)
       const HORARIOS_ORDER = VALID_TIME_OF_DAY;
-      
+
       let horarioAMostrar = displayHorario ? String(displayHorario).toUpperCase() : null;
-      
+
       if (!horarioAMostrar) {
-        // Si el horario actual está en la lista, verificar si está completado
         if (normalizedHorarios.includes(normalizedTimeOfDay)) {
           if (!isHorarioCompleted(normalizedTimeOfDay)) {
             horarioAMostrar = normalizedTimeOfDay;
@@ -154,60 +162,24 @@ export const HabitCounterBadge = ({
           }
         }
       }
-      
-      // Mostrar icono del horario determinado
+
       if (horarioAMostrar) {
         resolvedHorario = horarioAMostrar;
-        switch (horarioAMostrar) {
-          case 'MAÑANA':
-            badgeContent = <WbSunnyIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
-            showBadge = true;
-            isNumber = false; // Es un icono, sin borde
-            break;
-          case 'TARDE':
-            badgeContent = <WbTwilightIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
-            showBadge = true;
-            isNumber = false; // Es un icono, sin borde
-            break;
-          case 'NOCHE':
-            badgeContent = <NightlightIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
-            showBadge = true;
-            isNumber = false; // Es un icono, sin borde
-            break;
-          default:
-            showBadge = false;
-        }
+        badgeContent = renderFranjaIcon(horarioAMostrar);
+        showBadge = Boolean(badgeContent);
+        isNumber = false;
       }
     } else {
       const horarioAMostrar = displayHorario ? String(displayHorario).toUpperCase() : null;
       if (horarioAMostrar && VALID_TIME_OF_DAY.includes(horarioAMostrar)) {
         resolvedHorario = horarioAMostrar;
-        switch (horarioAMostrar) {
-          case 'MAÑANA':
-            badgeContent = <WbSunnyIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
-            showBadge = true;
-            isNumber = false;
-            break;
-          case 'TARDE':
-            badgeContent = <WbTwilightIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
-            showBadge = true;
-            isNumber = false;
-            break;
-          case 'NOCHE':
-            badgeContent = <NightlightIcon sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }} />;
-            showBadge = true;
-            isNumber = false;
-            break;
-          default:
-            showBadge = false;
-        }
+        badgeContent = renderFranjaIcon(horarioAMostrar);
+        showBadge = Boolean(badgeContent);
+        isNumber = false;
       }
     }
-    // Si no tiene horarios pero frecuencia > 1, no mostrar badge (solo frecuencia)
-    // (El badge solo muestra horarios, no frecuencia para diarios)
   }
 
-  // Si no hay nada que mostrar, renderizar sin badge (salvo reserva de espacio en carrusel)
   if (!showBadge && !reserveBadgeSpace) {
     return <>{children}</>;
   }
@@ -215,24 +187,26 @@ export const HabitCounterBadge = ({
   const badgeVisible = showBadge;
   const renderedBadgeContent = badgeVisible ? badgeContent : '\u00a0';
 
-  // Calcular transform según el tipo de superposición
   const getTransform = () => {
     if (overlap === 'subtle') {
-      // Superposición sutil para iconos grandes (38px) en vista expandida
-      return size === 'medium' 
-        ? 'translate(8%, 8%) scale(1)' // Para iconos más grandes (38px)
-        : 'translate(15%, 15%) scale(1)'; // Para iconos más pequeños
+      return size === 'medium'
+        ? 'translate(8%, 8%) scale(1)'
+        : 'translate(15%, 15%) scale(1)';
     }
-    // Por defecto: superposición estándar
     return 'translate(25%, 25%) scale(1)';
   };
 
+  // Franja completada en un slot concreto: filled + primary, sin romper el resto del chrome.
   const itemValue = rutina?.[section]?.[itemId];
-  const badgeAccent = isNumber
+  const franjaDone = Boolean(
+    resolvedHorario && isHabitHorarioCompleted(itemValue, resolvedHorario),
+  );
+  const badgeColor = (!isNumber && franjaDone)
     ? 'primary.main'
-    : (resolvedHorario && isHabitHorarioCompleted(itemValue, resolvedHorario)
-      ? 'primary.main'
-      : 'text.disabled');
+    : badgeChrome.colorToken;
+  const badgeOpacity = (!isNumber && franjaDone)
+    ? 1
+    : badgeChrome.opacity;
 
   return (
     <Badge
@@ -246,9 +220,11 @@ export const HabitCounterBadge = ({
           minWidth: size === 'small' ? 12 : 14,
           height: size === 'small' ? 12 : 14,
           fontSize: size === 'small' ? '0.6rem' : '0.65rem',
+          fontWeight: isNumber ? 600 : 400,
           padding: size === 'small' ? '1px 3px' : '2px 4px',
           bgcolor: 'transparent',
-          color: badgeAccent,
+          color: badgeColor,
+          opacity: badgeOpacity,
           border: 'none',
           display: 'flex',
           alignItems: 'center',
@@ -261,7 +237,8 @@ export const HabitCounterBadge = ({
           }),
           '& svg': {
             fontSize: size === 'small' ? '0.65rem' : '0.7rem',
-            color: badgeAccent,
+            color: 'inherit',
+            opacity: 1,
           },
         },
       }}
@@ -272,4 +249,3 @@ export const HabitCounterBadge = ({
 };
 
 export default HabitCounterBadge;
-

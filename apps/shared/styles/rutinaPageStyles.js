@@ -18,8 +18,6 @@ import {
 import {
   getRutinaHabitIconTokens,
   RUTINA_CHEVRON,
-  RUTINA_HABIT_ICON_GLYPH,
-  RUTINA_HABIT_ICON_SIZE,
 } from './rutinaIconTokens';
 import {
   collapseHubBodySx,
@@ -184,48 +182,6 @@ export const rutinaBackToListIconSx = {
   minHeight: { xs: RUTINA_CHEVRON.mobile.button, md: RUTINA_CHEVRON.desktop.button },
   mr: 0.5,
 };
-
-/** Botón circular de hábito (lista expandida de rutina). */
-export function getRutinaHabitIconButtonSx({
-  isCompleted,
-  size = RUTINA_HABIT_ICON_SIZE.desktop,
-  glyph,
-  mr = 1,
-} = {}) {
-  const resolvedGlyph = glyph || (size >= 44
-    ? RUTINA_HABIT_ICON_GLYPH.mobile
-    : size <= 32
-      ? RUTINA_HABIT_ICON_GLYPH.compact
-      : RUTINA_HABIT_ICON_GLYPH.desktop);
-
-  return {
-    width: size,
-    height: size,
-    minWidth: size,
-    minHeight: size,
-    p: 0,
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    mr,
-    cursor: 'pointer',
-    color: isCompleted ? 'primary.main' : 'text.secondary',
-    bgcolor: isCompleted ? 'action.selected' : 'transparent',
-    borderRadius: '50%',
-    border: '1px solid',
-    borderStyle: 'solid',
-    borderColor: isCompleted ? 'primary.main' : 'divider',
-    transition: 'all 0.2s ease',
-    '& .MuiSvgIcon-root': {
-      fontSize: resolvedGlyph,
-    },
-    '&:hover': {
-      color: isCompleted ? 'primary.main' : 'text.primary',
-      bgcolor: isCompleted ? 'action.selected' : 'action.hover',
-    },
-  };
-}
 
 export const rutinaCollapsedIconsRowSx = {
   width: '100%',

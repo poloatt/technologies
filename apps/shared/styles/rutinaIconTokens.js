@@ -20,6 +20,54 @@ export const RUTINA_HABIT_ICON_GLYPH = {
   compact: '1.2rem',
 };
 
+/** Alias canónico (feature Hábitos) — misma escala en lista, stack y carrusel. */
+export const HABIT_ICON_SIZE = RUTINA_HABIT_ICON_SIZE;
+export const HABIT_ICON_GLYPH = RUTINA_HABIT_ICON_GLYPH;
+
+/**
+ * Tokens de botón circular de hábito según contexto.
+ * @param {{ mobile?: boolean, compact?: boolean, stackCell?: boolean, dense?: boolean }} opts
+ */
+export function getHabitIconTokens({
+  mobile = false,
+  compact = false,
+  stackCell = false,
+  dense = false,
+} = {}) {
+  return getRutinaHabitIconTokens({ mobile, compact, stackCell, dense });
+}
+
+/** @deprecated Prefer getHabitIconTokens */
+export function getRutinaHabitIconTokens({
+  mobile = false,
+  compact = false,
+  stackCell = false,
+  dense = false,
+} = {}) {
+  if (stackCell) {
+    return {
+      size: RUTINA_HABIT_ICON_SIZE.stackCell,
+      glyph: RUTINA_HABIT_ICON_GLYPH.compact,
+    };
+  }
+  if (compact || dense) {
+    return {
+      size: RUTINA_HABIT_ICON_SIZE.compact,
+      glyph: RUTINA_HABIT_ICON_GLYPH.compact,
+    };
+  }
+  if (mobile) {
+    return {
+      size: RUTINA_HABIT_ICON_SIZE.mobile,
+      glyph: RUTINA_HABIT_ICON_GLYPH.mobile,
+    };
+  }
+  return {
+    size: RUTINA_HABIT_ICON_SIZE.desktop,
+    glyph: RUTINA_HABIT_ICON_GLYPH.desktop,
+  };
+}
+
 /** Celda del picker de iconos de hábito. */
 export const RUTINA_PICKER_ICON_SIZE = {
   mobile: 48,
@@ -54,40 +102,6 @@ export const RUTINA_ROW_ACTION_GLYPH = {
   mobile: '1.25rem',
   desktop: '1.1rem',
 };
-
-/**
- * Tokens de botón circular de hábito según contexto.
- * @param {{ mobile?: boolean, compact?: boolean, stackCell?: boolean, dense?: boolean }} opts
- */
-export function getRutinaHabitIconTokens({
-  mobile = false,
-  compact = false,
-  stackCell = false,
-  dense = false,
-} = {}) {
-  if (stackCell) {
-    return {
-      size: RUTINA_HABIT_ICON_SIZE.stackCell,
-      glyph: RUTINA_HABIT_ICON_GLYPH.compact,
-    };
-  }
-  if (compact || dense) {
-    return {
-      size: RUTINA_HABIT_ICON_SIZE.compact,
-      glyph: RUTINA_HABIT_ICON_GLYPH.compact,
-    };
-  }
-  if (mobile) {
-    return {
-      size: RUTINA_HABIT_ICON_SIZE.mobile,
-      glyph: RUTINA_HABIT_ICON_GLYPH.mobile,
-    };
-  }
-  return {
-    size: RUTINA_HABIT_ICON_SIZE.desktop,
-    glyph: RUTINA_HABIT_ICON_GLYPH.desktop,
-  };
-}
 
 export function getRutinaPickerIconTokens(mobile = false) {
   return mobile

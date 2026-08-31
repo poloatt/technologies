@@ -157,6 +157,28 @@ describe('habitChainUtils', () => {
     expect(rows[0].entries.map((e) => e.itemId)).toEqual(['cocinar', 'platos']);
   });
 
+  test('groupEntriesIntoDisplayRows orders ahora before sinHacer within a routine', () => {
+    const items = [
+      {
+        itemId: 'morning',
+        section: 'bodyCare',
+        franjaScheduleSlot: 'sinHacer',
+        chain: { id: 'routine', stepIndex: 0, stepCount: 2 },
+      },
+      {
+        itemId: 'afternoon',
+        section: 'bodyCare',
+        franjaScheduleSlot: 'ahora',
+        chain: { id: 'routine', stepIndex: 1, stepCount: 2 },
+      },
+    ];
+
+    const rows = groupEntriesIntoDisplayRows(items);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe('stack');
+    expect(rows[0].entries.map((e) => e.itemId)).toEqual(['afternoon', 'morning']);
+  });
+
   test('groupHabitsIntoDisplayRows groups routine habits from manager list', () => {
     const sectionHabits = [
       { id: 'solo', label: 'Solo', activo: true },

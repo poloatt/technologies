@@ -30,8 +30,9 @@ import RutinaFranjaIconCarousel from './RutinaFranjaIconCarousel';
 import RutinaDoneSection from '../section/RutinaDoneSection';
 
 /**
- * Bucket Diario con secciones dinámicas según la franja activa:
- * Hoy → Sin hacer / Ahora / Luego (paridad con vista Grupo).
+ * Bucket Diario en vista cadencia:
+ * Hoy → Ahora (franjas atrasadas + activa, stacks por rutina) / Luego
+ * (franjas futuras + días semanales como subsecciones floating).
  * Otros días → Mañana, Tarde, Noche estáticos.
  */
 export default function RutinaDailyCadenceFranjaLayout({
@@ -45,6 +46,7 @@ export default function RutinaDailyCadenceFranjaLayout({
   includeDoneSection = true,
   useShortFranjaLabels = false,
   onReorderSection,
+  luegoWeekdayGroups = [],
 }) {
   const { isMobileOrTablet } = useResponsive();
   const isViewingToday = useMemo(() => isViewingRutinaToday(rutina), [rutina]);
@@ -146,7 +148,8 @@ export default function RutinaDailyCadenceFranjaLayout({
   const hasTodaySchedule = sinHacer.length > 0
     || ahora.length > 0
     || luego.length > 0
-    || notToday.length > 0;
+    || notToday.length > 0
+    || (luegoWeekdayGroups || []).some((group) => (group?.pending || []).length > 0);
 
   const hasHistoricalReview = isHistorical && (ahora.length > 0 || notToday.length > 0);
 
@@ -193,35 +196,65 @@ export default function RutinaDailyCadenceFranjaLayout({
   return (
     <Box sx={collapseSectionStackSx}>
       {hasHistoricalReview ? (
-        <RutinaDayGroupList
-          today={ahora}
-          notToday={notToday}
-          rutina={rutina}
-          habits={habits}
-          readOnly={readOnly}
-          sortable={!readOnly && typeof onReorderSection === 'function'}
-          multiSection
-          hideDone
-          hideGroupHeadings={false}
-          useFranjaHeadings
-          sectionLabel={RUTINA_HISTORICAL_COPY.unmarked}
-          showSectionCounts
-          habitsPreferences={habitsPreferences}
-          localDataBySection={localDataBySection}
-          rowKeyPrefix="historical-cadence"
-          onReorderSection={onReorderSection}
-          onItemClick={(itemId, event, horario, entrySection) => {
-            onItemClick(entrySection, itemId, event, horario);
-          }}
-          onDoneToggle={(entrySection, itemId, event, horario) => {
-            onItemClick(entrySection, itemId, event, horario);
-          }}
-        />
+        <>
+          <RutinaDayGroupList
+            today={ahora}
+            notToday={notToday}
+            rutina={rutina}
+            habits={habits}
+            readOnly={readOnly}
+            sortable={!readOnly && typeof onReorderSection === 'function'}
+            multiSection
+            hideDone
+            hideGroupHeadings={false}
+            useFranjaHeadings
+            sectionLabel={RUTINA_HISTORICAL_COPY.unmarked}
+            showSectionCounts
+            habitsPreferences={habitsPreferences}
+            localDataBySection={localDataBySection}
+            rowKeyPrefix="historical-cadence"
+            onReorderSection={onReorderSection}
+            onItemClick={(itemId, event, horario, entrySection) => {
+              onItemClick(entrySection, itemId, event, horario);
+            }}
+            onDoneToggle={(entrySection, itemId, event, horario) => {
+              onItemClick(entrySection, itemId, event, horario);
+            }}
+          />
+          {(luegoWeekdayGroups || []).some((group) => (group?.pending || []).length > 0) && (
+            <RutinaDayGroupList
+              today={[]}
+              luego={[]}
+              luegoWeekdayGroups={luegoWeekdayGroups}
+              rutina={rutina}
+              habits={habits}
+              readOnly={readOnly}
+              sortable={!readOnly && typeof onReorderSection === 'function'}
+              multiSection
+              hideDone
+              hideGroupHeadings
+              showSectionCounts
+              expandableCarousels
+              activeFranja={activeFranja}
+              habitsPreferences={habitsPreferences}
+              localDataBySection={localDataBySection}
+              rowKeyPrefix="historical-weekly-luego"
+              onReorderSection={onReorderSection}
+              onItemClick={(itemId, event, horario, entrySection) => {
+                onItemClick(entrySection, itemId, event, horario);
+              }}
+              onDoneToggle={(entrySection, itemId, event, horario) => {
+                onItemClick(entrySection, itemId, event, horario);
+              }}
+            />
+          )}
+        </>
       ) : isViewingToday && hasTodaySchedule ? (
         <RutinaDayGroupList
           today={ahora}
           sinHacer={sinHacer}
           luego={luego}
+          luegoWeekdayGroups={luegoWeekdayGroups}
           notToday={notToday}
           rutina={rutina}
           habits={habits}

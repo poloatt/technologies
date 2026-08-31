@@ -102,5 +102,6 @@ export {
   getCarouselCompletedTodayItems,
   isFlexiblePeriodic,
   getPeriodicCarouselMode,
+  resolveFlexiblePeriodicPlan,
   shouldShowInTracker,
 } from '../engine/habitVisibilityEngine.js';

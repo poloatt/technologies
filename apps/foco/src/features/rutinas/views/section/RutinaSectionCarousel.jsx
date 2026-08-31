@@ -80,7 +80,7 @@ export default function RutinaSectionCarousel({
 
   const isMobile = mobileProp ?? isMobileOrTablet;
 
-  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
+  const { size, dividerColor, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobile,
   });
 
@@ -314,15 +314,10 @@ export default function RutinaSectionCarousel({
 
                   showCompletionState
 
+
                   isScheduled={isScheduled}
 
                   carouselSlot={carouselSlot}
-
-                  bg={bg}
-
-                  hoverBg={hoverBg}
-
-                  rail={rail}
 
                   size={size}
 

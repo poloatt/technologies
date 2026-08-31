@@ -2,11 +2,21 @@ import {
   HABIT_SECTIONS,
   getCarouselSectionItemIds,
 } from '../domain/habitSectionIds.js';
-import { endOfMonth, endOfWeek, differenceInDays, getDay, getDate } from 'date-fns';
-import { es } from '../../utils/localeEs.js';
+import {
+  endOfMonth,
+  endOfWeek,
+  startOfWeek,
+  startOfDay,
+  differenceInDays,
+  getDay,
+  getDate,
+  eachDayOfInterval,
+  isSameDay,
+} from 'date-fns';
 import {
   contarCompletadosEnPeriodo,
   obtenerHistorialCompletados,
+  CADENCIA_WEEK_STARTS_ON,
 } from '../utils/cadenciaUtils.js';
 import { isHabitCompletedForHistorial, isHabitFullyCompletedToday, isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
 import { getNormalizedToday, toISODateString, parseAPIDate } from '../../utils/dateUtils.js';
@@ -30,6 +40,8 @@ export {
  * Motor de visibilidad de hábitos en carrusel y tracker.
  * Glosario: @see agendaTerminology — habitSlot.* (diarios), habitPeriodic.flexible (Fase 5)
  */
+
+const WEEK_OPTS = { weekStartsOn: CADENCIA_WEEK_STARTS_ON };
 
 function normalizeTipoPeriodo(itemConfig) {
   const tipo = (itemConfig.tipo || 'DIARIO').toUpperCase();
@@ -80,7 +92,7 @@ function countCompletionsInPeriod(itemId, section, rutinaHoy, itemConfig) {
       hoyEsValido = diasSemana.includes(diaHoy);
       diasRestantes = diasSemana.filter((dia) => dia >= diaHoy).length;
     } else {
-      const finSemana = endOfWeek(hoy, { locale: es });
+      const finSemana = endOfWeek(hoy, WEEK_OPTS);
       diasRestantes = Math.max(0, differenceInDays(finSemana, hoy) + 1);
     }
   } else if (tipo === 'MENSUAL' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_MES')) {
@@ -132,10 +144,178 @@ export function isFlexiblePeriodic(itemConfig) {
   return false;
 }
 
+/** Elige `count` fechas repartidas de forma uniforme (incluye extremos). */
+function pickEvenlySpacedDates(days, count) {
+  if (count <= 0 || !Array.isArray(days) || days.length === 0) return [];
+  if (count >= days.length) return [...days];
+  if (count === 1) return [days[0]];
+
+  const picked = [];
+  const used = new Set();
+  for (let i = 0; i < count; i += 1) {
+    const idx = Math.round((i * (days.length - 1)) / (count - 1));
+    if (!used.has(idx)) {
+      used.add(idx);
+      picked.push(days[idx]);
+    }
+  }
+  for (let i = 0; i < days.length && picked.length < count; i += 1) {
+    if (!used.has(i)) {
+      used.add(i);
+      picked.push(days[i]);
+    }
+  }
+  return picked.sort((a, b) => a.getTime() - b.getTime());
+}
+
+function resolveFlexiblePeriodRemainingDays(hoy, itemConfig) {
+  const { tipo, periodo } = normalizeTipoPeriodo(itemConfig);
+  const start = startOfDay(hoy);
+  let end;
+  if (tipo === 'MENSUAL' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_MES')) {
+    end = startOfDay(endOfMonth(hoy));
+  } else {
+    end = startOfDay(endOfWeek(hoy, WEEK_OPTS));
+  }
+  if (end < start) return [];
+  return eachDayOfInterval({ start, end });
+}
+
+/**
+ * Plantilla de ritmo para periódicos flexibles (sin días fijos).
+ * No aplica a diarios. Si se salta hoy, al recalcular solo quedan días futuros.
+ *
+ * @returns {null|{
+ *   remainingQuota: number,
+ *   showToday: boolean,
+ *   suggestedWeekdayKeys: number[],
+ *   futureWeekdayKeys: number[],
+ *   behindPace: boolean,
+ *   urgent: boolean,
+ * }}
+ */
+export function resolveFlexiblePeriodicPlan(itemConfig, rutinaHoy, section, itemId) {
+  if (!isFlexiblePeriodic(itemConfig) || !rutinaHoy) return null;
+
+  const { completadosEnPeriodo, frecuencia } = countCompletionsInPeriod(
+    itemId,
+    section,
+    rutinaHoy,
+    itemConfig,
+  );
+  const remainingQuota = Math.max(0, frecuencia - completadosEnPeriodo);
+  const itemValue = rutinaHoy?.[section]?.[itemId];
+  const doneToday = isHabitCompletedForHistorial(itemValue);
+
+  if (remainingQuota <= 0) {
+    return {
+      remainingQuota: 0,
+      showToday: false,
+      suggestedWeekdayKeys: [],
+      futureWeekdayKeys: [],
+      futureSlots: [],
+      todayQuotaSlot: doneToday ? completadosEnPeriodo : null,
+      behindPace: false,
+      urgent: false,
+    };
+  }
+
+  const hoy = getRutinaReferenceDate(rutinaHoy);
+  const periodDays = resolveFlexiblePeriodRemainingDays(hoy, itemConfig);
+  const { tipo, periodo } = normalizeTipoPeriodo(itemConfig);
+  const isWeekly = tipo === 'SEMANAL' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_SEMANA');
+  const periodLength = isWeekly
+    ? 7
+    : Math.max(1, differenceInDays(endOfMonth(hoy), new Date(hoy.getFullYear(), hoy.getMonth(), 1)) + 1);
+  const weekOrMonthStart = isWeekly
+    ? startOfWeek(hoy, WEEK_OPTS)
+    : startOfDay(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+  const dayIndex = Math.max(0, differenceInDays(startOfDay(hoy), startOfDay(weekOrMonthStart)));
+  const expectedBeforeToday = Math.floor((frecuencia * dayIndex) / Math.max(periodLength, 1));
+  const behindPace = completadosEnPeriodo < expectedBeforeToday;
+  const aheadPace = completadosEnPeriodo > expectedBeforeToday;
+  const urgent = !doneToday && remainingQuota >= periodDays.length;
+  const nextSlotBase = completadosEnPeriodo + 1;
+
+  const assignSlots = (days) => {
+    let slot = nextSlotBase;
+    let todayQuotaSlot = null;
+    const futureSlots = [];
+    const suggestedWeekdayKeys = [];
+    days.forEach((day) => {
+      const quotaSlot = slot;
+      slot += 1;
+      suggestedWeekdayKeys.push(getDay(day));
+      if (isSameDay(day, hoy)) {
+        todayQuotaSlot = quotaSlot;
+      } else {
+        futureSlots.push({ weekdayKey: getDay(day), quotaSlot });
+      }
+    });
+    return {
+      todayQuotaSlot,
+      futureSlots,
+      suggestedWeekdayKeys: [...new Set(suggestedWeekdayKeys)],
+      futureWeekdayKeys: [...new Set(futureSlots.map((s) => s.weekdayKey))],
+    };
+  };
+
+  // 1× por período: suave hasta urgencia/atraso (última ventana); N× reparte plantilla.
+  if (frecuencia === 1 && !urgent && !behindPace) {
+    const softDays = doneToday
+      ? []
+      : periodDays.filter((day) => !isSameDay(day, hoy));
+    const target = softDays.length > 0 ? softDays[softDays.length - 1] : null;
+    const slots = assignSlots(target ? [target] : []);
+    return {
+      remainingQuota,
+      showToday: false,
+      todayQuotaSlot: doneToday ? completadosEnPeriodo : null,
+      behindPace,
+      urgent,
+      ...slots,
+    };
+  }
+
+  const candidates = doneToday
+    ? periodDays.filter((day) => !isSameDay(day, hoy))
+    : (aheadPace && !behindPace
+      ? periodDays.filter((day) => !isSameDay(day, hoy))
+      : periodDays);
+
+  const pickPool = (urgent || behindPace) && !doneToday ? periodDays : candidates;
+  const picked = pickEvenlySpacedDates(pickPool, Math.min(remainingQuota, pickPool.length));
+
+  const showToday = !doneToday && remainingQuota > 0 && (
+    urgent
+    || behindPace
+    || picked.some((day) => isSameDay(day, hoy))
+  );
+
+  const effectiveDays = showToday && !picked.some((day) => isSameDay(day, hoy))
+    ? [startOfDay(hoy), ...picked].slice(0, remainingQuota)
+    : picked;
+
+  const slots = assignSlots(effectiveDays);
+
+  return {
+    remainingQuota,
+    showToday,
+    todayQuotaSlot: showToday
+      ? (slots.todayQuotaSlot ?? nextSlotBase)
+      : (doneToday ? completadosEnPeriodo : null),
+    behindPace,
+    urgent,
+    ...slots,
+  };
+}
+
 /**
  * Colocación en carrusel para hábitos periódicos: 'ahora' | 'luego' | null.
- * - frecuencia === 1: solo Luego salvo urgencia (últimos días del período) → Ahora en ventana activa.
- * - frecuencia > 1: se puede adelantar hoy → Ahora en ventana activa; Luego si pasó la ventana.
+ * - Flexibles (sin días fijos): Ahora si el ritmo propone hoy; franja no destierra a Luego.
+ *   Futuros van a plantilla por día (UI), no al cajón Luego genérico.
+ * - frecuencia === 1 fijo/urgente: Luego salvo urgencia → Ahora en ventana.
+ * - frecuencia > 1 con días fijos: Ahora en ventana; Luego si pasó la ventana.
  */
 export function getPeriodicCarouselMode(
   itemConfig,
@@ -154,6 +334,12 @@ export function getPeriodicCarouselMode(
 
   const itemValue = rutinaHoy?.[section]?.[itemId];
   if (isHabitCompletedForHistorial(itemValue)) return null;
+
+  if (isFlexiblePeriodic(itemConfig)) {
+    const plan = resolveFlexiblePeriodicPlan(itemConfig, rutinaHoy, section, itemId);
+    if (!plan || plan.remainingQuota <= 0) return null;
+    return plan.showToday ? 'ahora' : null;
+  }
 
   const horarios = Array.isArray(itemConfig.horarios) ? itemConfig.horarios : [];
   const inWindow = horarios.length === 0
@@ -259,7 +445,12 @@ function appendPeriodicCarouselItem({
   itemsSet,
 }) {
   if (!rutinaHoy) return;
-  if (mode === 'ahora' && !shouldShowInCarouselBase(section, itemId, rutinaHoy, itemConfig, currentTimeOfDay)) {
+  // Flexibles: la franja es preferencia; no ocultar de Ahora si el ritmo propone hoy.
+  if (
+    mode === 'ahora'
+    && !isFlexiblePeriodic(itemConfig)
+    && !shouldShowInCarouselBase(section, itemId, rutinaHoy, itemConfig, currentTimeOfDay)
+  ) {
     return;
   }
 

@@ -24,9 +24,10 @@ HÁBITOS PERIÓDICOS — habitVisibilityEngine.js / cadenciaUtils.js
   frecuencia > 1: Ahora si ventana activa (adelanto); Luego si pasó ventana sin marcar hoy.
 
 TRACKER / RUTINA — cadenciaUtils.debesMostrarHabitoEnFecha
-  Vista por franja (Sin hacer / Ahora / Noche): solo hábitos del día activos por horario.
-  Buckets semanal/mensual sin franja: "Hoy" + "Hecho"; off-schedule en bucket interno notToday
-  (sin sección propia cuando hay layout por franja).
+  Vista cadencia hoy: «Ahora» (diarios de hoy + franjas + flexibles que el ritmo propone hoy);
+  «Luego» colapsable con subsecciones floating (franjas futuras, días fijos semanales y
+  plantilla de días sugeridos para flexibles N×/semana). Diarios no se proyectan a otros días.
+  Flexibles: al saltar un día se recalcula cuota restante / días restantes.
 `;
 
 /** Grupos del listado expandido en /rutinas (registro diario). */

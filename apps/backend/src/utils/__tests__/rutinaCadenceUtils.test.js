@@ -321,6 +321,25 @@ describe('groupDailyCadenceBucketByFranjaSchedule', () => {
     expect(grouped.ahora.map((e) => e.itemId)).toContain('shower');
   });
 
+  it('on afternoon merges morning pending into ahora (no sinHacer section)', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 5, 22, 14, 0, 0)); // lunes tarde
+
+    const rutina = makeWeeklyRutina({
+      fecha: new Date(2026, 5, 22, 12, 0, 0).toISOString(),
+    });
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(mondayBucket, rutina);
+
+    expect(grouped.sinHacer).toEqual([]);
+    expect(grouped.ahora.map((e) => e.itemId)).toEqual(['afternoon', 'morning']);
+    expect(grouped.luego).toEqual([]);
+    expect(grouped.activeFranjaLabel).toBe('Ahora');
+    expect(grouped.ahora.find((e) => e.itemId === 'morning')?.franjaScheduleSlot).toBe('sinHacer');
+    expect(grouped.ahora.find((e) => e.itemId === 'afternoon')?.franjaScheduleSlot).toBe('ahora');
+
+    jest.useRealTimers();
+  });
+
   it('places periodic habit in luego when carousel mode is luego', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date(2026, 5, 22, 14, 0, 0)); // lunes tarde
@@ -376,18 +395,20 @@ describe('buildDailyCadenceDisplaySections', () => {
     NOCHE: { franjaKey: 'NOCHE', franjaLabel: 'Noche', today: [{ itemId: 'c' }], notToday: [], done: [] },
   };
 
-  it('mañana activa: Mañana (lista), Tarde y Noche (carrusel)', () => {
+  it('mañana activa: Ahora (lista) + Tarde y Noche (carrusel)', () => {
     const sections = buildDailyCadenceDisplaySections({
       groupsByKey,
       activeFranja: 'MAÑANA',
       isViewingToday: true,
+      labels: { ahora: 'Ahora' },
     });
-    expect(sections.map((s) => s.id)).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
-    expect(sections.find((s) => s.id === 'MAÑANA').isActive).toBe(true);
+    expect(sections.map((s) => s.id)).toEqual(['AHORA', 'TARDE', 'NOCHE']);
+    expect(sections.find((s) => s.id === 'AHORA').isActive).toBe(true);
+    expect(sections.find((s) => s.id === 'AHORA').group.today.map((e) => e.itemId)).toEqual(['a']);
     expect(sections.find((s) => s.id === 'TARDE').isActive).toBe(false);
   });
 
-  it('tarde activa: Mañana, Ahora (lista), Noche', () => {
+  it('tarde activa: Ahora = mañana+tarde, luego Noche', () => {
     const sections = buildDailyCadenceDisplaySections({
       groupsByKey,
       activeFranja: 'TARDE',
@@ -395,22 +416,23 @@ describe('buildDailyCadenceDisplaySections', () => {
       labels: { ahora: 'Ahora', sinHacer: 'Sin hacer' },
     });
     expect(sections.map((s) => ({ id: s.id, label: s.label, isActive: s.isActive }))).toEqual([
-      { id: 'MAÑANA', label: 'Mañana', isActive: false },
       { id: 'AHORA', label: 'Ahora', isActive: true },
       { id: 'NOCHE', label: 'Noche', isActive: false },
     ]);
+    expect(sections[0].group.today.map((e) => e.itemId)).toEqual(['b', 'a']);
+    expect(sections[0].group.today.map((e) => e.franjaScheduleSlot)).toEqual(['ahora', 'sinHacer']);
   });
 
-  it('noche activa: Sin hacer (merge mañana+tarde), Noche (lista)', () => {
+  it('noche activa: Ahora = mañana+tarde+noche (sin sección Sin hacer)', () => {
     const sections = buildDailyCadenceDisplaySections({
       groupsByKey,
       activeFranja: 'NOCHE',
       isViewingToday: true,
       labels: { ahora: 'Ahora', sinHacer: 'Sin hacer' },
     });
-    expect(sections.map((s) => s.id)).toEqual(['SIN_HACER', 'NOCHE']);
-    expect(sections[0].group.today.map((e) => e.itemId)).toEqual(['a', 'b']);
-    expect(sections[1].isActive).toBe(true);
+    expect(sections.map((s) => s.id)).toEqual(['AHORA']);
+    expect(sections[0].group.today.map((e) => e.itemId)).toEqual(['c', 'a', 'b']);
+    expect(sections[0].isActive).toBe(true);
   });
 
   it('día histórico: orden fijo Mañana → Tarde → Noche sin sección activa', () => {

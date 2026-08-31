@@ -7,6 +7,8 @@ import {
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
   resolveRoutineDisplayName,
+  isEntryFranjaSinHacer,
+  resolveActiveDailyFranja,
 } from '@shared/habits';
 import {
   rutinaChecklistItemSx,
@@ -17,7 +19,8 @@ import {
   rutinaChecklistIconColumnSx,
   getRutinaChecklistDragHandleSlotSx,
 } from '@shared/styles/rutinaPageStyles';
-import { getRutinaDragHandleGlyph, getRutinaHabitIconTokens } from '@shared/styles/rutinaIconTokens';
+import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
+import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
 import { useResponsive } from '@shared/hooks';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import { HabitIconButton } from './ChecklistItem';
@@ -66,10 +69,11 @@ export default function RutinaStackHabitRow({
   stackVariant = 'inline',
   dragHandleAttributes = null,
   dragHandleListeners = null,
+  deferredPending = false,
 }) {
   const { isMobileOrTablet } = useResponsive();
   const isCompact = stackVariant === 'compact';
-  const iconTokens = getRutinaHabitIconTokens({ mobile: isMobileOrTablet, compact: isCompact });
+  const iconTokens = getHabitIconTokens({ mobile: isMobileOrTablet, compact: isCompact });
   const iconSize = iconTokens.size;
   const iconGlyph = iconTokens.glyph;
   const routineName = resolveRoutineDisplayName(entries[0]?.chain);
@@ -140,6 +144,9 @@ export default function RutinaStackHabitRow({
       size: iconSize,
       glyph: iconGlyph,
       mr: 0,
+      hideBorder: isEntryFranjaSinHacer(entry, resolveActiveDailyFranja(rutina)),
+      deferredPending,
+      quotaSlot: entry.quotaSlot ?? null,
     };
 
     if (hasMultipleFranjas) {

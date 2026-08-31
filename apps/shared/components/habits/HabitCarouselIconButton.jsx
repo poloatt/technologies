@@ -4,16 +4,21 @@ import { HabitCounterBadge } from '../common/HabitCounterBadge';
 import {
   getHorarioForCarousel,
   isHabitFullyCompletedToday,
+  resolveHabitIconPresentation,
 } from '../../habits';
 import { getPeriodicCarouselCopy, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology';
+import { resolveHabitDisplayIcon } from '../../utils/habitOutlineIcons';
+import { getHabitCarouselIconButtonSx, getHabitIconTokens } from '../../styles/habitIconStyles';
 
 /**
- * Botón circular de hábito reutilizado en carrusel y panel desktop de rutinas.
+ * Botón de hábito en carrusel. Presentación canónica de Hábitos
+ * (outline pendiente; hechos filled planos con tono hoy / antes).
  */
 export default function HabitCarouselIconButton({
   section,
   itemId,
   Icon,
+  iconName = null,
   label,
   itemConfig,
   itemValue,
@@ -27,15 +32,16 @@ export default function HabitCarouselIconButton({
   showCompletionState,
   isScheduled = true,
   carouselSlot,
-  bg,
-  hoverBg,
-  rail,
   size,
   iconFontSize,
   onToggle,
   requireExpand = false,
   onRequireExpand,
-  plainCompleted = false,
+  /** 'today' | 'before' — hechos filled planos (hoy vs cuota anterior). */
+  doneTone = null,
+  /** false solo en carrusel de Tareas (filled pendiente legacy). Default: outline. */
+  preferOutlineWhenPending = true,
+  quotaSlot = null,
 }) {
   const horariosConfig = Array.isArray(itemConfig?.horarios) ? itemConfig.horarios : [];
   const completadoHoy = itemValue !== undefined ? itemValue : false;
@@ -65,18 +71,20 @@ export default function HabitCarouselIconButton({
     }
   }
 
-  const statusLabel = isCompleted ? 'completado' : 'pendiente';
+  const presentation = resolveHabitIconPresentation({
+    isCompleted,
+    carouselSlot: showCompletionState ? carouselSlot : null,
+    isScheduled: showCompletionState ? isScheduled : true,
+    preferOutlineWhenPending,
+    doneTone,
+  });
+
+  const isDoneVisual = presentation.doneTone != null;
+  const statusLabel = isDoneVisual ? 'completado' : 'pendiente';
   const isNotTodaySlot = showCompletionState
     && (carouselSlot === 'notToday' || (!carouselSlot && !isScheduled));
-  const isPlainInactiveSlot = showCompletionState && !isCompleted && (
-    carouselSlot === 'notToday'
-    || carouselSlot === 'luego'
-    || carouselSlot === 'inactiveFranja'
-    || (!carouselSlot && !isScheduled)
-  );
-  const isPlainDone = plainCompleted && isCompleted;
-  const isPlainPending = isPlainInactiveSlot;
-  const isDashedCircle = !isPlainPending && !isPlainDone && !isCompleted && requireExpand;
+  const isPlainPending = presentation.variant === 'plainPending'
+    || presentation.variant === 'deferredPending';
   const periodicHint = isCadenciaDebt ? getPeriodicCarouselCopy(mode, { isCadenciaDebt: true }) : '';
   const expandHint = requireExpand ? 'Expandir grupo para elegir franja' : '';
   const plainHint = isNotTodaySlot ? RUTINA_DAY_GROUP_COPY.notToday : '';
@@ -87,159 +95,72 @@ export default function HabitCarouselIconButton({
       : (periodicHint ? `${label} — ${periodicHint}` : label));
   const canQuickToggle = interactive && !requireExpand && !isNotTodaySlot;
   const canInteract = interactive && !isNotTodaySlot && !requireExpand;
+  const DisplayIcon = resolveHabitDisplayIcon(Icon, {
+    iconName,
+    outline: presentation.outline,
+  });
+  const { glyph } = getHabitIconTokens({
+    mobile: size >= 44,
+    compact: size <= 32,
+  });
+  const resolvedGlyph = iconFontSize || glyph;
+  const buttonSx = getHabitCarouselIconButtonSx({
+    isCompleted: isDoneVisual,
+    size,
+    glyph: resolvedGlyph,
+    hideBorder: presentation.hideBorder,
+    requireExpand,
+    interactive: canInteract || isDoneVisual,
+    doneTone: presentation.doneTone,
+    variant: presentation.variant,
+    outline: presentation.outline,
+  });
 
   const plainIcon = (
     <Box
       component="span"
       role="img"
       aria-label={`${label}, ${statusLabel}`}
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: size,
-        height: size,
-        flex: '0 0 auto',
-        color: isCompleted ? 'primary.main' : 'text.disabled',
-        opacity: isCompleted ? 0.65 : 0.45,
-        pointerEvents: 'none',
-        border: 'none',
-        outline: 'none',
-        bgcolor: 'transparent',
-        boxShadow: 'none',
-      }}
+      sx={getHabitCarouselIconButtonSx({
+        isCompleted: false,
+        size,
+        glyph: resolvedGlyph,
+        hideBorder: true,
+        interactive: false,
+        variant: presentation.variant === 'deferredPending' ? 'deferredPending' : 'plainPending',
+        outline: presentation.outline,
+      })}
     >
-      <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
+      {DisplayIcon && <DisplayIcon />}
     </Box>
   );
 
-  const plainPendingButton = (
+  const interactiveButton = (
     <IconButton
       size="small"
-      disabled={!canQuickToggle}
-      aria-label={`${label}, ${statusLabel}`}
-      aria-pressed={isCompleted}
+      disabled={isDoneVisual ? !interactive : (!canInteract && !isDoneVisual)}
+      aria-label={requireExpand && !isDoneVisual
+        ? `Expandir grupo para marcar ${label}`
+        : `${label}, ${statusLabel}`}
+      aria-pressed={requireExpand && !isDoneVisual ? undefined : isDoneVisual}
       onClick={(e) => {
         e.stopPropagation();
+        if (requireExpand && !isDoneVisual) {
+          onRequireExpand?.(section, itemId);
+          return;
+        }
+        if (isDoneVisual) {
+          if (!interactive) return;
+          onToggle(section, itemId, displayHorario || horarioToShow);
+          return;
+        }
         if (!canQuickToggle) return;
         onToggle(section, itemId, displayHorario || horarioToShow);
       }}
-      sx={{
-        width: size,
-        height: size,
-        minWidth: size,
-        minHeight: size,
-        maxWidth: size,
-        maxHeight: size,
-        p: 0,
-        borderRadius: '50%',
-        boxSizing: 'border-box',
-        bgcolor: 'transparent',
-        color: 'text.disabled',
-        opacity: 0.45,
-        border: 'none',
-        boxShadow: 'none',
-        flex: '0 0 auto',
-        touchAction: 'pan-x',
-        '&:hover': {
-          bgcolor: canQuickToggle ? 'action.hover' : 'transparent',
-          opacity: canQuickToggle ? 0.65 : 0.45,
-        },
-      }}
+      sx={buttonSx}
     >
-      <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
+      {DisplayIcon && <DisplayIcon />}
     </IconButton>
-  );
-
-  const plainCompletedButton = (
-    <IconButton
-      size="small"
-      disabled={!interactive}
-      aria-label={`${label}, completado`}
-      aria-pressed
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!interactive) return;
-        onToggle(section, itemId, displayHorario || horarioToShow);
-      }}
-      sx={{
-        width: size,
-        height: size,
-        minWidth: size,
-        minHeight: size,
-        maxWidth: size,
-        maxHeight: size,
-        p: 0,
-        borderRadius: '50%',
-        boxSizing: 'border-box',
-        bgcolor: 'transparent',
-        color: 'primary.main',
-        opacity: 0.65,
-        border: 'none',
-        boxShadow: 'none',
-        flex: '0 0 auto',
-        touchAction: 'pan-x',
-        '&:hover': {
-          bgcolor: 'action.hover',
-          opacity: 0.85,
-        },
-      }}
-    >
-      <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
-    </IconButton>
-  );
-
-  const iconButton = (
-          <IconButton
-            size="small"
-            disabled={!canInteract && !isCompleted}
-            aria-label={requireExpand ? `Expandir grupo para marcar ${label}` : `${label}, ${statusLabel}`}
-            aria-pressed={requireExpand ? undefined : isCompleted}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (requireExpand) {
-                onRequireExpand?.(section, itemId);
-                return;
-              }
-              if (!canQuickToggle) return;
-              onToggle(section, itemId, displayHorario || horarioToShow);
-            }}
-            sx={{
-              width: size,
-              height: size,
-              minWidth: size,
-              minHeight: size,
-              maxWidth: size,
-              maxHeight: size,
-              p: 0,
-              borderRadius: '50%',
-              boxSizing: 'border-box',
-              bgcolor: isCompleted ? 'action.selected' : bg,
-              color: isCompleted ? 'primary.main' : 'text.secondary',
-              border: '1px solid',
-              borderStyle: isDashedCircle ? 'dashed' : 'solid',
-              borderColor: isCompleted ? 'primary.main' : rail,
-              flex: '0 0 auto',
-              touchAction: 'pan-x',
-              opacity: requireExpand ? 0.72 : 1,
-              transition: showCompletionState
-                ? 'color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease'
-                : undefined,
-              '&.Mui-disabled': {
-                opacity: isCompleted ? 1 : undefined,
-                color: isCompleted ? 'primary.main' : undefined,
-                bgcolor: isCompleted ? 'action.selected' : undefined,
-                borderColor: isCompleted ? 'primary.main' : undefined,
-              },
-              '&:hover': {
-                bgcolor: isCompleted ? 'action.selected' : hoverBg,
-                color: isCompleted ? 'primary.main' : 'text.primary',
-                ...(requireExpand && !isCompleted && { opacity: 1 }),
-              },
-            }}
-          >
-            <Icon sx={{ fontSize: iconFontSize || (dense ? '1.1rem' : '1.2rem') }} />
-          </IconButton>
   );
 
   const habitBadge = (child, reserveBadgeSpace = showCompletionState && !isNotTodaySlot) => (
@@ -253,19 +174,20 @@ export default function HabitCarouselIconButton({
       rutina={rutinaHoy}
       section={section}
       itemId={itemId}
+      isCompleted={isDoneVisual}
+      quotaSlot={quotaSlot}
+      iconPresentation={presentation}
     >
       {child}
     </HabitCounterBadge>
   );
 
-  let renderedButton = iconButton;
-  if (isPlainPending) {
-    renderedButton = canQuickToggle ? plainPendingButton : plainIcon;
-  } else if (isPlainDone) {
-    renderedButton = plainCompletedButton;
+  let renderedButton = interactiveButton;
+  if (isPlainPending && !canQuickToggle) {
+    renderedButton = plainIcon;
   }
 
-  const wrapBadge = !isPlainPending || Boolean(horarioToShow);
+  const wrapBadge = !isPlainPending || Boolean(horarioToShow) || isDoneVisual;
 
   return (
     <Tooltip title={tooltipTitle} arrow placement="top">
@@ -282,7 +204,10 @@ export default function HabitCarouselIconButton({
         }}
       >
         {wrapBadge
-          ? habitBadge(renderedButton, isPlainDone ? false : (showCompletionState && !isNotTodaySlot))
+          ? habitBadge(
+            renderedButton,
+            isDoneVisual ? false : (showCompletionState && !isNotTodaySlot),
+          )
           : renderedButton}
       </Box>
     </Tooltip>

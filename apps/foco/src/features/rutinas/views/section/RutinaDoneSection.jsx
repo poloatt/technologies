@@ -36,7 +36,7 @@ export default function RutinaDoneSection({
 
   if (!items.length) return null;
 
-  const renderDoneGroup = (groupItems, label, alignLeft = false) => (
+  const renderDoneGroup = (groupItems, label, alignLeft = false, groupDoneTone = null) => (
     <Box sx={{ width: '100%', minWidth: 0 }}>
       <Typography variant="body2" sx={{ ...collapseSectionTitleSx, mb: 0.5 }}>
         {label}
@@ -49,14 +49,15 @@ export default function RutinaDoneSection({
         readOnly={readOnly}
         onToggle={onToggle}
         centerWhenFits={alignLeft ? false : undefined}
+        doneTone={groupDoneTone}
       />
     </Box>
   );
 
   const doneContent = hasSplitGroups ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
-      {doneOnDay.length > 0 && renderDoneGroup(doneOnDay, todayLabel, alignIconsLeft || defaultExpanded)}
-      {doneByQuota.length > 0 && renderDoneGroup(doneByQuota, beforeLabel, true)}
+      {doneOnDay.length > 0 && renderDoneGroup(doneOnDay, todayLabel, alignIconsLeft || defaultExpanded, 'today')}
+      {doneByQuota.length > 0 && renderDoneGroup(doneByQuota, beforeLabel, true, 'before')}
     </Box>
   ) : (
     <RutinaDoneCarousel
@@ -66,6 +67,8 @@ export default function RutinaDoneSection({
       readOnly={readOnly}
       onToggle={onToggle}
       centerWhenFits={alignIconsLeft || defaultExpanded ? false : undefined}
+      // Sin forzar tono de grupo: cada entrada resuelve today/before canónicamente.
+      doneTone={null}
     />
   );
 

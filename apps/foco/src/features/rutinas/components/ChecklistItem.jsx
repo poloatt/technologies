@@ -33,7 +33,8 @@ import {
   rutinaChecklistIconColumnSx,
   getRutinaChecklistDragHandleSlotSx,
 } from '@shared/styles/rutinaPageStyles';
-import { getRutinaDragHandleGlyph, getRutinaHabitIconTokens } from '@shared/styles/rutinaIconTokens';
+import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
+import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
 
 export { default as HabitIconButton } from '@shared/components/habits/HabitIconButton';
 
@@ -59,6 +60,9 @@ const ChecklistItem = ({
   chain = null,
   allowPostpone = false,
   onPostpone,
+  hideIconBorder = false,
+  deferredPending = false,
+  quotaSlot = null,
 }) => {
   const { rutina } = useRutinas();
   const { isMobileOrTablet } = useResponsive();
@@ -110,7 +114,7 @@ const ChecklistItem = ({
   const singleDisplayHorario = normalizedFocusHorario
     || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
 
-  const iconTokens = getRutinaHabitIconTokens({
+  const iconTokens = getHabitIconTokens({
     mobile: isMobileOrTablet,
     compact: iconColumnCompact,
     stackCell,
@@ -157,6 +161,9 @@ const ChecklistItem = ({
         <HabitIconButton
           isCompleted={franjaCompleted}
           Icon={Icon}
+          hideBorder={hideIconBorder}
+          deferredPending={deferredPending}
+          quotaSlot={quotaSlot}
           onClick={(e) => {
             e.stopPropagation();
             if (!readOnly) onItemClick(itemId, e, normalizedFocusHorario);
@@ -190,6 +197,9 @@ const ChecklistItem = ({
                 key={normalizedHorario}
                 isCompleted={franjaCompleted}
                 Icon={Icon}
+                hideBorder={hideIconBorder}
+                deferredPending={deferredPending}
+                quotaSlot={quotaSlot}
                 onClick={(e) => {
                   if (guardClick()) {
                     e.stopPropagation();
@@ -219,6 +229,9 @@ const ChecklistItem = ({
       <HabitIconButton
         isCompleted={isCompleted}
         Icon={Icon}
+        hideBorder={hideIconBorder}
+        deferredPending={deferredPending}
+        quotaSlot={quotaSlot}
         onClick={(e) => {
           e.stopPropagation();
           if (!readOnly) onItemClick(itemId, e, singleDisplayHorario);
@@ -371,6 +384,9 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.iconColumnCompact === nextProps.iconColumnCompact &&
     prevProps.isCadenciaDebt === nextProps.isCadenciaDebt &&
     prevProps.isScheduled === nextProps.isScheduled &&
+    prevProps.hideIconBorder === nextProps.hideIconBorder &&
+    prevProps.deferredPending === nextProps.deferredPending &&
+    prevProps.quotaSlot === nextProps.quotaSlot &&
     prevProps.allowPostpone === nextProps.allowPostpone &&
     prevProps.chain?.id === nextProps.chain?.id &&
     prevProps.chain?.label === nextProps.chain?.label &&

@@ -11,6 +11,7 @@ import {
   getHabitDisplayLabel,
 } from '@shared/habits';
 import { getNormalizedToday } from '@shared/utils/dateUtils.js';
+import { getDay } from 'date-fns';
 
 function makeRutina(overrides = {}) {
   return {
@@ -263,19 +264,29 @@ describe('rutinaDesktopUtils', () => {
     });
 
     it('keeps cadencia debt in today with fixed orden (not debt-first)', () => {
-      const tuesday = new Date(2026, 5, 23, 12, 0, 0, 0);
+      const today = getNormalizedToday();
+      const todayDow = getDay(today);
+      // Si hoy es lunes (inicio de semana), el semanal toca hoy; si no, un día anterior → deuda.
+      const scheduledDow = todayDow === 1 ? 1 : (todayDow === 0 ? 6 : todayDow - 1);
+      const expectDebt = scheduledDow !== todayDow;
       const rutina = makeRutina({
-        fecha: tuesday.toISOString(),
+        fecha: today.toISOString(),
         historial: { bodyCare: { weekly: {} } },
+        config: {
+          bodyCare: {
+            shower: { tipo: 'DIARIO', frecuencia: 1, activo: true },
+            weekly: { tipo: 'SEMANAL', frecuencia: 1, activo: true, diasSemana: [scheduledDow] },
+          },
+        },
       });
-      const { today, todayPending } = groupSectionHabitsByDaySchedule({
+      const { today: todayItems, todayPending } = groupSectionHabitsByDaySchedule({
         section: 'bodyCare',
         rutina,
         habits: mockHabits,
       });
-      const ids = today.map((h) => h.itemId);
+      const ids = todayItems.map((h) => h.itemId);
       expect(ids).toEqual(['shower', 'weekly']);
-      expect(todayPending.find((h) => h.itemId === 'weekly')?.isCadenciaDebt).toBe(true);
+      expect(Boolean(todayPending.find((h) => h.itemId === 'weekly')?.isCadenciaDebt)).toBe(expectDebt);
     });
 
     it('places interval personalizado habit (cada 4d) in Hecho when resting, not notToday', () => {
@@ -365,6 +376,48 @@ describe('rutinaDesktopUtils', () => {
       expect(today.map((h) => h.itemId)).toEqual(expect.arrayContaining(['haircare', 'skincare']));
       expect(notToday.map((h) => h.itemId)).not.toContain('haircare');
       expect(notToday.map((h) => h.itemId)).not.toContain('skincare');
+    });
+
+    it('historical: weekly habit with incomplete snapshot uses prefs and stays notToday off-schedule', () => {
+      // 2020-01-15 was Wednesday (getDay === 3); farmacia scheduled Mondays only.
+      const rutina = makeRutina({
+        fecha: '2020-01-15T12:00:00.000Z',
+        nutricion: { farmacia: false },
+        config: {
+          nutricion: {
+            farmacia: { activo: true },
+          },
+        },
+      });
+      const habits = {
+        nutricion: [
+          { id: 'farmacia', label: 'Compras farmacia', icon: 'LocalPharmacy', activo: true, orden: 0 },
+        ],
+      };
+      const habitsPreferences = {
+        nutricion: {
+          farmacia: {
+            tipo: 'SEMANAL',
+            frecuencia: 1,
+            periodo: 'CADA_SEMANA',
+            diasSemana: [1],
+            activo: true,
+          },
+        },
+      };
+
+      const { today, notToday, done } = groupSectionHabitsByDaySchedule({
+        section: 'nutricion',
+        rutina,
+        habits,
+        habitsPreferences,
+      });
+
+      expect(today.map((h) => h.itemId)).not.toContain('farmacia');
+      expect(done.map((h) => h.itemId)).not.toContain('farmacia');
+      const farmacia = notToday.find((h) => h.itemId === 'farmacia');
+      expect(farmacia).toBeTruthy();
+      expect(farmacia.config.tipo).toBe('SEMANAL');
     });
   });
 

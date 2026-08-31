@@ -62,6 +62,51 @@ function collectRutinaHistorialSections(rutina = {}) {
   return [...keys];
 }
 
+/** Integra respuesta de markComplete sin pisar otras secciones/ítems en vuelos concurrentes. */
+function mergeRutinaServerResponse(prev, response) {
+  if (!prev) return response;
+  if (!response || typeof response !== 'object') return prev;
+
+  const next = { ...prev };
+  Object.entries(response).forEach(([key, value]) => {
+    if (key === '_id' || key === 'id') return;
+    if (value == null || Array.isArray(value) || typeof value !== 'object') {
+      if (value !== undefined) next[key] = value;
+      return;
+    }
+
+    if (key === 'config') {
+      const prevConfig = prev.config && typeof prev.config === 'object' ? prev.config : {};
+      const mergedConfig = { ...prevConfig };
+      Object.entries(value).forEach(([section, items]) => {
+        if (!items || typeof items !== 'object' || Array.isArray(items)) {
+          mergedConfig[section] = items;
+          return;
+        }
+        const prevSection = prevConfig[section] && typeof prevConfig[section] === 'object'
+          ? prevConfig[section]
+          : {};
+        mergedConfig[section] = { ...prevSection };
+        Object.entries(items).forEach(([itemId, cfg]) => {
+          mergedConfig[section][itemId] = {
+            ...(prevSection[itemId] || {}),
+            ...(cfg && typeof cfg === 'object' ? cfg : {}),
+          };
+        });
+      });
+      next.config = mergedConfig;
+      return;
+    }
+
+    const prevSection = prev[key] && typeof prev[key] === 'object' && !Array.isArray(prev[key])
+      ? prev[key]
+      : {};
+    next[key] = { ...prevSection, ...value };
+  });
+
+  return next;
+}
+
 // Construye historial de completaciones por sección/ítem a partir del logger por día
 // Forma: historial[section][itemId][YYYY-MM-DD] = true
 const buildHistorialFromRutinas = (rutinasList = []) => {
@@ -453,7 +498,9 @@ export const RutinasProvider = ({ children }) => {
       if (response && typeof response === 'object') {
         setRutinas(prevList => {
           if (!Array.isArray(prevList)) return prevList;
-          const updated = prevList.map(r => (r && r._id === rutinaId ? { ...r, ...response } : r));
+          const updated = prevList.map((r) => (
+            r && r._id === rutinaId ? mergeRutinaServerResponse(r, response) : r
+          ));
           const { rutinasWithHist } = attachHistorial(updated);
           syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
           return rutinasWithHist;

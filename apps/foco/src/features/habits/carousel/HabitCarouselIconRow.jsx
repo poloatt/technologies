@@ -36,9 +36,6 @@ function renderCarouselIcon({
   dense,
   interactive,
   showCompletionState,
-  bg,
-  hoverBg,
-  rail,
   size,
   iconFontSize,
   onToggle,
@@ -82,9 +79,6 @@ function renderCarouselIcon({
         dense={dense}
         interactive={interactive}
         showCompletionState={showCompletionState}
-        bg={bg}
-        hoverBg={hoverBg}
-        rail={rail}
         size={size}
         iconFontSize={iconFontSize}
         onToggle={onToggle}
@@ -129,8 +123,7 @@ function HabitCarouselIconRow({
   const [showCompletedPanel, setShowCompletedPanel] = useState(false);
   const completedDrag = useHorizontalDragScroll({ enabled: enableDragScroll });
 
-  const { size, bg, hoverBg, rail, dividerColor, iconFontSize } = getHabitCarouselSurface(theme, {
-    dense: dense && !mobile,
+  const { size, rail, dividerColor, iconFontSize } = getHabitCarouselSurface(theme, {
     mobile,
   });
   const panelBg = theme.palette.background.default;
@@ -225,9 +218,6 @@ function HabitCarouselIconRow({
         dense: iconDense,
         interactive: rowInteractive ?? interactive,
         showCompletionState: completionState ?? showCompletionState,
-        bg,
-        hoverBg,
-        rail,
         size,
         iconFontSize,
         onToggle: rowOnToggle ?? onToggle,

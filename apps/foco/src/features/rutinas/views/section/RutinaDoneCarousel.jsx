@@ -2,7 +2,13 @@ import React, { useMemo, useCallback } from 'react';
 import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
-import { resolveRutinaItemConfig, resolveEntryFranjaFocusHorario, groupEntriesIntoDisplayRows, resolveStackRoutineLabel } from '@shared/habits';
+import {
+  resolveRutinaItemConfig,
+  resolveEntryFranjaFocusHorario,
+  groupEntriesIntoDisplayRows,
+  resolveStackRoutineLabel,
+  resolveHabitDoneTone,
+} from '@shared/habits';
 import HabitCarouselIconButton from '@shared/components/habits/HabitCarouselIconButton';
 import HabitCarouselScrollTrack from '@shared/components/habits/HabitCarouselScrollTrack';
 import { RoutineCarouselStackCluster } from '@shared/components/habits/routines';
@@ -35,11 +41,13 @@ export default function RutinaDoneCarousel({
   readOnly = false,
   onToggle,
   centerWhenFits: centerWhenFitsProp,
+  /** 'today' | 'before' — fuerza tono del grupo (Hecho hoy / Hecho antes). */
+  doneTone = null,
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
   const centerWhenFits = centerWhenFitsProp ?? false;
-  const { size, bg, hoverBg, rail, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
+  const { size, iconFontSize } = getRutinaHabitCarouselSurface(theme, {
     mobile: isMobileOrTablet,
   });
 
@@ -88,6 +96,15 @@ export default function RutinaDoneCarousel({
     const itemValue = resolveCarouselItemValue(entry, rutina);
     const displayHorario = resolveEntryHorario(entry);
     const carouselKey = `${section}-${itemId}-${displayHorario || 'none'}`;
+    const resolvedTone = resolveHabitDoneTone({
+      config: itemConfig,
+      itemValue,
+      itemId,
+      section,
+      rutina,
+    });
+    // Preferir tono por entrada; el del grupo solo como fallback de sección homogénea.
+    const entryDoneTone = resolvedTone || doneTone || 'today';
 
     return (
       <Box key={carouselKey} sx={{ display: 'inline-flex', flex: '0 0 auto', flexShrink: 0 }}>
@@ -102,13 +119,10 @@ export default function RutinaDoneCarousel({
           rutinaHoy={rutina}
           mode="ahora"
           displayHorario={displayHorario}
-          carouselSlot="ahora"
           dense={false}
           interactive={!readOnly}
           showCompletionState
-          bg={bg}
-          hoverBg={hoverBg}
-          rail={rail}
+          doneTone={entryDoneTone}
           size={size}
           iconFontSize={iconFontSize}
           onToggle={handleToggle}

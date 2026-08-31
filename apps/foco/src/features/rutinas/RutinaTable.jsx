@@ -42,15 +42,25 @@ export const RutinaTable = ({
 };
 
 const MemoizedRutinaTable = memo(RutinaTable, (prevProps, nextProps) => {
+  if (prevProps.loading !== nextProps.loading) return false;
+  if (prevProps.rutina?._id !== nextProps.rutina?._id) return false;
+  if (prevProps.rutina?.fecha !== nextProps.rutina?.fecha) return false;
+
   const prevConfig = JSON.stringify(prevProps.rutina?.config || {});
   const nextConfig = JSON.stringify(nextProps.rutina?.config || {});
   if (prevConfig !== nextConfig) return false;
 
-  return (
-    prevProps.loading === nextProps.loading
-    && prevProps.rutina?._id === nextProps.rutina?._id
-    && prevProps.rutina?.fecha === nextProps.rutina?.fecha
-  );
+  // Completados por sección (sin esto, multi-marcar en histórico no re-renderiza).
+  const prevCompletion = JSON.stringify(prevProps.rutina, (key, value) => {
+    if (key === 'config' || key === 'historial' || key === 'completitud') return undefined;
+    return value;
+  });
+  const nextCompletion = JSON.stringify(nextProps.rutina, (key, value) => {
+    if (key === 'config' || key === 'historial' || key === 'completitud') return undefined;
+    return value;
+  });
+
+  return prevCompletion === nextCompletion;
 });
 
 export default MemoizedRutinaTable;

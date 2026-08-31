@@ -2,7 +2,7 @@ import React from 'react';
 import { Box } from '@mui/material';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { isHabitCompletedForHistorial, isHabitHorarioCompleted, resolveEntryFranjaFocusHorario } from '@shared/habits';
+import { isHabitCompletedForHistorial, isHabitHorarioCompleted, resolveEntryFranjaFocusHorario, isEntryFranjaSinHacer, resolveActiveDailyFranja } from '@shared/habits';
 import ChecklistItem from './ChecklistItem';
 
 export default function SortableRutinaHabitRow({
@@ -15,6 +15,7 @@ export default function SortableRutinaHabitRow({
   stackVariant = 'inline',
   allowPostpone = false,
   onPostpone,
+  deferredPending = false,
 }) {
   const { itemId, Icon, label, config } = entry;
   const focusHorario = resolveEntryFranjaFocusHorario(entry);
@@ -24,6 +25,7 @@ export default function SortableRutinaHabitRow({
   const isCompleted = focusHorario
     ? isHabitHorarioCompleted(itemValue, focusHorario)
     : isHabitCompletedForHistorial(itemValue);
+  const hideIconBorder = isEntryFranjaSinHacer(entry, resolveActiveDailyFranja(rutina));
 
   const {
     attributes,
@@ -69,6 +71,9 @@ export default function SortableRutinaHabitRow({
         focusHorario={focusHorario}
         allowPostpone={allowPostpone}
         onPostpone={onPostpone}
+        hideIconBorder={hideIconBorder}
+        deferredPending={deferredPending}
+        quotaSlot={entry.quotaSlot ?? null}
       />
     </Box>
   );
