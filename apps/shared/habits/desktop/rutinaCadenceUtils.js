@@ -15,6 +15,7 @@ import {
   sortSectionHabitsByFixedOrder,
   resolveRutinaScheduleBucket,
   isEntryDueOnRutinaDay,
+  filterRutinaDoneSectionEntries,
 } from './rutinaDesktopUtils.js';
 import { isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
@@ -35,6 +36,98 @@ export function dedupeCadenceEntries(items = []) {
     seen.add(key);
     return true;
   });
+}
+
+/** Deduplica carrusel Hecho: distingue franjas sueltas del mismo hábito. */
+export function dedupeCadenceDoneCarouselEntries(items = []) {
+  const seen = new Set();
+  return items.filter((entry) => {
+    const key = `${entry.section}:${entry.itemId}:${entry.franjaKey || 'full'}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Ítems del sector Hecho en vista cadencia: franjas marcadas + cierre del bucket + otros.
+ * Restaura la paridad con la UI previa (groupDailyCadenceByFranja + semanal por weekday).
+ */
+export function buildRutinaGlobalDoneItems(cadenceBuckets = [], rutina, rutinaForVisibility = rutina) {
+  const diarioBucket = cadenceBuckets.find((bucket) => bucket.id === 'DIARIO') || null;
+  const semanalBucket = cadenceBuckets.find((bucket) => bucket.id === 'SEMANAL') || null;
+  const otherBuckets = cadenceBuckets.filter(
+    (bucket) => bucket.id !== 'DIARIO' && bucket.id !== 'SEMANAL',
+  );
+
+  const resolveBucketItems = (bucket) => {
+    if (!bucket) return [];
+    if (bucket.items?.length) return bucket.items;
+    return [...(bucket.today || []), ...(bucket.done || []), ...(bucket.notToday || [])];
+  };
+
+  const dailyFranjaDone = resolveBucketItems(diarioBucket).length
+    ? groupDailyCadenceByFranja(
+      { ...diarioBucket, items: resolveBucketItems(diarioBucket) },
+      rutina,
+    ).flatMap((group) => group.done || [])
+    : [];
+
+  const weeklyDone = resolveBucketItems(semanalBucket).length
+    ? groupWeeklyCadenceByWeekday(
+      { ...semanalBucket, items: resolveBucketItems(semanalBucket) },
+      rutina,
+    ).flatMap((group) => group.done || [])
+    : [];
+
+  const otherDone = otherBuckets.flatMap((bucket) => bucket.done || []);
+  const bucketDone = cadenceBuckets.flatMap((bucket) => bucket.done || []);
+
+  const raw = dedupeCadenceDoneCarouselEntries([
+    ...dailyFranjaDone,
+    ...weeklyDone,
+    ...otherDone,
+    ...bucketDone,
+  ]);
+
+  return filterRutinaDoneSectionEntries(raw, rutina, rutinaForVisibility);
+}
+
+/** Convierte entradas Hecho de rutinas al formato mínimo del carrusel (Tareas). */
+export function mapRutinaDoneEntriesToCarouselItems(entries = []) {
+  return entries.map(({ section, itemId, franjaKey }) => ({
+    section,
+    itemId,
+    ...(franjaKey ? { horario: franjaKey } : {}),
+  }));
+}
+
+/**
+ * Fuente canónica de «Hecho hoy»: marcas del registro (completos o franja suelta).
+ * Usada por Rutinas (RutinaDoneSection) y Tareas (panel expand del carrusel).
+ */
+export function getRutinaMarkedDoneTodayEntries({
+  rutina,
+  habits = null,
+  habitsPreferences = null,
+  habitChains = [],
+  customSections = [],
+  iconsMap = null,
+  localDataBySection = {},
+}) {
+  if (!rutina) return [];
+
+  const cadenceBuckets = groupRutinaHabitsByCadence({
+    rutina,
+    habits,
+    habitsPreferences,
+    habitChains,
+    customSections,
+    iconsMap,
+    localDataBySection,
+  });
+
+  return buildRutinaGlobalDoneItems(cadenceBuckets, rutina);
 }
 
 /** Solo Diario usa subgrupos por franja horaria. */
@@ -129,7 +222,8 @@ function resolveFranjaScheduleBucket(entry, franjaKey, rutina) {
     if (isHabitHorarioCompleted(entry.itemValue, franjaKey)) {
       return 'done';
     }
-    if (resolveRutinaScheduleBucket(entry, { rutina }) === 'done') {
+    const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+    if (!isHistorical && resolveRutinaScheduleBucket(entry, { rutina }) === 'done') {
       return 'done';
     }
     if (!isEntryDueOnRutinaDay(entry, rutina)) {

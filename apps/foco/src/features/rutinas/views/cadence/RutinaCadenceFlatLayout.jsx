@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import {
-  groupDailyCadenceByFranja,
-  dedupeCadenceEntries,
+  buildRutinaGlobalDoneItems,
   buildFlexibleLuegoWeekdayGroups,
   mergeLuegoWeekdayGroups,
+  shouldHideFlexibleLuegoProjections,
 } from '@shared/habits';
 import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
-import { RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
+import { RUTINA_FUTURE_PREVIEW_COPY, RUTINA_HISTORICAL_COPY, RUTINA_DONE_GROUP_COPY } from '@shared/copy/agendaTerminology';
 import { collapseSectionStackSx } from '@shared/styles/collapseSectionStyles';
 import RutinaDailyCadenceFranjaLayout from './RutinaDailyCadenceFranjaLayout';
 import RutinaWeeklyCadenceDayLayout, {
@@ -21,6 +21,7 @@ import useRutinaCadenceBucketController from '../../hooks/useRutinaCadenceBucket
 export default function RutinaCadenceFlatLayout({
   rutina,
   readOnly = false,
+  isPreview = false,
 }) {
   const {
     habits,
@@ -47,47 +48,54 @@ export default function RutinaCadenceFlatLayout({
     [cadenceBuckets],
   );
 
-  const isHistorical = useMemo(
-    () => rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical',
+  const dayMode = useMemo(
+    () => (rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'empty'),
     [rutina?.fecha],
   );
 
-  const { pendingWeekdayGroups, allDoneItems: weeklyDoneItems } = useWeeklyCadenceLuegoGroups(
-    semanalBucket,
+  const isHistorical = dayMode === 'historical';
+  const isToday = dayMode === 'today';
+  const hideFutureProjections = shouldHideFlexibleLuegoProjections(dayMode);
+  const hideNotToday = hideFutureProjections;
+
+  const { pendingWeekdayGroups } = useWeeklyCadenceLuegoGroups(
+    hideFutureProjections ? null : semanalBucket,
     rutina,
   );
 
   const flexibleWeekdayGroups = useMemo(() => {
+    if (hideFutureProjections) return [];
     const entries = [
       ...(diarioBucket?.today || []),
       ...(diarioBucket?.items || []),
       ...(semanalBucket?.items || []),
     ];
     return buildFlexibleLuegoWeekdayGroups(entries, rutina);
-  }, [diarioBucket, semanalBucket, rutina]);
+  }, [diarioBucket, semanalBucket, rutina, hideFutureProjections]);
 
   const luegoWeekdayGroups = useMemo(
-    () => mergeLuegoWeekdayGroups(pendingWeekdayGroups, flexibleWeekdayGroups),
-    [pendingWeekdayGroups, flexibleWeekdayGroups],
+    () => (hideFutureProjections ? [] : mergeLuegoWeekdayGroups(pendingWeekdayGroups, flexibleWeekdayGroups)),
+    [pendingWeekdayGroups, flexibleWeekdayGroups, hideFutureProjections],
   );
 
-  const mergedDoneItems = useMemo(() => {
-    const dailyDone = diarioBucket
-      ? groupDailyCadenceByFranja(diarioBucket, rutina).flatMap((group) => group.done)
-      : [];
-    const otherDone = otherBuckets.flatMap((bucket) => bucket.done || []);
-    return dedupeCadenceEntries([...dailyDone, ...weeklyDoneItems, ...otherDone]);
-  }, [diarioBucket, weeklyDoneItems, otherBuckets, rutina]);
+  const mergedDoneItems = useMemo(
+    () => buildRutinaGlobalDoneItems(cadenceBuckets, rutina),
+    [cadenceBuckets, rutina],
+  );
 
   if (cadenceBuckets.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          No hay hábitos activos para mostrar
+          {isPreview || dayMode === 'future'
+            ? RUTINA_FUTURE_PREVIEW_COPY.emptyBody
+            : 'No hay hábitos activos para mostrar'}
         </Typography>
       </Box>
     );
   }
+
+  const showDoneSection = dayMode !== 'future' && !isPreview;
 
   return (
     <Box sx={collapseSectionStackSx}>
@@ -104,6 +112,7 @@ export default function RutinaCadenceFlatLayout({
           useShortFranjaLabels
           onReorderSection={handleReorderSection}
           luegoWeekdayGroups={luegoWeekdayGroups}
+          hideNotToday={hideNotToday}
         />
       ) : (
         semanalBucket && (
@@ -118,6 +127,7 @@ export default function RutinaCadenceFlatLayout({
             includeDoneSection={false}
             onReorderSection={handleReorderSection}
             luegoWeekdayGroupsExtra={flexibleWeekdayGroups}
+            hideNotToday={hideNotToday}
           />
         )
       )}
@@ -134,9 +144,12 @@ export default function RutinaCadenceFlatLayout({
           localDataBySection={localDataBySection}
           onItemClick={handleItemClick}
           onReorderSection={handleReorderSection}
+          hideNotToday={hideNotToday}
+          hideDone={showDoneSection || isPreview || dayMode === 'future'}
         />
       ))}
 
+      {showDoneSection && mergedDoneItems.length > 0 && (
       <RutinaDoneSection
         items={mergedDoneItems}
         rutina={rutina}
@@ -146,10 +159,17 @@ export default function RutinaCadenceFlatLayout({
         collapsible
         collapseThreshold={isHistorical ? 3 : 5}
         defaultExpanded={isHistorical}
-        doneHeadingLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
-        doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : undefined}
-        doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : undefined}
+        doneHeadingLabel={
+          isHistorical
+            ? RUTINA_HISTORICAL_COPY.doneThatDay
+            : isToday
+              ? RUTINA_DONE_GROUP_COPY.doneToday
+              : undefined
+        }
+        doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : RUTINA_DONE_GROUP_COPY.doneToday}
+        doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : RUTINA_DONE_GROUP_COPY.doneBefore}
       />
+      )}
     </Box>
   );
 }

@@ -124,45 +124,49 @@ export function isScheduledCadenciaDay(fechaObjetivo, cadenciaConfig) {
   return false;
 }
 
+/** PERSONALIZADO sin días fijos (intervalo desde última completación). */
+export function isPersonalizedIntervalConfig(cadenciaConfig) {
+  if (!cadenciaConfig || cadenciaConfig.activo === false) return false;
+
+  const tipo = (cadenciaConfig.tipo || 'DIARIO').toUpperCase();
+  if (tipo !== 'PERSONALIZADO') return false;
+  return !resolveFixedPeriodicCadence(cadenciaConfig);
+}
+
+/** Días del intervalo para cadencia PERSONALIZADO por periodo. */
+export function resolvePersonalizedIntervalDays(cadenciaConfig) {
+  const frecuencia = Number(cadenciaConfig?.frecuencia || 1);
+  const periodo = (cadenciaConfig?.periodo || 'CADA_DIA').toUpperCase();
+
+  switch (periodo) {
+    case 'CADA_SEMANA':
+      return frecuencia * 7;
+    case 'CADA_MES':
+      return frecuencia * 30;
+    case 'CADA_TRIMESTRE':
+      return frecuencia * 90;
+    case 'CADA_SEMESTRE':
+      return frecuencia * 180;
+    case 'CADA_ANO':
+    case 'CADA_AÑO':
+      return frecuencia * 365;
+    default:
+      return frecuencia;
+  }
+}
+
 /**
  * ¿Hábito PERSONALIZADO en período de descanso tras completar (p. ej. cada 4 días)?
  * No aplica a periódicos con días fijos (diasSemana/diasMes).
  */
 export function isIntervalCadenceResting(fechaObjetivo, cadenciaConfig, historialCompletado = []) {
-  if (!cadenciaConfig || cadenciaConfig.activo === false) return false;
-
-  const tipo = (cadenciaConfig.tipo || 'DIARIO').toUpperCase();
-  if (tipo !== 'PERSONALIZADO') return false;
-  if (resolveFixedPeriodicCadence(cadenciaConfig)) return false;
+  if (!isPersonalizedIntervalConfig(cadenciaConfig)) return false;
 
   const ultimaCompletacion = obtenerUltimaCompletacion(historialCompletado);
   if (!ultimaCompletacion) return false;
 
   const fecha = normalizeCadenciaDate(fechaObjetivo);
-  const frecuencia = Number(cadenciaConfig.frecuencia || 1);
-  const periodo = cadenciaConfig.periodo || 'CADA_DIA';
-  let diasIntervalo = frecuencia;
-
-  switch (periodo) {
-    case 'CADA_SEMANA':
-      diasIntervalo = frecuencia * 7;
-      break;
-    case 'CADA_MES':
-      diasIntervalo = frecuencia * 30;
-      break;
-    case 'CADA_TRIMESTRE':
-      diasIntervalo = frecuencia * 90;
-      break;
-    case 'CADA_SEMESTRE':
-      diasIntervalo = frecuencia * 180;
-      break;
-    case 'CADA_ANO':
-    case 'CADA_AÑO':
-      diasIntervalo = frecuencia * 365;
-      break;
-    default:
-      break;
-  }
+  const diasIntervalo = resolvePersonalizedIntervalDays(cadenciaConfig);
 
   return differenceInDays(fecha, ultimaCompletacion) < diasIntervalo;
 }
@@ -295,32 +299,10 @@ export const debesMostrarHabitoEnFecha = (targetDate, cadenciaConfig, historialC
         return true;
       }
 
-      let diasIntervalo = frecuencia;
-
-      switch (periodo) {
-        case 'CADA_SEMANA':
-          diasIntervalo = frecuencia * 7;
-          break;
-        case 'CADA_MES':
-          diasIntervalo = frecuencia * 30;
-          break;
-        case 'CADA_TRIMESTRE':
-          diasIntervalo = frecuencia * 90;
-          break;
-        case 'CADA_SEMESTRE':
-          diasIntervalo = frecuencia * 180;
-          break;
-        case 'CADA_ANO':
-          diasIntervalo = frecuencia * 365;
-          break;
-      }
-
-      const diasDesdeUltimaCompletacion = differenceInDays(
+      return differenceInDays(
         fechaObjetivo,
-        ultimaCompletacion
-      );
-
-      return diasDesdeUltimaCompletacion >= diasIntervalo;
+        ultimaCompletacion,
+      ) >= resolvePersonalizedIntervalDays(cadenciaConfig);
     }
 
     default:
@@ -642,4 +624,6 @@ export default {
   getScheduledDatesInPeriod,
   hasCadenciaDebt,
   isIntervalCadenceResting,
+  isPersonalizedIntervalConfig,
+  resolvePersonalizedIntervalDays,
 };

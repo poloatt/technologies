@@ -9,6 +9,7 @@ export {
   formatRutinaDayLabel,
   formatRutinaDaySubtitle,
   getRutinaCompletionStats,
+  calculateDayLinkedVisibleItems,
   findRutinaByDateStr,
   normalizeRutinaNavigateDate,
   resolveHabitConfigApplyFrom,
@@ -31,6 +32,8 @@ export {
   hasCadenciaDebt,
   isScheduledCadenciaDay,
   isIntervalCadenceResting,
+  isPersonalizedIntervalConfig,
+  resolvePersonalizedIntervalDays,
   getCadenciaWeekRange,
   DIAS_SEMANA,
   CADENCIA_WEEK_STARTS_ON,
@@ -57,6 +60,7 @@ export {
   isHabitDoneByPeriodQuotaOnly,
   resolveHabitDoneTone,
   partitionDoneEntriesByRutinaDay,
+  filterRutinaDoneSectionEntries,
   resolveRutinaScheduleBucket,
   isEntryDueOnRutinaDay,
 } from '../desktop/rutinaDesktopUtils.js';
@@ -69,6 +73,7 @@ export {
 } from './habitCadenceBuckets.js';
 
 export { groupRutinaHabitsByCadence } from '../desktop/rutinaCadenceUtils.js';
+
 export {
   getCadenceBucketCarouselItems,
   getCadenceBucketCompletionStats,
@@ -91,6 +96,10 @@ export {
   resolveEntryWeekdays,
   buildFlexibleLuegoWeekdayGroups,
   mergeLuegoWeekdayGroups,
+  buildRutinaGlobalDoneItems,
+  getRutinaMarkedDoneTodayEntries,
+  mapRutinaDoneEntriesToCarouselItems,
+  dedupeCadenceDoneCarouselEntries,
   DAILY_CADENCE_FRANJA_ORDER,
   WEEKDAY_ORDER,
   CADENCE_BUCKET_ICON_KEYS,
@@ -106,3 +115,8 @@ export {
   canPostponeHabitFranja,
   getPostponeMenuLabel,
 } from './rutinaPostponeUtils.js';
+
+export {
+  resolveRutinaScheduleLegend,
+  resolveRutinaStackScheduleLegend,
+} from './rutinaRowLabels.js';

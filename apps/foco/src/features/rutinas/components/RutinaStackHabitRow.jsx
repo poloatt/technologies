@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Box, Chip, ListItem } from '@mui/material';
+import React, { useMemo } from 'react';
+import { Box, Chip, ListItem, Typography } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import {
@@ -9,6 +9,7 @@ import {
   resolveRoutineDisplayName,
   isEntryFranjaSinHacer,
   resolveActiveDailyFranja,
+  resolveRutinaStackScheduleLegend,
 } from '@shared/habits';
 import {
   rutinaChecklistItemSx,
@@ -16,6 +17,7 @@ import {
   rutinaChecklistContentSx,
   rutinaChecklistTextColumnSx,
   rutinaRoutineChipPrimarySx,
+  rutinaChecklistMetaSx,
   rutinaChecklistIconColumnSx,
   getRutinaChecklistDragHandleSlotSx,
 } from '@shared/styles/rutinaPageStyles';
@@ -29,8 +31,6 @@ const DRAG_HANDLE_INNER_SX = {
   display: 'flex',
   alignItems: 'center',
 };
-
-const MOBILE_STACK_MAX_VISIBLE_ICONS = 2.5;
 
 function resolveEntrySection(entry, fallbackSection) {
   return entry?.section || fallbackSection;
@@ -77,21 +77,23 @@ export default function RutinaStackHabitRow({
   const iconSize = iconTokens.size;
   const iconGlyph = iconTokens.glyph;
   const routineName = resolveRoutineDisplayName(entries[0]?.chain);
-  const [iconsOverflow, setIconsOverflow] = useState(false);
+  const scheduleLegend = useMemo(
+    () => resolveRutinaStackScheduleLegend(entries, {
+      rutina,
+      section,
+      localData,
+      localDataBySection,
+    }),
+    [entries, rutina, section, localData, localDataBySection],
+  );
 
-  const hasMultipleEntries = entries.length > 1;
   const hasNestedFranjaScroll = useMemo(
     () => entries.some(entryHasMultipleFranjas),
     [entries],
   );
-  const useStackIconCarousel = isMobileOrTablet && hasMultipleEntries && !hasNestedFranjaScroll;
-
-  const handleIconsOverflowChange = useCallback((hasOverflow) => {
-    setIconsOverflow(hasOverflow);
-  }, []);
-
-  const hideTextColumn = useStackIconCarousel && iconsOverflow;
-  const useFluidIconColumn = hideTextColumn;
+  const isMultiIconStack = entries.length >= 2;
+  const useStackIconCarousel = isMultiIconStack && !hasNestedFranjaScroll;
+  const useFluidIconColumn = isMultiIconStack;
 
   const allCompleted = entries.every((entry) => {
     const entrySection = resolveEntrySection(entry, section);
@@ -198,16 +200,7 @@ export default function RutinaStackHabitRow({
     <HabitIconScrollRow
       itemCount={entries.length}
       iconSize={iconSize}
-      maxVisibleIcons={iconsOverflow
-        ? Math.min(entries.length, 4)
-        : MOBILE_STACK_MAX_VISIBLE_ICONS}
-      onOverflowChange={handleIconsOverflowChange}
-      sx={{
-        mr: 0,
-        minWidth: 0,
-        flexShrink: iconsOverflow ? 1 : 0,
-        ...(iconsOverflow ? { flex: 1, maxWidth: '100%' } : null),
-      }}
+      sx={{ mr: 0 }}
     >
       {(guardClick) => entries.map((entry) => renderStackIcon(entry, guardClick))}
     </HabitIconScrollRow>
@@ -241,12 +234,7 @@ export default function RutinaStackHabitRow({
             </Box>
           ) : null}
         </Box>
-        <Box
-          sx={{
-            ...rutinaChecklistContentSx,
-            ...(hideTextColumn ? { gap: 0 } : null),
-          }}
-        >
+        <Box sx={rutinaChecklistContentSx}>
           <Box sx={rutinaChecklistIconColumnSx({
             compact: isCompact,
             mobile: isMobileOrTablet,
@@ -255,21 +243,24 @@ export default function RutinaStackHabitRow({
           >
             {iconColumnContent}
           </Box>
-          {!hideTextColumn && (
-            <Box sx={{ ...rutinaChecklistTextColumnSx, flex: 1, minWidth: 0 }}>
-              <Chip
-                size="small"
-                label={routineName}
-                sx={{
-                  ...rutinaRoutineChipPrimarySx,
-                  ...(allCompleted ? {
-                    opacity: 0.55,
-                    '& .MuiChip-label': { textDecoration: 'line-through' },
-                  } : null),
-                }}
-              />
-            </Box>
-          )}
+          <Box sx={rutinaChecklistTextColumnSx}>
+            <Chip
+              size="small"
+              label={routineName}
+              sx={{
+                ...rutinaRoutineChipPrimarySx,
+                ...(allCompleted ? {
+                  opacity: 0.55,
+                  '& .MuiChip-label': { textDecoration: 'line-through' },
+                } : null),
+              }}
+            />
+            {scheduleLegend ? (
+              <Typography variant="caption" sx={rutinaChecklistMetaSx}>
+                {scheduleLegend}
+              </Typography>
+            ) : null}
+          </Box>
         </Box>
       </Box>
     </ListItem>

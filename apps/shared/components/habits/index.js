@@ -8,6 +8,7 @@ export { default as HabitCarouselIconButton } from './HabitCarouselIconButton.js
 export { default as HabitCarouselScrollTrack } from './HabitCarouselScrollTrack.jsx';
 export { default as HabitIconButton } from './HabitIconButton.jsx';
 export { default as HabitIconScrollRow } from './HabitIconScrollRow.jsx';
+export { shouldUseHabitRowIconCarousel } from './habitRowCarouselUtils.js';
 export { default as AddHabitGroupButton, AddHabitGroupButtonWrap } from './AddHabitGroupButton.jsx';
 export { default as HabitGroupContextMenu } from './HabitGroupContextMenu.jsx';
 export { default as HabitChainAfterPicker } from './HabitChainAfterPicker.jsx';

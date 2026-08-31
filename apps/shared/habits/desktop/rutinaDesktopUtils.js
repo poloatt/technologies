@@ -7,16 +7,23 @@ import {
 import { getHabitDisplayLabel } from '../domain/habitDisplayLabels.js';
 import { resolveItemVisibilityByCadence } from '../domain/resolveItemVisibility.js';
 import { resolveRutinaItemConfig } from '../domain/resolveRutinaItemConfig.js';
-import { isHabitCompletedForHistorial, isHabitFullyCompletedToday } from '../domain/habitCompletionUtils.js';
+import {
+  isHabitFullyCompletedToday,
+  isHabitHorarioCompleted,
+  isHabitMarkedCompleteForConfig,
+} from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import {
-  hasCadenciaDebt,
   isScheduledCadenciaDay,
   isIntervalCadenceResting,
   obtenerHistorialCompletados,
   contarCompletadosEnPeriodo,
 } from '../utils/cadenciaUtils.js';
 import { enrichEntryWithChainContext } from '../domain/habitChainUtils.js';
+import {
+  resolveDayLinkedQuota,
+  getHistorialDatesForItem,
+} from '../domain/resolveRutinaDayView.js';
 import { parseAPIDate } from '../../utils/dateUtils.js';
 import { RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
 import { getPeriodicCarouselMode } from '../engine/habitVisibilityEngine.js';
@@ -172,17 +179,27 @@ export function categorizeSectionHabits({
     const fromLocal = localData?.[itemId];
     const fromRutina = rutina?.[section]?.[itemId];
     const itemValue = fromLocal !== undefined ? fromLocal : fromRutina;
-    const isCompleted = isHabitCompletedForHistorial(itemValue);
-    const isScheduled = resolveItemVisibilityByCadence(section, itemId, rutinaForVisibility);
+    const isCompleted = isHabitMarkedCompleteForConfig(config, itemValue);
 
     const fechaRutina = parseAPIDate(rutina.fecha) || new Date();
-    const historialDates = [...obtenerHistorialCompletados(itemId, section, rutinaForVisibility)];
+    const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'today';
+    const historialDates = getHistorialDatesForItem(itemId, section, rutinaForVisibility);
     if (isCompleted) {
       historialDates.push(fechaRutina);
     }
-    const isCadenciaDebt = !isCompleted
-      && hasCadenciaDebt(fechaRutina, config, historialDates)
-      && !isScheduledCadenciaDay(fechaRutina, config);
+
+    const dayLink = resolveDayLinkedQuota({
+      fechaObjetivo: fechaRutina,
+      config,
+      historialCompletado: historialDates,
+      rutinaForPlan: rutinaForVisibility,
+      section,
+      itemId,
+      dayMode,
+    });
+
+    const isCadenciaDebt = !isCompleted && dayLink.isCadenciaDebt;
+    const isScheduled = isCompleted || dayLink.visible;
 
     const entry = enrichEntryWithChainContext({
       section,
@@ -194,6 +211,7 @@ export function categorizeSectionHabits({
       isCompleted,
       isScheduled,
       isCadenciaDebt,
+      quotaSlot: dayLink.quotaSlot ?? null,
       userHabit: findUserHabit(section, itemId, habits),
     }, chains);
 
@@ -219,6 +237,15 @@ function isDailyMultiHorarioConfig(config = {}) {
   return horarios.length > 1;
 }
 
+function getConfigHorarios(config = {}) {
+  return Array.isArray(config?.horarios) ? config.horarios : [];
+}
+
+/** Varios horarios configurados → hace falta completar todas las franjas del día. */
+function requiresFullFranjaCompletion(config = {}) {
+  return isDailyMultiHorarioConfig(config) || getConfigHorarios(config).length > 1;
+}
+
 /**
  * ¿Cuota del período satisfecha o hábito totalmente completado hoy?
  * Usado para mover ítems a "Hecho" en lugar de "No toca hoy".
@@ -233,12 +260,11 @@ export function isHabitQuotaOrDayDone({
 }) {
   if (!config || config.activo === false) return false;
 
-  if (isDailyMultiHorarioConfig(config)) {
-    const horarios = Array.isArray(config.horarios) ? config.horarios : [];
-    return isHabitFullyCompletedToday(itemValue, horarios);
+  if (requiresFullFranjaCompletion(config)) {
+    return isHabitFullyCompletedToday(itemValue, getConfigHorarios(config));
   }
 
-  if (isHabitCompletedForHistorial(itemValue)) {
+  if (isHabitMarkedCompleteForConfig(config, itemValue)) {
     return true;
   }
 
@@ -276,19 +302,7 @@ export function isHabitCompletedOnRutinaDay({
     ? itemValue
     : rutina?.[section]?.[itemId];
 
-  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
-
-  // Revisión retroactiva: cualquier franja marcada cuenta como hecho ese día.
-  if (isHistorical) {
-    return isHabitCompletedForHistorial(resolvedValue);
-  }
-
-  if (isDailyMultiHorarioConfig(config)) {
-    const horarios = Array.isArray(config.horarios) ? config.horarios : [];
-    return isHabitFullyCompletedToday(resolvedValue, horarios);
-  }
-
-  return isHabitCompletedForHistorial(resolvedValue);
+  return isHabitMarkedCompleteForConfig(config, resolvedValue);
 }
 
 /** Hecho por cuota/rest del período, sin completar en el día del registro. */
@@ -356,6 +370,67 @@ export function partitionDoneEntriesByRutinaDay(
   };
 }
 
+/** Entrada de carrusel Hecho con franja concreta marcada (multi-horario parcial). */
+function isCadenceFranjaDoneEntry(entry, params) {
+  const franjaKey = entry?.franjaKey;
+  if (!franjaKey || franjaKey === 'GENERAL') return false;
+  return isHabitHorarioCompleted(params.itemValue, franjaKey);
+}
+
+/** Una sola fila por hábito cerrado; conserva franjas sueltas en completados parciales. */
+function collapseDoneSectionCarouselEntries(entries = [], rutina, rutinaForVisibility = rutina) {
+  const seenConsolidated = new Set();
+  const result = [];
+
+  entries.forEach((entry) => {
+    const params = resolveDoneEntryParams(entry, rutina, rutinaForVisibility);
+    const habitKey = `${entry.section}:${entry.itemId}`;
+    const isPartialFranja = isCadenceFranjaDoneEntry(entry, params)
+      && !isHabitCompletedOnRutinaDay(params);
+
+    if (isPartialFranja) {
+      result.push(entry);
+      return;
+    }
+
+    if (seenConsolidated.has(habitKey)) return;
+    seenConsolidated.add(habitKey);
+
+    const { franjaKey, weekdayKey, ...rest } = entry;
+    result.push(rest);
+  });
+
+  return result;
+}
+
+/**
+ * Sector Hecho global: ítems cerrados (marca completa del día, franja suelta o cuota/rest).
+ * Las entradas sin franjaKey parcial no pasan si el hábito sigue abierto en otra franja.
+ */
+export function filterRutinaDoneSectionEntries(
+  entries = [],
+  rutina,
+  rutinaForVisibility = rutina,
+) {
+  const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'today';
+
+  const filtered = entries.filter((entry) => {
+    const params = resolveDoneEntryParams(entry, rutina, rutinaForVisibility);
+
+    if (isHabitCompletedOnRutinaDay(params)) return true;
+
+    if (isCadenceFranjaDoneEntry(entry, params)) return true;
+
+    // Hoy e histórico: solo marcas del registro; cuota/rest vive fuera de este carrusel.
+    if (dayMode === 'today' || dayMode === 'historical') return false;
+
+    if (isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility)) return false;
+    return isHabitDoneByPeriodQuotaOnly(params);
+  });
+
+  return collapseDoneSectionCarouselEntries(filtered, rutina, rutinaForVisibility);
+}
+
 /**
  * ¿El ítem toca hoy (cadencia del día o deuda), más allá de isScheduled del tracker?
  * Cubre semanales/mensuales en día programado cuando debesMostrarHabitoEnFecha falla.
@@ -363,39 +438,62 @@ export function partitionDoneEntriesByRutinaDay(
 export function isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility = rutina) {
   const { config, itemId, section, itemValue } = entry;
   const fechaRutina = parseAPIDate(rutina?.fecha) || new Date();
-  const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
+  const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'today';
 
   // Histórico: solo lo que tocaba ese día calendario (sin catch-up de deuda semanal/mensual).
-  if (isHistorical) {
-    return isScheduledCadenciaDay(fechaRutina, config);
+  if (dayMode === 'historical') {
+    const historialDates = getHistorialDatesForItem(itemId, section, rutinaForVisibility);
+    const link = resolveDayLinkedQuota({
+      fechaObjetivo: fechaRutina,
+      config,
+      historialCompletado: historialDates,
+      rutinaForPlan: rutinaForVisibility,
+      section,
+      itemId,
+      dayMode: 'historical',
+    });
+    return link.visible;
   }
 
-  if (entry.isScheduled || entry.isCadenciaDebt) return true;
-
-  if (isScheduledCadenciaDay(fechaRutina, config)) return true;
-
-  const historialDates = [...obtenerHistorialCompletados(itemId, section, rutinaForVisibility)];
-  if (isHabitCompletedForHistorial(itemValue)) {
-    historialDates.push(fechaRutina);
+  if (isHabitMarkedCompleteForConfig(config, itemValue)) {
+    return true;
   }
-  return hasCadenciaDebt(fechaRutina, config, historialDates);
+
+  const historialDates = getHistorialDatesForItem(itemId, section, rutinaForVisibility);
+  const link = resolveDayLinkedQuota({
+    fechaObjetivo: fechaRutina,
+    config,
+    historialCompletado: historialDates,
+    rutinaForPlan: rutinaForVisibility,
+    section,
+    itemId,
+    dayMode,
+  });
+
+  return link.visible;
 }
 
 /** Clasifica un ítem del tracker: today (pendiente), done (hecho), notToday. */
 export function resolveRutinaScheduleBucket(entry, { rutina, rutinaForVisibility = rutina } = {}) {
-  const { config, itemValue, isScheduled, itemId, section } = entry;
-  const horarios = Array.isArray(config?.horarios) ? config.horarios : [];
+  const { config, itemValue, itemId, section } = entry;
   const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
 
-  // Revisión retroactiva: cualquier marca del día va a Hecho, no Sin marcar.
-  if (isHistorical && isHabitCompletedForHistorial(itemValue)) {
+  // Histórico: solo marca del registro (sin cuota/rest del período ni proyecciones Luego).
+  if (isHistorical) {
+    if (isHabitMarkedCompleteForConfig(config, itemValue)) {
+      return 'done';
+    }
+    if (isEntryDueOnRutinaDay(entry, rutina, rutinaForVisibility)) {
+      return 'today';
+    }
+    return 'notToday';
+  }
+
+  if (isHabitMarkedCompleteForConfig(config, itemValue)) {
     return 'done';
   }
 
-  if (isDailyMultiHorarioConfig(config)) {
-    if (isHabitFullyCompletedToday(itemValue, horarios)) {
-      return 'done';
-    }
+  if (requiresFullFranjaCompletion(config)) {
     if (isHabitQuotaOrDayDone({ config, itemValue, itemId, section, rutina, rutinaForVisibility })) {
       return 'done';
     }
@@ -463,15 +561,6 @@ export function groupSectionHabitsByDaySchedule(params) {
   };
 }
 
-function resolveItemCarouselDaySchedule(config, fechaRutina) {
-  if (!config || config.activo === false) return false;
-  const tipo = (config.tipo || 'DIARIO').toUpperCase();
-  const periodo = (config.periodo || 'CADA_DIA').toUpperCase();
-  const isDaily = tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
-  if (isDaily) return true;
-  return isScheduledCadenciaDay(fechaRutina, config);
-}
-
 /** Todos los hábitos activos pendientes de una sección para el carrusel (ahora → luego → no hoy). */
 export function getSectionCarouselItems({
   section,
@@ -488,8 +577,11 @@ export function getSectionCarouselItems({
 
   const chains = Array.isArray(habitChains) ? habitChains : [];
   const localBySection = localDataBySection ?? (localData ? { [section]: localData } : null);
+  const sectionIcons = iconsMap?.[section] || {};
+  const sortOpts = { section, habits };
+  const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'today';
 
-  const { done } = groupSectionHabitsByDaySchedule({
+  const grouped = groupSectionHabitsByDaySchedule({
     section,
     rutina,
     habits,
@@ -499,48 +591,17 @@ export function getSectionCarouselItems({
     localDataBySection: localBySection,
     habitChains: chains,
   });
-  const doneIds = new Set(done.map((entry) => entry.itemId));
 
-  const prefs = habitsPreferences ?? {};
-  const sectionIcons = iconsMap?.[section] || {};
-  const itemIds = resolveSectionItemIds(section, habits, iconsMap);
-  const sortOpts = { section, habits };
-  const fechaRutina = parseAPIDate(rutina.fecha) || new Date();
+  // Histórico: solo lo que tocaba ese día (sin arrastre/deuda en días intermedios).
+  const pendingEntries = (dayMode === 'historical'
+    ? grouped.today
+    : [...grouped.today, ...grouped.notToday]
+  ).filter((entry) => !iconsMap || sectionIcons[entry.itemId]);
 
-  const entriesWithSlot = itemIds.reduce((acc, itemId) => {
-    if (iconsMap && !sectionIcons[itemId]) return acc;
-    if (doneIds.has(itemId)) return acc;
-
-    const config = resolveRutinaItemConfig(section, itemId, rutina, prefs);
-    if (config.activo === false) return acc;
-
-    const itemValue = rutina?.[section]?.[itemId];
-    const isCompleted = isHabitCompletedForHistorial(itemValue);
-    const isScheduled = resolveItemCarouselDaySchedule(config, fechaRutina);
-    const historialDates = [...obtenerHistorialCompletados(itemId, section, rutina)];
-    const isCadenciaDebt = !isCompleted
-      && hasCadenciaDebt(fechaRutina, config, historialDates)
-      && !isScheduledCadenciaDay(fechaRutina, config);
-
-    const entry = enrichEntryWithChainContext({
-      section,
-      itemId,
-      label: getHabitDisplayLabel(section, itemId, habits),
-      Icon: sectionIcons[itemId] || null,
-      config,
-      itemValue,
-      isCompleted,
-      isScheduled,
-      isCadenciaDebt,
-      userHabit: findUserHabit(section, itemId, habits),
-    }, chains);
-
-    acc.push({
-      ...entry,
-      carouselSlot: resolveSectionCarouselSlot(entry, { rutina, currentTimeOfDay }),
-    });
-    return acc;
-  }, []);
+  const entriesWithSlot = pendingEntries.map((entry) => ({
+    ...entry,
+    carouselSlot: resolveSectionCarouselSlot(entry, { rutina, currentTimeOfDay }),
+  }));
 
   return sortSectionCarouselBySlot(entriesWithSlot, sortOpts);
 }

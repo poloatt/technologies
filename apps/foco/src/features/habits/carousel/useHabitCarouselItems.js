@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import {
-  getCarouselCompletedTodayItems,
   getCarouselItemsForMode,
+  getRutinaMarkedDoneTodayEntries,
+  mapRutinaDoneEntriesToCarouselItems,
 } from '@shared/habits';
-
 /**
  * Filtra items del carrusel según modo Ahora/Luego.
  * @param {'ahora'|'luego'} mode
@@ -30,10 +30,16 @@ export default function useHabitCarouselItems(mode, {
   }, [mode, rutinaHoy, sectionIconsMap, habits, currentTimeOfDay, habitsPreferences]);
 
   const completedTodayItems = useMemo(() => {
-    if (!includeCompletedToday || habitsPreferences === null) return [];
-    return getCarouselCompletedTodayItems(params);
+    if (!includeCompletedToday || habitsPreferences === null || !rutinaHoy) return [];
+    return mapRutinaDoneEntriesToCarouselItems(
+      getRutinaMarkedDoneTodayEntries({
+        rutina: rutinaHoy,
+        habits,
+        habitsPreferences,
+        iconsMap: sectionIconsMap?.iconsMap,
+      }),
+    );
   }, [includeCompletedToday, rutinaHoy, sectionIconsMap, habits, habitsPreferences]);
-
   return {
     pendingItems,
     carouselItems: pendingItems,

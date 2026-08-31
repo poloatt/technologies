@@ -4,7 +4,6 @@ import RutinaTable from './RutinaTable';
 import { RutinaForm } from './dialogs/RutinaForm';
 import { HabitsManager } from '../habits/manager';
 import HabitFormDialog from '@shared/components/HabitFormDialog';
-import HubSectionShell from '@shared/components/hub/HubSectionShell';
 import { useRutinasPageController } from './hooks/useRutinasPageController';
 import {
   rutinaPageMainSx,
@@ -19,14 +18,6 @@ import {
   CalendarMonthOutlined as DateIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-
-const rutinaHubShellBodySx = {
-  pt: 0,
-  py: 0.75,
-  gap: 0.75,
-  minHeight: 0,
-  px: 0,
-};
 
 function EmptyStateMessage({ error, isFuture = false }) {
   if (error) {
@@ -65,6 +56,9 @@ function EmptyStateMessage({ error, isFuture = false }) {
 const RutinasWithContext = () => {
   const {
     rutina,
+    effectiveRutina,
+    rutinaReadOnly,
+    isPreview,
     rutinas,
     loading,
     error,
@@ -77,53 +71,48 @@ const RutinasWithContext = () => {
     habitFormOpen,
     setHabitFormOpen,
     handleCloseForm,
-    isViewingFutureWithoutRecord,
     isMobileOrTablet,
-    scrollBottomPadding,
   } = useRutinasPageController();
+
+  const showRutinaContent = Boolean(effectiveRutina) && !editMode;
 
   return (
     <Box component="main" className="page-main-content" sx={rutinaPageMainSx}>
-      <Box sx={{ ...getRutinaPageContentShellSx(isMobileOrTablet), pb: { xs: 10, sm: 4 }, py: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <Box sx={rutinaPageScrollSx(isMobileOrTablet, scrollBottomPadding, RUTINA_NAVIGATION_BAR_CONFIG.height)}>
+      <Box sx={{
+        ...getRutinaPageContentShellSx(isMobileOrTablet),
+        flex: 1,
+        minHeight: 0,
+        py: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0,
+      }}
+      >
+        <Box sx={rutinaPageScrollSx(isMobileOrTablet, undefined, RUTINA_NAVIGATION_BAR_CONFIG.height)}>
           {loading && (
             <Box sx={rutinaPageLoaderSx}>
               <CircularProgress />
             </Box>
           )}
 
-          {!loading && !rutina && !editMode && (
-            <HubSectionShell
-              title="Rutinas"
-              iconKey="fitnessCenter"
-              shellSx={{ width: '100%' }}
-              bodySx={{ ...rutinaHubShellBodySx, pt: 0 }}
-            >
-              <EmptyStateMessage
-                error={error}
-                isFuture={isViewingFutureWithoutRecord}
-              />
-            </HubSectionShell>
+          {!loading && !effectiveRutina && !editMode && (
+            <EmptyStateMessage error={error} isFuture={false} />
           )}
 
-          {!loading && !editMode && rutina && (
-            <HubSectionShell
-              headerContent={<></>}
-              shellSx={{ width: '100%' }}
-              bodySx={rutinaHubShellBodySx}
-            >
-              <RutinaTable
-                rutina={{
-                  ...rutina,
-                  _page: currentPage,
-                  _totalPages: totalPages,
-                }}
-                rutinas={rutinas}
-                loading={loading}
-                currentPage={currentPage}
-                totalPages={totalPages}
-              />
-            </HubSectionShell>
+          {showRutinaContent && (
+            <RutinaTable
+              rutina={{
+                ...effectiveRutina,
+                _page: currentPage,
+                _totalPages: totalPages,
+              }}
+              readOnly={rutinaReadOnly}
+              isPreview={isPreview}
+              rutinas={rutinas}
+              loading={loading}
+              currentPage={currentPage}
+              totalPages={totalPages}
+            />
           )}
 
           {editMode && (

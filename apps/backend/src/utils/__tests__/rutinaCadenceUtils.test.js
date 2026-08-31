@@ -10,7 +10,8 @@ import {
   reorderFlatEntriesByDisplayRowDnD,
 } from '@shared/habits';
 import { jest } from '@jest/globals';
-import { getNormalizedToday } from '@shared/utils/dateUtils.js';
+import { getNormalizedToday, formatDateForAPI } from '@shared/utils/dateUtils.js';
+import { addDays, getDay, startOfWeek } from 'date-fns';
 
 const monday = new Date(2026, 5, 22, 12, 0, 0, 0); // lunes (getDay=1)
 
@@ -43,6 +44,33 @@ const habits = {
 const iconsMap = {
   bodyCare: { weekly: () => null },
 };
+
+function makeQuotaMetWeeklyRutina(overrides = {}) {
+  const today = getNormalizedToday();
+  const todayDow = getDay(today);
+  const scheduledDow = todayDow === 1 ? 2 : 1;
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const scheduledDate = addDays(weekStart, scheduledDow === 0 ? 6 : scheduledDow - 1);
+  return makeWeeklyRutina({
+    fecha: today.toISOString(),
+    historial: {
+      bodyCare: {
+        weekly: { [formatDateForAPI(scheduledDate)]: true },
+      },
+    },
+    config: {
+      bodyCare: {
+        weekly: {
+          tipo: 'SEMANAL',
+          frecuencia: 1,
+          activo: true,
+          diasSemana: [scheduledDow],
+        },
+      },
+    },
+    ...overrides,
+  });
+}
 
 describe('cadence view — dynamic Diario promotion', () => {
   it('promotes weekly habit due today to Diario bucket, not Semanal', () => {
@@ -112,7 +140,7 @@ describe('cadence view — dynamic Diario promotion', () => {
     expect(resolveCadenceViewBucket(entry, rutina)).toBe('DIARIO');
   });
 
-  it('on historical day resolves partially completed multi-franja to done', () => {
+  it('on historical day keeps partially completed multi-franja in sin marcar', () => {
     const rutina = makeWeeklyRutina({ fecha: new Date(2026, 5, 20).toISOString() });
     const entry = {
       section: 'bodyCare',
@@ -125,7 +153,7 @@ describe('cadence view — dynamic Diario promotion', () => {
       },
       itemValue: { MAÑANA: true, NOCHE: false },
     };
-    expect(resolveRutinaScheduleBucket(entry, { rutina })).toBe('done');
+    expect(resolveRutinaScheduleBucket(entry, { rutina })).toBe('today');
   });
 
   it('on today keeps partially completed multi-franja in today', () => {
@@ -145,11 +173,7 @@ describe('cadence view — dynamic Diario promotion', () => {
   });
 
   it('places quota-satisfied weekly habit in Hecho, not notToday, in Semanal bucket', () => {
-    const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
-    const rutina = makeWeeklyRutina({
-      fecha: sunday.toISOString(),
-      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
-    });
+    const rutina = makeQuotaMetWeeklyRutina();
     const semanal = groupRutinaHabitsByCadence({ rutina, habits, iconsMap })
       .find((b) => b.id === 'SEMANAL');
 
@@ -162,10 +186,10 @@ describe('cadence view — dynamic Diario promotion', () => {
   });
 
   it('places quota-satisfied monthly habit in Hecho, not notToday, in Mensual bucket', () => {
-    const day20 = new Date(2026, 5, 20, 12, 0, 0, 0);
+    const today = getNormalizedToday();
     const rutina = {
       _id: 'r1',
-      fecha: day20.toISOString(),
+      fecha: today.toISOString(),
       bodyCare: { monthly: false },
       config: {
         bodyCare: {
@@ -177,7 +201,11 @@ describe('cadence view — dynamic Diario promotion', () => {
           },
         },
       },
-      historial: { bodyCare: { monthly: { '2026-06-01': true } } },
+      historial: {
+        bodyCare: {
+          monthly: { [formatDateForAPI(new Date(today.getFullYear(), today.getMonth(), 1))]: true },
+        },
+      },
     };
     const habitsMonthly = {
       bodyCare: [{ id: 'monthly', label: 'Mensual', icon: 'Spa', activo: true, orden: 0 }],
@@ -195,31 +223,20 @@ describe('cadence view — dynamic Diario promotion', () => {
   });
 
   it('places quota-satisfied weekly habit in Diario franja Hecho, not notToday', () => {
-    const sunday = new Date(2026, 5, 21, 12, 0, 0, 0);
-    const rutina = makeWeeklyRutina({
-      fecha: sunday.toISOString(),
-      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
-    });
+    const rutina = makeQuotaMetWeeklyRutina();
     const diario = groupRutinaHabitsByCadence({ rutina, habits, iconsMap })
       .find((b) => b.id === 'DIARIO');
 
     expect(diario).toBeUndefined();
 
-    const rutinaWithDaily = makeWeeklyRutina({
-      fecha: sunday.toISOString(),
+    const rutinaWithDaily = makeQuotaMetWeeklyRutina({
       bodyCare: { shower: false, weekly: false },
       config: {
         bodyCare: {
           shower: { tipo: 'DIARIO', frecuencia: 1, activo: true },
-          weekly: {
-            tipo: 'SEMANAL',
-            frecuencia: 1,
-            activo: true,
-            diasSemana: [1],
-          },
+          weekly: rutina.config.bodyCare.weekly,
         },
       },
-      historial: { bodyCare: { weekly: { '2026-06-16': true } } },
     });
     const habitsBoth = {
       bodyCare: [
@@ -275,7 +292,7 @@ describe('groupDailyCadenceBucketByFranjaSchedule', () => {
     expect(grouped.ahora.map((e) => e.itemId).sort()).toEqual(['afternoon', 'morning']);
   });
 
-  it('on historical day moves marked multi-franja habits to done, not sin marcar', () => {
+  it('on historical day keeps partial multi-franja in sin marcar until all franjas done', () => {
     const historicalDate = new Date(2026, 5, 20).toISOString();
     const rutina = {
       _id: 'r1',
@@ -312,12 +329,12 @@ describe('groupDailyCadenceBucketByFranjaSchedule', () => {
       iconsMap: iconsMulti,
     }).find((b) => b.id === 'DIARIO');
 
-    expect(diario?.done.map((e) => e.itemId)).toContain('teeth');
-    expect(diario?.today.map((e) => e.itemId)).not.toContain('teeth');
+    expect(diario?.done.map((e) => e.itemId)).not.toContain('teeth');
+    expect(diario?.today.map((e) => e.itemId)).toContain('teeth');
     expect(diario?.today.map((e) => e.itemId)).toContain('shower');
 
     const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
-    expect(grouped.ahora.map((e) => e.itemId)).not.toContain('teeth');
+    expect(grouped.ahora.map((e) => e.itemId)).toContain('teeth');
     expect(grouped.ahora.map((e) => e.itemId)).toContain('shower');
   });
 

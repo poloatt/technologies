@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { RUTINA_DAY_GROUP_COPY, RUTINA_DONE_GROUP_COPY } from '@shared/copy/agendaTerminology';
-import { partitionDoneEntriesByRutinaDay } from '@shared/habits';
+import { filterRutinaDoneSectionEntries, partitionDoneEntriesByRutinaDay } from '@shared/habits';
+import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
 import { CollapsibleSection, CollapseSectionLabel } from '@shared/components/collapse';
 import { collapseSectionCountSx, collapseSectionTitleSx } from '@shared/styles/collapseSectionStyles';
 import RutinaDoneCarousel from './RutinaDoneCarousel';
@@ -21,20 +22,47 @@ export default function RutinaDoneSection({
   doneTodayLabel,
   doneBeforeLabel,
 }) {
-  const shouldCollapse = collapsible && items.length > collapseThreshold;
-  const [expanded, setExpanded] = useState(defaultExpanded || !shouldCollapse);
-
-  const { doneOnDay, doneByQuota } = useMemo(
-    () => partitionDoneEntriesByRutinaDay(items, rutina),
+  const sectionItems = useMemo(
+    () => filterRutinaDoneSectionEntries(items, rutina),
     [items, rutina],
   );
 
-  const hasSplitGroups = doneOnDay.length > 0 && doneByQuota.length > 0;
+  const shouldCollapseSection = collapsible && sectionItems.length > collapseThreshold;
+  const [expanded, setExpanded] = useState(defaultExpanded || !shouldCollapseSection);
+
+  const { doneOnDay, doneByQuota } = useMemo(
+    () => partitionDoneEntriesByRutinaDay(sectionItems, rutina),
+    [sectionItems, rutina],
+  );
+
+  const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'today';
+  const visibleDoneByQuota = dayMode === 'today' ? [] : doneByQuota;
+
+  const hasSplitGroups = doneOnDay.length > 0 && visibleDoneByQuota.length > 0;
   const todayLabel = doneTodayLabel || RUTINA_DONE_GROUP_COPY.doneToday;
   const beforeLabel = doneBeforeLabel || RUTINA_DONE_GROUP_COPY.doneBefore;
-  const headingLabel = doneHeadingLabel || RUTINA_DAY_GROUP_COPY.done;
+  const defaultHeadingLabel = RUTINA_DAY_GROUP_COPY.done;
+  const headingLabel = useMemo(() => {
+    if (!doneHeadingLabel) return defaultHeadingLabel;
+    if (hasSplitGroups) return doneHeadingLabel;
+    if (doneOnDay.length === 0 && visibleDoneByQuota.length > 0) {
+      return beforeLabel;
+    }
+    if (doneOnDay.length > 0 && visibleDoneByQuota.length === 0) {
+      return doneTodayLabel || doneHeadingLabel;
+    }
+    return doneHeadingLabel;
+  }, [
+    doneHeadingLabel,
+    doneTodayLabel,
+    beforeLabel,
+    hasSplitGroups,
+    doneOnDay.length,
+    visibleDoneByQuota.length,
+    defaultHeadingLabel,
+  ]);
 
-  if (!items.length) return null;
+  if (!sectionItems.length) return null;
 
   const renderDoneGroup = (groupItems, label, alignLeft = false, groupDoneTone = null) => (
     <Box sx={{ width: '100%', minWidth: 0 }}>
@@ -57,11 +85,11 @@ export default function RutinaDoneSection({
   const doneContent = hasSplitGroups ? (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
       {doneOnDay.length > 0 && renderDoneGroup(doneOnDay, todayLabel, alignIconsLeft || defaultExpanded, 'today')}
-      {doneByQuota.length > 0 && renderDoneGroup(doneByQuota, beforeLabel, true, 'before')}
+      {visibleDoneByQuota.length > 0 && renderDoneGroup(visibleDoneByQuota, beforeLabel, true, 'before')}
     </Box>
   ) : (
     <RutinaDoneCarousel
-      items={items}
+      items={sectionItems}
       rutina={rutina}
       habitsPreferences={habitsPreferences}
       readOnly={readOnly}
@@ -72,11 +100,11 @@ export default function RutinaDoneSection({
     />
   );
 
-  if (shouldCollapse) {
+  if (shouldCollapseSection) {
     return (
       <CollapsibleSection
         title={headingLabel}
-        count={items.length}
+        count={sectionItems.length}
         collapsible
         expanded={expanded}
         onToggle={() => setExpanded((prev) => !prev)}
@@ -90,7 +118,7 @@ export default function RutinaDoneSection({
   return (
     <CollapseSectionLabel
       title={headingLabel}
-      count={items.length}
+      count={sectionItems.length}
     >
       {doneContent}
     </CollapseSectionLabel>

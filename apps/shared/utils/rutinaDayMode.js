@@ -22,3 +22,10 @@ export function isRutinaToday(fecha, today = getNormalizedToday()) {
 export function isRutinaHistorical(fecha, today = getNormalizedToday()) {
   return getRutinaDayMode(fecha, today) === 'historical';
 }
+
+/** Preview o día futuro sin log: todos los pendientes comparten el mismo estilo plano. */
+export function isRutinaFuturePreview(rutina, today = getNormalizedToday()) {
+  if (!rutina) return false;
+  if (rutina.isPreview) return true;
+  return getRutinaDayMode(rutina.fecha, today) === 'future';
+}

@@ -594,6 +594,7 @@ function appendCompletedDailyEntries({
 
 /**
  * Hábitos marcados como completados hoy (para panel colapsable en Tareas).
+ * @deprecated Prefer getRutinaMarkedDoneTodayEntries + mapRutinaDoneEntriesToCarouselItems.
  */
 export function getCarouselCompletedTodayItems({
   rutinaHoy,

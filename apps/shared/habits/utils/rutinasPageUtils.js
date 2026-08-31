@@ -2,8 +2,101 @@ import { addDays, format, isAfter, startOfDay, subDays } from 'date-fns';
 import { es } from '../../utils/localeEs.js';
 import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '../../utils/dateUtils.js';
 import { calculateCompletionPercentage, calculateVisibleItems } from '../../utils/rutinaCalculations.js';
+import { groupRutinaHabitsByCadence } from '../desktop/rutinaCadenceUtils.js';
+import { isHabitCompletedForHistorial } from '../domain/habitCompletionUtils.js';
+import { isHabitQuotaOrDayDone } from '../desktop/rutinaDesktopUtils.js';
+import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 
-export { getRutinaDayMode, isRutinaHistorical, isRutinaToday } from '../../utils/rutinaDayMode.js';
+export {
+  getRutinaDayMode,
+  isRutinaHistorical,
+  isRutinaToday,
+  isRutinaFuturePreview,
+} from '../../utils/rutinaDayMode.js';
+
+/** Ítems visibles vinculados al día (hoy / preview futuro). */
+export function calculateDayLinkedVisibleItems(
+  rutina,
+  customHabits = null,
+  habitsPreferences = {},
+) {
+  if (!rutina) {
+    return { visibleItems: [], completedItems: [] };
+  }
+
+  const buckets = groupRutinaHabitsByCadence({
+    rutina,
+    habits: customHabits,
+    habitsPreferences,
+    iconsMap: null,
+  });
+
+  const visibleItems = [];
+  const completedItems = [];
+  const seen = new Set();
+
+  buckets.forEach((bucket) => {
+    const linked = [...(bucket.today || []), ...(bucket.done || [])];
+    linked.forEach((entry) => {
+      const key = `${entry.section}:${entry.itemId}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const itemValue = rutina?.[entry.section]?.[entry.itemId];
+      const isCompleted = entry.isCompleted
+        || isHabitCompletedForHistorial(itemValue)
+        || isHabitQuotaOrDayDone({
+          config: entry.config,
+          itemValue,
+          itemId: entry.itemId,
+          section: entry.section,
+          rutina,
+        });
+
+      visibleItems.push({ section: entry.section, itemId: entry.itemId, isCompleted });
+      if (isCompleted) {
+        completedItems.push({ section: entry.section, itemId: entry.itemId });
+      }
+    });
+  });
+
+  return { visibleItems, completedItems };
+}
+
+export function getRutinaCompletionStats(rutina, customHabits = null, habitsPreferences = {}) {
+  if (!rutina) {
+    return { percentage: 0, completed: 0, total: 0 };
+  }
+
+  const dayMode = getRutinaDayMode(rutina.fecha);
+
+  if (dayMode === 'future' || rutina.isPreview) {
+    return { percentage: 0, completed: 0, total: 0 };
+  }
+
+  if (dayMode === 'today') {
+    const { visibleItems, completedItems } = calculateDayLinkedVisibleItems(
+      rutina,
+      customHabits,
+      habitsPreferences,
+    );
+    const total = visibleItems.length;
+    const completed = completedItems.length;
+    return {
+      percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
+      completed,
+      total,
+    };
+  }
+
+  const percentage = calculateCompletionPercentage(rutina, customHabits);
+  const { visibleItems, completedItems } = calculateVisibleItems(rutina, {}, customHabits);
+  return {
+    percentage,
+    completed: completedItems.length,
+    total: visibleItems.length,
+  };
+}
 
 export function formatRutinaDayLabel(fecha) {
   if (!fecha) return '';
@@ -18,19 +111,6 @@ export function formatRutinaDaySubtitle({ fecha, percentage }) {
   const dateLabel = formatRutinaDayLabel(fecha);
   const pctLabel = typeof percentage === 'number' ? `${percentage}%` : '—';
   return [dateLabel, pctLabel].filter(Boolean).join(' · ');
-}
-
-export function getRutinaCompletionStats(rutina, customHabits = null) {
-  if (!rutina) {
-    return { percentage: 0, completed: 0, total: 0 };
-  }
-  const percentage = calculateCompletionPercentage(rutina, customHabits);
-  const { visibleItems, completedItems } = calculateVisibleItems(rutina, {}, customHabits);
-  return {
-    percentage,
-    completed: completedItems.length,
-    total: visibleItems.length,
-  };
 }
 
 export function findRutinaByDateStr(rutinas = [], dateStr) {

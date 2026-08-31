@@ -6,6 +6,7 @@ import {
   isHabitFullyCompletedToday,
   resolveHabitIconPresentation,
 } from '../../habits';
+import { getRutinaDayMode, isRutinaFuturePreview } from '../../utils/rutinaDayMode.js';
 import { getPeriodicCarouselCopy, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology';
 import { resolveHabitDisplayIcon } from '../../utils/habitOutlineIcons';
 import { getHabitCarouselIconButtonSx, getHabitIconTokens } from '../../styles/habitIconStyles';
@@ -71,17 +72,25 @@ export default function HabitCarouselIconButton({
     }
   }
 
+  const isHistoricalDay = rutinaHoy?.fecha && getRutinaDayMode(rutinaHoy.fecha) === 'historical';
+  const fullyCompleted = !showCompletionState
+    || !hasMultipleDaily
+    || !isObjectFormat
+    || isHabitFullyCompletedToday(itemValue, horariosConfig);
+
   const presentation = resolveHabitIconPresentation({
     isCompleted,
     carouselSlot: showCompletionState ? carouselSlot : null,
     isScheduled: showCompletionState ? isScheduled : true,
     preferOutlineWhenPending,
-    doneTone,
+    doneTone: fullyCompleted ? doneTone : null,
+    forcePlainPending: isRutinaFuturePreview(rutinaHoy),
   });
 
   const isDoneVisual = presentation.doneTone != null;
   const statusLabel = isDoneVisual ? 'completado' : 'pendiente';
   const isNotTodaySlot = showCompletionState
+    && !isHistoricalDay
     && (carouselSlot === 'notToday' || (!carouselSlot && !isScheduled));
   const isPlainPending = presentation.variant === 'plainPending'
     || presentation.variant === 'deferredPending';

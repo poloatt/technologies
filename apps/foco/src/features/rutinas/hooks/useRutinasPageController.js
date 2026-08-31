@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSnackbar } from 'notistack';
 import { useResponsive, useScopedPageHistory } from '@shared/hooks';
 import { useRutinas, useHabits } from '@shared/context';
-import { getMainBottomPadding } from '@shared/config/uiConstants';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
 import {
   getRutinaCompletionStats,
@@ -10,6 +10,7 @@ import {
   isRutinaHistorical,
   isRutinaToday,
   resolveRutinaNavigateTarget,
+  resolveEffectiveRutinaView,
 } from '@shared/habits';
 import { ensureRutinaForDate } from '../lib/ensureRutinaForDate';
 import useEnsureRutinaForDate from './useEnsureRutinaForDate';
@@ -34,7 +35,9 @@ export function useRutinasPageController() {
     patchRutinaSection,
     updateItemConfiguration,
   } = useRutinas();
-  const { habits, fetchHabits } = useHabits();
+  const { habits, fetchHabits, customSections } = useHabits();
+  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
 
   useEnsureRutinaForDate(getNormalizedToday());
 
@@ -156,22 +159,38 @@ export function useRutinasPageController() {
 
   const activeFecha = rutina?.fecha ?? viewDate;
 
+  const effectiveView = useMemo(
+    () => resolveEffectiveRutinaView({
+      rutina,
+      viewDate,
+      habits,
+      habitsPreferences: habitPrefs,
+      rutinas,
+      customSections,
+    }),
+    [rutina, viewDate, habits, habitPrefs, rutinas, customSections],
+  );
+
+  const effectiveRutina = effectiveView.rutina;
+
   const completionStats = useMemo(
-    () => getRutinaCompletionStats(rutina, habits),
-    [rutina, habits],
+    () => getRutinaCompletionStats(effectiveRutina, habits, habitPrefs),
+    [effectiveRutina, habits, habitPrefs],
   );
 
   const dayMode = useMemo(
-    () => getRutinaDayMode(activeFecha),
-    [activeFecha],
+    () => effectiveView.dayMode || getRutinaDayMode(activeFecha),
+    [effectiveView.dayMode, activeFecha],
   );
 
-  const isViewingFutureWithoutRecord = !rutina && getRutinaDayMode(viewDate) === 'future';
-
-  const scrollBottomPadding = getMainBottomPadding(isMobileOrTablet);
+  const isViewingFutureWithoutRecord = effectiveView.isPreview;
+  const rutinaReadOnly = effectiveView.readOnly;
 
   return {
     rutina,
+    effectiveRutina,
+    rutinaReadOnly,
+    isPreview: effectiveView.isPreview,
     rutinas,
     loading,
     error,
@@ -193,6 +212,5 @@ export function useRutinasPageController() {
     isHistorical: isRutinaHistorical(activeFecha),
     isMobile,
     isMobileOrTablet,
-    scrollBottomPadding,
   };
 }

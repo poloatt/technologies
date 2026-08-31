@@ -33,6 +33,7 @@ export default function RutinaWeeklyCadenceDayLayout({
   includeDoneSection = true,
   onReorderSection,
   luegoWeekdayGroupsExtra = [],
+  hideNotToday = false,
 }) {
   const { pendingWeekdayGroups, allDoneItems } = useWeeklyCadenceLuegoGroups(bucket, rutina);
   const luegoWeekdayGroups = useMemo(

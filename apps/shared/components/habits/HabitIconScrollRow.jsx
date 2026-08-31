@@ -1,181 +1,74 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, IconButton } from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { alpha, useTheme } from '@mui/material/styles';
-import { RUTINA_HABIT_ICON_SIZE } from '../../styles/rutinaIconTokens';
+import React, { useCallback, useMemo } from 'react';
+import { Box, useTheme } from '@mui/material';
+import HabitCarouselScrollTrack from './HabitCarouselScrollTrack.jsx';
 import useHorizontalDragScroll from '../../hooks/useHorizontalDragScroll.js';
-
-const SCROLL_STEP_RATIO = 0.75;
-
-function EdgeArrowBar({ direction, onClick, theme }) {
-  const isLeft = direction === 'left';
-  const Icon = isLeft ? ChevronLeftIcon : ChevronRightIcon;
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        alignSelf: 'stretch',
-        flexShrink: 0,
-        px: 0.1,
-        zIndex: 2,
-        bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.88 : 0.94),
-        borderLeft: isLeft ? 'none' : '1px solid',
-        borderRight: isLeft ? '1px solid' : 'none',
-        borderColor: 'divider',
-      }}
-    >
-      <IconButton
-        size="small"
-        aria-label={isLeft ? 'Desplazar iconos a la izquierda' : 'Desplazar iconos a la derecha'}
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick();
-        }}
-        sx={{
-          p: 0.25,
-          color: 'text.secondary',
-          '&:hover': { color: 'primary.main', bgcolor: 'action.hover' },
-        }}
-      >
-        <Icon sx={{ fontSize: '1.1rem' }} />
-      </IconButton>
-    </Box>
-  );
-}
+import { RUTINA_HABIT_ICON_SIZE } from '../../styles/rutinaIconTokens';
 
 /**
- * Fila horizontal de iconos de hábito con scroll por arrastre y flechas laterales.
+ * Fila horizontal de iconos de hábito con scroll (misma UX que el carrusel de Tareas).
+ * Ocupa el ancho disponible; si los iconos no caben, drag scroll + fades laterales.
+ *
  * @param {(guardClick: () => boolean) => React.ReactNode} [children] — render prop opcional
  */
 export default function HabitIconScrollRow({
   itemCount = 0,
   iconSize = RUTINA_HABIT_ICON_SIZE.desktop,
   gap = 0.35,
-  maxVisibleIcons = 2.5,
-  onOverflowChange = null,
+  enableDragScroll = true,
+  fadeColor = null,
+  centerWhenFits = false,
   sx = {},
   children,
 }) {
   const theme = useTheme();
-  const edgeRef = useRef(null);
-  const { scrollRef, isDragging, bind, dragRef } = useHorizontalDragScroll({ enabled: true });
-  const [edgeState, setEdgeState] = useState({
-    hasOverflow: false,
-    atStart: true,
-    atEnd: true,
+  const { scrollRef, isDragging, bind, dragRef } = useHorizontalDragScroll({
+    enabled: enableDragScroll,
   });
-
-  const mergeScrollRef = useCallback((node) => {
-    edgeRef.current = node;
-    scrollRef.current = node;
-  }, [scrollRef]);
-
-  const updateEdgeState = useCallback(() => {
-    const node = edgeRef.current;
-    if (!node) return;
-    const { scrollLeft, scrollWidth, clientWidth } = node;
-    const hasOverflow = scrollWidth > clientWidth + 2;
-    setEdgeState((prev) => {
-      const next = {
-        hasOverflow,
-        atStart: scrollLeft <= 4,
-        atEnd: scrollLeft >= scrollWidth - clientWidth - 4,
-      };
-      if (
-        prev.hasOverflow === next.hasOverflow
-        && prev.atStart === next.atStart
-        && prev.atEnd === next.atEnd
-      ) {
-        return prev;
-      }
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    const node = edgeRef.current;
-    if (!node) return undefined;
-    updateEdgeState();
-    node.addEventListener('scroll', updateEdgeState, { passive: true });
-    const ro = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(() => updateEdgeState())
-      : null;
-    ro?.observe(node);
-    return () => {
-      node.removeEventListener('scroll', updateEdgeState);
-      ro?.disconnect();
-    };
-  }, [itemCount, updateEdgeState]);
-
-  useEffect(() => {
-    onOverflowChange?.(edgeState.hasOverflow);
-  }, [edgeState.hasOverflow, onOverflowChange]);
-
-  const scrollByStep = useCallback((direction) => {
-    const node = edgeRef.current;
-    if (!node) return;
-    const delta = node.clientWidth * SCROLL_STEP_RATIO * direction;
-    node.scrollBy({ left: delta, behavior: 'smooth' });
-  }, []);
 
   const guardClick = useCallback(() => dragRef.current.moved, [dragRef]);
 
-  const itemStride = iconSize + theme.spacing(gap);
-  const maxWidth = itemStride * maxVisibleIcons + theme.spacing(0.5);
+  const scrollTrackSx = useMemo(() => ({
+    display: 'flex',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    gap,
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    touchAction: 'pan-x',
+    overscrollBehaviorX: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    cursor: enableDragScroll ? (isDragging ? 'grabbing' : 'grab') : 'auto',
+    userSelect: enableDragScroll ? 'none' : 'auto',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
+    minHeight: iconSize + 4,
+    '&::-webkit-scrollbar': { display: 'none' },
+  }), [gap, enableDragScroll, isDragging, iconSize]);
 
   const content = typeof children === 'function' ? children(guardClick) : children;
 
   return (
     <Box
       sx={{
-        display: 'flex',
-        alignItems: 'center',
-        flexShrink: 0,
-        maxWidth,
+        flex: 1,
         minWidth: 0,
-        borderRadius: 1,
-        border: edgeState.hasOverflow ? '1px solid' : 'none',
-        borderColor: 'divider',
-        overflow: 'hidden',
+        maxWidth: '100%',
         ...sx,
       }}
     >
-      {edgeState.hasOverflow && !edgeState.atStart && (
-        <EdgeArrowBar direction="left" theme={theme} onClick={() => scrollByStep(-1)} />
-      )}
-
-      <Box
-        ref={mergeScrollRef}
-        {...bind}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap,
-          flex: 1,
-          minWidth: 0,
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          py: 0.15,
-          px: edgeState.hasOverflow ? 0.25 : 0,
-          touchAction: 'pan-x',
-          overscrollBehaviorX: 'contain',
-          WebkitOverflowScrolling: 'touch',
-          cursor: isDragging ? 'grabbing' : 'grab',
-          userSelect: 'none',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
+      <HabitCarouselScrollTrack
+        itemCount={itemCount}
+        fadeColor={fadeColor || theme.palette.background.paper}
+        scrollTrackSx={scrollTrackSx}
+        enableDragScroll={enableDragScroll}
+        centerWhenFits={centerWhenFits}
+        bind={bind}
+        mergeScrollRef={(node) => {
+          scrollRef.current = node;
         }}
       >
         {content}
-      </Box>
-
-      {edgeState.hasOverflow && !edgeState.atEnd && (
-        <EdgeArrowBar direction="right" theme={theme} onClick={() => scrollByStep(1)} />
-      )}
+      </HabitCarouselScrollTrack>
     </Box>
   );
 }

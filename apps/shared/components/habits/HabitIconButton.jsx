@@ -4,6 +4,7 @@ import { HabitCounterBadge } from '../common/HabitCounterBadge';
 import { getCurrentTimeOfDay } from '../../utils/timeOfDayUtils';
 import { resolveHabitIconPresentation } from '../../habits/presentation';
 import { resolveHabitDisplayIcon } from '../../utils/habitOutlineIcons';
+import { isRutinaFuturePreview } from '../../utils/rutinaDayMode';
 import { getHabitIconButtonSx, getHabitIconTokens } from '../../styles/habitIconStyles';
 import { RUTINA_HABIT_ICON_SIZE } from '../../styles/rutinaIconTokens';
 
@@ -43,6 +44,7 @@ export default function HabitIconButton({
     plainPending: hideBorder,
     deferredPending,
     doneTone,
+    forcePlainPending: isRutinaFuturePreview(rutina),
   });
   const DisplayIcon = resolveHabitDisplayIcon(Icon, {
     iconName,

@@ -70,6 +70,7 @@ export function normalizeHabitIconDoneTone(doneTone) {
  * @param {string|null} [opts.carouselSlot]
  * @param {boolean} [opts.isScheduled]
  * @param {boolean} [opts.preferOutlineWhenPending] — false solo en carrusel de Tareas
+ * @param {boolean} [opts.forcePlainPending] — preview futuro: outline plano sin borde para todos
  * @param {'today'|'before'|null} [opts.doneTone]
  * @returns {{
  *   outline: boolean,
@@ -85,6 +86,7 @@ export function resolveHabitIconPresentation({
   carouselSlot = null,
   isScheduled = true,
   preferOutlineWhenPending = true,
+  forcePlainPending = false,
   doneTone = null,
 } = {}) {
   const normalizedDoneTone = normalizeHabitIconDoneTone(doneTone);
@@ -100,6 +102,15 @@ export function resolveHabitIconPresentation({
       hideBorder: true,
       variant: isBefore ? 'completedBefore' : 'completedToday',
       doneTone: resolvedDoneTone,
+    };
+  }
+
+  if (forcePlainPending) {
+    return {
+      outline: Boolean(preferOutlineWhenPending),
+      hideBorder: true,
+      variant: 'plainPending',
+      doneTone: null,
     };
   }
 

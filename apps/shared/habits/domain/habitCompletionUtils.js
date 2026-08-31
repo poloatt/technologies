@@ -104,6 +104,22 @@ export function isHabitValueObject(itemValue) {
   return typeof itemValue === 'object' && itemValue !== null && !Array.isArray(itemValue);
 }
 
+/** ¿Marcado según las franjas configuradas (ignora claves huérfanas en el snapshot)? */
+export function isHabitMarkedCompleteForConfig(config = {}, itemValue) {
+  if (itemValue === undefined || itemValue === null || itemValue === false) return false;
+  if (typeof itemValue === 'boolean') return itemValue === true;
+
+  const horarios = normalizeHorarios(config.horarios);
+  if (isHabitValueObject(itemValue)) {
+    if (horarios.length > 0) {
+      return horarios.every((h) => itemValue[h] === true);
+    }
+    return isHabitFullyCompletedToday(itemValue, []);
+  }
+
+  return false;
+}
+
 /** ¿El hábito cuenta como completado hoy para historial / cuotas? */
 export function isHabitCompletedForHistorial(itemValue) {
   if (itemValue === undefined || itemValue === null || itemValue === false) return false;

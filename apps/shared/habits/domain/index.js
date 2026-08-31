@@ -18,6 +18,7 @@ export {
   isHabitValueObject,
   rutinaItemValuesDiffer,
   isHabitCompletedForHistorial,
+  isHabitMarkedCompleteForConfig,
   isHabitHorarioCompleted,
   isHabitFullyCompletedToday,
   isHabitPartiallyCompletedToday,
@@ -64,6 +65,19 @@ export {
   isCustomHabitSection,
 } from './resolveHabitSections.js';
 export { getRutinaPeriodStart, getRutinaPeriodEnd } from './rutinaPeriodBounds.js';
+
+export {
+  resolveActiveQuotaForDay,
+  resolveFlexibleQuotaForDay,
+  resolveDayLinkedQuota,
+  mergeHistorialUpToDate,
+  buildPreviewRutinaForDate,
+  resolveEffectiveRutinaView,
+  getHistorialDatesForItem,
+  isEntryDayLinked,
+  shouldHideNotTodayBucket,
+  shouldHideFlexibleLuegoProjections,
+} from './resolveRutinaDayView.js';
 
 export {
   ROUTINE_CHIP_LABEL,

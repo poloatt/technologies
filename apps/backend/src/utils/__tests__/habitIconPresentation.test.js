@@ -74,6 +74,26 @@ describe('resolveHabitIconPresentation', () => {
     assert.equal(p.outline, false);
     assert.equal(p.variant, 'activePending');
   });
+
+  it('preview futuro: fuerza plainPending aunque el slot sea luego o activo', () => {
+    const active = resolveHabitIconPresentation({
+      isCompleted: false,
+      carouselSlot: 'ahora',
+      forcePlainPending: true,
+    });
+    assert.equal(active.variant, 'plainPending');
+    assert.equal(active.hideBorder, true);
+    assert.equal(active.outline, true);
+
+    const deferred = resolveHabitIconPresentation({
+      isCompleted: false,
+      carouselSlot: 'luego',
+      deferredPending: true,
+      forcePlainPending: true,
+    });
+    assert.equal(deferred.variant, 'plainPending');
+    assert.equal(deferred.hideBorder, true);
+  });
 });
 
 describe('resolveHabitBadgeChrome', () => {

@@ -34,7 +34,10 @@ import {
   resolveActiveDailyFranja,
 } from '@shared/habits';
 import { RoutineStackRow } from '@shared/components/habits/routines';
+import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
+import { shouldUseHabitRowIconCarousel } from '@shared/components/habits/habitRowCarouselUtils';
 import { rutinaStackCellCompactSx } from '@shared/styles/rutinaPageStyles';
+import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 import { useRutinas } from '@shared/context';
 
@@ -286,6 +289,7 @@ function StaticHabitRow({
         hideIconBorder={hideIconBorder}
         deferredPending={deferredPending}
         quotaSlot={entry.quotaSlot ?? null}
+        rutina={rutina}
       />
     </Box>
   );
@@ -311,6 +315,10 @@ function HabitRows({
   const { isMobileOrTablet } = useResponsive();
   const effectiveStackVariant = stackVariant;
   const shouldShareRows = isMobileOrTablet && !sortable;
+  const compactIconSize = getHabitIconTokens({
+    mobile: isMobileOrTablet,
+    compact: effectiveStackVariant === 'compact',
+  }).size;
 
   const displayRows = useMemo(() => groupEntriesIntoDisplayRows(items), [items]);
   const layoutRows = useMemo(
@@ -369,6 +377,31 @@ function HabitRows({
   return layoutRows.map((row, rowIndex) => {
     if (row.kind === 'compact') {
       const shareKey = rowKeyPrefix ? `${rowKeyPrefix}-share-${rowIndex}` : `share-${rowIndex}`;
+      const useCompactCarousel = shouldUseHabitRowIconCarousel({
+        mobile: isMobileOrTablet,
+        itemCount: row.entries.length,
+      });
+      const compactCells = row.entries.map((entry) => (
+        <StaticHabitRow
+          key={`${resolveEntrySection(entry, section)}-${entry.itemId}`}
+          entry={entry}
+          section={section}
+          rutina={rutina}
+          habits={habits}
+          readOnly={readOnly}
+          onItemClick={onItemClick}
+          localData={localData}
+          localDataBySection={localDataBySection}
+          multiSection={multiSection}
+          stackCell
+          hideMeta
+          stackVariant={effectiveStackVariant}
+          allowPostpone={allowPostpone}
+          onPostpone={onPostpone}
+          deferredPending={deferredPending}
+        />
+      ));
+
       return (
         <RoutineStackRow
           key={shareKey}
@@ -376,26 +409,15 @@ function HabitRows({
           rowKeyPrefix={rowKeyPrefix}
           variant="compact"
         >
-          {row.entries.map((entry) => (
-            <StaticHabitRow
-              key={`${resolveEntrySection(entry, section)}-${entry.itemId}`}
-              entry={entry}
-              section={section}
-              rutina={rutina}
-              habits={habits}
-              readOnly={readOnly}
-              onItemClick={onItemClick}
-              localData={localData}
-              localDataBySection={localDataBySection}
-              multiSection={multiSection}
-              stackCell
-              hideMeta
-              stackVariant={effectiveStackVariant}
-              allowPostpone={allowPostpone}
-              onPostpone={onPostpone}
-              deferredPending={deferredPending}
-            />
-          ))}
+          {useCompactCarousel ? (
+            <HabitIconScrollRow
+              itemCount={row.entries.length}
+              iconSize={compactIconSize}
+              sx={{ width: '100%' }}
+            >
+              {() => compactCells}
+            </HabitIconScrollRow>
+          ) : compactCells}
         </RoutineStackRow>
       );
     }
@@ -479,9 +501,12 @@ export default function RutinaDayGroupList({
   rowKeyPrefix = '',
   hideDone = false,
   hideGroupHeadings = false,
+  hideNotToday = false,
   stackVariant = 'inline',
   showSectionCounts = false,
   expandableCarousels = false,
+  /** Claves iniciales expandidas en secciones con carrusel colapsable (p. ej. `['today']`). */
+  defaultExpandedCarouselKeys = [],
   doneHeadingLabel,
   doneTodayLabel,
   doneBeforeLabel,
@@ -491,7 +516,9 @@ export default function RutinaDayGroupList({
   const { isMobileOrTablet } = useResponsive();
   const { postponeHabitFranja } = useRutinas();
   const effectiveStackVariant = stackVariant;
-  const [expandedCarouselSections, setExpandedCarouselSections] = useState(() => new Set());
+  const [expandedCarouselSections, setExpandedCarouselSections] = useState(
+    () => new Set(defaultExpandedCarouselKeys),
+  );
 
   const handlePostpone = useCallback(async (entrySection, itemId, franja) => {
     if (!rutina?._id || readOnly) return;
@@ -729,7 +756,31 @@ export default function RutinaDayGroupList({
           )
       )}
       {hasToday && (
-        todaySectionTitle ? (
+        shouldExpandCarousels && !useSectionFranjaLayout ? (
+          <ExpandableCarouselSection
+            sectionKey="today"
+            label={todaySectionTitle || RUTINA_DAY_GROUP_COPY.today}
+            items={today}
+            expandedSections={expandedCarouselSections}
+            onToggleExpand={toggleCarouselExpand}
+            showSectionCounts={shouldShowCounts}
+            franjaKey={activeFranja}
+            activeFranja={activeFranja}
+            rutina={rutina}
+            habitsPreferences={habitsPreferences}
+            readOnly={readOnly}
+            onCarouselToggle={handleCarouselToggle}
+            section={section}
+            habits={habits}
+            onItemClick={onItemClick}
+            localData={localData}
+            localDataBySection={localDataBySection}
+            multiSection={multiSection}
+            rowKeyPrefix={rowKeyPrefix}
+            stackVariant={effectiveStackVariant}
+            allowPostpone={false}
+          />
+        ) : todaySectionTitle ? (
           <CollapseSectionLabel
             title={todaySectionTitle}
             count={shouldShowCounts ? today.length : undefined}
@@ -775,7 +826,7 @@ export default function RutinaDayGroupList({
           </CollapseSectionLabel>
         )
       )}
-      {notToday.length > 0 && !useSectionFranjaLayout && (
+      {notToday.length > 0 && !useSectionFranjaLayout && !hideNotToday && (
         hideGroupHeadings ? (
           <HabitRows
             items={notToday}

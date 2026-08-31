@@ -8,8 +8,6 @@ import { useRutinas } from '@shared/context';
 import { useResponsive, useHabitItemContextMenu } from '@shared/hooks';
 import {
   isHabitHorarioCompleted,
-  formatHabitCadenceProgressLabel,
-  resolveHabitCompletadosEnPeriodo,
   canPostponeHabitFranja,
   resolvePostponeTargetFranja,
   getPostponeMenuLabel,
@@ -17,7 +15,7 @@ import {
   resolveRoutineDisplayName,
 } from '@shared/habits';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
-import { HABIT_PERIODIC_COPY } from '@shared/copy/agendaTerminology';
+import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
@@ -25,7 +23,7 @@ import {
   rutinaChecklistTextColumnSx,
   rutinaChecklistLabelSx,
   rutinaChecklistMetaSx,
-  rutinaRoutineChipSx,
+  rutinaRoutineChipPrimarySx,
   rutinaChecklistStackCellItemSx,
   rutinaChecklistStackCellRowSx,
   rutinaChecklistStackCellContentSx,
@@ -63,8 +61,10 @@ const ChecklistItem = ({
   hideIconBorder = false,
   deferredPending = false,
   quotaSlot = null,
+  rutina: rutinaProp = null,
 }) => {
-  const { rutina } = useRutinas();
+  const { rutina: contextRutina } = useRutinas();
+  const rutina = rutinaProp ?? contextRutina;
   const { isMobileOrTablet } = useResponsive();
   const { menuState, closeMenu, getRowHandlers } = useHabitItemContextMenu({
     enabled: allowPostpone && !readOnly,
@@ -77,31 +77,12 @@ const ChecklistItem = ({
     return isHabitHorarioCompleted(itemValue, horario);
   };
 
-  const secondaryText = useMemo(() => {
-    if (!config) return '';
-    if (isCadenciaDebt) return HABIT_PERIODIC_COPY.cadenciaDebt;
-
-    const completados = resolveHabitCompletadosEnPeriodo({
-      itemId,
-      section,
-      rutina,
-      config,
-      isCompleted,
-    });
-    const baseLabel = formatHabitCadenceProgressLabel(config, completados);
-    const tipo = (config.tipo || 'DIARIO').toUpperCase();
-    const isDaily = tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && config?.periodo === 'CADA_DIA');
-
-    if (!isDaily && isScheduled) {
-      return `Hoy · ${baseLabel}`;
-    }
-
-    return baseLabel;
-  }, [config, isCompleted, rutina, section, itemId, isCadenciaDebt, isScheduled]);
-
-  const showRoutineMeta = isEntryGroupedRoutineChain(chain) && !isCadenciaDebt;
-  const routineChipLabel = showRoutineMeta ? resolveRoutineDisplayName(chain) : '';
-  const showMetaRow = Boolean(config) && (!hideMeta || showRoutineMeta);
+  const hasRoutine = isEntryGroupedRoutineChain(chain) && !isCadenciaDebt;
+  const primaryText = hasRoutine
+    ? resolveRoutineDisplayName(chain)
+    : HABIT_CHAIN_COPY.noRoutine;
+  const secondaryText = habitLabel || itemId;
+  const showMetaRow = !hideMeta;
 
   const horariosConfig = useMemo(
     () => normalizeTimeOfDay(config?.horarios),
@@ -153,8 +134,6 @@ const ChecklistItem = ({
   });
 
   const renderHabitActionButtons = () => {
-    if (readOnly) return null;
-
     if (normalizedFocusHorario && normalizedFocusHorario !== 'GENERAL') {
       const franjaCompleted = isHorarioCompleted(normalizedFocusHorario);
       return (
@@ -303,43 +282,57 @@ const ChecklistItem = ({
               ...(stackCell ? rutinaChecklistStackCellTextSx : null),
             }}
           >
-            <Typography
-              variant="body2"
-              sx={{
-                ...rutinaChecklistLabelSx(isCompleted),
-                ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left', fontSize: '0.8125rem', width: '100%' } : null),
-              }}
+            <Box sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              width: '100%',
+            }}
             >
-              {habitLabel || itemId}
-            </Typography>
+              {hasRoutine ? (
+                <Chip
+                  size="small"
+                  label={primaryText}
+                  sx={{
+                    ...rutinaRoutineChipPrimarySx,
+                    ...(isCompleted ? {
+                      opacity: 0.55,
+                      '& .MuiChip-label': { textDecoration: 'line-through' },
+                    } : null),
+                  }}
+                />
+              ) : (
+                <Typography
+                  variant="body2"
+                  sx={{
+                    ...rutinaChecklistLabelSx(isCompleted),
+                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'right', fontSize: '0.8125rem', width: '100%' } : null),
+                  }}
+                >
+                  {primaryText}
+                </Typography>
+              )}
+            </Box>
             {showMetaRow && (
               <Box sx={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'flex-start',
+                justifyContent: 'flex-end',
                 gap: 0.5,
                 mt: stackCell ? 0.1 : 0.2,
                 flexWrap: 'wrap',
                 width: '100%',
               }}
               >
-                {showRoutineMeta ? (
-                  <Chip
-                    size="small"
-                    label={routineChipLabel}
-                    sx={rutinaRoutineChipSx}
-                  />
-                ) : (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      ...rutinaChecklistMetaSx,
-                      ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left' } : null),
-                    }}
-                  >
-                    {secondaryText}
-                  </Typography>
-                )}
+                <Typography
+                  variant="caption"
+                  sx={{
+                    ...rutinaChecklistMetaSx,
+                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'left' } : null),
+                  }}
+                >
+                  {secondaryText}
+                </Typography>
               </Box>
             )}
           </Box>
@@ -388,8 +381,11 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.deferredPending === nextProps.deferredPending &&
     prevProps.quotaSlot === nextProps.quotaSlot &&
     prevProps.allowPostpone === nextProps.allowPostpone &&
+    prevProps.habitLabel === nextProps.habitLabel &&
     prevProps.chain?.id === nextProps.chain?.id &&
     prevProps.chain?.label === nextProps.chain?.label &&
-    prevProps.chain?.stepCount === nextProps.chain?.stepCount
+    prevProps.chain?.stepCount === nextProps.chain?.stepCount &&
+    prevProps.rutina?.fecha === nextProps.rutina?.fecha &&
+    Boolean(prevProps.rutina?.isPreview) === Boolean(nextProps.rutina?.isPreview)
   );
 });

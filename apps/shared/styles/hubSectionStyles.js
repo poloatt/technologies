@@ -10,12 +10,16 @@ export function hubPageScrollSx({
   const compactViewport = isMobileOrTablet ?? isMobile;
   const viewportOffset = (compactViewport ? 180 : 190) + extraTopOffset;
   return {
+    flex: 1,
+    minHeight: 0,
     py: compactViewport ? 1 : 2,
     px: { xs: 1, sm: 2, md: 3 },
-    height: `calc(100vh - ${viewportOffset}px)`,
+    maxHeight: `calc(100vh - ${viewportOffset}px)`,
     overflowY: 'auto',
     overflowX: 'hidden',
-    pb: bottomPadding ?? (compactViewport ? 4 : 6),
+    // El clearance de bottom nav lo aplica Layout (mainBottomPadding); padding grande
+    // dentro de overflow:auto genera scrollHeight extra y barra vertical fantasma.
+    pb: bottomPadding ?? (compactViewport ? 1 : 2),
     '&::-webkit-scrollbar': {
       width: compactViewport ? '4px' : '8px',
     },

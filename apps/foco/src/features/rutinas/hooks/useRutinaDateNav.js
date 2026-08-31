@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import { startOfDay } from 'date-fns';
 import { useRutinas, useHabits } from '@shared/context';
+import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
 import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
-import { RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
+import { RUTINA_FUTURE_PREVIEW_COPY, RUTINA_HISTORICAL_COPY } from '@shared/copy/agendaTerminology';
 import {
   getRutinaCompletionStats,
   getRutinaDayMode,
   resolveRutinaNavigateTarget,
+  resolveEffectiveRutinaView,
 } from '@shared/habits';
 import { ensureRutinaForDate } from '../lib/ensureRutinaForDate';
 
@@ -23,7 +25,9 @@ export function useRutinaDateNav() {
     getRutinaById,
     fetchRutinas,
   } = useRutinas();
-  const { habits } = useHabits();
+  const { habits, customSections } = useHabits();
+  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
 
   const [datePickerAnchor, setDatePickerAnchor] = useState(null);
   const datePickerOpen = Boolean(datePickerAnchor);
@@ -108,20 +112,34 @@ export function useRutinaDateNav() {
     [currentDate],
   );
 
-  const completionStats = useMemo(
-    () => getRutinaCompletionStats(rutina, habits),
-    [rutina, habits],
+  const effectiveView = useMemo(
+    () => resolveEffectiveRutinaView({
+      rutina,
+      viewDate,
+      habits,
+      habitsPreferences: habitPrefs,
+      rutinas,
+      customSections,
+    }),
+    [rutina, viewDate, habits, habitPrefs, rutinas, customSections],
   );
 
-  const completionPercentage = rutina ? completionStats.percentage : 0;
+  const completionStats = useMemo(
+    () => getRutinaCompletionStats(effectiveView.rutina, habits, habitPrefs),
+    [effectiveView.rutina, habits, habitPrefs],
+  );
+
+  const completionPercentage = effectiveView.rutina ? completionStats.percentage : 0;
   const totalCompleted = completionStats.completed;
   const totalVisible = completionStats.total;
 
-  const completionTooltip = totalVisible > 0
-    ? (dayMode === 'historical'
-      ? RUTINA_HISTORICAL_COPY.completionTooltip(totalCompleted, totalVisible)
-      : `${totalCompleted}/${totalVisible} completados`)
-    : 'Sin ítems activos';
+  const completionTooltip = dayMode === 'future'
+    ? RUTINA_FUTURE_PREVIEW_COPY.completionTooltip
+    : (totalVisible > 0
+      ? (dayMode === 'historical'
+        ? RUTINA_HISTORICAL_COPY.completionTooltip(totalCompleted, totalVisible)
+        : `${totalCompleted}/${totalVisible} completados`)
+      : 'Sin ítems activos');
 
   const navHandlers = useMemo(() => ({
     onPrevious,

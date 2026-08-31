@@ -58,6 +58,14 @@ export const RUTINA_HISTORICAL_COPY = {
   completionTooltip: (done, total) => `${done}/${total} completados ese día`,
 };
 
+/** Preview de días futuros (sin registro persistido). */
+export const RUTINA_FUTURE_PREVIEW_COPY = {
+  badge: 'Futuro',
+  emptyTitle: 'Sin hábitos programados',
+  emptyBody: 'No hay hábitos vinculados a este día según tu configuración actual.',
+  completionTooltip: 'Vista previa — sin registro',
+};
+
 /** Configuración y runtime de rutinas. */
 export const HABIT_CHAIN_COPY = {
   sectionTitle: 'Rutinas',

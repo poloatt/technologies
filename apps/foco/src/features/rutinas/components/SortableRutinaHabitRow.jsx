@@ -74,6 +74,7 @@ export default function SortableRutinaHabitRow({
         hideIconBorder={hideIconBorder}
         deferredPending={deferredPending}
         quotaSlot={entry.quotaSlot ?? null}
+        rutina={rutina}
       />
     </Box>
   );

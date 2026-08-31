@@ -17,6 +17,8 @@ export default function RutinaCadenceBucketList({
   sortable = false,
   localDataBySection = {},
   useShortFranjaLabels = false,
+  hideNotToday = false,
+  hideDone = false,
 }) {
   if (bucketUsesFranjaLayout(bucket.id)) {
     return (
@@ -30,6 +32,7 @@ export default function RutinaCadenceBucketList({
         localDataBySection={localDataBySection}
         useShortFranjaLabels={useShortFranjaLabels}
         onReorderSection={onReorderSection}
+        hideNotToday={hideNotToday}
       />
     );
   }
@@ -67,6 +70,8 @@ export default function RutinaCadenceBucketList({
         onReorder={(habitIds) => onReorderSection?.(section, habitIds)}
         onItemClick={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
         onDoneToggle={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
+        hideNotToday={hideNotToday}
+        hideDone={hideDone}
       />
     );
   }
@@ -97,6 +102,8 @@ export default function RutinaCadenceBucketList({
           onReorder={(habitIds) => onReorderSection?.(section, habitIds)}
           onItemClick={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
           onDoneToggle={(itemId, event, horario) => onItemClick(section, itemId, event, horario)}
+          hideNotToday={hideNotToday}
+          hideDone={hideDone}
         />
       </Box>
     );

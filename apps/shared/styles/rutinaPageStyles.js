@@ -273,7 +273,7 @@ export function rutinaChecklistIconColumnSx({ compact = false, mobile = false, f
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'flex-start',
-      flex: '1 1 auto',
+      flex: '1 1 0',
       minWidth: 0,
       maxWidth: '100%',
       gap,
@@ -313,11 +313,15 @@ export const rutinaChecklistContentSx = {
 export const rutinaChecklistTextColumnSx = {
   display: 'flex',
   flexDirection: 'column',
-  alignItems: 'flex-start',
+  alignItems: 'flex-end',
   justifyContent: 'center',
   minWidth: 0,
-  flex: 1,
+  flex: '0 1 auto',
+  flexShrink: 0,
+  maxWidth: '46%',
+  marginLeft: 'auto',
   overflow: 'hidden',
+  textAlign: 'right',
 };
 
 export function rutinaChecklistLabelSx(isCompleted) {
@@ -329,8 +333,8 @@ export function rutinaChecklistLabelSx(isCompleted) {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    flex: 1,
-    minWidth: 0,
+    maxWidth: '100%',
+    textAlign: 'right',
   };
 }
 
@@ -340,6 +344,8 @@ export const rutinaChecklistMetaSx = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  maxWidth: '100%',
+  textAlign: 'right',
 };
 
 export const rutinaChainRowWrapSx = {
@@ -497,7 +503,8 @@ export const rutinaRoutineChipSx = {
   fontSize: '0.65rem',
   height: 18,
   mt: 0.25,
-  alignSelf: 'flex-start',
+  alignSelf: 'flex-end',
+  maxWidth: '100%',
 };
 
 /** Chip de rutina como etiqueta principal (sin meta secundaria). */
