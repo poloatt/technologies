@@ -4,7 +4,7 @@ import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
 import { startOfDay } from 'date-fns';
 import { getNormalizedToday, toISODateString, parseAPIDate, formatDateForAPI } from '../utils/dateUtils';
-import { resolveHabitConfigApplyFrom, getRutinaDayMode, buildHistoricalFranjaMigrationPayload, buildPostponedFranjasUpdate } from '@shared/habits';
+import { resolveHabitConfigApplyFrom, getRutinaDayMode, buildHistoricalFranjaMigrationPayload, buildHabitDeferralUpdate, HABIT_DEFERRAL_ACTION, buildDeferralPayload } from '@shared/habits';
 import { getCachedHabitsPreferences, fetchHabitsPreferencesFromApi } from '../hooks/useHabitsPreferences.js';
 import rutinasService from '../services/rutinasService';
 import { UISettingsContext } from './UISettingsContext';
@@ -556,17 +556,20 @@ export const RutinasProvider = ({ children }) => {
     }
   }, [rutinas, rutina, enqueueSnackbar, patchRutinaSection, undoScope, undoRecorder]);
 
-  const postponeHabitFranja = useCallback(async (rutinaId, section, itemId, franja) => {
-    if (!rutinaId || !section || !itemId || !franja) return null;
+  const deferHabitItem = useCallback(async (rutinaId, section, itemId, action, options = {}) => {
+    if (!rutinaId || !section || !itemId || !action) return null;
 
     const rutinaBefore = rutinas.find((r) => r._id === rutinaId)
       || (rutina?._id === rutinaId ? rutina : null);
     if (!rutinaBefore) return null;
 
-    const postponedFranjas = buildPostponedFranjasUpdate(rutinaBefore, section, itemId, franja);
+    const payload = buildDeferralPayload(action, options);
+    if (!payload) return null;
+
+    const habitDeferrals = buildHabitDeferralUpdate(rutinaBefore, section, itemId, payload);
 
     try {
-      const response = await rutinasService.updateRutina(rutinaId, { postponedFranjas });
+      const response = await rutinasService.updateRutina(rutinaId, { habitDeferrals });
 
       if (response && typeof response === 'object') {
         setRutinas((prevList) => {
@@ -579,12 +582,12 @@ export const RutinasProvider = ({ children }) => {
       } else {
         setRutina((prev) => {
           if (!prev || prev._id !== rutinaId) return prev;
-          return { ...prev, postponedFranjas };
+          return { ...prev, habitDeferrals };
         });
         setRutinas((prevList) => {
           if (!Array.isArray(prevList)) return prevList;
           const updated = prevList.map((r) => (
-            r && r._id === rutinaId ? { ...r, postponedFranjas } : r
+            r && r._id === rutinaId ? { ...r, habitDeferrals } : r
           ));
           const { rutinasWithHist } = attachHistorial(updated);
           syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
@@ -594,11 +597,16 @@ export const RutinasProvider = ({ children }) => {
 
       return response;
     } catch (error) {
-      console.error('[RutinasContext] Error al posponer hábito:', error);
-      enqueueSnackbar('No se pudo posponer el hábito', { variant: 'error' });
+      console.error('[RutinasContext] Error al aplazar hábito:', error);
+      enqueueSnackbar('No se pudo actualizar el hábito', { variant: 'error' });
       throw error;
     }
   }, [rutinas, rutina, enqueueSnackbar]);
+
+  /** @deprecated use deferHabitItem with HABIT_DEFERRAL_ACTION.POSTPONE */
+  const postponeHabitFranja = useCallback(async (rutinaId, section, itemId, franja) => {
+    return deferHabitItem(rutinaId, section, itemId, HABIT_DEFERRAL_ACTION.IGNORE, { franja });
+  }, [deferHabitItem]);
 
   // Parche local de config para un ítem (refresca SOLO lo necesario sin recargar toda la página)
   const patchRutinaItemConfig = useCallback((rutinaId, section, itemId, nextConfig) => {
@@ -912,6 +920,7 @@ export const RutinasProvider = ({ children }) => {
     fetchRutinas,
     getRutinaById,
     markItemComplete,
+    deferHabitItem,
     postponeHabitFranja,
     handlePrevious,
     handleNext,
@@ -934,6 +943,7 @@ export const RutinasProvider = ({ children }) => {
     fetchRutinas,
     getRutinaById,
     markItemComplete,
+    deferHabitItem,
     postponeHabitFranja,
     handlePrevious,
     handleNext,

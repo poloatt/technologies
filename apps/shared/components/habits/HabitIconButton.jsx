@@ -34,6 +34,8 @@ export default function HabitIconButton({
   quotaSlot = null,
   /** Franjas completadas en Hecho histórico multi-franja (un icono, varias insignias). */
   completedHorarios = null,
+  /** Menú posponer: clic derecho / long-press en el icono. */
+  postponeHandlers = null,
   ...props
 }) {
   const timeOfDay = currentTimeOfDay || getCurrentTimeOfDay();
@@ -83,14 +85,39 @@ export default function HabitIconButton({
         })}
         {...props}
         onClick={(event) => {
+          if (postponeHandlers?.onClick) {
+            postponeHandlers.onClick(event);
+            if (event.defaultPrevented) return;
+          }
           event.stopPropagation();
           onClick?.(event);
         }}
         onPointerDown={(event) => {
+          postponeHandlers?.onPointerDown?.(event);
           event.stopPropagation();
           props.onPointerDown?.(event);
         }}
+        onPointerUp={(event) => {
+          postponeHandlers?.onPointerUp?.(event);
+          props.onPointerUp?.(event);
+        }}
+        onPointerMove={(event) => {
+          postponeHandlers?.onPointerMove?.(event);
+          props.onPointerMove?.(event);
+        }}
+        onPointerCancel={(event) => {
+          postponeHandlers?.onPointerCancel?.(event);
+          props.onPointerCancel?.(event);
+        }}
+        onPointerLeave={(event) => {
+          postponeHandlers?.onPointerLeave?.(event);
+          props.onPointerLeave?.(event);
+        }}
         onContextMenu={(event) => {
+          if (postponeHandlers?.onContextMenu) {
+            postponeHandlers.onContextMenu(event);
+            return;
+          }
           event.stopPropagation();
           props.onContextMenu?.(event);
         }}

@@ -1,10 +1,14 @@
 import {
   buildPostponedFranjasUpdate,
   canPostponeHabitFranja,
+  canDeferHabit,
+  isOverdueDailyFranja,
   getPostponeMenuLabel,
   isFranjaPostponed,
   resolvePostponeTargetFranja,
 } from '@shared/habits';
+import { formatDateForAPI, getNormalizedToday } from '@shared/utils/dateUtils';
+import { VALID_TIME_OF_DAY, getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
 
 describe('rutinaPostponeUtils', () => {
   const rutina = {
@@ -58,5 +62,33 @@ describe('rutinaPostponeUtils', () => {
       currentTimeOfDay: 'MAÑANA',
       allowPostpone: true,
     })).toBe(true);
+  });
+
+  it('canDeferHabit stays true when another franja is already done today', () => {
+    expect(canDeferHabit({
+      rutina: {
+        ...rutina,
+        fecha: formatDateForAPI(getNormalizedToday()),
+        bodyCare: { shower: { MAÑANA: false, TARDE: true } },
+      },
+      section: 'bodyCare',
+      itemId: 'shower',
+      config: rutina.config.bodyCare.shower,
+      itemValue: { MAÑANA: false, TARDE: true },
+      focusHorario: 'MAÑANA',
+      allowPostpone: true,
+    })).toBe(true);
+  });
+
+  it('isOverdueDailyFranja marks earlier slots as overdue today', () => {
+    const rutina = { fecha: formatDateForAPI(getNormalizedToday()) };
+    const config = { tipo: 'DIARIO', horarios: ['MAÑANA', 'TARDE', 'NOCHE'] };
+    const activeIdx = VALID_TIME_OF_DAY.indexOf(getCurrentTimeOfDay());
+
+    VALID_TIME_OF_DAY.forEach((franja, idx) => {
+      expect(isOverdueDailyFranja(rutina, config, franja)).toBe(
+        idx < activeIdx,
+      );
+    });
   });
 });

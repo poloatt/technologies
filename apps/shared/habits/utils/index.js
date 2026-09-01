@@ -108,12 +108,25 @@ export {
 } from '../desktop/rutinaCadenceUtils.js';
 
 export {
+  HABIT_DEFERRAL_ACTION,
   getPostponedFranjasForItem,
   isFranjaPostponed,
   buildPostponedFranjasUpdate,
+  getHabitDeferral,
+  buildHabitDeferralUpdate,
+  resolveActivePushUntil,
+  isHabitHiddenByDeferral,
+  resolvePostponeTargetDay,
+  resolvePushTargetDay,
   resolvePostponeTargetFranja,
+  canDeferHabit,
   canPostponeHabitFranja,
+  getPostponeActionLabel,
+  getEmpujarActionLabel,
   getPostponeMenuLabel,
+  resolveHabitDeferralMenuOptions,
+  buildDeferralPayload,
+  isOverdueDailyFranja,
 } from './rutinaPostponeUtils.js';
 
 export {

@@ -6,13 +6,17 @@ import {
   ListItemText,
 } from '@mui/material';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
+import FastForwardOutlinedIcon from '@mui/icons-material/FastForwardOutlined';
 
 export default function HabitItemPostponeMenu({
   open,
   anchorPosition,
   postponeLabel,
+  empujarLabel,
   onClose,
   onPostpone,
+  onEmpujar,
+  onIgnoreToday,
 }) {
   return (
     <Menu
@@ -30,11 +34,32 @@ export default function HabitItemPostponeMenu({
           onPostpone?.();
           onClose?.();
         }}
+        disabled={!postponeLabel}
       >
         <ListItemIcon>
           <ScheduleOutlinedIcon fontSize="small" />
         </ListItemIcon>
-        <ListItemText>{postponeLabel}</ListItemText>
+        <ListItemText>{postponeLabel || 'Posponer'}</ListItemText>
+      </MenuItem>
+      <MenuItem
+        onClick={() => {
+          onEmpujar?.();
+          onClose?.();
+        }}
+        disabled={!empujarLabel}
+      >
+        <ListItemIcon>
+          <FastForwardOutlinedIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>{empujarLabel || 'Empujar'}</ListItemText>
+      </MenuItem>
+      <MenuItem
+        onClick={() => {
+          onIgnoreToday?.();
+          onClose?.();
+        }}
+      >
+        <ListItemText inset>Ignorar por hoy</ListItemText>
       </MenuItem>
     </Menu>
   );

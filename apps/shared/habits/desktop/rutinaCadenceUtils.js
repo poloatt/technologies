@@ -21,7 +21,7 @@ import { isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
 import { DAILY_CADENCE_SECTION_COPY, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
-import { isFranjaPostponed } from '../utils/rutinaPostponeUtils.js';
+import { isHabitHiddenByDeferral } from '../utils/rutinaPostponeUtils.js';
 import { getPeriodicCarouselMode, isFlexiblePeriodic, resolveFlexiblePeriodicPlan } from '../engine/habitVisibilityEngine.js';
 
 /** Lunes → Domingo. */
@@ -287,7 +287,7 @@ export function resolveGroupViewActiveFranjaLabel(activeFranja, rutina) {
   return DAILY_CADENCE_SECTION_COPY.ahora;
 }
 
-function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
+function splitTodayEntryByFranja(entry, activeFranja, rutina = null, allRutinas = []) {
   const { config, itemValue, section, itemId } = entry;
   const activeIdx = VALID_TIME_OF_DAY.indexOf(activeFranja);
   const sinHacer = [];
@@ -295,6 +295,9 @@ function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
   const luego = [];
 
   if (!isDailyCadenceConfig(config)) {
+    if (isHabitHiddenByDeferral({ rutina, section, itemId, allRutinas })) {
+      return { sinHacer, ahora, luego };
+    }
     const mode = getPeriodicCarouselMode(config, rutina, section, itemId, activeFranja);
     if (mode === 'ahora') {
       const plan = isFlexiblePeriodic(config)
@@ -312,13 +315,13 @@ function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
 
   resolveEntryDailyFranjas(config, activeFranja).forEach((franjaKey) => {
     if (isHabitHorarioCompleted(itemValue, franjaKey)) return;
+    if (isHabitHiddenByDeferral({ rutina, section, itemId, franja: franjaKey, allRutinas })) {
+      return;
+    }
 
     const franjaIdx = VALID_TIME_OF_DAY.indexOf(franjaKey);
-    const postponed = rutina && isFranjaPostponed(rutina, section, itemId, franjaKey);
     let franjaScheduleSlot = 'luego';
-    if (postponed) {
-      franjaScheduleSlot = 'luego';
-    } else if (franjaIdx < activeIdx) {
+    if (franjaIdx < activeIdx) {
       franjaScheduleSlot = 'sinHacer';
     } else if (franjaIdx === activeIdx) {
       franjaScheduleSlot = 'ahora';
@@ -326,7 +329,7 @@ function splitTodayEntryByFranja(entry, activeFranja, rutina = null) {
 
     const enriched = { ...entry, franjaKey, franjaScheduleSlot };
 
-    if (postponed || franjaScheduleSlot === 'luego') {
+    if (franjaScheduleSlot === 'luego') {
       luego.push(enriched);
       return;
     }
@@ -375,7 +378,7 @@ function sortMultiSectionCadenceEntries(entries = []) {
  * Hoy: franjas atrasadas + franja activa se fusionan en «Ahora» (una sola lista, stacks por rutina).
  * Luego: franjas futuras (y periódicos luego).
  */
-export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
+export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutinas = []) {
   const today = bucket?.today || [];
   const done = bucket?.done || [];
   const notToday = bucket?.notToday || [];
@@ -398,7 +401,7 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
   const luego = [];
 
   today.forEach((entry) => {
-    const split = splitTodayEntryByFranja(entry, activeFranja, rutina);
+    const split = splitTodayEntryByFranja(entry, activeFranja, rutina, allRutinas);
     sinHacer.push(...split.sinHacer);
     ahora.push(...split.ahora);
     luego.push(...split.luego);
@@ -427,7 +430,7 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina) {
  */
 export function groupSectionHabitsByFranjaSchedule(params) {
   const grouped = groupSectionHabitsByDaySchedule(params);
-  const { rutina, section, habits = null } = params;
+  const { rutina, section, habits = null, allRutinas = [] } = params;
   const sortOpts = { section, habits };
 
   if (!isViewingRutinaToday(rutina)) {
@@ -447,7 +450,7 @@ export function groupSectionHabitsByFranjaSchedule(params) {
   const luego = [];
 
   grouped.today.forEach((entry) => {
-    const split = splitTodayEntryByFranja(entry, activeFranja, rutina);
+    const split = splitTodayEntryByFranja(entry, activeFranja, rutina, allRutinas);
     sinHacer.push(...split.sinHacer);
     ahora.push(...split.ahora);
     luego.push(...split.luego);

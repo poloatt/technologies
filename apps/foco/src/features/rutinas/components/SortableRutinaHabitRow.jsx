@@ -15,6 +15,7 @@ export default function SortableRutinaHabitRow({
   multiSection = false,
   stackVariant = 'inline',
   allowPostpone = false,
+  onDefer,
   onPostpone,
   deferredPending = false,
 }) {
@@ -80,6 +81,7 @@ export default function SortableRutinaHabitRow({
         chain={entry.chain}
         focusHorario={focusHorario}
         allowPostpone={allowPostpone}
+        onDefer={onDefer}
         onPostpone={onPostpone}
         hideIconBorder={hideIconBorder}
         deferredPending={deferredPending}

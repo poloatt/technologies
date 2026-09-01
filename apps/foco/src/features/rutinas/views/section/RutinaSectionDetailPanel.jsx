@@ -30,7 +30,7 @@ export default function RutinaSectionDetailPanel({
   readOnly = false,
 }) {
   const { reorderHabits } = useHabits();
-  const { markItemComplete, patchRutinaSection } = useRutinas();
+  const { markItemComplete, patchRutinaSection, rutinas } = useRutinas();
   const { habitChains, prefsReady } = useHabitsPreferences();
   const sectionData = rutina?.[section] || {};
   const [localData, setLocalData] = useRutinaSectionLocalData(section, sectionData, rutina);
@@ -71,8 +71,9 @@ export default function RutinaSectionDetailPanel({
       habitChains: prefsReady ? habitChains : [],
       iconsMap: habitIconsMap,
       localData,
+      allRutinas: rutinas,
     }),
-    [section, rutina, habits, habitsPreferences, habitChains, prefsReady, habitIconsMap, localData],
+    [section, rutina, rutinas, habits, habitsPreferences, habitChains, prefsReady, habitIconsMap, localData],
   );
 
   const {

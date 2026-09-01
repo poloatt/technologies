@@ -7,6 +7,7 @@ import {
   getCollapseSectionCarouselBodySx,
 } from '@shared/styles/collapseSectionStyles';
 import useResponsive from '@shared/hooks/useResponsive';
+import { useRutinas } from '@shared/context';
 
 import {
   groupDailyCadenceByFranja,
@@ -52,6 +53,7 @@ export default function RutinaDailyCadenceFranjaLayout({
   luegoWeekdayGroups = [],
   hideNotToday = false,
 }) {
+  const { rutinas } = useRutinas();
   const { isMobileOrTablet } = useResponsive();
   const isViewingToday = useMemo(() => isViewingRutinaToday(rutina), [rutina]);
   const isHistorical = useMemo(
@@ -79,8 +81,8 @@ export default function RutinaDailyCadenceFranjaLayout({
   }, []);
 
   const franjaSchedule = useMemo(
-    () => groupDailyCadenceBucketByFranjaSchedule(bucket, rutina),
-    [bucket, rutina],
+    () => groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, rutinas),
+    [bucket, rutina, rutinas],
   );
 
   const franjaGroups = useMemo(

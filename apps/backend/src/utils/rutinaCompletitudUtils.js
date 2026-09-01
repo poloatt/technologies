@@ -36,6 +36,10 @@ export function buildRutinaUpdateSetOps(patches, body, currentRutina) {
     $set.postponedFranjas = toPlainValue(body.postponedFranjas);
   }
 
+  if (body.habitDeferrals && typeof body.habitDeferrals === 'object') {
+    $set.habitDeferrals = toPlainValue(body.habitDeferrals);
+  }
+
   return $set;
 }
 

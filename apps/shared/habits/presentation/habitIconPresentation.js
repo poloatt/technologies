@@ -3,15 +3,17 @@
  * Rutinas y otros consumidores solo aplican este contrato; no redefinen estilos.
  *
  * Pendientes:
- * - Franja/slot activo → outline + borde circular (invitar a marcar).
- * - Franja anterior (sinHacer) → outline plano.
+ * - Franja/slot activo (Ahora) → outline plano, sin borde circular.
+ * - Franja anterior (sinHacer) → outline plano, brillo más bajo.
  * - Luego / diferido → outline plano con menos brillo (no tienta el click).
  *
  * Hechos:
  * - Icono principal: filled plano (sin borde circular).
  * - Insignia de franja horaria: outline (sol/atardecer/luna), no filled.
  * - Hecho hoy → brillo pleno; hecho antes → brillo más sutil.
- * - Multi-franja completado: MAÑANA izquierda, TARDE centro, NOCHE derecha (bajo el icono).
+ * - Cuota diaria cubierta → sin insignias de franja (solo icono filled).
+ * - Una franja pendiente o hecha → insignia a la derecha, sobre el icono.
+ * - Varias franjas hechas (parcial): MAÑANA izq, TARDE centro, NOCHE der, sobre el icono.
  */
 
 /** Slots de carrusel: pendiente plano sin borde (sinHacer u overdue visible). */
@@ -131,7 +133,7 @@ export function resolveHabitIconPresentation({
 
   return {
     outline: Boolean(preferOutlineWhenPending),
-    hideBorder: isPlain,
+    hideBorder: true,
     variant: isPlain ? 'plainPending' : 'activePending',
     doneTone: null,
   };

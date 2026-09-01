@@ -264,8 +264,8 @@ export function getRutinaChecklistIconColumnWidth({
   return iconSize * maxIcons + gapPx * Math.max(0, maxIcons - 1);
 }
 
-/** Espacio extra bajo iconos para insignias de franja (HabitCounterBadge). */
-const RUTINA_FRANJA_STRIP_RESERVE_PX = 14;
+/** Reserva mínima bajo iconos con overlay de franja (HabitCounterBadge). */
+const RUTINA_FRANJA_STRIP_RESERVE_PX = 4;
 
 export function rutinaChecklistIconColumnSx({ compact = false, mobile = false, fluid = false } = {}) {
   const gap = compact ? 0.15 : 0.25;

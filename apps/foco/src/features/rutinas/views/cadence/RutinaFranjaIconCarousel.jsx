@@ -56,6 +56,9 @@ export default function RutinaFranjaIconCarousel({
   readOnly = false,
   onToggle,
   centerWhenFits: centerWhenFitsProp,
+  allowPostpone = false,
+  onDefer = null,
+  onPostpone = null,
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
@@ -142,6 +145,9 @@ export default function RutinaFranjaIconCarousel({
           size={size}
           iconFontSize={iconFontSize}
           onToggle={handleToggle}
+          allowPostpone={allowPostpone}
+          onDefer={onDefer}
+          onPostpone={onPostpone}
         />
       </Box>
     );
@@ -157,6 +163,9 @@ export default function RutinaFranjaIconCarousel({
     rutina,
     size,
     handleToggle,
+    allowPostpone,
+    onDefer,
+    onPostpone,
   ]);
 
   if (!displayRows.length) return null;

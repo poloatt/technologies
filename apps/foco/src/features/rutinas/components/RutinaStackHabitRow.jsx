@@ -12,7 +12,12 @@ import {
   isEntryFranjaSinHacer,
   resolveRutinaStackScheduleLegend,
   resolveHistoricalDoneFranjaBadges,
+  resolveHabitDeferralMenuOptions,
+  canDeferHabit,
+  HABIT_DEFERRAL_ACTION,
+  isHabitHiddenByDeferral,
 } from '@shared/habits';
+import { useRutinas } from '@shared/context';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
@@ -25,8 +30,9 @@ import {
 } from '@shared/styles/rutinaPageStyles';
 import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
-import { useResponsive } from '@shared/hooks';
+import { useResponsive, useHabitItemContextMenu } from '@shared/hooks';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
+import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HabitIconButton } from './ChecklistItem';
 
 const DRAG_HANDLE_INNER_SX = {
@@ -72,8 +78,15 @@ export default function RutinaStackHabitRow({
   dragHandleAttributes = null,
   dragHandleListeners = null,
   deferredPending = false,
+  allowPostpone = false,
+  onDefer = null,
+  onPostpone = null,
 }) {
+  const { rutinas } = useRutinas();
   const { isMobileOrTablet } = useResponsive();
+  const { menuState, closeMenu, getPostponeHandlers } = useHabitItemContextMenu({
+    enabled: allowPostpone && !readOnly,
+  });
   const isCompact = stackVariant === 'compact';
   const iconTokens = getHabitIconTokens({ mobile: isMobileOrTablet, compact: isCompact });
   const iconSize = iconTokens.size;
@@ -89,15 +102,37 @@ export default function RutinaStackHabitRow({
     [entries, rutina, section, localData, localDataBySection],
   );
 
-  const hasNestedFranjaScroll = useMemo(
-    () => entries.some(entryHasMultipleFranjas),
-    [entries],
+  const visibleEntries = useMemo(
+    () => entries.filter((entry) => {
+      const entrySection = resolveEntrySection(entry, section);
+      const focusHorario = resolveEntryFocusHorario(entry);
+      const horariosConfig = normalizeTimeOfDay(entry.config?.horarios);
+      const normalizedFocusHorario = focusHorario
+        ? String(focusHorario).toUpperCase()
+        : null;
+      const singleDisplayHorario = normalizedFocusHorario
+        || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
+      const postponeFranja = normalizedFocusHorario || singleDisplayHorario || getCurrentTimeOfDay();
+      return !isHabitHiddenByDeferral({
+        rutina,
+        section: entrySection,
+        itemId: entry.itemId,
+        franja: postponeFranja,
+        allRutinas: rutinas,
+      });
+    }),
+    [entries, section, rutina, rutinas],
   );
-  const isMultiIconStack = entries.length >= 2;
+
+  const hasNestedFranjaScroll = useMemo(
+    () => visibleEntries.some(entryHasMultipleFranjas),
+    [visibleEntries],
+  );
+  const isMultiIconStack = visibleEntries.length >= 2;
   const useStackIconCarousel = isMultiIconStack && !hasNestedFranjaScroll;
   const useFluidIconColumn = isMultiIconStack;
 
-  const allCompleted = entries.every((entry) => {
+  const allCompleted = visibleEntries.every((entry) => {
     const entrySection = resolveEntrySection(entry, section);
     const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
     const focusHorario = resolveEntryFocusHorario(entry);
@@ -108,6 +143,65 @@ export default function RutinaStackHabitRow({
       ? isHabitHorarioCompleted(itemValue, focusHorario)
       : isHabitCompletedForHistorial(itemValue);
   });
+
+  if (!visibleEntries.length) return null;
+
+  const buildDeferMenuMeta = (entry, franjaFocus) => {
+    const entrySection = resolveEntrySection(entry, section);
+    const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
+    const itemValue = entryLocalData?.[entry.itemId] !== undefined
+      ? entryLocalData[entry.itemId]
+      : rutina?.[entrySection]?.[entry.itemId];
+    const franja = franjaFocus
+      ? String(franjaFocus).toUpperCase()
+      : getCurrentTimeOfDay();
+    const menuOptions = resolveHabitDeferralMenuOptions({
+      rutina,
+      section: entrySection,
+      itemId: entry.itemId,
+      config: entry.config,
+      itemValue,
+      focusHorario: franja,
+      readOnly,
+      allowPostpone,
+    });
+    return {
+      ...menuOptions,
+      menuOptions,
+      franja: menuOptions.franja || franja,
+    };
+  };
+
+  const buildPostponeHandlersForEntry = (entry, franjaFocus) => {
+    const entrySection = resolveEntrySection(entry, section);
+    const entryLocalData = resolveEntryLocalData(entry, section, localData, localDataBySection);
+    const itemValue = entryLocalData?.[entry.itemId] !== undefined
+      ? entryLocalData[entry.itemId]
+      : rutina?.[entrySection]?.[entry.itemId];
+    const franja = franjaFocus
+      ? String(franjaFocus).toUpperCase()
+      : getCurrentTimeOfDay();
+    if (!canDeferHabit({
+      rutina,
+      section: entrySection,
+      itemId: entry.itemId,
+      config: entry.config,
+      itemValue,
+      focusHorario: franja,
+      readOnly,
+      allowPostpone,
+    })) {
+      return null;
+    }
+    const postponeEntry = {
+      section: entrySection,
+      itemId: entry.itemId,
+      config: entry.config,
+      itemValue,
+      label: entry.label || entry.itemId,
+    };
+    return getPostponeHandlers(postponeEntry, () => buildDeferMenuMeta(entry, franjaFocus));
+  };
 
   const renderStackIcon = (entry, guardClick = null) => {
     const entrySection = resolveEntrySection(entry, section);
@@ -162,6 +256,9 @@ export default function RutinaStackHabitRow({
       quotaSlot: entry.quotaSlot ?? null,
     };
 
+    const postponeFranja = normalizedFocusHorario || singleDisplayHorario || getCurrentTimeOfDay();
+    const postponeHandlers = buildPostponeHandlersForEntry(entry, postponeFranja);
+
     if (hasMultipleFranjas) {
       if (completedFranjaBadges?.length) {
         return (
@@ -175,6 +272,7 @@ export default function RutinaStackHabitRow({
               if (!readOnly) handleClick(e, singleDisplayHorario);
             }}
             completedHorarios={completedFranjaBadges}
+            postponeHandlers={allowPostpone && !readOnly ? postponeHandlers : null}
             {...buttonProps}
           />
         );
@@ -189,6 +287,8 @@ export default function RutinaStackHabitRow({
           {(innerGuardClick) => horariosConfig.map((horario) => {
             const normalizedHorario = String(horario).toUpperCase();
             const franjaCompleted = isHabitHorarioCompleted(itemValue, normalizedHorario);
+            const horarioPostponeFranja = normalizedHorario;
+            const horarioHandlers = buildPostponeHandlersForEntry(entry, horarioPostponeFranja);
             return (
               <HabitIconButton
                 key={normalizedHorario}
@@ -200,6 +300,7 @@ export default function RutinaStackHabitRow({
                   if (!readOnly) handleClick(e, normalizedHorario);
                 }}
                 displayHorario={normalizedHorario}
+                postponeHandlers={allowPostpone && !readOnly ? horarioHandlers : null}
                 {...buttonProps}
               />
             );
@@ -219,6 +320,7 @@ export default function RutinaStackHabitRow({
           if (!readOnly) handleClick(e, singleDisplayHorario);
         }}
         displayHorario={singleDisplayHorario}
+        postponeHandlers={allowPostpone && !readOnly ? postponeHandlers : null}
         {...buttonProps}
       />
     );
@@ -226,14 +328,14 @@ export default function RutinaStackHabitRow({
 
   const iconColumnContent = useStackIconCarousel ? (
     <HabitIconScrollRow
-      itemCount={entries.length}
+      itemCount={visibleEntries.length}
       iconSize={iconSize}
       sx={{ mr: 0 }}
     >
-      {(guardClick) => entries.map((entry) => renderStackIcon(entry, guardClick))}
+      {(guardClick) => visibleEntries.map((entry) => renderStackIcon(entry, guardClick))}
     </HabitIconScrollRow>
   ) : (
-    entries.map((entry) => renderStackIcon(entry))
+    visibleEntries.map((entry) => renderStackIcon(entry))
   );
 
   return (
@@ -291,6 +393,43 @@ export default function RutinaStackHabitRow({
           </Box>
         </Box>
       </Box>
+      {(allowPostpone && !readOnly) && (
+        <HabitItemPostponeMenu
+          open={Boolean(menuState.open && menuState.entry)}
+          anchorPosition={menuState.anchorPosition}
+          postponeLabel={menuState.postponeLabel}
+          empujarLabel={menuState.empujarLabel}
+          onClose={closeMenu}
+          onPostpone={() => {
+            const entry = menuState.entry;
+            if (!entry || !menuState.canPostpone) return;
+            const defer = onDefer || onPostpone;
+            defer?.(entry.section, entry.itemId, HABIT_DEFERRAL_ACTION.POSTPONE, {
+              franja: menuState.franja,
+              postponeTargetDate: menuState.menuOptions?.postponeTargetDate,
+              pushTargetDate: menuState.menuOptions?.pushTargetDate,
+            });
+          }}
+          onEmpujar={() => {
+            const entry = menuState.entry;
+            if (!entry || !menuState.canEmpujar) return;
+            const defer = onDefer || onPostpone;
+            defer?.(entry.section, entry.itemId, HABIT_DEFERRAL_ACTION.PUSH, {
+              franja: menuState.franja,
+              postponeTargetDate: menuState.menuOptions?.postponeTargetDate,
+              pushTargetDate: menuState.menuOptions?.pushTargetDate,
+            });
+          }}
+          onIgnoreToday={() => {
+            const entry = menuState.entry;
+            if (!entry) return;
+            const defer = onDefer || onPostpone;
+            defer?.(entry.section, entry.itemId, HABIT_DEFERRAL_ACTION.IGNORE, {
+              franja: menuState.franja,
+            });
+          }}
+        />
+      )}
     </ListItem>
   );
 }

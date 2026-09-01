@@ -9,12 +9,13 @@ import { useRutinas } from '@shared/context';
 import { useResponsive, useHabitItemContextMenu } from '@shared/hooks';
 import {
   isHabitHorarioCompleted,
-  canPostponeHabitFranja,
-  resolvePostponeTargetFranja,
-  getPostponeMenuLabel,
   isEntryGroupedRoutineChain,
   resolveRoutineDisplayName,
   resolveHistoricalDoneFranjaBadges,
+  resolveHabitDeferralMenuOptions,
+  canDeferHabit,
+  HABIT_DEFERRAL_ACTION,
+  isHabitHiddenByDeferral,
 } from '@shared/habits';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
@@ -36,16 +37,11 @@ import {
 import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
 
-const postponeTextColumnSx = {
+const postponeIconColumnSx = {
   cursor: 'context-menu',
   WebkitTouchCallout: 'none',
   userSelect: 'none',
   touchAction: 'manipulation',
-};
-
-const habitIconColumnGuardHandlers = {
-  onPointerDown: (event) => event.stopPropagation(),
-  onContextMenu: (event) => event.stopPropagation(),
 };
 
 export { default as HabitIconButton } from '@shared/components/habits/HabitIconButton';
@@ -71,16 +67,17 @@ const ChecklistItem = ({
   isScheduled = true,
   chain = null,
   allowPostpone = false,
+  onDefer,
   onPostpone,
   hideIconBorder = false,
   deferredPending = false,
   quotaSlot = null,
   rutina: rutinaProp = null,
 }) => {
-  const { rutina: contextRutina } = useRutinas();
+  const { rutina: contextRutina, rutinas } = useRutinas();
   const rutina = rutinaProp ?? contextRutina;
   const { isMobileOrTablet } = useResponsive();
-  const { menuState, closeMenu, getTextColumnHandlers } = useHabitItemContextMenu({
+  const { menuState, closeMenu, getPostponeHandlers } = useHabitItemContextMenu({
     enabled: allowPostpone && !readOnly,
   });
 
@@ -132,30 +129,60 @@ const ChecklistItem = ({
     : null;
 
   const postponeFranja = normalizedFocusHorario || singleDisplayHorario || getCurrentTimeOfDay();
-  const nextPostponeFranja = resolvePostponeTargetFranja({
-    config,
-    itemValue,
-    focusHorario: postponeFranja,
-    currentTimeOfDay: getCurrentTimeOfDay(),
-  });
-  const postponeLabel = getPostponeMenuLabel(nextPostponeFranja);
-  const canPostpone = canPostponeHabitFranja({
+
+  if (isHabitHiddenByDeferral({
     rutina,
     section,
     itemId,
-    config,
-    itemValue,
-    focusHorario: postponeFranja,
-    currentTimeOfDay: getCurrentTimeOfDay(),
-    readOnly,
-    allowPostpone,
-  });
-  const postponeEntry = { section, itemId, config, itemValue, label: habitLabel || itemId };
-  const postponeTextHandlers = getTextColumnHandlers(postponeEntry, {
-    canPostpone,
-    postponeLabel,
     franja: postponeFranja,
-  });
+    allRutinas: rutinas,
+  })) {
+    return null;
+  }
+
+  const postponeEntry = { section, itemId, config, itemValue, label: habitLabel || itemId };
+
+  const buildDeferMenuMeta = (franjaFocus) => {
+    const franja = franjaFocus
+      ? String(franjaFocus).toUpperCase()
+      : (singleDisplayHorario || getCurrentTimeOfDay());
+    const menuOptions = resolveHabitDeferralMenuOptions({
+      rutina,
+      section,
+      itemId,
+      config,
+      itemValue,
+      focusHorario: franja,
+      readOnly,
+      allowPostpone,
+    });
+    return {
+      ...menuOptions,
+      menuOptions,
+      franja: menuOptions.franja || franja,
+    };
+  };
+
+  const buildPostponeHandlersForFranja = (franjaFocus) => {
+    const franja = franjaFocus
+      ? String(franjaFocus).toUpperCase()
+      : (singleDisplayHorario || getCurrentTimeOfDay());
+    if (!canDeferHabit({
+      rutina,
+      section,
+      itemId,
+      config,
+      itemValue,
+      focusHorario: franja,
+      readOnly,
+      allowPostpone,
+    })) {
+      return null;
+    }
+    return getPostponeHandlers(postponeEntry, () => buildDeferMenuMeta(franjaFocus));
+  };
+
+  const defaultPostponeHandlers = buildPostponeHandlersForFranja(postponeFranja);
 
   const renderHabitActionButtons = () => {
     if (normalizedFocusHorario && normalizedFocusHorario !== 'GENERAL') {
@@ -181,6 +208,7 @@ const ChecklistItem = ({
           size={iconSize}
           glyph={iconGlyph}
           mr={0}
+          postponeHandlers={buildPostponeHandlersForFranja(normalizedFocusHorario)}
         />
       );
     }
@@ -208,6 +236,7 @@ const ChecklistItem = ({
             size={iconSize}
             glyph={iconGlyph}
             mr={0}
+            postponeHandlers={buildPostponeHandlersForFranja(singleDisplayHorario)}
           />
         );
       }
@@ -247,6 +276,7 @@ const ChecklistItem = ({
                 size={iconSize}
                 glyph={iconGlyph}
                 mr={0}
+                postponeHandlers={buildPostponeHandlersForFranja(normalizedHorario)}
               />
             );
           })}
@@ -275,6 +305,7 @@ const ChecklistItem = ({
         size={iconSize}
         glyph={iconGlyph}
         mr={0}
+        postponeHandlers={defaultPostponeHandlers}
       />
     );
   };
@@ -315,8 +346,10 @@ const ChecklistItem = ({
           }}
         >
           <Box
-            sx={rutinaChecklistIconColumnSx({ compact: iconColumnCompact, mobile: isMobileOrTablet })}
-            {...habitIconColumnGuardHandlers}
+            sx={{
+              ...rutinaChecklistIconColumnSx({ compact: iconColumnCompact, mobile: isMobileOrTablet }),
+              ...(allowPostpone && !readOnly ? postponeIconColumnSx : null),
+            }}
           >
             {habitActionButtons}
           </Box>
@@ -324,9 +357,7 @@ const ChecklistItem = ({
             sx={{
               ...rutinaChecklistTextColumnSx,
               ...(stackCell ? rutinaChecklistStackCellTextSx : null),
-              ...(canPostpone ? postponeTextColumnSx : null),
             }}
-            {...(canPostpone ? postponeTextHandlers : {})}
           >
             <Box sx={{
               display: 'flex',
@@ -386,11 +417,39 @@ const ChecklistItem = ({
       </Box>
       {(allowPostpone && !readOnly) && (
         <HabitItemPostponeMenu
-          open={menuState.open && menuState.entry?.itemId === itemId && menuState.entry?.section === section}
+          open={Boolean(
+            menuState.open
+            && menuState.entry?.itemId === itemId
+            && menuState.entry?.section === section,
+          )}
           anchorPosition={menuState.anchorPosition}
           postponeLabel={menuState.postponeLabel}
+          empujarLabel={menuState.empujarLabel}
           onClose={closeMenu}
-          onPostpone={() => onPostpone?.(section, itemId, menuState.franja || postponeFranja)}
+          onPostpone={() => {
+            if (!menuState.canPostpone) return;
+            const defer = onDefer || onPostpone;
+            defer?.(section, itemId, HABIT_DEFERRAL_ACTION.POSTPONE, {
+              franja: menuState.franja || postponeFranja,
+              postponeTargetDate: menuState.menuOptions?.postponeTargetDate,
+              pushTargetDate: menuState.menuOptions?.pushTargetDate,
+            });
+          }}
+          onEmpujar={() => {
+            if (!menuState.canEmpujar) return;
+            const defer = onDefer || onPostpone;
+            defer?.(section, itemId, HABIT_DEFERRAL_ACTION.PUSH, {
+              franja: menuState.franja || postponeFranja,
+              postponeTargetDate: menuState.menuOptions?.postponeTargetDate,
+              pushTargetDate: menuState.menuOptions?.pushTargetDate,
+            });
+          }}
+          onIgnoreToday={() => {
+            const defer = onDefer || onPostpone;
+            defer?.(section, itemId, HABIT_DEFERRAL_ACTION.IGNORE, {
+              franja: menuState.franja || postponeFranja,
+            });
+          }}
         />
       )}
     </ListItem>
@@ -432,6 +491,7 @@ export default memo(ChecklistItem, (prevProps, nextProps) => {
     prevProps.chain?.label === nextProps.chain?.label &&
     prevProps.chain?.stepCount === nextProps.chain?.stepCount &&
     prevProps.onItemClick === nextProps.onItemClick &&
+    prevProps.onDefer === nextProps.onDefer &&
     prevProps.onPostpone === nextProps.onPostpone &&
     prevProps.rutina?._id === nextProps.rutina?._id &&
     prevProps.rutina?.fecha === nextProps.rutina?.fecha &&

@@ -6,11 +6,28 @@ import {
   isHabitFullyCompletedToday,
   resolveHabitIconPresentation,
   resolveHistoricalDoneFranjaBadges,
+  resolveHabitDeferralMenuOptions,
+  canDeferHabit,
+  HABIT_DEFERRAL_ACTION,
+  isHabitHiddenByDeferral,
 } from '../../habits';
+import { getCurrentTimeOfDay } from '../../utils/timeOfDayUtils';
 import { getRutinaDayMode, isRutinaFuturePreview } from '../../utils/rutinaDayMode.js';
 import { getPeriodicCarouselCopy, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology';
 import { resolveHabitDisplayIcon } from '../../utils/habitOutlineIcons';
 import { getHabitCarouselIconButtonSx, getHabitIconTokens } from '../../styles/habitIconStyles';
+import useHabitItemContextMenu from '../../hooks/useHabitItemContextMenu';
+import HabitItemPostponeMenu from './HabitItemPostponeMenu';
+
+const postponeIconWrapSx = {
+  cursor: 'context-menu',
+  WebkitTouchCallout: 'none',
+  userSelect: 'none',
+  touchAction: 'manipulation',
+};
+
+/** Ahora + franjas atrasadas del mismo día (sinHacer en carrusel). */
+const DEFERRAL_CAROUSEL_SLOTS = new Set(['ahora', 'sinHacer']);
 
 /**
  * Botón de hábito en carrusel. Presentación canónica de Hábitos
@@ -39,6 +56,9 @@ export default function HabitCarouselIconButton({
   onToggle,
   requireExpand = false,
   onRequireExpand,
+  allowPostpone = false,
+  onDefer = null,
+  onPostpone = null,
   /** 'today' | 'before' — hechos filled planos (hoy vs cuota anterior). */
   doneTone = null,
   /** false solo en carrusel de Tareas (filled pendiente legacy). Default: outline. */
@@ -113,6 +133,85 @@ export default function HabitCarouselIconButton({
       : (periodicHint ? `${label} — ${periodicHint}` : label));
   const canQuickToggle = interactive && !requireExpand && !isNotTodaySlot;
   const canInteract = interactive && !isNotTodaySlot && !requireExpand;
+
+  const postponeFranja = displayHorario || horarioToShow || getCurrentTimeOfDay();
+  const isHiddenByDeferral = isHabitHiddenByDeferral({
+    rutina: rutinaHoy,
+    section,
+    itemId,
+    franja: postponeFranja,
+  });
+
+  const deferMenuSlotAllowed = DEFERRAL_CAROUSEL_SLOTS.has(carouselSlot);
+  const canOpenDeferMenu = allowPostpone && interactive && deferMenuSlotAllowed && canDeferHabit({
+    rutina: rutinaHoy,
+    section,
+    itemId,
+    config: itemConfig,
+    itemValue: completadoHoy,
+    focusHorario: postponeFranja,
+    readOnly: !interactive,
+    allowPostpone: allowPostpone && deferMenuSlotAllowed,
+  });
+  const { menuState, closeMenu, getPostponeHandlers } = useHabitItemContextMenu({
+    enabled: canOpenDeferMenu,
+  });
+
+  if (isHiddenByDeferral) {
+    return null;
+  }
+  const postponeEntry = { section, itemId, config: itemConfig, itemValue: completadoHoy, label };
+  const resolveMenuMeta = () => resolveHabitDeferralMenuOptions({
+    rutina: rutinaHoy,
+    section,
+    itemId,
+    config: itemConfig,
+    itemValue: completadoHoy,
+    focusHorario: postponeFranja,
+    readOnly: !interactive,
+    allowPostpone: allowPostpone && deferMenuSlotAllowed,
+  });
+  const postponeHandlers = canOpenDeferMenu
+    ? getPostponeHandlers(postponeEntry, resolveMenuMeta)
+    : {};
+  const postponeEnabled = canOpenDeferMenu;
+
+  const mergePostponeIconHandlers = (baseHandlers = {}) => ({
+    ...baseHandlers,
+    onClick: (event) => {
+      postponeHandlers?.onClick?.(event);
+      if (event.defaultPrevented) return;
+      baseHandlers.onClick?.(event);
+    },
+    onPointerDown: (event) => {
+      postponeHandlers?.onPointerDown?.(event);
+      baseHandlers.onPointerDown?.(event);
+    },
+    onPointerUp: (event) => {
+      postponeHandlers?.onPointerUp?.(event);
+      baseHandlers.onPointerUp?.(event);
+    },
+    onPointerMove: (event) => {
+      postponeHandlers?.onPointerMove?.(event);
+      baseHandlers.onPointerMove?.(event);
+    },
+    onPointerCancel: (event) => {
+      postponeHandlers?.onPointerCancel?.(event);
+      baseHandlers.onPointerCancel?.(event);
+    },
+    onPointerLeave: (event) => {
+      postponeHandlers?.onPointerLeave?.(event);
+      baseHandlers.onPointerLeave?.(event);
+    },
+    onContextMenu: (event) => {
+      if (postponeHandlers?.onContextMenu) {
+        postponeHandlers.onContextMenu(event);
+        return;
+      }
+      baseHandlers.onContextMenu?.(event);
+    },
+  });
+
   const DisplayIcon = resolveHabitDisplayIcon(Icon, {
     iconName,
     outline: presentation.outline,
@@ -148,6 +247,7 @@ export default function HabitCarouselIconButton({
         variant: presentation.variant === 'deferredPending' ? 'deferredPending' : 'plainPending',
         outline: presentation.outline,
       })}
+      {...(postponeEnabled ? mergePostponeIconHandlers() : null)}
     >
       {DisplayIcon && <DisplayIcon />}
     </Box>
@@ -161,21 +261,23 @@ export default function HabitCarouselIconButton({
         ? `Expandir grupo para marcar ${label}`
         : `${label}, ${statusLabel}`}
       aria-pressed={requireExpand && !isDoneVisual ? undefined : isDoneVisual}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (requireExpand && !isDoneVisual) {
-          onRequireExpand?.(section, itemId);
-          return;
-        }
-        if (isDoneVisual) {
-          if (!interactive) return;
+      {...mergePostponeIconHandlers({
+        onClick: (e) => {
+          e.stopPropagation();
+          if (requireExpand && !isDoneVisual) {
+            onRequireExpand?.(section, itemId);
+            return;
+          }
+          if (isDoneVisual) {
+            if (!interactive) return;
+            onToggle(section, itemId, displayHorario || horarioToShow);
+            return;
+          }
+          if (!canQuickToggle) return;
           onToggle(section, itemId, displayHorario || horarioToShow);
-          return;
-        }
-        if (!canQuickToggle) return;
-        onToggle(section, itemId, displayHorario || horarioToShow);
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
+        },
+        onPointerDown: (e) => e.stopPropagation(),
+      })}
       sx={buttonSx}
     >
       {DisplayIcon && <DisplayIcon />}
@@ -210,24 +312,60 @@ export default function HabitCarouselIconButton({
   const wrapBadge = !isPlainPending || Boolean(horarioToShow) || isDoneVisual;
 
   return (
-    <Tooltip title={tooltipTitle} arrow placement="top">
-      <Box
-        component="span"
-        sx={{
-          display: 'inline-flex',
-          flex: '0 0 auto',
-          alignItems: 'flex-start',
-          justifyContent: 'center',
-          verticalAlign: 'middle',
-        }}
-      >
-        {wrapBadge
-          ? habitBadge(
-            renderedButton,
-            isDoneVisual ? false : (showCompletionState && !isNotTodaySlot),
-          )
-          : renderedButton}
-      </Box>
-    </Tooltip>
+    <>
+      <Tooltip title={tooltipTitle} arrow placement="top">
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-flex',
+            flex: '0 0 auto',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            verticalAlign: 'middle',
+            ...(postponeEnabled ? postponeIconWrapSx : null),
+          }}
+        >
+          {wrapBadge
+            ? habitBadge(
+              renderedButton,
+              isDoneVisual ? false : (showCompletionState && !isNotTodaySlot),
+            )
+            : renderedButton}
+        </Box>
+      </Tooltip>
+      {postponeEnabled && (
+        <HabitItemPostponeMenu
+          open={menuState.open && menuState.entry?.itemId === itemId && menuState.entry?.section === section}
+          anchorPosition={menuState.anchorPosition}
+          postponeLabel={menuState.postponeLabel}
+          empujarLabel={menuState.empujarLabel}
+          onClose={closeMenu}
+          onPostpone={() => {
+            if (!menuState.canPostpone) return;
+            const defer = onDefer || onPostpone;
+            defer?.(section, itemId, HABIT_DEFERRAL_ACTION.POSTPONE, {
+              franja: menuState.franja || postponeFranja,
+              postponeTargetDate: menuState.menuOptions?.postponeTargetDate,
+              pushTargetDate: menuState.menuOptions?.pushTargetDate,
+            });
+          }}
+          onEmpujar={() => {
+            if (!menuState.canEmpujar) return;
+            const defer = onDefer || onPostpone;
+            defer?.(section, itemId, HABIT_DEFERRAL_ACTION.PUSH, {
+              franja: menuState.franja || postponeFranja,
+              postponeTargetDate: menuState.menuOptions?.postponeTargetDate,
+              pushTargetDate: menuState.menuOptions?.pushTargetDate,
+            });
+          }}
+          onIgnoreToday={() => {
+            const defer = onDefer || onPostpone;
+            defer?.(section, itemId, HABIT_DEFERRAL_ACTION.IGNORE, {
+              franja: menuState.franja || postponeFranja,
+            });
+          }}
+        />
+      )}
+    </>
   );
 }

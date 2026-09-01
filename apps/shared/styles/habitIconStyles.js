@@ -26,13 +26,13 @@ function resolveGlyph(size, glyph) {
   }).glyph;
 }
 
-function shouldInsetOutlineGlyph(variant, outline) {
-  if (!outline) return false;
+function shouldInsetOutlineGlyph(variant, outline, hideBorder) {
+  if (!outline || hideBorder) return false;
   return variant === 'activePending';
 }
 
-function baseIconBoxSx(size, mr, resolvedGlyph, { outline = false, variant = null } = {}) {
-  const inset = shouldInsetOutlineGlyph(variant, outline);
+function baseIconBoxSx(size, mr, resolvedGlyph, { outline = false, variant = null, hideBorder = false } = {}) {
+  const inset = shouldInsetOutlineGlyph(variant, outline, hideBorder);
   return {
     width: size,
     height: size,
@@ -126,7 +126,7 @@ export function getHabitIconButtonSx({
   const resolvedGlyph = resolveGlyph(size, glyph);
   const tone = doneTone
     || (isCompleted ? HABIT_ICON_DONE_TONE.TODAY : null);
-  const base = baseIconBoxSx(size, mr, resolvedGlyph, { outline, variant });
+  const base = baseIconBoxSx(size, mr, resolvedGlyph, { outline, variant, hideBorder });
 
   if (tone === HABIT_ICON_DONE_TONE.BEFORE || variant === 'completedBefore') {
     return (theme) => ({
@@ -149,16 +149,17 @@ export function getHabitIconButtonSx({
     });
   }
 
-  const plainPending = (hideBorder || variant === 'plainPending') && !isCompleted;
+  const hideRing = (hideBorder || variant === 'plainPending') && !isCompleted;
+  const mutedPending = variant === 'plainPending' && !isCompleted;
 
   return {
     ...base,
     color: 'text.secondary',
     bgcolor: 'transparent',
-    border: plainPending ? 'none' : `${HABIT_ICON_ACTIVE_RING_WIDTH}px solid`,
-    borderStyle: plainPending ? 'none' : 'solid',
-    borderColor: plainPending ? 'transparent' : 'divider',
-    opacity: plainPending ? 0.78 : 1,
+    border: hideRing ? 'none' : `${HABIT_ICON_ACTIVE_RING_WIDTH}px solid`,
+    borderStyle: hideRing ? 'none' : 'solid',
+    borderColor: hideRing ? 'transparent' : 'divider',
+    opacity: mutedPending ? 0.78 : 1,
     '&:hover': {
       color: 'text.primary',
       bgcolor: 'action.hover',

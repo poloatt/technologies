@@ -9,10 +9,10 @@ import {
 } from '../../../../shared/habits/presentation/habitIconPresentation.js';
 
 describe('resolveHabitIconPresentation', () => {
-  it('pendiente activo: outline + borde circular', () => {
+  it('pendiente activo (Ahora): outline plano sin borde circular', () => {
     const p = resolveHabitIconPresentation({ isCompleted: false, carouselSlot: 'ahora' });
     assert.equal(p.outline, true);
-    assert.equal(p.hideBorder, false);
+    assert.equal(p.hideBorder, true);
     assert.equal(p.variant, 'activePending');
     assert.equal(p.doneTone, null);
   });

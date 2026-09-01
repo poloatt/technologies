@@ -64,7 +64,7 @@ const RutinaCard = ({
   onExpandedSectionChange,
   externalFocusedItemId = null,
 }) => {
-  const { rutina, markItemComplete, patchRutinaSection } = useRutinas();
+  const { rutina, rutinas, markItemComplete, patchRutinaSection } = useRutinas();
   const { habits, customSections, reorderHabits } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
@@ -180,6 +180,7 @@ const RutinaCard = ({
       habitChains: prefsReady ? habitChains : [],
       localData,
       iconsMap: habitIconsMap,
+      allRutinas: rutinas,
     });
 
     if (!focusedItemId) {
@@ -196,7 +197,7 @@ const RutinaCard = ({
       done: matchFocused(grouped.done),
       notToday: matchFocused(grouped.notToday),
     };
-  }, [section, rutina, habits, habitPrefs, habitChains, prefsReady, localData, focusedItemId, habitIconsMap]);
+  }, [section, rutina, rutinas, habits, habitPrefs, habitChains, prefsReady, localData, focusedItemId, habitIconsMap]);
 
   const useSectionFranjaLayout = isViewingRutinaToday(rutina);
   const isHistorical = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
