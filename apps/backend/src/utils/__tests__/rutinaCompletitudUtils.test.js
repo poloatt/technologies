@@ -1,4 +1,43 @@
-import { calculateRutinaCompletitud } from '../rutinaCompletitudUtils.js';
+import { calculateRutinaCompletitud, buildRutinaUpdateSetOps } from '../rutinaCompletitudUtils.js';
+import { buildRutinaUpdatePatches, collectRutinaUpdateSectionKeys } from '../rutinaUpdatePatches.js';
+
+describe('buildRutinaUpdateSetOps', () => {
+  const currentRutina = {
+    bodyCare: {},
+    nutricion: {},
+    ejercicio: {},
+    cleaning: {},
+    config: { bodyCare: {}, nutricion: {}, ejercicio: {}, cleaning: {} },
+  };
+
+  it('sets habitDeferrals without conflicting nested paths', () => {
+    const habitDeferrals = {
+      bodyCare: {
+        shower: { action: 'ignore', franja: 'MAÑANA' },
+      },
+    };
+    const body = { habitDeferrals };
+    const sectionKeys = collectRutinaUpdateSectionKeys(currentRutina, body);
+    const patches = buildRutinaUpdatePatches(currentRutina, body, sectionKeys);
+    const updateOps = buildRutinaUpdateSetOps(patches, body, currentRutina);
+
+    expect(updateOps.habitDeferrals).toEqual(habitDeferrals);
+    expect(updateOps['habitDeferrals.bodyCare']).toBeUndefined();
+  });
+
+  it('sets postponedFranjas without conflicting nested paths', () => {
+    const postponedFranjas = {
+      bodyCare: { shower: ['TARDE'] },
+    };
+    const body = { postponedFranjas };
+    const sectionKeys = collectRutinaUpdateSectionKeys(currentRutina, body);
+    const patches = buildRutinaUpdatePatches(currentRutina, body, sectionKeys);
+    const updateOps = buildRutinaUpdateSetOps(patches, body, currentRutina);
+
+    expect(updateOps.postponedFranjas).toEqual(postponedFranjas);
+    expect(updateOps['postponedFranjas.bodyCare']).toBeUndefined();
+  });
+});
 
 describe('calculateRutinaCompletitud', () => {
   it('counts each franja as separate task for multi-horario daily habits', () => {

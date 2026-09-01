@@ -18,6 +18,8 @@ export const RUTINA_UPDATE_SKIP_KEYS = new Set([
   'notas',
   'tipo',
   'historial',
+  'postponedFranjas',
+  'habitDeferrals',
 ]);
 
 function hasNewHabitCompletion(currentValue, nextValue) {
