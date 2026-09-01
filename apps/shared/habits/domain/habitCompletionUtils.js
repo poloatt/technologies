@@ -178,16 +178,14 @@ export function resolveCompletedDailyFranjas(itemValue, config = {}) {
 }
 
 /**
- * Insignias de franja para Hecho histórico: un solo icono con todas las franjas satisfechas.
- * @returns {string[]|null} null si no aplica (no histórico o no multi-franja).
+ * Insignias de franja para Hecho (histórico o hoy): un solo icono con franjas satisfechas.
+ * @returns {string[]|null} null si no aplica (no multi-franja o sin franjas completadas).
  */
-export function resolveHistoricalDoneFranjaBadges({
-  rutina,
+export function resolveDoneFranjaBadges({
   config,
   itemValue,
   franjaKey = null,
 } = {}) {
-  if (!rutina?.fecha || getRutinaDayMode(rutina.fecha) !== 'historical') return null;
   if (!isDailyMultiFranjaConfig(config)) return null;
 
   const horarios = normalizeHorarios(config.horarios);
@@ -202,6 +200,17 @@ export function resolveHistoricalDoneFranjaBadges({
 
   const completed = resolveCompletedDailyFranjas(itemValue, config);
   return completed.length > 0 ? completed : null;
+}
+
+/** @deprecated Usar resolveDoneFranjaBadges; conservado por compatibilidad. */
+export function resolveHistoricalDoneFranjaBadges({
+  rutina,
+  config,
+  itemValue,
+  franjaKey = null,
+} = {}) {
+  if (!rutina?.fecha || getRutinaDayMode(rutina.fecha) !== 'historical') return null;
+  return resolveDoneFranjaBadges({ config, itemValue, franjaKey });
 }
 
 /** ¿Alguna franja completada pero aún quedan pendientes hoy? */

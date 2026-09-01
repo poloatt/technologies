@@ -55,6 +55,7 @@ export default function RutinaCadenceFlatLayout({
 
   const isHistorical = dayMode === 'historical';
   const isToday = dayMode === 'today';
+  const doneSectionCollapsible = isHistorical || isToday;
   const hideFutureProjections = shouldHideFlexibleLuegoProjections(dayMode);
   const hideNotToday = hideFutureProjections;
 
@@ -156,10 +157,10 @@ export default function RutinaCadenceFlatLayout({
         habitsPreferences={habitPrefs}
         readOnly={readOnly}
         onToggle={handleDoneToggle}
-        collapsible
-        collapseThreshold={isHistorical ? 0 : 5}
+        collapsible={doneSectionCollapsible}
+        collapseThreshold={doneSectionCollapsible ? 0 : 5}
         defaultExpanded={false}
-        collapsePreviewMode={isHistorical ? 'carousel' : 'hide'}
+        collapsePreviewMode={doneSectionCollapsible ? 'carousel' : 'hide'}
         habits={habits}
         doneHeadingLabel={
           isHistorical

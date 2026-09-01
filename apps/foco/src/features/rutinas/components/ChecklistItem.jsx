@@ -11,7 +11,7 @@ import {
   isHabitHorarioCompleted,
   isEntryGroupedRoutineChain,
   resolveRoutineDisplayName,
-  resolveHistoricalDoneFranjaBadges,
+  resolveDoneFranjaBadges,
   resolveHabitDeferralMenuOptions,
   canDeferHabit,
   HABIT_DEFERRAL_ACTION,
@@ -73,6 +73,7 @@ const ChecklistItem = ({
   deferredPending = false,
   quotaSlot = null,
   rutina: rutinaProp = null,
+  consolidateDoneFranjas = false,
 }) => {
   const { rutina: contextRutina, rutinas } = useRutinas();
   const rutina = rutinaProp ?? contextRutina;
@@ -119,9 +120,9 @@ const ChecklistItem = ({
     ? localData[itemId]
     : (completionValue !== undefined ? completionValue : rutina?.[section]?.[itemId]);
 
-  const completedFranjaBadges = (isHistoricalDay && isCompleted)
-    ? resolveHistoricalDoneFranjaBadges({
-      rutina,
+  const shouldConsolidateDoneFranjas = consolidateDoneFranjas || isHistoricalDay;
+  const completedFranjaBadges = (shouldConsolidateDoneFranjas && isCompleted)
+    ? resolveDoneFranjaBadges({
       config,
       itemValue,
       franjaKey: normalizedFocusHorario,

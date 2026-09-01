@@ -11,7 +11,7 @@ import {
   resolveActiveDailyFranja,
   isEntryFranjaSinHacer,
   resolveRutinaStackScheduleLegend,
-  resolveHistoricalDoneFranjaBadges,
+  resolveDoneFranjaBadges,
   resolveHabitDeferralMenuOptions,
   canDeferHabit,
   HABIT_DEFERRAL_ACTION,
@@ -223,9 +223,9 @@ export default function RutinaStackHabitRow({
     const singleDisplayHorario = normalizedFocusHorario
       || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
     const isHistoricalDay = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
-    const completedFranjaBadges = (isHistoricalDay && isCompleted)
-      ? resolveHistoricalDoneFranjaBadges({
-        rutina,
+    const shouldConsolidateDoneFranjas = rowKeyPrefix === 'done' || isHistoricalDay;
+    const completedFranjaBadges = (shouldConsolidateDoneFranjas && isCompleted)
+      ? resolveDoneFranjaBadges({
         config,
         itemValue,
         franjaKey: normalizedFocusHorario,

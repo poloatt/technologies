@@ -52,6 +52,7 @@ function DoneChecklistRow({
         iconColumnCompact={stackVariant === 'compact'}
         quotaSlot={entry.quotaSlot ?? null}
         rutina={rutina}
+        consolidateDoneFranjas
       />
     </Box>
   );

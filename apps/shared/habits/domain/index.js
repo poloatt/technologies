@@ -23,6 +23,7 @@ export {
   isHabitFullyCompletedToday,
   isDailyMultiFranjaConfig,
   resolveCompletedDailyFranjas,
+  resolveDoneFranjaBadges,
   resolveHistoricalDoneFranjaBadges,
   isHabitPartiallyCompletedToday,
   buildEmptyHabitCompletionValue,

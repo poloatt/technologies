@@ -69,6 +69,7 @@ export default function RutinaDailyCadenceFranjaLayout({
     () => rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'today',
     [rutina],
   );
+  const doneSectionCollapsible = isHistorical || isToday;
   const [expandedFranjaKeys, setExpandedFranjaKeys] = useState(() => new Set());
 
   const toggleFranjaExpand = useCallback((sectionId) => {
@@ -332,9 +333,9 @@ export default function RutinaDailyCadenceFranjaLayout({
           doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : RUTINA_DONE_GROUP_COPY.doneToday}
           doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : RUTINA_DONE_GROUP_COPY.doneBefore}
           defaultExpanded={false}
-          collapsible={isHistorical}
-          collapsePreviewMode={isHistorical ? 'carousel' : 'hide'}
-          collapseThreshold={isHistorical ? 0 : 5}
+          collapsible={doneSectionCollapsible}
+          collapsePreviewMode={doneSectionCollapsible ? 'carousel' : 'hide'}
+          collapseThreshold={doneSectionCollapsible ? 0 : 5}
           habits={habits}
         />
       )}

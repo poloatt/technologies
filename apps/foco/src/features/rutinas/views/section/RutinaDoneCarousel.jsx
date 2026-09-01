@@ -122,6 +122,7 @@ export default function RutinaDoneCarousel({
           dense={false}
           interactive={!readOnly}
           showCompletionState
+          consolidateDoneFranjas
           doneTone={entryDoneTone}
           size={size}
           iconFontSize={iconFontSize}

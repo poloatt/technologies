@@ -5,7 +5,7 @@ import {
   getHorarioForCarousel,
   isHabitFullyCompletedToday,
   resolveHabitIconPresentation,
-  resolveHistoricalDoneFranjaBadges,
+  resolveDoneFranjaBadges,
   resolveHabitDeferralMenuOptions,
   canDeferHabit,
   HABIT_DEFERRAL_ACTION,
@@ -63,6 +63,8 @@ export default function HabitCarouselIconButton({
   doneTone = null,
   /** false solo en carrusel de Tareas (filled pendiente legacy). Default: outline. */
   preferOutlineWhenPending = true,
+  /** Hecho hoy/histórico: un icono con insignias de franja en multi-horario. */
+  consolidateDoneFranjas = false,
   quotaSlot = null,
 }) {
   const horariosConfig = Array.isArray(itemConfig?.horarios) ? itemConfig.horarios : [];
@@ -94,9 +96,9 @@ export default function HabitCarouselIconButton({
   }
 
   const isHistoricalDay = rutinaHoy?.fecha && getRutinaDayMode(rutinaHoy.fecha) === 'historical';
-  const completedFranjaBadges = (showCompletionState && isHistoricalDay)
-    ? resolveHistoricalDoneFranjaBadges({
-      rutina: rutinaHoy,
+  const shouldConsolidateDoneFranjas = consolidateDoneFranjas || isHistoricalDay;
+  const completedFranjaBadges = (showCompletionState && shouldConsolidateDoneFranjas && isCompleted)
+    ? resolveDoneFranjaBadges({
       config: itemConfig,
       itemValue: completadoHoy,
       franjaKey: displayHorario,
