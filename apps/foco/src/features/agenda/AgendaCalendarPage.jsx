@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Box, CircularProgress } from '@mui/material';
+import { Box } from '@mui/material';
 import { useSnackbar } from 'notistack';
 import { startOfDay } from 'date-fns';
 import { useResponsive } from '@shared/hooks';
@@ -35,7 +35,7 @@ export default function AgendaCalendarPage() {
   const {
     tasks: tareas,
     setTasks: setTareas,
-    loading,
+    isFetching,
     refetch: refetchCalendarTasks,
   } = useTasksForCalendar(selectedDate, viewMode);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -392,12 +392,8 @@ export default function AgendaCalendarPage() {
     >
       <Box ref={quickCreateFallbackRef} sx={{ position: 'absolute', top: 8, right: 16, width: 1, height: 1 }} />
 
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50%' }}>
-            <CircularProgress />
-          </Box>
-        ) : viewMode === 'day' ? (
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }} aria-busy={isFetching}>
+        {viewMode === 'day' ? (
           <AgendaDayView
             date={selectedDate}
             events={events}

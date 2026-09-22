@@ -62,4 +62,37 @@ describe('computeRutinaToggleValue', () => {
 
     expect(result).toEqual({ MAÑANA: true, NOCHE: false });
   });
+
+  it('toggles single-franja daily habit as object slot, not boolean', () => {
+    const single = {
+      bodyCare: { teeth: { MAÑANA: false } },
+      config: {
+        bodyCare: {
+          teeth: {
+            tipo: 'DIARIO',
+            frecuencia: 1,
+            horarios: ['MAÑANA'],
+          },
+        },
+      },
+    };
+    const result = computeRutinaToggleValue({
+      section: 'bodyCare',
+      itemId: 'teeth',
+      rutina: single,
+      horario: 'MAÑANA',
+    });
+    expect(result).toEqual({ MAÑANA: true });
+  });
+
+  it('historical multi-franja without horario does not collapse to boolean', () => {
+    const result = computeRutinaToggleValue({
+      section: 'bodyCare',
+      itemId: 'cuidadoBucal',
+      rutina,
+      horario: null,
+      currentTimeOfDay: null,
+    });
+    expect(result).toEqual({ MAÑANA: false, NOCHE: false });
+  });
 });

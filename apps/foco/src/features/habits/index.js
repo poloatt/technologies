@@ -18,6 +18,5 @@ export {
   ensureRutinaForDate,
   useEnsureRutinaForDate,
   useRutinaItemToggle,
-  useRutinaSectionLocalData,
   useRutinaBucketLocalData,
 } from '../rutinas';

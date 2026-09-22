@@ -39,6 +39,8 @@ function renderCarouselIcon({
   size,
   iconFontSize,
   onToggle,
+  allowPostpone = false,
+  onDefer = null,
   keySuffix = '',
 }) {
   const { section, itemId, horario } = entry;
@@ -54,6 +56,7 @@ function renderCarouselIcon({
   );
   const itemValue = rutinaHoy?.[section]?.[itemId];
   const uniqueKey = `${section}.${itemId}.${horario || 'none'}${keySuffix ? `.${keySuffix}` : ''}.${index}`;
+  const deferEnabled = allowPostpone && mode === 'ahora';
 
   return (
     <MotionBox
@@ -82,6 +85,9 @@ function renderCarouselIcon({
         size={size}
         iconFontSize={iconFontSize}
         onToggle={onToggle}
+        allowPostpone={deferEnabled}
+        onDefer={onDefer}
+        carouselSlot={mode === 'ahora' ? 'ahora' : 'luego'}
       />
     </MotionBox>
   );
@@ -116,6 +122,8 @@ function HabitCarouselIconRow({
   bind,
   onToggle,
   onConfigure,
+  allowPostpone = false,
+  onDefer = null,
   mobile = false,
 }) {
   const theme = useTheme();
@@ -205,7 +213,7 @@ function HabitCarouselIconRow({
 
   const iconDense = dense && !mobile;
 
-  const renderIconsRow = (items, { keySuffix, completionState, rowInteractive, rowOnToggle } = {}) => (
+  const renderIconsRow = (items, { keySuffix, completionState, rowInteractive, rowOnToggle, rowAllowPostpone } = {}) => (
     <AnimatePresence mode="popLayout">
       {items.map((entry, index) => renderCarouselIcon({
         entry,
@@ -221,6 +229,8 @@ function HabitCarouselIconRow({
         size,
         iconFontSize,
         onToggle: rowOnToggle ?? onToggle,
+        allowPostpone: rowAllowPostpone ?? allowPostpone,
+        onDefer,
         keySuffix,
       }))}
     </AnimatePresence>
@@ -337,6 +347,7 @@ function HabitCarouselIconRow({
               keySuffix: 'done',
               completionState: true,
               rowOnToggle: handleCompletedToggle,
+              rowAllowPostpone: false,
             })}
           </HabitCarouselScrollTrack>
           <Tooltip title="Ir a Rutinas">

@@ -33,6 +33,7 @@ export default function RutinaCadenceBucketList({
         useShortFranjaLabels={useShortFranjaLabels}
         onReorderSection={onReorderSection}
         hideNotToday={hideNotToday}
+        includeDoneSection={false}
       />
     );
   }
@@ -46,6 +47,8 @@ export default function RutinaCadenceBucketList({
         onItemClick={onItemClick}
         habitsPreferences={habitsPreferences}
         localDataBySection={localDataBySection}
+        includeDoneSection={false}
+        hideNotToday={hideNotToday}
       />
     );
   }

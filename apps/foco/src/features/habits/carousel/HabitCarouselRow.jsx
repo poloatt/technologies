@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { useRutinas, useHabits } from '@shared/context';
 import { resolveRutinaForDate } from '@shared/habits';
@@ -35,9 +35,10 @@ export default function HabitCarouselRow({
     error: rutinasError,
     markItemComplete,
     patchRutinaSection,
+    deferHabitItem,
   } = useRutinas();
-  const { habits, loading: habitsLoading } = useHabits();
-  const { habitsPreferences, prefsReady } = useHabitsPreferences();
+  const { habits, loading: habitsLoading, customSections } = useHabits();
+  const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const carouselRef = useRef(null);
 
   const { scrollRef, dragRef, isDragging, bind } = useHorizontalDragScroll({
@@ -80,7 +81,10 @@ export default function HabitCarouselRow({
     sectionIconsMap,
     habits,
     currentTimeOfDay,
-    habitsPreferences: prefsReady ? habitsPreferences : null,
+    habitsPreferences: habitsPreferences || {},
+    habitChains: habitChains || [],
+    customSections,
+    allRutinas: rutinas,
     includeCompletedToday: showCompletedToggle,
   });
 
@@ -95,7 +99,13 @@ export default function HabitCarouselRow({
     habitsPreferences: habitsPreferences || {},
   });
 
-  if (!prefsReady) {
+  const handleDefer = useCallback((section, itemId, action, options) => {
+    if (!isInteractive || !rutinaHoy?._id || typeof deferHabitItem !== 'function') return;
+    if (dragRef.current?.moved) return;
+    deferHabitItem(rutinaHoy._id, section, itemId, action, options);
+  }, [isInteractive, rutinaHoy?._id, deferHabitItem, dragRef]);
+
+  if (!prefsReady && !hasConfiguredHabits && (habitsLoading || rutinasLoading)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 36 }}>
         <CircularProgress size={18} aria-label="Cargando hábitos" />
@@ -128,6 +138,8 @@ export default function HabitCarouselRow({
       isDragging={isDragging}
       bind={bind}
       onToggle={handleToggle}
+      allowPostpone={isInteractive && mode === 'ahora'}
+      onDefer={handleDefer}
       mobile={mobile}
     />
   );

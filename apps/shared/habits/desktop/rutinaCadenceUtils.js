@@ -17,7 +17,7 @@ import {
   isEntryDueOnRutinaDay,
   filterRutinaDoneSectionEntries,
 } from './rutinaDesktopUtils.js';
-import { isHabitHorarioCompleted } from '../domain/habitCompletionUtils.js';
+import { isHabitHorarioCompleted, isHabitMarkedCompleteForConfig } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import { DIAS_SEMANA } from '../utils/cadenciaUtils.js';
 import { DAILY_CADENCE_SECTION_COPY, RUTINA_DAY_GROUP_COPY } from '../../copy/agendaTerminology.js';
@@ -27,11 +27,14 @@ import { getPeriodicCarouselMode, isFlexiblePeriodic, resolveFlexiblePeriodicPla
 /** Lunes → Domingo. */
 export const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
 
-/** Deduplica entradas multi-sección por section:itemId (p. ej. Hecho global). */
+/** Deduplica entradas multi-sección por section:itemId[:franjaKey]. */
 export function dedupeCadenceEntries(items = []) {
   const seen = new Set();
   return items.filter((entry) => {
-    const key = `${entry.section}:${entry.itemId}`;
+    const franja = entry.franjaKey && entry.franjaKey !== 'GENERAL'
+      ? `:${entry.franjaKey}`
+      : '';
+    const key = `${entry.section}:${entry.itemId}${franja}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -183,12 +186,12 @@ export function entryHasConfiguredDailyFranjas(config = {}) {
     .some((horario) => VALID_TIME_OF_DAY.includes(horario));
 }
 
-/** Horario de UI para un ítem en bucket Diario (null si solo está ubicado por franja activa). */
+/** Horario de UI para un ítem en bucket Diario (null si no hay franja concreta). */
 export function resolveEntryFranjaFocusHorario(entry) {
   const franjaKey = entry?.franjaKey;
   if (!franjaKey || franjaKey === 'GENERAL') return null;
-  if (!entryHasConfiguredDailyFranjas(entry?.config)) return null;
-  return franjaKey;
+  // Confiar en franjaKey del splitter (histórico/hoy); no exigir re-validar config.
+  return String(franjaKey).toUpperCase();
 }
 
 function getDailyFranjaHeading(franjaKey, rutina) {
@@ -374,14 +377,123 @@ function sortMultiSectionCadenceEntries(entries = []) {
 }
 
 /**
- * Agrupa el bucket Diario (multi-sección) con Ahora / Luego.
- * Hoy: franjas atrasadas + franja activa se fusionan en «Ahora» (una sola lista, stacks por rutina).
- * Luego: franjas futuras (y periódicos luego).
+ * Histórico: expande pendientes por franja (repeticiones del día).
+ * Las franjas ya marcadas no entran aquí (van a Hecho vía groupDailyCadenceByFranja).
+ * Horarios: config (snapshot/prefs) → claves del valor objeto → frecuencia DIARIO.
+ * Sin franjas resolubles: una sola fila sin insignia (marca boolean del día).
  */
-export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutinas = []) {
+function expandHistoricalPendingByFranja(entry, rutina = null, allRutinas = []) {
+  const { config, itemValue, section, itemId } = entry;
+
+  if (!isDailyCadenceConfig(config)) {
+    if (isHabitHiddenByDeferral({ rutina, section, itemId, allRutinas })) {
+      return [];
+    }
+    return [entry];
+  }
+
+  const configuredHorarios = resolveHistoricalPendingHorarios(config, itemValue);
+
+  if (configuredHorarios.length === 0) {
+    if (isHabitMarkedCompleteForConfig(config, itemValue)) return [];
+    if (isHabitHiddenByDeferral({ rutina, section, itemId, allRutinas })) return [];
+    return [entry];
+  }
+
+  // Evitar doble expansión si la entrada ya viene con franjaKey.
+  const existingFranja = entry.franjaKey && entry.franjaKey !== 'GENERAL'
+    ? String(entry.franjaKey).toUpperCase()
+    : null;
+  if (existingFranja && configuredHorarios.includes(existingFranja)) {
+    if (isHabitHorarioCompleted(itemValue, existingFranja)) return [];
+    if (isHabitHiddenByDeferral({
+      rutina,
+      section,
+      itemId,
+      franja: existingFranja,
+      allRutinas,
+    })) {
+      return [];
+    }
+    return [{
+      ...entry,
+      config: { ...config, horarios: configuredHorarios },
+      franjaKey: existingFranja,
+      franjaScheduleSlot: 'ahora',
+    }];
+  }
+
+  const pending = [];
+  configuredHorarios.forEach((franjaKey) => {
+    if (isHabitHorarioCompleted(itemValue, franjaKey)) return;
+    if (isHabitHiddenByDeferral({
+      rutina,
+      section,
+      itemId,
+      franja: franjaKey,
+      allRutinas,
+    })) {
+      return;
+    }
+    pending.push({
+      ...entry,
+      config: { ...config, horarios: configuredHorarios },
+      franjaKey,
+      franjaScheduleSlot: 'ahora',
+    });
+  });
+  return pending;
+}
+
+/** Horarios efectivos para expandir Sin marcar en histórico. */
+function resolveHistoricalPendingHorarios(config = {}, itemValue) {
+  const fromConfig = [...new Set(
+    (Array.isArray(config?.horarios) ? config.horarios : [])
+      .map((h) => String(h).toUpperCase())
+      .filter((h) => VALID_TIME_OF_DAY.includes(h)),
+  )];
+  if (fromConfig.length > 0) return fromConfig;
+
+  if (itemValue && typeof itemValue === 'object' && !Array.isArray(itemValue)) {
+    const fromValue = VALID_TIME_OF_DAY.filter((h) => Object.prototype.hasOwnProperty.call(itemValue, h));
+    if (fromValue.length > 0) return fromValue;
+  }
+
+  const frecuencia = Number(config?.frecuencia || 1);
+  if ((config?.tipo || 'DIARIO').toUpperCase() === 'DIARIO' && frecuencia > 1) {
+    return VALID_TIME_OF_DAY.slice(0, frecuencia);
+  }
+
+  return [];
+}
+
+/**
+ * Agrupa el bucket Diario (multi-sección) con Ahora / Luego.
+ * Hoy: franjas atrasadas + franja activa se fusionan en «Ahora».
+ * Histórico: pendientes expandidos por franja (Sin marcar con insignia sol/luna).
+ * Luego (hoy): franjas futuras (y periódicos luego).
+ */
+export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutinas = [], options = {}) {
   const today = bucket?.today || [];
   const done = bucket?.done || [];
   const notToday = bucket?.notToday || [];
+  const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'empty';
+  const activeFranja = options.activeFranja || resolveActiveDailyFranja(rutina);
+
+  if (dayMode === 'historical') {
+    const ahora = sortMultiSectionCadenceEntries(
+      today.flatMap((entry) => expandHistoricalPendingByFranja(entry, rutina, allRutinas)),
+    );
+    return {
+      sinHacer: [],
+      ahora,
+      luego: [],
+      done,
+      notToday,
+      activeFranja,
+      activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
+    };
+  }
 
   if (!isViewingRutinaToday(rutina)) {
     return {
@@ -390,12 +502,11 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutin
       luego: [],
       done,
       notToday,
-      activeFranja: resolveActiveDailyFranja(rutina),
+      activeFranja,
       activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
     };
   }
 
-  const activeFranja = resolveActiveDailyFranja(rutina);
   const sinHacer = [];
   const ahora = [];
   const luego = [];
@@ -432,6 +543,23 @@ export function groupSectionHabitsByFranjaSchedule(params) {
   const grouped = groupSectionHabitsByDaySchedule(params);
   const { rutina, section, habits = null, allRutinas = [] } = params;
   const sortOpts = { section, habits };
+  const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'empty';
+  const activeFranja = resolveActiveDailyFranja(rutina);
+
+  if (dayMode === 'historical') {
+    const ahora = sortSectionHabitsByFixedOrder(
+      grouped.today.flatMap((entry) => expandHistoricalPendingByFranja(entry, rutina, allRutinas)),
+      sortOpts,
+    );
+    return {
+      ...grouped,
+      sinHacer: [],
+      ahora,
+      luego: [],
+      activeFranja,
+      activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
+    };
+  }
 
   if (!isViewingRutinaToday(rutina)) {
     return {
@@ -439,12 +567,11 @@ export function groupSectionHabitsByFranjaSchedule(params) {
       sinHacer: [],
       ahora: grouped.today,
       luego: [],
-      activeFranja: resolveActiveDailyFranja(rutina),
+      activeFranja,
       activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
     };
   }
 
-  const activeFranja = resolveActiveDailyFranja(rutina);
   const sinHacer = [];
   const ahora = [];
   const luego = [];

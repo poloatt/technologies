@@ -3,7 +3,6 @@ import {
   computeRutinaToggleValue,
   getHabitItemValue,
   persistRutinaItemToggle,
-  resolveActiveDailyFranja,
   rutinaItemValuesDiffer,
 } from '@shared/habits';
 import { getCurrentTimeOfDay } from '@shared/utils/timeOfDayUtils';
@@ -41,9 +40,11 @@ export default function useRutinaItemToggle({
       rutina: rutinaForToggle,
       habitsPreferences,
       horario,
-      currentTimeOfDay: rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical'
-        ? resolveActiveDailyFranja(rutina)
-        : getCurrentTimeOfDay(),
+      currentTimeOfDay: horario
+        ? String(horario).toUpperCase()
+        : (rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical'
+          ? null
+          : getCurrentTimeOfDay()),
     });
 
     onOptimisticValue?.(section, itemId, newValue);

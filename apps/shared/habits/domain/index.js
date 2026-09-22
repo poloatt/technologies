@@ -12,6 +12,7 @@ export {
   computeNextHabitValue,
   isFranjaCompleted,
   habitRequiresExpandedCarouselToggle,
+  resolveLastCompletedFranja,
 } from './habitToggleUtils.js';
 export {
   getHabitItemValue,
@@ -117,6 +118,9 @@ export {
   getCarouselItemsForMode,
   getCarouselAhoraItems,
   getCarouselLuegoItems,
+} from '../engine/agendaHabitCarouselItems.js';
+
+export {
   getCarouselCompletedTodayItems,
   isFlexiblePeriodic,
   getPeriodicCarouselMode,

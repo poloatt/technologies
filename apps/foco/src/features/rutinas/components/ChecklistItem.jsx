@@ -120,12 +120,17 @@ const ChecklistItem = ({
     ? localData[itemId]
     : (completionValue !== undefined ? completionValue : rutina?.[section]?.[itemId]);
 
-  const shouldConsolidateDoneFranjas = consolidateDoneFranjas || isHistoricalDay;
-  const completedFranjaBadges = (shouldConsolidateDoneFranjas && isCompleted)
+  const shouldShowDoneFranjaBadges = consolidateDoneFranjas || isHistoricalDay;
+  const completedFranjaBadges = (
+    shouldShowDoneFranjaBadges
+    && isCompleted
+    && consolidateDoneFranjas
+    && !normalizedFocusHorario
+  )
     ? resolveDoneFranjaBadges({
       config,
       itemValue,
-      franjaKey: normalizedFocusHorario,
+      franjaKey: null,
     })
     : null;
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { getTaskHorizonCopy } from '@shared/copy/agendaTerminology';
 import { hubSectionTitleSx } from '@shared/styles/hubSectionStyles';
 import AgendaCalendarPage from '../../agenda/AgendaCalendarPage';
@@ -58,7 +58,7 @@ export function TareasListPage() {
   const [desktopOpenTask, setDesktopOpenTask] = useState(null);
 
   const {
-    loading,
+    isFetching,
     objetivos,
     refetchObjetivos,
     isMobile,
@@ -163,12 +163,8 @@ export function TareasListPage() {
           flexDirection: 'column',
         }}
       >
-        <Box sx={scrollContainerSx}>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-              <CircularProgress />
-            </Box>
-          ) : isMobile ? (
+        <Box sx={scrollContainerSx} aria-busy={isFetching}>
+          {isMobile ? (
             <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <TareasTable {...tareasTableCommonProps} tareas={tareasAgenda} agendaView={agendaView} />
             </Box>

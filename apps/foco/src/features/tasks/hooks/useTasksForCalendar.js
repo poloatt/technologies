@@ -4,14 +4,12 @@ import { es } from 'date-fns/locale';
 import { CADENCIA_WEEK_STARTS_ON } from '@shared/habits';
 import { useSnackbar } from 'notistack';
 import { normalizeTaskList } from '@shared/utils/taskListUtils';
+import { getNormalizedToday } from '@shared/utils/dateUtils';
 import { fetchTasksForAgendaRange } from '../api/tasksApi';
 
-// Caché por rango + dedup de requests en vuelo, compartida entre montajes.
-// Permite alternar día/semana (o volver a un rango ya visto) sin spinner ni
-// refetch bloqueante: se sirve la caché al instante y se revalida en background.
 const AGENDA_TTL_MS = 30000;
-const agendaCache = new Map(); // rangeKey -> { docs, timestamp }
-const agendaInFlight = new Map(); // rangeKey -> Promise<docs>
+const agendaCache = new Map();
+const agendaInFlight = new Map();
 
 function loadAgendaRange(rangeKey, { from, to, includeCompleted, force = false }) {
   if (!force && agendaInFlight.has(rangeKey)) {
@@ -42,11 +40,19 @@ function rangeKeyOf(range, includeCompleted) {
   return `${range.start.getTime()}|${range.end.getTime()}|${includeCompleted}`;
 }
 
-// Prefetch en background: calienta la caché sin tocar loading/tasks del rango actual.
+function peekAgendaCache(rangeKey) {
+  const cached = agendaCache.get(rangeKey);
+  if (!cached) return null;
+  return {
+    ...cached,
+    stale: Date.now() - cached.timestamp >= AGENDA_TTL_MS,
+  };
+}
+
 function prefetchAgendaRange(range, includeCompleted) {
   const key = rangeKeyOf(range, includeCompleted);
-  const cached = agendaCache.get(key);
-  if (cached && Date.now() - cached.timestamp < AGENDA_TTL_MS) return;
+  const cached = peekAgendaCache(key);
+  if (cached && !cached.stale) return;
   if (agendaInFlight.has(key)) return;
   loadAgendaRange(key, {
     from: range.start,
@@ -55,11 +61,35 @@ function prefetchAgendaRange(range, includeCompleted) {
   }).catch(() => {});
 }
 
+/** Prefetch del rango visible (hoy / semana) para abrir Agenda sin spinner. */
+export function prefetchTasksForCalendar(selectedDate = null, viewMode = 'week', includeCompleted = false) {
+  const range = computeRange(selectedDate || getNormalizedToday(), viewMode);
+  prefetchAgendaRange(range, includeCompleted);
+}
+
+/**
+ * Calendario /tareas: caché por rango + SWR.
+ * Sync hydrate al montar; la UI no se bloquea con spinner a pantalla completa.
+ */
 export function useTasksForCalendar(selectedDate, viewMode = 'week') {
   const { enqueueSnackbar } = useSnackbar();
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [includeCompleted, setIncludeCompleted] = useState(false);
+
+  const range = useMemo(
+    () => computeRange(selectedDate || getNormalizedToday(), viewMode),
+    [selectedDate, viewMode],
+  );
+
+  const rangeKey = useMemo(
+    () => rangeKeyOf(range, includeCompleted),
+    [range, includeCompleted],
+  );
+
+  const initialCache = peekAgendaCache(rangeKey);
+  const [tasks, setTasks] = useState(() => (
+    initialCache ? normalizeTaskList(initialCache.docs) : []
+  ));
+  const [isFetching, setIsFetching] = useState(!initialCache || Boolean(initialCache?.stale));
 
   useEffect(() => {
     const handleSetShowCompleted = (event) => {
@@ -70,26 +100,13 @@ export function useTasksForCalendar(selectedDate, viewMode = 'week') {
     return () => window.removeEventListener('setShowCompleted', handleSetShowCompleted);
   }, []);
 
-  const range = useMemo(
-    () => computeRange(selectedDate || new Date(), viewMode),
-    [selectedDate, viewMode],
-  );
-
-  const rangeKey = useMemo(
-    () => `${range.start.getTime()}|${range.end.getTime()}|${includeCompleted}`,
-    [range.start, range.end, includeCompleted],
-  );
-
-  // Mantener el rango actual accesible para refetch sin recrear el callback
   const rangeRef = useRef({ rangeKey, range, includeCompleted });
   rangeRef.current = { rangeKey, range, includeCompleted };
 
   const refetch = useCallback(async () => {
     const { rangeKey: key, range: r, includeCompleted: inc } = rangeRef.current;
+    setIsFetching(true);
     try {
-      setLoading(true);
-      // Refresco explícito (normalmente tras una mutación): invalidar todos los
-      // rangos para que al alternar día/semana se revaliden y no queden viejos.
       agendaCache.clear();
       const docs = await loadAgendaRange(key, {
         from: r.start,
@@ -102,31 +119,35 @@ export function useTasksForCalendar(selectedDate, viewMode = 'week') {
     } catch (error) {
       console.error('Error al cargar agenda:', error);
       enqueueSnackbar('Error al cargar tareas del calendario', { variant: 'error' });
-      setTasks([]);
       throw error;
     } finally {
-      setLoading(false);
+      setIsFetching(false);
     }
   }, [enqueueSnackbar]);
 
   useEffect(() => {
     let cancelled = false;
+    const cached = peekAgendaCache(rangeKey);
 
-    const cached = agendaCache.get(rangeKey);
-    const isFresh = cached && Date.now() - cached.timestamp < AGENDA_TTL_MS;
-
-    // Stale-while-revalidate: si hay caché, mostrarla ya y revalidar sin spinner
     if (cached) {
       setTasks(normalizeTaskList(cached.docs));
-      setLoading(false);
-    } else {
-      setLoading(true);
+      if (!cached.stale) {
+        setIsFetching(false);
+        loadAgendaRange(rangeKey, {
+          from: range.start,
+          to: range.end,
+          includeCompleted,
+          force: true,
+        })
+          .then((docs) => {
+            if (!cancelled) setTasks(normalizeTaskList(docs));
+          })
+          .catch(() => {});
+        return () => { cancelled = true; };
+      }
     }
 
-    if (isFresh) {
-      return () => { cancelled = true; };
-    }
-
+    setIsFetching(true);
     loadAgendaRange(rangeKey, {
       from: range.start,
       to: range.end,
@@ -142,16 +163,14 @@ export function useTasksForCalendar(selectedDate, viewMode = 'week') {
         }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setIsFetching(false);
       });
 
     return () => { cancelled = true; };
   }, [rangeKey, enqueueSnackbar, range.start, range.end, includeCompleted]);
 
-  // Prefetch en background (en idle) del rango adyacente y del "otro modo de vista"
-  // para que avanzar semana/día o alternar día/semana sea instantáneo la primera vez.
   useEffect(() => {
-    const base = selectedDate || new Date();
+    const base = selectedDate || getNormalizedToday();
     const runPrefetch = () => {
       const step = viewMode === 'week' ? addWeeks : addDays;
       prefetchAgendaRange(computeRange(step(base, 1), viewMode), includeCompleted);
@@ -173,5 +192,14 @@ export function useTasksForCalendar(selectedDate, viewMode = 'week') {
     };
   }, [selectedDate, viewMode, includeCompleted]);
 
-  return { tasks, setTasks, loading, range, refetch, includeCompleted };
+  return {
+    tasks,
+    setTasks,
+    /** Compat: la vista Agenda no debe bloquearse. */
+    loading: false,
+    isFetching,
+    range,
+    refetch,
+    includeCompleted,
+  };
 }

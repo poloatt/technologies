@@ -47,7 +47,7 @@ export default function RutinaDailyCadenceFranjaLayout({
   habits = null,
   habitsPreferences = {},
   localDataBySection = {},
-  includeDoneSection = true,
+  includeDoneSection = false,
   useShortFranjaLabels = false,
   onReorderSection,
   luegoWeekdayGroups = [],

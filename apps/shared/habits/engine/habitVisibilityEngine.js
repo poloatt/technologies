@@ -529,7 +529,7 @@ function collectCarouselItems(mode, {
 
 /**
  * Hábitos pendientes para el carrusel "Ahora".
- * Diarios: franjas retrasadas + actual en Ahora; futuras en Luego. Periódicos: adelanto o urgencia.
+ * @deprecated Prefer getAgendaHabitCarouselItems / getCarouselAhoraItems desde agendaHabitCarouselItems.
  * @see agendaTerminology — habitSlot.ahora
  */
 export function getCarouselAhoraItems(params) {
@@ -538,7 +538,7 @@ export function getCarouselAhoraItems(params) {
 
 /**
  * Hábitos para el carrusel "Luego".
- * Diarios: franjas futuras hoy. Periódicos: backlog o ventana pasada.
+ * @deprecated Prefer getAgendaHabitCarouselItems / getCarouselLuegoItems desde agendaHabitCarouselItems.
  * @see agendaTerminology — habitSlot.luego
  */
 export function getCarouselLuegoItems(params) {
@@ -546,20 +546,21 @@ export function getCarouselLuegoItems(params) {
 }
 
 /**
- * Tracker: mostrar todos los hábitos activos (completados o no).
+ * @deprecated Prefer getCarouselItemsForMode desde agendaHabitCarouselItems.
  */
-export function shouldShowInTracker(section, itemId, rutina, config) {
-  if (!section || !itemId) return false;
-  const itemConfig = config || rutina?.config?.[section]?.[itemId];
-  if (itemConfig?.activo === false) return false;
-  return true;
-}
-
 export function getCarouselItemsForMode(mode, params) {
   if (mode === 'luego') {
     return getCarouselLuegoItems(params);
   }
   return getCarouselAhoraItems(params);
+}
+
+/** Tracker: mostrar todos los hábitos activos (completados o no). */
+export function shouldShowInTracker(section, itemId, rutina, config) {
+  if (!section || !itemId) return false;
+  const itemConfig = config || rutina?.config?.[section]?.[itemId];
+  if (itemConfig?.activo === false) return false;
+  return true;
 }
 
 function appendCompletedDailyEntries({

@@ -77,7 +77,7 @@ describe('habitVisibilityEngine', () => {
         habits,
         currentTimeOfDay: 'MAÑANA',
       });
-      expect(items).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      expect(items).toEqual([{ section: 'ejercicio', itemId: 'gym', horario: 'MAÑANA' }]);
     });
 
     it('excludes completed daily habits', () => {
@@ -224,8 +224,8 @@ describe('habitVisibilityEngine', () => {
         currentTimeOfDay: 'NOCHE',
       });
       expect(ahoraItems).toEqual([
-        { section: 'bodyCare', itemId: 'cuidadoBucal', horario: 'MAÑANA' },
         { section: 'bodyCare', itemId: 'cuidadoBucal', horario: 'NOCHE' },
+        { section: 'bodyCare', itemId: 'cuidadoBucal', horario: 'MAÑANA' },
       ]);
 
       const luegoItems = getCarouselLuegoItems({
@@ -653,7 +653,9 @@ describe('habitVisibilityEngine', () => {
         habitsPreferences,
       };
 
-      expect(getCarouselAhoraItems(params)).toEqual([{ section: 'nutricion', itemId: 'protein' }]);
+      expect(getCarouselAhoraItems(params)).toEqual([
+        { section: 'nutricion', itemId: 'protein', horario: 'MAÑANA' },
+      ]);
       expect(getCarouselLuegoItems(params)).toEqual([]);
     });
 
@@ -798,7 +800,7 @@ describe('habitVisibilityEngine', () => {
       expect(resolved.horarios).toEqual(['TARDE']);
     });
 
-    it('fills historical horarios from preferences when snapshot has none', () => {
+    it('injects preference horarios into historical daily snapshots without horarios', () => {
       const historicalDate = new Date('2020-01-15T12:00:00.000Z');
       const rutinaHistorica = buildRutina({
         fecha: historicalDate.toISOString(),
@@ -833,7 +835,7 @@ describe('habitVisibilityEngine', () => {
         habitsPreferences,
       );
       expect(resolved.tipo).toBe('DIARIO');
-      expect(resolved.frecuencia).toBe(2);
+      expect(resolved.frecuencia).toBe(1);
       expect(resolved.horarios).toEqual(['MAÑANA', 'NOCHE']);
     });
 
@@ -862,7 +864,7 @@ describe('habitVisibilityEngine', () => {
   describe('cadencia carry-over carousel', () => {
     const tuesday = new Date(2026, 5, 23, 12, 0, 0, 0);
 
-    it('shows fixed weekly carry-over in Luego on non-scheduled day', () => {
+    it('hides fixed weekly off-schedule habits from Tareas Luego (parity with /rutinas)', () => {
       const rutinaHoy = buildRutina({
         fecha: tuesday.toISOString(),
         config: {
@@ -885,7 +887,7 @@ describe('habitVisibilityEngine', () => {
         currentTimeOfDay: 'MAÑANA',
       });
 
-      expect(luego).toEqual([{ section: 'ejercicio', itemId: 'gym' }]);
+      expect(luego).toEqual([]);
       expect(ahora).toEqual([]);
     });
 

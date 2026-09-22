@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, CircularProgress, Paper } from '@mui/material';
-import RutinaTable from './RutinaTable';
+import RutinaDayView from './RutinaDayView';
 import { RutinaForm } from './dialogs/RutinaForm';
 import { HabitsManager } from '../habits/manager';
 import HabitFormDialog from '@shared/components/HabitFormDialog';
@@ -10,16 +10,12 @@ import {
   getRutinaPageContentShellSx,
   rutinaPageScrollSx,
   rutinaPageLoaderSx,
-  rutinaEmptyStatePaperSx,
   rutinaErrorStatePaperSx,
 } from '@shared/styles/rutinaPageStyles';
 import { RUTINA_NAVIGATION_BAR_CONFIG } from '@shared/config/uiConstants';
-import {
-  CalendarMonthOutlined as DateIcon,
-  Info as InfoIcon,
-} from '@mui/icons-material';
+import { Info as InfoIcon } from '@mui/icons-material';
 
-function EmptyStateMessage({ error, isFuture = false }) {
+function PageStatusMessage({ error }) {
   if (error) {
     return (
       <Paper elevation={0} sx={rutinaErrorStatePaperSx}>
@@ -29,43 +25,24 @@ function EmptyStateMessage({ error, isFuture = false }) {
     );
   }
 
-  if (!isFuture) {
-    return (
-      <Box sx={rutinaPageLoaderSx}>
-        <CircularProgress size={32} />
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-          Preparando el registro del día…
-        </Typography>
-      </Box>
-    );
-  }
-
   return (
-    <Paper elevation={0} sx={rutinaEmptyStatePaperSx}>
-      <DateIcon sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
-      <Typography variant="h6">
-        Aún no hay registro para este día
+    <Box sx={rutinaPageLoaderSx}>
+      <CircularProgress size={32} />
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+        Preparando el registro del día…
       </Typography>
-      <Typography variant="body2" color="text.secondary">
-        El registro diario se crea automáticamente. Puedes agregar hábitos con el botón + de la barra superior.
-      </Typography>
-    </Paper>
+    </Box>
   );
 }
 
 const RutinasWithContext = () => {
   const {
-    rutina,
     effectiveRutina,
     rutinaReadOnly,
     isPreview,
-    rutinas,
-    loading,
     error,
     editMode,
     rutinaToEdit,
-    currentPage,
-    totalPages,
     habitsManagerOpen,
     setHabitsManagerOpen,
     habitFormOpen,
@@ -74,7 +51,9 @@ const RutinasWithContext = () => {
     isMobileOrTablet,
   } = useRutinasPageController();
 
+  // Mantener el día anterior mientras carga el siguiente (evita flash de spinner).
   const showRutinaContent = Boolean(effectiveRutina) && !editMode;
+  const showStatus = !showRutinaContent && !editMode;
 
   return (
     <Box component="main" className="page-main-content" sx={rutinaPageMainSx}>
@@ -89,29 +68,13 @@ const RutinasWithContext = () => {
       }}
       >
         <Box sx={rutinaPageScrollSx(isMobileOrTablet, undefined, RUTINA_NAVIGATION_BAR_CONFIG.height)}>
-          {loading && (
-            <Box sx={rutinaPageLoaderSx}>
-              <CircularProgress />
-            </Box>
-          )}
-
-          {!loading && !effectiveRutina && !editMode && (
-            <EmptyStateMessage error={error} isFuture={false} />
-          )}
+          {showStatus && <PageStatusMessage error={error} />}
 
           {showRutinaContent && (
-            <RutinaTable
-              rutina={{
-                ...effectiveRutina,
-                _page: currentPage,
-                _totalPages: totalPages,
-              }}
+            <RutinaDayView
+              rutina={effectiveRutina}
               readOnly={rutinaReadOnly}
               isPreview={isPreview}
-              rutinas={rutinas}
-              loading={loading}
-              currentPage={currentPage}
-              totalPages={totalPages}
             />
           )}
 

@@ -8,6 +8,7 @@ import {
   isEntryDueOnRutinaDay,
   buildDailyCadenceDisplaySections,
   reorderFlatEntriesByDisplayRowDnD,
+  buildRutinaGlobalDoneItems,
 } from '@shared/habits';
 import { jest } from '@jest/globals';
 import { getNormalizedToday, formatDateForAPI } from '@shared/utils/dateUtils.js';
@@ -292,7 +293,50 @@ describe('groupDailyCadenceBucketByFranjaSchedule', () => {
     expect(grouped.ahora.map((e) => e.itemId).sort()).toEqual(['afternoon', 'morning']);
   });
 
-  it('on historical day keeps partial multi-franja in sin marcar until all franjas done', () => {
+  it('on historical day does not double-expand entries that already have franjaKey', () => {
+    const historicalDate = new Date(2026, 5, 20).toISOString();
+    const rutina = {
+      _id: 'r1',
+      fecha: historicalDate,
+      bodyCare: { teeth: { MAÑANA: false, NOCHE: false } },
+      config: {
+        bodyCare: {
+          teeth: {
+            tipo: 'DIARIO',
+            frecuencia: 2,
+            activo: true,
+            horarios: ['MAÑANA', 'NOCHE'],
+          },
+        },
+      },
+    };
+    const preExpanded = {
+      today: [
+        {
+          itemId: 'teeth',
+          section: 'bodyCare',
+          config: rutina.config.bodyCare.teeth,
+          itemValue: rutina.bodyCare.teeth,
+          franjaKey: 'MAÑANA',
+        },
+        {
+          itemId: 'teeth',
+          section: 'bodyCare',
+          config: rutina.config.bodyCare.teeth,
+          itemValue: rutina.bodyCare.teeth,
+          franjaKey: 'NOCHE',
+        },
+      ],
+      done: [],
+      notToday: [],
+    };
+
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(preExpanded, rutina);
+    expect(grouped.ahora).toHaveLength(2);
+    expect(grouped.ahora.map((e) => e.franjaKey).sort()).toEqual(['MAÑANA', 'NOCHE']);
+  });
+
+  it('on historical day expands partial multi-franja into pending franja slots only', () => {
     const historicalDate = new Date(2026, 5, 20).toISOString();
     const rutina = {
       _id: 'r1',
@@ -334,8 +378,66 @@ describe('groupDailyCadenceBucketByFranjaSchedule', () => {
     expect(diario?.today.map((e) => e.itemId)).toContain('shower');
 
     const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
-    expect(grouped.ahora.map((e) => e.itemId)).toContain('teeth');
+    const teethPending = grouped.ahora.filter((e) => e.itemId === 'teeth');
+    expect(teethPending).toEqual([
+      expect.objectContaining({ itemId: 'teeth', franjaKey: 'NOCHE' }),
+    ]);
     expect(grouped.ahora.map((e) => e.itemId)).toContain('shower');
+
+    const doneItems = buildRutinaGlobalDoneItems([diario], rutina);
+    const teethDone = doneItems.filter((e) => e.itemId === 'teeth');
+    expect(teethDone).toEqual([
+      expect.objectContaining({ itemId: 'teeth', franjaKey: 'MAÑANA' }),
+    ]);
+  });
+
+  it('on historical day expands from prefs horarios when snapshot has none', () => {
+    const historicalDate = new Date(2026, 5, 20).toISOString();
+    const rutina = {
+      _id: 'r1',
+      fecha: historicalDate,
+      bodyCare: { skincare: false },
+      config: {
+        bodyCare: {
+          skincare: {
+            tipo: 'DIARIO',
+            frecuencia: 1,
+            activo: true,
+            horarios: [],
+          },
+        },
+      },
+    };
+    const habitsPreferences = {
+      bodyCare: {
+        skincare: {
+          tipo: 'DIARIO',
+          frecuencia: 1,
+          activo: true,
+          horarios: ['MAÑANA', 'NOCHE'],
+        },
+      },
+    };
+    const habitsMulti = {
+      bodyCare: [
+        { id: 'skincare', label: 'Skincare', icon: 'Spa', activo: true, orden: 0 },
+      ],
+    };
+    const iconsMulti = {
+      bodyCare: { skincare: () => null },
+    };
+
+    const diario = groupRutinaHabitsByCadence({
+      rutina,
+      habits: habitsMulti,
+      habitsPreferences,
+      iconsMap: iconsMulti,
+    }).find((b) => b.id === 'DIARIO');
+
+    const grouped = groupDailyCadenceBucketByFranjaSchedule(diario, rutina);
+    const pending = grouped.ahora.filter((e) => e.itemId === 'skincare');
+    expect(pending).toHaveLength(2);
+    expect(pending.map((e) => e.franjaKey).sort()).toEqual(['MAÑANA', 'NOCHE']);
   });
 
   it('on afternoon merges morning pending into ahora (no sinHacer section)', () => {

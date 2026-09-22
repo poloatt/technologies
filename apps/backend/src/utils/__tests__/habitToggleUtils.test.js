@@ -71,6 +71,44 @@ describe('habitToggleUtils', () => {
       expect(result).toEqual({ MAÑANA: true, TARDE: false });
     });
 
+    it('toggles single configured franja without collapsing to boolean', () => {
+      const result = computeCarouselToggleValue({
+        itemValue: { MAÑANA: false },
+        horariosConfig: ['MAÑANA'],
+        normalizedHorario: 'MAÑANA',
+      });
+
+      expect(result).toEqual({ MAÑANA: true });
+      expect(typeof result).toBe('object');
+    });
+
+    it('unmarks one franja without destroying object shape', () => {
+      const result = computeCarouselToggleValue({
+        itemValue: { MAÑANA: true, NOCHE: false },
+        horariosConfig: ['MAÑANA', 'NOCHE'],
+        normalizedHorario: 'MAÑANA',
+      });
+
+      expect(result).toEqual({ MAÑANA: false, NOCHE: false });
+    });
+
+    it('no-ops multi-franja partial when horario is missing (avoids boolean collapse)', () => {
+      const value = { MAÑANA: true, NOCHE: false };
+      expect(computeCarouselToggleValue({
+        itemValue: value,
+        horariosConfig: ['MAÑANA', 'NOCHE'],
+        normalizedHorario: null,
+      })).toEqual(value);
+    });
+
+    it('unmarks last completed franja when fully done and horario is missing', () => {
+      expect(computeCarouselToggleValue({
+        itemValue: { MAÑANA: true, TARDE: true, NOCHE: true },
+        horariosConfig: ['MAÑANA', 'TARDE', 'NOCHE'],
+        normalizedHorario: null,
+      })).toEqual({ MAÑANA: true, TARDE: true, NOCHE: false });
+    });
+
     it('toggles overdue MAÑANA franja when explicitly passed', () => {
       const result = computeCarouselToggleValue({
         itemValue: { MAÑANA: false, NOCHE: false },

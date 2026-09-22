@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Container,
   Box,
   IconButton,
   Tooltip,
-  CircularProgress,
   Chip,
 } from '@mui/material';
 import { useResponsive } from '@shared/hooks';
@@ -19,7 +18,8 @@ import {
   AccessTimeOutlined as TimeIcon,
 } from '@mui/icons-material';
 import clienteAxios from '@shared/config/axios';
-import { fetchObjetivosLight, fetchTasksByObjetivo } from '../tasks/api/tasksApi';
+import { fetchTasksByObjetivo } from '../tasks/api/tasksApi';
+import { useObjetivosLight } from '../tasks/hooks/useObjetivosLight';
 import { useSnackbar } from 'notistack';
 import ObjetivosGrid from './ObjetivosGrid';
 import ObjetivoForm from './ObjetivoForm';
@@ -31,8 +31,12 @@ import { useScopedPageHistory, useScopedCRUD } from '@shared/hooks';
 import { useNavigate } from 'react-router-dom';
 
 export function Objetivos() {
-  const [objetivos, setObjetivos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    objetivos,
+    setObjetivos,
+    isFetching,
+    refetch: refetchObjetivos,
+  } = useObjetivosLight();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingObjetivo, setEditingObjetivo] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
@@ -45,52 +49,17 @@ export function Objetivos() {
   const { showValues, toggleValuesVisibility } = useValuesVisibility();
   const navigate = useNavigate();
 
-  // 1. fetchObjetivos: fetch directo (sin debounce artificial) con dedup in-flight
-  //    para coalescer llamadas concurrentes (montaje + eventos) sin añadir latencia.
-  const fetchObjetivosInFlightRef = useRef(null);
   const fetchObjetivos = useCallback(async () => {
-    if (fetchObjetivosInFlightRef.current) {
-      return fetchObjetivosInFlightRef.current;
-    }
-
-    const run = (async () => {
-      try {
-        const docs = await fetchObjetivosLight();
-        setObjetivos(docs.map((o) => ({ ...o, tareas: o.tareas || [] })));
-        setLoading(false);
-        return { docs };
-      } catch (error) {
-        console.error('Error:', error);
-        enqueueSnackbar('Error al cargar Objetivos', { variant: 'error' });
-        setObjetivos([]);
-        setLoading(false);
-        throw error;
-      }
-    })();
-
-    fetchObjetivosInFlightRef.current = run;
-    try {
-      return await run;
-    } finally {
-      fetchObjetivosInFlightRef.current = null;
-    }
-  }, [enqueueSnackbar]);
+    const docs = await refetchObjetivos({ force: true });
+    return docs ? { docs } : null;
+  }, [refetchObjetivos]);
 
   // Función estable para el historial
   const fetchObjetivosStable = useCallback(async () => {
-    try {
-      const docs = await fetchObjetivosLight();
-      setObjetivos(docs.map((o) => ({ ...o, tareas: o.tareas || [] })));
-      setLoading(false);
-      return { docs };
-    } catch (error) {
-      console.error('Error:', error);
-      enqueueSnackbar('Error al cargar Objetivos', { variant: 'error' });
-      setObjetivos([]);
-      setLoading(false);
-      throw error;
-    }
-  }, [enqueueSnackbar]);
+    const docs = await refetchObjetivos({ force: true });
+    if (!docs) throw new Error('Error al cargar Objetivos');
+    return { docs };
+  }, [refetchObjetivos]);
 
   // 2. Historial de objetivos (ruta actual)
   const tareaApiService = useMemo(() => ({
@@ -212,10 +181,6 @@ export function Objetivos() {
       enqueueSnackbar('Error al eliminar los Objetivos', { variant: 'error' });
     }
   }, [selectedObjetivos, deleteWithHistory, enqueueSnackbar, fetchObjetivos]);
-
-  useEffect(() => {
-    fetchObjetivos();
-  }, [fetchObjetivos]);
 
   // Escuchar eventos del Header y navegación
   useEffect(() => {
@@ -420,13 +385,9 @@ export function Objetivos() {
               backgroundColor: 'rgba(0,0,0,0.3)',
             },
           }}
+          aria-busy={isFetching}
         >
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <ObjetivosGrid
+          <ObjetivosGrid
               objetivos={objetivos}
               onEdit={handleEdit}
               onDelete={handleDelete}
@@ -444,7 +405,6 @@ export function Objetivos() {
               selectedObjetivos={selectedObjetivos}
               onSelectobjetivo={handleSelectobjetivo}
             />
-          )}
         </Box>
         <ObjetivoForm
           open={isFormOpen}

@@ -11,6 +11,7 @@ import {
   isHabitFullyCompletedToday,
   isHabitHorarioCompleted,
   isHabitMarkedCompleteForConfig,
+  isHabitPartiallyCompletedToday,
 } from '../domain/habitCompletionUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 import {
@@ -357,7 +358,14 @@ export function partitionDoneEntriesByRutinaDay(
 
   entries.forEach((entry) => {
     const params = resolveDoneEntryParams(entry, rutina, rutinaForVisibility);
-    if (isHabitCompletedOnRutinaDay(params)) {
+    // Franja diaria marcada ese día (con o sin franjaKey tras consolidar) → Hecho.
+    const partialFranjaOnDay = requiresFullFranjaCompletion(params.config)
+      && isHabitPartiallyCompletedToday(params.itemValue, getConfigHorarios(params.config));
+    if (
+      isHabitCompletedOnRutinaDay(params)
+      || isCadenceFranjaDoneEntry(entry, params)
+      || partialFranjaOnDay
+    ) {
       doneOnDay.push(entry);
     } else if (isHabitQuotaOrDayDone(params)) {
       doneByQuota.push(entry);
@@ -377,7 +385,10 @@ function isCadenceFranjaDoneEntry(entry, params) {
   return isHabitHorarioCompleted(params.itemValue, franjaKey);
 }
 
-/** Una sola fila por hábito cerrado; conserva franjas sueltas en completados parciales. */
+/**
+ * Una sola fila por hábito solo cuando el día está cerrado (todas las franjas).
+ * Parciales: una entrada por franjaKey (misma regla que Hoy — insignia + toggle por slot).
+ */
 function collapseDoneSectionCarouselEntries(entries = [], rutina, rutinaForVisibility = rutina) {
   const seenConsolidated = new Set();
   const result = [];

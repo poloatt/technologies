@@ -294,10 +294,14 @@ const TareasTable = ({
     setExpandedPeriodo((prev) => {
       if (periodosOrdenados.length === 0) return null;
       if (prev && periodosOrdenados.includes(prev)) return prev;
-      // Ahora: RETRASADAS primero si existe; Luego: el grupo más próximo.
-      return periodosOrdenados[0];
+      // Ahora: preferir HOY (Retrasadas queda colapsada). Luego: el grupo más próximo.
+      if (!isArchive && agendaView === 'ahora' && periodosOrdenados.includes('HOY')) {
+        return 'HOY';
+      }
+      const withoutRetrasadas = periodosOrdenados.filter((periodo) => periodo !== 'RETRASADAS');
+      return withoutRetrasadas[0] || periodosOrdenados[0];
     });
-  }, [groupsCollapsible, periodosKey, periodosOrdenados]);
+  }, [groupsCollapsible, periodosKey, periodosOrdenados, agendaView, isArchive]);
 
   const handleTogglePeriodo = (periodo) => {
     setExpandedPeriodo((prev) => {

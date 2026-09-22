@@ -32,6 +32,8 @@ export function buildEmptyHabitCompletionValue(config = {}) {
 /**
  * Alinea el valor guardado al formato esperado cuando hay franjas configuradas.
  * Migra boolean legacy → objeto por franja.
+ * Al agregar franjas nuevas: si el valor ya estaba completo (boolean true u objeto
+ * con todos los slots existentes en true), las franjas nuevas nacen completadas.
  */
 export function ensureHabitCompletionShape(itemValue, config = {}) {
   const horarios = normalizeHorarios(config.horarios);
@@ -41,9 +43,12 @@ export function ensureHabitCompletionShape(itemValue, config = {}) {
   }
 
   if (isHabitValueObject(itemValue)) {
+    const existingKeys = Object.keys(itemValue);
+    const wasFullyComplete = existingKeys.length > 0
+      && existingKeys.every((key) => itemValue[key] === true);
     const next = { ...itemValue };
     horarios.forEach((horario) => {
-      if (!(horario in next)) next[horario] = false;
+      if (!(horario in next)) next[horario] = wasFullyComplete;
     });
     return next;
   }
@@ -179,7 +184,9 @@ export function resolveCompletedDailyFranjas(itemValue, config = {}) {
 
 /**
  * Insignias de franja para Hecho (histórico o hoy): un solo icono con franjas satisfechas.
- * @returns {string[]|null} null si no aplica (no multi-franja o sin franjas completadas).
+ * Cierre total (todas las franjas) sin focus → null (icono limpio en Hecho).
+ * Parcial sin focus → todas las franjas ya marcadas (insignias acumuladas).
+ * @returns {string[]|null} null si no aplica, sin franjas completadas, o cierre total.
  */
 export function resolveDoneFranjaBadges({
   config,
@@ -194,12 +201,18 @@ export function resolveDoneFranjaBadges({
   const focus = franjaKey && franjaKey !== 'GENERAL'
     ? String(franjaKey).toUpperCase()
     : null;
-  if (focus && VALID_TIME_OF_DAY.includes(focus) && isHabitHorarioCompleted(itemValue, focus)) {
+  if (focus) {
+    if (!VALID_TIME_OF_DAY.includes(focus) || !isHabitHorarioCompleted(itemValue, focus)) {
+      return null;
+    }
     return [focus];
   }
 
   const completed = resolveCompletedDailyFranjas(itemValue, config);
-  return completed.length > 0 ? completed : null;
+  if (completed.length === 0) return null;
+  // Todas hechas → Hecho sin insignia; parcial → acumular las marcadas.
+  if (completed.length >= horarios.length) return null;
+  return completed;
 }
 
 /** @deprecated Usar resolveDoneFranjaBadges; conservado por compatibilidad. */

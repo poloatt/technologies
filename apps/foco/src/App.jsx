@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import { Toaster } from 'react-hot-toast';
@@ -20,6 +20,9 @@ import { RutinasProvider } from '@shared/context/RutinasContext';
 import { HabitsProvider } from '@shared/context/HabitsContext';
 import TimezoneInitializer from '@shared/components/TimezoneInitializer';
 import { useAuth } from '@shared/context/AuthContext';
+import { prefetchTasksForList } from './features/tasks/hooks/useTasksForList';
+import { prefetchTasksForCalendar } from './features/tasks/hooks/useTasksForCalendar';
+import { prefetchObjetivosLight } from './features/tasks/hooks/useObjetivosLight';
 
 // Páginas Foco (lazy)
 const Rutinas = React.lazy(() => import('./pages/Rutinas'));
@@ -34,6 +37,29 @@ const Preferencias = React.lazy(() => import('@shared/pages/Preferencias'));
 
 function AppContent() {
   const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const warm = () => {
+      prefetchTasksForList(false);
+      prefetchTasksForCalendar(null, 'week', false);
+      prefetchObjetivosLight();
+      // Precargar chunks de rutas frecuentes para no ver Suspense al entrar.
+      import('./pages/Tareas').catch(() => {});
+      import('./pages/Objetivos').catch(() => {});
+    };
+    const ric = typeof window !== 'undefined' && window.requestIdleCallback;
+    const id = ric
+      ? window.requestIdleCallback(warm, { timeout: 1500 })
+      : setTimeout(warm, 300);
+    return () => {
+      if (ric && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(id);
+      } else {
+        clearTimeout(id);
+      }
+    };
+  }, [user]);
 
   if (import.meta.env.DEV && !user && !loading) {
     console.log('[Foco] auth state:', { authenticated: !!user, loading });

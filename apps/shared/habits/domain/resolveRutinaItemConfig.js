@@ -20,8 +20,8 @@ function hasOwnCadenceField(cfg, key) {
 }
 
 /**
- * Snapshot histórico puede venir incompleto: rellena cadencia desde prefs
- * sin pisar campos explícitos del día.
+ * Snapshot histórico puede venir incompleto: rellena tipo/periodo/días desde prefs
+ * sin importar franjas ni subir frecuencia (evita reabrir días cerrados).
  */
 function mergeHistoricalHabitConfig(snapshotCfg = {}, prefCfg = null) {
   const prefs = prefCfg && typeof prefCfg === 'object' ? prefCfg : {};
@@ -50,14 +50,16 @@ function mergeHistoricalHabitConfig(snapshotCfg = {}, prefCfg = null) {
   if (snapshotHorarios.length > 0) {
     merged.horarios = snapshotHorarios;
   } else if (prefHorarios.length > 0) {
+    // Diario histórico sin horarios en snapshot: usar prefs para expandir
+    // Sin marcar (1 hábito → N filas con insignia de franja).
     merged.horarios = prefHorarios;
-    merged.frecuencia = Math.max(
-      Number(merged.frecuencia || 1),
-      prefHorarios.length,
-      Number(prefs.frecuencia || 1),
-    );
   } else {
     merged.horarios = [];
+  }
+
+  // Conservar frecuencia del snapshot si existe; no subirla con prefs solo para expandir slots.
+  if (hasOwnCadenceField(snapshot, 'frecuencia')) {
+    merged.frecuencia = snapshot.frecuencia;
   }
 
   return merged;

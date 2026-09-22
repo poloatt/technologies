@@ -4,8 +4,9 @@ import {
   getRutinaMarkedDoneTodayEntries,
   mapRutinaDoneEntriesToCarouselItems,
 } from '@shared/habits';
+
 /**
- * Filtra items del carrusel según modo Ahora/Luego.
+ * Filtra items del carrusel según modo Ahora/Luego (misma lógica que /rutinas).
  * @param {'ahora'|'luego'} mode
  */
 export default function useHabitCarouselItems(mode, {
@@ -14,20 +15,34 @@ export default function useHabitCarouselItems(mode, {
   habits,
   currentTimeOfDay,
   habitsPreferences = null,
+  habitChains = [],
+  customSections = [],
+  allRutinas = [],
   includeCompletedToday = false,
 }) {
-  const params = {
+  const pendingItems = useMemo(() => {
+    if (habitsPreferences === null) return [];
+    return getCarouselItemsForMode(mode, {
+      rutinaHoy,
+      sectionIconsMap,
+      habits,
+      currentTimeOfDay,
+      habitsPreferences: habitsPreferences || {},
+      habitChains,
+      customSections,
+      allRutinas,
+    });
+  }, [
+    mode,
     rutinaHoy,
     sectionIconsMap,
     habits,
     currentTimeOfDay,
-    habitsPreferences: habitsPreferences || {},
-  };
-
-  const pendingItems = useMemo(() => {
-    if (habitsPreferences === null) return [];
-    return getCarouselItemsForMode(mode, params);
-  }, [mode, rutinaHoy, sectionIconsMap, habits, currentTimeOfDay, habitsPreferences]);
+    habitsPreferences,
+    habitChains,
+    customSections,
+    allRutinas,
+  ]);
 
   const completedTodayItems = useMemo(() => {
     if (!includeCompletedToday || habitsPreferences === null || !rutinaHoy) return [];
@@ -40,6 +55,7 @@ export default function useHabitCarouselItems(mode, {
       }),
     );
   }, [includeCompletedToday, rutinaHoy, sectionIconsMap, habits, habitsPreferences]);
+
   return {
     pendingItems,
     carouselItems: pendingItems,

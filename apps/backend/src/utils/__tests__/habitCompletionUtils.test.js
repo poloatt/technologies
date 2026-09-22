@@ -30,9 +30,17 @@ describe('done multi-franja badges', () => {
   it('returns all completed franjas for consolidated done entry', () => {
     const badges = resolveDoneFranjaBadges({
       config: multiFranjaConfig,
+      itemValue: { MAÑANA: true, TARDE: true, NOCHE: false },
+    });
+    expect(badges).toEqual(['MAÑANA', 'TARDE']);
+  });
+
+  it('hides badges when all configured franjas are complete', () => {
+    const badges = resolveDoneFranjaBadges({
+      config: multiFranjaConfig,
       itemValue: historicalRutina.bodyCare.skincare,
     });
-    expect(badges).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
+    expect(badges).toBeNull();
   });
 
   it('returns single franja badge for partial done entry', () => {
@@ -52,7 +60,7 @@ describe('done multi-franja badges', () => {
     expect(resolveDoneFranjaBadges({
       config: multiFranjaConfig,
       itemValue: todayRutina.bodyCare.skincare,
-    })).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
+    })).toBeNull();
   });
 
   it('resolveHistoricalDoneFranjaBadges still gates on historical day', () => {
@@ -71,9 +79,18 @@ describe('done multi-franja badges', () => {
     const badges = resolveHistoricalDoneFranjaBadges({
       rutina: historicalRutina,
       config: multiFranjaConfig,
+      itemValue: { MAÑANA: true, TARDE: true, NOCHE: false },
+    });
+    expect(badges).toEqual(['MAÑANA', 'TARDE']);
+  });
+
+  it('hides historical badges when all configured franjas are complete', () => {
+    const badges = resolveHistoricalDoneFranjaBadges({
+      rutina: historicalRutina,
+      config: multiFranjaConfig,
       itemValue: historicalRutina.bodyCare.skincare,
     });
-    expect(badges).toEqual(['MAÑANA', 'TARDE', 'NOCHE']);
+    expect(badges).toBeNull();
   });
 
   it('returns single franja badge for partial historical done entry', () => {

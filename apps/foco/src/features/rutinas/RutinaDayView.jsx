@@ -1,15 +1,14 @@
 import React, { memo } from 'react';
-import { Box, Typography, CircularProgress } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import RutinaCadenceFlatLayout from './views/cadence/RutinaCadenceFlatLayout';
-import { rutinaPageLoaderSx } from '@shared/styles/rutinaPageStyles';
 import { toISODateString, parseAPIDate } from '@shared/utils/dateUtils';
 
-export const RutinaTable = ({
+/** Vista del día activo: layout plano por cadencia. */
+export function RutinaDayView({
   rutina,
-  loading: loadingProp,
   readOnly = false,
   isPreview = false,
-}) => {
+}) {
   const rutinaDateKey = (() => {
     try {
       return rutina?.fecha ? toISODateString(parseAPIDate(rutina.fecha)) : 'no-rutina';
@@ -17,14 +16,6 @@ export const RutinaTable = ({
       return rutina?._id || rutina?.fecha || 'no-rutina';
     }
   })();
-
-  if (loadingProp) {
-    return (
-      <Box sx={{ ...rutinaPageLoaderSx, height: '70vh', alignItems: 'center' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   if (!rutina || (!rutina._id && !isPreview && !rutina.isPreview)) {
     return (
@@ -45,10 +36,9 @@ export const RutinaTable = ({
       />
     </Box>
   );
-};
+}
 
-const MemoizedRutinaTable = memo(RutinaTable, (prevProps, nextProps) => {
-  if (prevProps.loading !== nextProps.loading) return false;
+const MemoizedRutinaDayView = memo(RutinaDayView, (prevProps, nextProps) => {
   if (prevProps.readOnly !== nextProps.readOnly) return false;
   if (prevProps.isPreview !== nextProps.isPreview) return false;
   if (prevProps.rutina?._id !== nextProps.rutina?._id) return false;
@@ -72,4 +62,4 @@ const MemoizedRutinaTable = memo(RutinaTable, (prevProps, nextProps) => {
   return prevCompletion === nextCompletion;
 });
 
-export default MemoizedRutinaTable;
+export default MemoizedRutinaDayView;

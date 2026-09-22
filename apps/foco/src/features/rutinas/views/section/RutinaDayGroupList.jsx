@@ -24,7 +24,7 @@ import RutinaFranjaIconCarousel from '../cadence/RutinaFranjaIconCarousel';
 import { RUTINA_DAY_GROUP_COPY, DAILY_CADENCE_SECTION_COPY } from '@shared/copy/agendaTerminology';
 import HabitFormSectionLabel from '@shared/components/habits/HabitFormSectionLabel';
 import {
-  isHabitCompletedForHistorial,
+  isHabitMarkedCompleteForConfig,
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
   groupEntriesIntoDisplayRows,
@@ -41,6 +41,7 @@ import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
 import { useRutinas } from '@shared/context';
+import { resolveEntryLocalData, resolveEntrySection } from '../../lib/resolveEntryLocalData';
 
 function resolveFranjaLabel(franjaKey) {
   if (franjaKey === 'MAÑANA') return 'Mañana';
@@ -170,20 +171,17 @@ function buildMultiSectionReorderUpdates(visibleItems, reorderedIds, habits = {}
   }));
 }
 
-function resolveEntrySection(entry, fallbackSection) {
-  return entry?.section || fallbackSection;
-}
-
-function resolveEntryLocalData(entry, fallbackSection, localData, localDataBySection) {
-  const section = resolveEntrySection(entry, fallbackSection);
-  if (localDataBySection && section) {
-    return localDataBySection[section] || null;
-  }
-  return localData;
-}
-
 function resolveEntryFocusHorario(entry) {
   return resolveEntryFranjaFocusHorario(entry);
+}
+
+function resolveEntryRenderKey(entry, fallbackSection, prefix = '') {
+  const entrySection = resolveEntrySection(entry, fallbackSection);
+  const franja = entry?.franjaKey && entry.franjaKey !== 'GENERAL'
+    ? entry.franjaKey
+    : (entry?.franjaScheduleSlot || 'full');
+  const base = `${entrySection}-${entry.itemId}-${franja}`;
+  return prefix ? `${prefix}-${base}` : base;
 }
 
 /** Hábitos simples (1 franja / frecuencia 1) pueden compartir renglón en móvil. */
@@ -251,7 +249,7 @@ function StaticHabitRow({
     : rutina?.[entrySection]?.[itemId];
   const isCompleted = focusHorario
     ? isHabitHorarioCompleted(itemValue, focusHorario)
-    : isHabitCompletedForHistorial(itemValue);
+    : isHabitMarkedCompleteForConfig(config, itemValue);
   const hideIconBorder = isEntryFranjaSinHacer(entry, resolveActiveDailyFranja(rutina));
 
   const handleItemClick = (clickedItemId, event, horario) => {
@@ -265,9 +263,9 @@ function StaticHabitRow({
 
   return (
     <Box
-      key={rowKey || `${entrySection}-${itemId}`}
+      key={rowKey || resolveEntryRenderKey(entry, section)}
       sx={stackCell ? rutinaStackCellCompactSx : undefined}
-      id={stackCell ? undefined : `habit-row-${entrySection}-${itemId}`}
+      id={stackCell ? undefined : `habit-row-${resolveEntryRenderKey(entry, section)}`}
     >
       <ChecklistItem
         itemId={itemId}
@@ -361,7 +359,7 @@ function HabitRows({
       const entrySection = resolveEntrySection(entry, section);
       return (
         <SortableRutinaHabitRow
-          key={rowKeyPrefix ? `${rowKeyPrefix}-${entrySection}-${entry.itemId}` : `${entrySection}-${entry.itemId}`}
+          key={resolveEntryRenderKey(entry, section, rowKeyPrefix)}
           entry={entry}
           section={entrySection}
           rutina={rutina}
@@ -388,7 +386,7 @@ function HabitRows({
       });
       const compactCells = row.entries.map((entry) => (
         <StaticHabitRow
-          key={`${resolveEntrySection(entry, section)}-${entry.itemId}`}
+          key={resolveEntryRenderKey(entry, section)}
           entry={entry}
           section={section}
           rutina={rutina}
@@ -451,9 +449,7 @@ function HabitRows({
 
     return (
       <StaticHabitRow
-        key={rowKeyPrefix
-          ? `${rowKeyPrefix}-${resolveEntrySection(row.entry, section)}-${row.entry.itemId}`
-          : `${resolveEntrySection(row.entry, section)}-${row.entry.itemId}`}
+        key={resolveEntryRenderKey(row.entry, section, rowKeyPrefix)}
         entry={row.entry}
         section={section}
         rutina={rutina}

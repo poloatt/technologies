@@ -82,9 +82,16 @@ export default function HabitCarouselIconButton({
   const frecuencia = Number(itemConfig?.frecuencia || 1);
   const hasMultipleDaily = frecuencia > 1 || horariosConfig.length > 1;
 
+  const isHistoricalDay = rutinaHoy?.fecha && getRutinaDayMode(rutinaHoy.fecha) === 'historical';
+  // Badges en Hecho (prop) o histórico; el visual “parcial = hecho” solo con prop del sector Hecho.
+  const shouldShowDoneFranjaBadges = consolidateDoneFranjas || isHistoricalDay;
+
   let isCompleted = false;
   if (showCompletionState) {
-    if (hasMultipleDaily && isObjectFormat && horarioToShow) {
+    if (consolidateDoneFranjas && hasMultipleDaily && isObjectFormat && !displayHorario) {
+      // Hecho cerrado (sin franjaKey): icono limpio, desmarca última franja al toggle.
+      isCompleted = isHabitFullyCompletedToday(itemValue, horariosConfig);
+    } else if (hasMultipleDaily && isObjectFormat && horarioToShow) {
       isCompleted = itemValue[horarioToShow] === true;
     } else if (hasMultipleDaily && isObjectFormat) {
       isCompleted = isHabitFullyCompletedToday(itemValue, horariosConfig);
@@ -95,13 +102,17 @@ export default function HabitCarouselIconButton({
     }
   }
 
-  const isHistoricalDay = rutinaHoy?.fecha && getRutinaDayMode(rutinaHoy.fecha) === 'historical';
-  const shouldConsolidateDoneFranjas = consolidateDoneFranjas || isHistoricalDay;
-  const completedFranjaBadges = (showCompletionState && shouldConsolidateDoneFranjas && isCompleted)
+  const completedFranjaBadges = (
+    showCompletionState
+    && shouldShowDoneFranjaBadges
+    && isCompleted
+    && consolidateDoneFranjas
+    && !displayHorario
+  )
     ? resolveDoneFranjaBadges({
       config: itemConfig,
       itemValue: completadoHoy,
-      franjaKey: displayHorario,
+      franjaKey: null,
     })
     : null;
   const fullyCompleted = !showCompletionState
@@ -135,6 +146,10 @@ export default function HabitCarouselIconButton({
       : (periodicHint ? `${label} — ${periodicHint}` : label));
   const canQuickToggle = interactive && !requireExpand && !isNotTodaySlot;
   const canInteract = interactive && !isNotTodaySlot && !requireExpand;
+  // Hecho cerrado sin franjaKey: no forzar horario de carrusel (desmarca la última).
+  const toggleHorario = (consolidateDoneFranjas && !displayHorario && fullyCompleted)
+    ? null
+    : (displayHorario || horarioToShow);
 
   const postponeFranja = displayHorario || horarioToShow || getCurrentTimeOfDay();
   const isHiddenByDeferral = isHabitHiddenByDeferral({
@@ -272,11 +287,11 @@ export default function HabitCarouselIconButton({
           }
           if (isDoneVisual) {
             if (!interactive) return;
-            onToggle(section, itemId, displayHorario || horarioToShow);
+            onToggle(section, itemId, toggleHorario);
             return;
           }
           if (!canQuickToggle) return;
-          onToggle(section, itemId, displayHorario || horarioToShow);
+          onToggle(section, itemId, toggleHorario);
         },
         onPointerDown: (e) => e.stopPropagation(),
       })}

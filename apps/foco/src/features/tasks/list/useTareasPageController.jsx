@@ -6,18 +6,14 @@ import { useAgendaFilter } from '../../agenda/hooks/useAgendaFilter';
 import { useObjetivosLight } from '../hooks/useObjetivosLight';
 import { useTasksForList } from '../hooks/useTasksForList';
 import { isInAhora, isInLuego, isTaskCompleted, isTaskCancelled } from '@shared/utils/agendaRules';
-import { useRutinas, useHabits } from '@shared/context';
-import { getNormalizedToday } from '@shared/utils/dateUtils';
-import { ensureRutinaForDate } from '../../rutinas';
 import { buildTareaPayload, syncTareaToGoogleInBackground } from '../form';
 
 /**
  * Estado, handlers y toolbar compartidos de la página Tareas.
+ * Bootstrap de hábitos/rutina: HabitCarouselRow → useEnsureRutinaForDate.
  */
 export function useTareasPageController() {
-  const { fetchRutinas, getRutinaById } = useRutinas();
-  const { fetchHabits } = useHabits();
-  const { tasks: tareas, setTasks: setTareas, loading, refetch: refetchTareas } = useTasksForList();
+  const { tasks: tareas, setTasks: setTareas, loading, isFetching, refetch: refetchTareas } = useTasksForList();
   const { objetivos, refetch: refetchObjetivos } = useObjetivosLight();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTarea, setEditingTarea] = useState(null);
@@ -52,26 +48,6 @@ export function useTareasPageController() {
       return isInLuego(t, now);
     });
   }, [tareas, showCompleted, isMobile]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const bootRutinas = async () => {
-      await Promise.all([
-        typeof fetchHabits === 'function' ? fetchHabits().catch(() => {}) : Promise.resolve(),
-        typeof fetchRutinas === 'function' ? fetchRutinas().catch(() => {}) : Promise.resolve(),
-      ]);
-      if (cancelled || typeof getRutinaById !== 'function') return;
-      await ensureRutinaForDate(getNormalizedToday(), {
-        rutinas: [],
-        getRutinaById,
-        fetchRutinas,
-      }).catch(() => {});
-    };
-
-    bootRutinas();
-    return () => { cancelled = true; };
-  }, [fetchRutinas, fetchHabits, getRutinaById]);
 
   const fetchDataStable = useCallback(async () => {
     try {
@@ -333,6 +309,7 @@ export function useTareasPageController() {
   return {
     tareas,
     loading,
+    isFetching,
     objetivos,
     refetchObjetivos,
     isMobile,

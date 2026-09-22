@@ -15,15 +15,16 @@ import RutinaWeeklyCadenceDayLayout, {
 } from './RutinaWeeklyCadenceDayLayout';
 import RutinaCadenceBucketList from './RutinaCadenceBucketList';
 import RutinaDoneSection from '../section/RutinaDoneSection';
-import useRutinaCadenceBucketController from '../../hooks/useRutinaCadenceBucketController';
+import {
+  RutinaCadenceViewProvider,
+  useRutinaCadenceView,
+} from '../../context/RutinaCadenceViewContext';
 
-/** Vista cadencia plana (mobile): Ahora / Luego (franjas + días semanales) → otros → Hecho. */
-export default function RutinaCadenceFlatLayout({
-  rutina,
-  readOnly = false,
-  isPreview = false,
-}) {
+/** Vista cadencia plana: Ahora / Luego → otros → Hecho. */
+function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
   const {
+    rutina,
+    readOnly,
     habits,
     habitPrefs,
     localDataBySection,
@@ -31,7 +32,7 @@ export default function RutinaCadenceFlatLayout({
     handleItemClick,
     handleDoneToggle,
     handleReorderSection,
-  } = useRutinaCadenceBucketController({ rutina, readOnly });
+  } = useRutinaCadenceView();
 
   const diarioBucket = useMemo(
     () => cadenceBuckets.find((bucket) => bucket.id === 'DIARIO') || null,
@@ -151,28 +152,40 @@ export default function RutinaCadenceFlatLayout({
       ))}
 
       {showDoneSection && mergedDoneItems.length > 0 && (
-      <RutinaDoneSection
-        items={mergedDoneItems}
-        rutina={rutina}
-        habitsPreferences={habitPrefs}
-        readOnly={readOnly}
-        onToggle={handleDoneToggle}
-        collapsible={doneSectionCollapsible}
-        collapseThreshold={doneSectionCollapsible ? 0 : 5}
-        defaultExpanded={false}
-        collapsePreviewMode={doneSectionCollapsible ? 'carousel' : 'hide'}
-        habits={habits}
-        doneHeadingLabel={
-          isHistorical
-            ? RUTINA_HISTORICAL_COPY.doneThatDay
-            : isToday
-              ? RUTINA_DONE_GROUP_COPY.doneToday
-              : undefined
-        }
-        doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : RUTINA_DONE_GROUP_COPY.doneToday}
-        doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : RUTINA_DONE_GROUP_COPY.doneBefore}
-      />
+        <RutinaDoneSection
+          items={mergedDoneItems}
+          rutina={rutina}
+          habitsPreferences={habitPrefs}
+          readOnly={readOnly}
+          onToggle={handleDoneToggle}
+          collapsible={doneSectionCollapsible}
+          collapseThreshold={doneSectionCollapsible ? 0 : 5}
+          defaultExpanded={false}
+          collapsePreviewMode={doneSectionCollapsible ? 'carousel' : 'hide'}
+          habits={habits}
+          doneHeadingLabel={
+            isHistorical
+              ? RUTINA_HISTORICAL_COPY.doneThatDay
+              : isToday
+                ? RUTINA_DONE_GROUP_COPY.doneToday
+                : undefined
+          }
+          doneTodayLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneThatDay : RUTINA_DONE_GROUP_COPY.doneToday}
+          doneBeforeLabel={isHistorical ? RUTINA_HISTORICAL_COPY.doneBeforeThatDay : RUTINA_DONE_GROUP_COPY.doneBefore}
+        />
       )}
     </Box>
+  );
+}
+
+export default function RutinaCadenceFlatLayout({
+  rutina,
+  readOnly = false,
+  isPreview = false,
+}) {
+  return (
+    <RutinaCadenceViewProvider rutina={rutina} readOnly={readOnly}>
+      <RutinaCadenceFlatLayoutInner isPreview={isPreview} />
+    </RutinaCadenceViewProvider>
   );
 }

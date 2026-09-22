@@ -6,7 +6,7 @@ import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 import useRutinaItemToggle from './useRutinaItemToggle';
 import useRutinaBucketLocalData from './useRutinaBucketLocalData';
 
-/** Estado compartido para layouts de vista cadencia (flat mobile + nav desktop). */
+/** Estado compartido para el layout plano de cadencia. */
 export default function useRutinaCadenceBucketController({ rutina, readOnly = false }) {
   const { habits, customSections, reorderHabits } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
@@ -41,14 +41,11 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
 
   const toggleItem = useRutinaItemToggle({
     rutina,
-    habits,
     habitsPreferences: habitPrefs,
-    habitChains: resolvedHabitChains,
     markItemComplete,
     patchRutinaSection,
     readOnly,
     getSectionOverrides: (section) => localDataBySection[section] || {},
-    getLocalDataBySection: () => localDataBySection,
     onOptimisticValue: (section, itemId, newValue) => {
       setLocalDataBySection((prev) => ({
         ...prev,

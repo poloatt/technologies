@@ -4,7 +4,7 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
 import {
-  isHabitCompletedForHistorial,
+  isHabitMarkedCompleteForConfig,
   isHabitHorarioCompleted,
   resolveEntryFranjaFocusHorario,
   resolveRoutineDisplayName,
@@ -34,26 +34,25 @@ import { useResponsive, useHabitItemContextMenu } from '@shared/hooks';
 import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HabitIconButton } from './ChecklistItem';
+import { resolveEntryLocalData, resolveEntrySection } from '../lib/resolveEntryLocalData';
 
 const DRAG_HANDLE_INNER_SX = {
   display: 'flex',
   alignItems: 'center',
 };
 
-function resolveEntrySection(entry, fallbackSection) {
-  return entry?.section || fallbackSection;
-}
-
-function resolveEntryLocalData(entry, fallbackSection, localData, localDataBySection) {
-  const section = resolveEntrySection(entry, fallbackSection);
-  if (localDataBySection && section) {
-    return localDataBySection[section] || null;
-  }
-  return localData;
-}
-
 function resolveEntryFocusHorario(entry) {
   return resolveEntryFranjaFocusHorario(entry);
+}
+
+/** Key estable por hábito + franja (evita ghosts al togglear slots históricos). */
+function resolveEntryRenderKey(entry, fallbackSection, prefix = '') {
+  const entrySection = resolveEntrySection(entry, fallbackSection);
+  const franja = entry?.franjaKey && entry.franjaKey !== 'GENERAL'
+    ? entry.franjaKey
+    : (entry?.franjaScheduleSlot || 'full');
+  const base = `${entrySection}-${entry.itemId}-${franja}`;
+  return prefix ? `${prefix}-${base}` : base;
 }
 
 function entryHasMultipleFranjas(entry) {
@@ -141,7 +140,7 @@ export default function RutinaStackHabitRow({
       : rutina?.[entrySection]?.[entry.itemId];
     return focusHorario
       ? isHabitHorarioCompleted(itemValue, focusHorario)
-      : isHabitCompletedForHistorial(itemValue);
+      : isHabitMarkedCompleteForConfig(entry.config, itemValue);
   });
 
   if (!visibleEntries.length) return null;
@@ -211,10 +210,6 @@ export default function RutinaStackHabitRow({
     const itemValue = entryLocalData?.[itemId] !== undefined
       ? entryLocalData[itemId]
       : rutina?.[entrySection]?.[itemId];
-    const isCompleted = focusHorario
-      ? isHabitHorarioCompleted(itemValue, focusHorario)
-      : isHabitCompletedForHistorial(itemValue);
-
     const horariosConfig = normalizeTimeOfDay(config?.horarios);
     const normalizedFocusHorario = focusHorario
       ? String(focusHorario).toUpperCase()
@@ -223,12 +218,21 @@ export default function RutinaStackHabitRow({
     const singleDisplayHorario = normalizedFocusHorario
       || (horariosConfig.length === 1 ? String(horariosConfig[0]).toUpperCase() : null);
     const isHistoricalDay = rutina?.fecha && getRutinaDayMode(rutina.fecha) === 'historical';
-    const shouldConsolidateDoneFranjas = rowKeyPrefix === 'done' || isHistoricalDay;
-    const completedFranjaBadges = (shouldConsolidateDoneFranjas && isCompleted)
+    const isDoneSectionRow = rowKeyPrefix === 'done';
+    const shouldShowDoneFranjaBadges = isDoneSectionRow || isHistoricalDay;
+    const isCompleted = focusHorario
+      ? isHabitHorarioCompleted(itemValue, focusHorario)
+      : isHabitMarkedCompleteForConfig(config, itemValue);
+    const completedFranjaBadges = (
+      shouldShowDoneFranjaBadges
+      && isCompleted
+      && isDoneSectionRow
+      && !normalizedFocusHorario
+    )
       ? resolveDoneFranjaBadges({
         config,
         itemValue,
-        franjaKey: normalizedFocusHorario,
+        franjaKey: null,
       })
       : null;
 
@@ -263,7 +267,7 @@ export default function RutinaStackHabitRow({
       if (completedFranjaBadges?.length) {
         return (
           <HabitIconButton
-            key={`${entrySection}-${itemId}`}
+            key={resolveEntryRenderKey(entry, section)}
             isCompleted={isCompleted}
             Icon={Icon}
             onClick={(e) => {
@@ -280,7 +284,7 @@ export default function RutinaStackHabitRow({
 
       return (
         <HabitIconScrollRow
-          key={`${entrySection}-${itemId}`}
+          key={resolveEntryRenderKey(entry, section)}
           itemCount={horariosConfig.length}
           iconSize={iconSize}
         >
@@ -311,7 +315,7 @@ export default function RutinaStackHabitRow({
 
     return (
       <HabitIconButton
-        key={`${entrySection}-${itemId}`}
+        key={resolveEntryRenderKey(entry, section)}
         isCompleted={isCompleted}
         Icon={Icon}
         onClick={(e) => {

@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSnackbar } from 'notistack';
 import { useResponsive, useScopedPageHistory } from '@shared/hooks';
 import { useRutinas, useHabits } from '@shared/context';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
-import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
+import { getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
 import {
   getRutinaCompletionStats,
   getRutinaDayMode,
@@ -18,6 +18,7 @@ import { listenOpenHabitsManager } from '../../habits/manager';
 
 /**
  * Estado, eventos toolbar y helpers compartidos para la página Rutinas.
+ * Bootstrap de datos: solo useEnsureRutinaForDate (fetch + ensure del día).
  */
 export function useRutinasPageController() {
   const { enqueueSnackbar } = useSnackbar();
@@ -65,29 +66,8 @@ export function useRutinasPageController() {
 
   const [editMode, setEditMode] = useState(false);
   const [rutinaToEdit, setRutinaToEdit] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [habitsManagerOpen, setHabitsManagerOpen] = useState(false);
   const [habitFormOpen, setHabitFormOpen] = useState(false);
-  const initialFetchDone = useRef(false);
-
-  useEffect(() => {
-    if (rutina?._id && rutinas.length > 0) {
-      const index = rutinas.findIndex((r) => r._id === rutina._id);
-      if (index !== -1) {
-        setCurrentPage(index + 1);
-        setTotalPages(rutinas.length);
-      }
-    }
-  }, [rutina?._id, rutinas.length]);
-
-  useEffect(() => {
-    if (!initialFetchDone.current) {
-      initialFetchDone.current = true;
-      fetchRutinas().catch(() => {});
-      fetchHabits().catch(() => {});
-    }
-  }, [fetchRutinas, fetchHabits]);
 
   const handleCloseForm = useCallback(() => {
     setEditMode(false);
@@ -197,8 +177,6 @@ export function useRutinasPageController() {
     viewDate,
     editMode,
     rutinaToEdit,
-    currentPage,
-    totalPages,
     habitsManagerOpen,
     setHabitsManagerOpen,
     habitFormOpen,

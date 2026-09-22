@@ -30,7 +30,7 @@ export default function RutinaWeeklyCadenceDayLayout({
   habits = null,
   habitsPreferences = {},
   localDataBySection = {},
-  includeDoneSection = true,
+  includeDoneSection = false,
   onReorderSection,
   luegoWeekdayGroupsExtra = [],
   hideNotToday = false,

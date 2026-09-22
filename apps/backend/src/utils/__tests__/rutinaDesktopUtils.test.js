@@ -1037,7 +1037,7 @@ describe('partitionDoneEntriesByRutinaDay', () => {
     expect(doneOnDay.map((e) => e.itemId)).toEqual(['shower', 'water']);
   });
 
-  it('on historical day keeps partial multi-franja in sin marcar until all franjas done', () => {
+  it('on historical day places partial multi-franja marks in doneOnDay, not doneByQuota', () => {
     const historicalDate = new Date(2026, 5, 20).toISOString();
     const rutina = makeRutina({
       fecha: historicalDate,
@@ -1057,18 +1057,28 @@ describe('partitionDoneEntriesByRutinaDay', () => {
         },
       },
     });
-    const entry = {
+    const entryWithFranja = {
       section: 'bodyCare',
       itemId: 'teeth',
       config: rutina.config.bodyCare.teeth,
       itemValue: { MAÑANA: true, NOCHE: false },
+      franjaKey: 'MAÑANA',
     };
     expect(isHabitCompletedOnRutinaDay({
-      ...entry,
+      ...entryWithFranja,
       rutina,
     })).toBe(false);
-    const { doneOnDay } = partitionDoneEntriesByRutinaDay([entry], rutina);
-    expect(doneOnDay.map((e) => e.itemId)).toEqual([]);
+
+    const { doneOnDay, doneByQuota } = partitionDoneEntriesByRutinaDay([entryWithFranja], rutina);
+    expect(doneOnDay.map((e) => e.itemId)).toEqual(['teeth']);
+    expect(doneByQuota).toHaveLength(0);
+
+    // Tras consolidar Hecho (sin franjaKey) sigue en doneOnDay por valor parcial.
+    const collapsed = { ...entryWithFranja };
+    delete collapsed.franjaKey;
+    const afterCollapse = partitionDoneEntriesByRutinaDay([collapsed], rutina);
+    expect(afterCollapse.doneOnDay.map((e) => e.itemId)).toEqual(['teeth']);
+    expect(afterCollapse.doneByQuota).toHaveLength(0);
   });
 
   it('on historical day keeps quota-satisfied unmarked habits in sin marcar, not done', () => {
@@ -1136,7 +1146,45 @@ describe('filterRutinaDoneSectionEntries', () => {
       franjaKey: 'MAÑANA',
     };
     expect(isHabitCompletedOnRutinaDay({ ...entry, rutina })).toBe(false);
-    expect(filterRutinaDoneSectionEntries([entry], rutina).map((e) => e.franjaKey)).toEqual(['MAÑANA']);
+    const filtered = filterRutinaDoneSectionEntries([entry], rutina);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].franjaKey).toBe('MAÑANA');
+  });
+
+  it('keeps one Hecho row per completed franja when habit is partial', () => {
+    const rutina = makeRutina({
+      bodyCare: {
+        skincare: { MAÑANA: true, TARDE: true, NOCHE: false },
+      },
+      config: {
+        ...makeRutina().config,
+        bodyCare: {
+          ...makeRutina().config.bodyCare,
+          skincare: {
+            tipo: 'DIARIO',
+            frecuencia: 1,
+            activo: true,
+            horarios: ['MAÑANA', 'TARDE', 'NOCHE'],
+          },
+        },
+      },
+    });
+    const base = {
+      section: 'bodyCare',
+      itemId: 'skincare',
+      config: rutina.config.bodyCare.skincare,
+      itemValue: rutina.bodyCare.skincare,
+    };
+    const entries = [
+      { ...base, franjaKey: 'MAÑANA' },
+      { ...base, franjaKey: 'TARDE' },
+    ];
+    const filtered = filterRutinaDoneSectionEntries(entries, rutina);
+    expect(filtered.map((e) => e.franjaKey).sort()).toEqual(['MAÑANA', 'TARDE']);
+
+    const { doneOnDay, doneByQuota } = partitionDoneEntriesByRutinaDay(filtered, rutina);
+    expect(doneOnDay.map((e) => e.franjaKey).sort()).toEqual(['MAÑANA', 'TARDE']);
+    expect(doneByQuota).toHaveLength(0);
   });
 
   it('excludes partial completion when config has multiple horarios but tipo is not DIARIO', () => {

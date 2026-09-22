@@ -2,7 +2,7 @@ import { getTimeOfDayLabel } from '../../utils/timeOfDayUtils.js';
 import { HABIT_PERIODIC_COPY } from '../../copy/agendaTerminology.js';
 import { resolveEntryFranjaFocusHorario } from '../desktop/rutinaCadenceUtils.js';
 import {
-  isHabitCompletedForHistorial,
+  isHabitMarkedCompleteForConfig,
   isHabitHorarioCompleted,
 } from '../domain/habitCompletionUtils.js';
 import {
@@ -26,7 +26,7 @@ function resolveEntryCompleted(entry, { rutina, section, localData, localDataByS
   const focusHorario = resolveEntryFranjaFocusHorario(entry);
   return focusHorario
     ? isHabitHorarioCompleted(itemValue, focusHorario)
-    : isHabitCompletedForHistorial(itemValue);
+    : isHabitMarkedCompleteForConfig(entry?.config, itemValue);
 }
 
 /**
@@ -92,12 +92,24 @@ export function resolveRutinaStackScheduleLegend(
     }
   }
 
+  const dailyFranjaKeys = [...new Set(
+    entries
+      .map((entry) => resolveEntryFranjaFocusHorario(entry) || entry?.franjaKey)
+      .filter((key) => key && key !== 'GENERAL')
+      .map((key) => String(key).toUpperCase()),
+  )];
+
+  // Varias franjas en el mismo stack → leyenda genérica (no "Cada mañana" por el primer ítem).
+  if (dailyFranjaKeys.length > 1) {
+    return getCadenceTypeLabel(entries[0]?.config || { tipo: 'DIARIO' });
+  }
+
   const ref = entries[0];
   const entrySection = ref.section || section;
   return resolveRutinaScheduleLegend({
     config: ref.config,
-    franjaKey: ref.franjaKey,
-    focusHorario: resolveEntryFranjaFocusHorario(ref),
+    franjaKey: dailyFranjaKeys[0] || ref.franjaKey,
+    focusHorario: dailyFranjaKeys[0] || resolveEntryFranjaFocusHorario(ref),
     isCadenciaDebt: ref.isCadenciaDebt,
     rutina,
     section: entrySection,
