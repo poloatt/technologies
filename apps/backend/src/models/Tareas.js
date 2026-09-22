@@ -119,62 +119,28 @@ const tareaSchema = createSchema({
     type: Number,
     default: 0
   },
-  // Campos para integración completa con Google Tasks API
+  // Mixed: evita ConflictingUpdateOperators al $set del subdoc vs paths dotted
+  // que Mongoose genera al castear Nested schemas en findOneAndUpdate.
   googleTasksSync: {
-    enabled: {
-      type: Boolean,
-      default: false
-    },
-    // Campos principales de Google Tasks
-    googleTaskId: String, // ID único de la tarea en Google Tasks
-    googleTaskListId: String, // ID de la lista en Google Tasks donde está la tarea
-    
-    // Campos de posición y jerarquía
-    position: String, // Posición de la tarea en la lista (para ordenamiento)
-    /** @deprecated Modelo notes-only: las subtareas no se exportan como tasks hijas con parent. */
-    parent: String,
-    
-    // Campos de fechas según Google Tasks
-    completed: Date, // Fecha y hora de finalización (cuando se marca como completada)
-    updated: Date, // Fecha de última modificación en Google Tasks
-    
-    // Campos de sincronización
-    lastSyncDate: Date,
-    syncStatus: {
-      type: String,
-      enum: ['pending', 'syncing', 'synced', 'error', 'unlinked'],
-      default: 'pending'
-    },
-    syncingStartedAt: Date, // Timestamp cuando comenzó la sincronización
-    syncErrors: [String], // Array de errores de sincronización
-    
-    // Metadatos adicionales
-    etag: String, // ETag de Google Tasks para control de versiones
-    kind: {
-      type: String,
-      default: 'tasks#task'
-    }, // Tipo de recurso de Google Tasks
-    selfLink: String, // URL de la tarea en Google Tasks
-    
-    // Campos para manejo de conflictos
-    localVersion: {
-      type: Number,
-      default: 1
-    }, // Versión local para detectar conflictos
-    needsSync: {
-      type: Boolean,
-      default: false
-    }, // Flag para marcar tareas que necesitan sincronización
-    hasTimedSchedule: {
-      type: Boolean,
-      default: false,
-    },
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      enabled: false,
+      syncStatus: 'pending',
+      needsSync: false,
+      hasTimedSchedule: false,
+      localVersion: 1,
+    }),
   },
   googleCalendarSync: {
     googleEventId: String,
     googleCalendarId: String,
     etag: String,
     htmlLink: String,
+    /** true cuando el evento en Google es date-only (all-day). */
+    allDay: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ['confirmed', 'tentative', 'cancelled'],
@@ -184,6 +150,13 @@ const tareaSchema = createSchema({
       type: String,
       default: 'default',
     },
+    /** Label/categoría de Google Calendar (feature Labels: Estudio, Salud, …). */
+    eventLabelId: String,
+    eventLabelName: String,
+    /** colorId legacy de la palette fija de Google (1–11). */
+    colorId: String,
+    /** Hex resuelto para pintar el bloque en Agenda. */
+    backgroundColor: String,
     lastSyncDate: Date,
   },
   ...commonFields
@@ -462,6 +435,116 @@ tareaSchema.pre('findOneAndUpdate', async function() {
     }
   };
 
+  const plainGoogleSync = (value) => {
+    if (!value || typeof value !== 'object') return {};
+    const raw = typeof value.toObject === 'function' ? value.toObject() : value;
+    const out = {};
+    Object.keys(raw).forEach((key) => {
+      if (key.startsWith('$') || key === '_id' || key === '__v' || key === 'id') return;
+      // No anidar objetos no-planos (arrays sí: syncErrors)
+      out[key] = raw[key];
+    });
+    return out;
+  };
+
+  const stripGoogleTasksSyncKeys = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    Object.keys(obj).forEach((key) => {
+      if (key === 'googleTasksSync' || key.startsWith('googleTasksSync.')) {
+        delete obj[key];
+      }
+    });
+  };
+
+  /**
+   * Solo objeto completo en $set — nunca dotted paths.
+   * Evita ConflictingUpdateOperators (objeto + googleTasksSync.*).
+   */
+  const applyGoogleSyncObject = (fields) => {
+    const prevDoc = plainGoogleSync(docToUpdate.googleTasksSync);
+    const next = { ...prevDoc, ...plainGoogleSync(fields) };
+    stripGoogleTasksSyncKeys(update);
+    if (update.$set) stripGoogleTasksSyncKeys(update.$set);
+    applyField('googleTasksSync', next);
+  };
+
+  const applyGooglePendingFields = (extra = {}) => {
+    const prevDoc = plainGoogleSync(docToUpdate.googleTasksSync);
+    const prevVersion = prevDoc.localVersion || 0;
+    const pending = {
+      needsSync: true,
+      syncStatus: 'pending',
+      localVersion: prevVersion + 1,
+      ...extra,
+    };
+
+    const incoming = patch.googleTasksSync
+      && typeof patch.googleTasksSync === 'object'
+      && !Array.isArray(patch.googleTasksSync)
+      ? plainGoogleSync(patch.googleTasksSync)
+      : {};
+
+    applyGoogleSyncObject({ ...incoming, ...pending });
+  };
+
+  /**
+   * Colapsa bare keys + $set en un único $set limpio, con googleTasksSync
+   * como un solo objeto (sin paths dotted).
+   */
+  const normalizeGoogleTasksSyncUpdate = () => {
+    const raw = this.getUpdate() || {};
+    const $set = {};
+    const rest = {};
+
+    Object.entries(raw).forEach(([key, value]) => {
+      if (key === '$set' && value && typeof value === 'object' && !Array.isArray(value)) {
+        Object.assign($set, value);
+      } else if (key.startsWith('$')) {
+        rest[key] = value;
+      } else {
+        $set[key] = value;
+      }
+    });
+
+    let whole = null;
+    const dotted = {};
+    Object.keys($set).forEach((key) => {
+      if (key === 'googleTasksSync'
+        && $set[key]
+        && typeof $set[key] === 'object'
+        && !Array.isArray($set[key])) {
+        whole = { ...(whole || {}), ...plainGoogleSync($set[key]) };
+        delete $set[key];
+      } else if (key.startsWith('googleTasksSync.')) {
+        dotted[key.slice('googleTasksSync.'.length)] = $set[key];
+        delete $set[key];
+      }
+    });
+
+    if (rest.$unset && typeof rest.$unset === 'object') {
+      stripGoogleTasksSyncKeys(rest.$unset);
+      if (Object.keys(rest.$unset).length === 0) delete rest.$unset;
+    }
+
+    if (whole || Object.keys(dotted).length > 0) {
+      $set.googleTasksSync = {
+        ...plainGoogleSync(docToUpdate.googleTasksSync),
+        ...(whole || {}),
+        ...dotted,
+      };
+    }
+
+    // Defensa final: nunca dejar googleTasksSync.* sueltos fuera de $set
+    Object.keys(rest).forEach((op) => {
+      if (rest[op] && typeof rest[op] === 'object' && !Array.isArray(rest[op])) {
+        stripGoogleTasksSyncKeys(rest[op]);
+        if (Object.keys(rest[op]).length === 0) delete rest[op];
+      }
+    });
+
+    this.setUpdate({ ...rest, $set });
+  };
+
   const newObjetivoId = patch.objetivo;
   if (
     newObjetivoId
@@ -472,17 +555,23 @@ tareaSchema.pre('findOneAndUpdate', async function() {
     const objetivo = await Objetivos.findById(newObjetivoId);
     const listId = objetivo?.googleTasksSync?.googleTaskListId;
     if (listId) {
-      applyField('googleTasksSync.googleTaskListId', listId);
       const syncEnabled = patch.googleTasksSync?.enabled
+        ?? patch['googleTasksSync.enabled']
         ?? docToUpdate.googleTasksSync?.enabled;
       if (syncEnabled) {
-        applyField('googleTasksSync.needsSync', true);
-        applyField('googleTasksSync.syncStatus', 'pending');
+        applyGooglePendingFields({ googleTaskListId: listId });
+      } else if (patch.googleTasksSync && typeof patch.googleTasksSync === 'object') {
+        applyGoogleSyncObject({
+          ...plainGoogleSync(patch.googleTasksSync),
+          googleTaskListId: listId,
+        });
+      } else {
+        applyGoogleSyncObject({ googleTaskListId: listId });
       }
     }
   }
 
-  // findByIdAndUpdate bypasses pre('save'); mark Google export when status/completion changes
+  // findByIdAndUpdate bypasses pre('save'); mark Google export when local fields change
   const syncEnabled = patch['googleTasksSync.enabled']
     ?? patch.googleTasksSync?.enabled
     ?? docToUpdate.googleTasksSync?.enabled;
@@ -494,13 +583,50 @@ tareaSchema.pre('findOneAndUpdate', async function() {
     const estadoChanged = nextEstado !== undefined
       && String(nextEstado) !== String(docToUpdate.estado || '');
     const subtareasTouched = update.subtareas !== undefined || patch.subtareas !== undefined;
-    if (completadaChanged || estadoChanged || subtareasTouched) {
-      applyField('googleTasksSync.needsSync', true);
-      applyField('googleTasksSync.syncStatus', 'pending');
-      const prevVersion = docToUpdate.googleTasksSync?.localVersion || 0;
-      applyField('googleTasksSync.localVersion', prevVersion + 1);
+
+    const sameInstant = (a, b) => {
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      const da = a instanceof Date ? a : new Date(a);
+      const db = b instanceof Date ? b : new Date(b);
+      if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) {
+        return String(a) === String(b);
+      }
+      return da.getTime() === db.getTime();
+    };
+
+    const tituloChanged = patch.titulo !== undefined
+      && String(patch.titulo) !== String(docToUpdate.titulo || '');
+    const descripcionChanged = patch.descripcion !== undefined
+      && String(patch.descripcion) !== String(docToUpdate.descripcion || '');
+    const fechaInicioChanged = patch.fechaInicio !== undefined
+      && !sameInstant(patch.fechaInicio, docToUpdate.fechaInicio);
+    const fechaFinChanged = patch.fechaFin !== undefined
+      && !sameInstant(patch.fechaFin, docToUpdate.fechaFin);
+    const fechaVencimientoChanged = patch.fechaVencimiento !== undefined
+      && !sameInstant(patch.fechaVencimiento, docToUpdate.fechaVencimiento);
+
+    const alreadyPending = patch['googleTasksSync.needsSync'] === true
+      || patch.googleTasksSync?.needsSync === true;
+
+    if (
+      !alreadyPending
+      && (
+        completadaChanged
+        || estadoChanged
+        || subtareasTouched
+        || tituloChanged
+        || descripcionChanged
+        || fechaInicioChanged
+        || fechaFinChanged
+        || fechaVencimientoChanged
+      )
+    ) {
+      applyGooglePendingFields();
     }
   }
+
+  normalizeGoogleTasksSyncUpdate();
 });
 
 // Middleware para validar que el objetivo pertenezca al usuario

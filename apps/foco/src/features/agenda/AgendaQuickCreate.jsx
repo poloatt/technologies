@@ -163,7 +163,7 @@ export default function AgendaQuickCreate({
   const [day, setDay] = useState(() => startOfDay(selectedDate || new Date()));
   const [time, setTime] = useState(() => new Date());
   const [allDay, setAllDay] = useState(true);
-  const [durationMin, setDurationMin] = useState(60);
+  const [durationMin, setDurationMin] = useState(30);
   const [objetivo, setObjetivo] = useState('');
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -198,7 +198,7 @@ export default function AgendaQuickCreate({
     setDay(startOfDay(start));
     setTime(start);
     setAllDay(!hasExplicitTime);
-    setDurationMin(60);
+    setDurationMin(30);
     setObjetivo('');
     setExpanded(false);
     setScheduleExpanded(false);

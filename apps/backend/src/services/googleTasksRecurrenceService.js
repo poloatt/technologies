@@ -16,6 +16,7 @@ import {
 } from '../utils/recurrenceUtils.js';
 import { applySerieTimeToOccurrence } from '../utils/calendarVirtualUtils.js';
 import { isTaskCompleted } from '../utils/agendaListRules.js';
+import { mergeGoogleDueWithLocalSchedule } from '../utils/googleTasksScheduleMerge.js';
 
 const HORIZON_DAYS = parseInt(process.env.GTASKS_SERIES_HORIZON_DAYS || '90', 10);
 const EXPAND_LOOKBACK_DAYS = parseInt(process.env.GTASKS_SERIES_LOOKBACK_DAYS || '14', 10);
@@ -272,10 +273,19 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
       t.serieId = serie._id;
       t.descripcion = cleaned;
       if (dueFromGoogle) {
-        t.fechaVencimiento = dueFromGoogle;
-        t.fechaInicio = dueFromGoogle;
+        const rawDue =
+          (isAnchor && anchorGt?.due)
+            ? anchorGt.due
+            : googleById.get(t.googleTasksSync?.googleTaskId)?.due;
         if (typeof t.recordGoogleDueSnapshot === 'function') {
           t.recordGoogleDueSnapshot(dueFromGoogle);
+        }
+        if (rawDue) {
+          // Preserva horario local (Horario Attadia); Google due es solo día
+          mergeGoogleDueWithLocalSchedule(t, rawDue);
+        } else {
+          t.fechaVencimiento = dueFromGoogle;
+          t.fechaInicio = dueFromGoogle;
         }
       }
       if (

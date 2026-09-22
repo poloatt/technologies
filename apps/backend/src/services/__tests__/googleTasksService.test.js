@@ -50,12 +50,38 @@ describe('googleTasksService helpers', () => {
     expect(norm).toBe('adjuntar pdf');
   });
 
-  test('equalsForPatch matches only on relevant fields', () => {
-    const remote = { title: 'Tarea', status: 'needsAction', notes: 'abc', updated: 'ignored' };
-    const same = { title: 'Tarea', status: 'needsAction', notes: 'abc', parent: 'ignored' };
-    const different = { title: 'Tarea!', status: 'needsAction', notes: 'abc' };
+  test('equalsForPatch matches only on relevant fields including due', () => {
+    const remote = {
+      title: 'Tarea',
+      status: 'needsAction',
+      notes: 'abc',
+      due: '2026-05-20T00:00:00.000Z',
+      updated: 'ignored',
+    };
+    const same = {
+      title: 'Tarea',
+      status: 'needsAction',
+      notes: 'abc',
+      due: '2026-05-20',
+      parent: 'ignored',
+    };
+    const differentTitle = { title: 'Tarea!', status: 'needsAction', notes: 'abc', due: '2026-05-20T00:00:00.000Z' };
+    const differentDue = {
+      title: 'Tarea',
+      status: 'needsAction',
+      notes: 'abc',
+      due: '2026-05-21T00:00:00.000Z',
+    };
     expect(googleTasksService.equalsForPatch(remote, same)).toBe(true);
-    expect(googleTasksService.equalsForPatch(remote, different)).toBe(false);
+    expect(googleTasksService.equalsForPatch(remote, differentTitle)).toBe(false);
+    expect(googleTasksService.equalsForPatch(remote, differentDue)).toBe(false);
+  });
+
+  test('normalizeDueForCompare collapses RFC3339 and date-only', () => {
+    expect(googleTasksService.normalizeDueForCompare('2026-05-20T00:00:00.000Z')).toBe('2026-05-20');
+    expect(googleTasksService.normalizeDueForCompare('2026-05-20')).toBe('2026-05-20');
+    expect(googleTasksService.normalizeDueForCompare(null)).toBe('');
+    expect(googleTasksService.normalizeDueForCompare(undefined)).toBe('');
   });
 
   test('parseSubtasksFromNotes extracts description and subtareas with checkboxes', () => {
@@ -213,25 +239,76 @@ Subtareas:
     expect(googleTasksService.shouldApplyGoogleDueDespitePending(tarea, googleTask)).toBe(true);
   });
 
-  test('pending local blocks content import but not status refresh', () => {
+  test('pending local blocks content and status; due may still apply', () => {
     const googleTask = {
       status: 'completed',
-      due: '2026-05-20T00:00:00.000Z',
+      due: '2026-05-19T00:00:00.000Z',
       notes: 'Cambiado en Google',
-      updated: '2026-05-18T18:00:00.000Z',
+      updated: '2026-05-18T10:00:00.000Z',
     };
     const pending = {
       completada: false,
       estado: 'PENDIENTE',
       fechaVencimiento: new Date(2026, 4, 19, 12, 0, 0, 0),
       descripcion: 'Local',
-      googleTasksSync: { needsSync: true, syncStatus: 'pending' },
+      googleTasksSync: {
+        needsSync: true,
+        syncStatus: 'pending',
+        updated: new Date('2026-05-18T18:00:00.000Z'),
+      },
     };
     expect(googleTasksService.hasLocalPendingGoogleSync(pending)).toBe(true);
     expect(googleTasksService.shouldRefreshGoogleStatus(pending, googleTask)).toBe(true);
     expect(googleTasksService.shouldImportContentFromGoogle(pending, googleTask)).toBe(false);
     expect(googleTasksService.shouldRefreshGoogleDueDate(pending, googleTask)).toBe(false);
     expect(googleTasksService.shouldRefreshGoogleNotes(pending, googleTask)).toBe(false);
-    expect(googleTasksService.shouldImportFromGoogle(pending, googleTask)).toBe(true);
+    // Mismo día + Google updated más viejo → no import solo por status
+    expect(googleTasksService.shouldImportFromGoogle(pending, googleTask)).toBe(false);
+    expect(googleTasksService.shouldApplyGoogleDueDespitePending(pending, googleTask)).toBe(false);
+  });
+
+  test('applyNotesFromGoogle clears hasTimedSchedule when notes lack schedule', () => {
+    const tarea = new Tareas({
+      titulo: 'Timed once',
+      usuario: '507f1f77bcf86cd799439011',
+      descripcion: 'Sin horario',
+      fechaInicio: new Date(2026, 4, 20, 14, 0, 0, 0),
+      fechaVencimiento: new Date(2026, 4, 20, 15, 0, 0, 0),
+      googleTasksSync: {
+        enabled: true,
+        needsSync: false,
+        syncStatus: 'synced',
+        hasTimedSchedule: true,
+      },
+    });
+    googleTasksService.applyNotesFromGoogle(tarea, {
+      id: 'gt-clear',
+      title: 'Timed once',
+      notes: 'Solo texto',
+      status: 'needsAction',
+      due: '2026-05-20T00:00:00.000Z',
+    });
+    expect(tarea.googleTasksSync.hasTimedSchedule).toBe(false);
+  });
+
+  test('applyNotesFromGoogle keeps hasTimedSchedule when local export pending', () => {
+    const tarea = new Tareas({
+      titulo: 'Pending timed',
+      usuario: '507f1f77bcf86cd799439011',
+      descripcion: 'Local',
+      googleTasksSync: {
+        enabled: true,
+        needsSync: true,
+        syncStatus: 'pending',
+        hasTimedSchedule: true,
+      },
+    });
+    googleTasksService.applyNotesFromGoogle(tarea, {
+      id: 'gt-keep',
+      title: 'Pending timed',
+      notes: 'Sin horario aun',
+      status: 'needsAction',
+    });
+    expect(tarea.googleTasksSync.hasTimedSchedule).toBe(true);
   });
 });

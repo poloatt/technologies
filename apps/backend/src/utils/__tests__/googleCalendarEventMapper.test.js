@@ -2,6 +2,7 @@ import {
   mapGoogleEventDates,
   mapGoogleEventToTareaFields,
   parseLocalDateOnly,
+  resolveGoogleEventAppearance,
   shouldImportEventType,
   isGoogleCalendarImportedEvent,
 } from '../googleCalendarEventMapper.js';
@@ -56,7 +57,22 @@ describe('googleCalendarEventMapper', () => {
   });
 
   describe('mapGoogleEventToTareaFields', () => {
-    it('maps a timed calendar event to EVENTO fields', () => {
+    it('maps all-day calendar event with allDay flag persisted', () => {
+      const mapped = mapGoogleEventToTareaFields({
+        id: 'evt-allday',
+        summary: 'Feriado',
+        status: 'confirmed',
+        start: { date: '2026-06-21' },
+        end: { date: '2026-06-22' },
+        eventType: 'default',
+      }, 'primary');
+
+      expect(mapped.tipo).toBe('EVENTO');
+      expect(mapped.googleCalendarSync.allDay).toBe(true);
+      expect(mapped.fechaInicio.getUTCHours()).toBe(12);
+    });
+
+    it('maps timed calendar event with allDay false', () => {
       const mapped = mapGoogleEventToTareaFields({
         id: 'evt1',
         summary: 'IPC - Aula 16',
@@ -69,11 +85,59 @@ describe('googleCalendarEventMapper', () => {
         eventType: 'default',
       }, 'primary');
 
-      expect(mapped.tipo).toBe('EVENTO');
-      expect(mapped.titulo).toBe('IPC - Aula 16');
-      expect(mapped.googleCalendarSync.googleEventId).toBe('evt1');
-      expect(mapped.googleCalendarSync.googleCalendarId).toBe('primary');
-      expect(mapped.fechaInicio).toEqual(new Date('2026-06-22T13:00:00-03:00'));
+      expect(mapped.googleCalendarSync.allDay).toBe(false);
+    });
+
+    it('maps named event label (categoría Google) to color + name', () => {
+      const labelId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const mapped = mapGoogleEventToTareaFields({
+        id: 'evt-salud',
+        summary: 'Gym',
+        status: 'confirmed',
+        start: { dateTime: '2026-06-22T09:00:00-03:00' },
+        end: { dateTime: '2026-06-22T10:00:00-03:00' },
+        eventLabelId: labelId,
+        colorId: '5',
+      }, 'primary', {
+        labelsById: {
+          [labelId]: { id: labelId, name: 'Salud', backgroundColor: '#8e24aa' },
+        },
+        eventColorsById: { 5: '#fbd75b' },
+        calendarBackgroundColor: '#039be5',
+      });
+
+      expect(mapped.googleCalendarSync.eventLabelId).toBe(labelId);
+      expect(mapped.googleCalendarSync.eventLabelName).toBe('Salud');
+      expect(mapped.googleCalendarSync.backgroundColor).toBe('#8e24aa');
+      expect(mapped.googleCalendarSync.colorId).toBeNull();
+    });
+
+    it('falls back to legacy colorId then calendar default', () => {
+      const withColor = mapGoogleEventToTareaFields({
+        id: 'evt-c',
+        summary: 'X',
+        status: 'confirmed',
+        start: { dateTime: '2026-06-22T09:00:00Z' },
+        end: { dateTime: '2026-06-22T09:30:00Z' },
+        colorId: '11',
+      }, 'primary', {
+        eventColorsById: { 11: '#dc2127' },
+        calendarBackgroundColor: '#039be5',
+      });
+      expect(withColor.googleCalendarSync.backgroundColor).toBe('#dc2127');
+      expect(withColor.googleCalendarSync.colorId).toBe('11');
+
+      const defaultOnly = mapGoogleEventToTareaFields({
+        id: 'evt-d',
+        summary: 'Y',
+        status: 'confirmed',
+        start: { dateTime: '2026-06-22T09:00:00Z' },
+        end: { dateTime: '2026-06-22T09:30:00Z' },
+      }, 'primary', {
+        calendarBackgroundColor: '#039be5',
+      });
+      expect(defaultOnly.googleCalendarSync.backgroundColor).toBe('#039be5');
+      expect(defaultOnly.googleCalendarSync.eventLabelName).toBeNull();
     });
 
     it('returns cancelled marker for cancelled events', () => {
@@ -94,6 +158,20 @@ describe('googleCalendarEventMapper', () => {
         end: { date: '2026-06-22' },
       }, 'primary');
       expect(mapped).toBeNull();
+    });
+  });
+
+  describe('resolveGoogleEventAppearance', () => {
+    it('prefers label over colorId', () => {
+      const appearance = resolveGoogleEventAppearance(
+        { eventLabelId: 'L1', colorId: '3' },
+        {
+          labelsById: { L1: { name: 'Tech', backgroundColor: '#f6bf26' } },
+          eventColorsById: { 3: '#dbadff' },
+        },
+      );
+      expect(appearance.eventLabelName).toBe('Tech');
+      expect(appearance.backgroundColor).toBe('#f6bf26');
     });
   });
 

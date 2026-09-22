@@ -25,9 +25,36 @@ function cleanPropiedadData(originalData) {
 
 function cleanTareaData(originalData) {
   if (!originalData) return originalData;
+  const objetivoId = originalData.objetivo?._id
+    || originalData.objetivo?.id
+    || originalData.objetivo
+    || null;
+  const sync = originalData.googleTasksSync && typeof originalData.googleTasksSync === 'object'
+    ? {
+      enabled: Boolean(originalData.googleTasksSync.enabled),
+      googleTaskId: originalData.googleTasksSync.googleTaskId ?? null,
+      googleTaskListId: originalData.googleTasksSync.googleTaskListId ?? null,
+      syncStatus: 'pending',
+      needsSync: true,
+      hasTimedSchedule: Boolean(originalData.googleTasksSync.hasTimedSchedule),
+      localVersion: originalData.googleTasksSync.localVersion || 0,
+    }
+    : undefined;
+
   return {
-    ...originalData,
+    titulo: originalData.titulo,
+    descripcion: originalData.descripcion || '',
+    estado: originalData.estado || 'PENDIENTE',
+    tipo: originalData.tipo === 'EVENTO' ? 'EVENTO' : 'TAREA',
+    completada: Boolean(originalData.completada),
+    fechaInicio: originalData.fechaInicio || null,
+    fechaFin: originalData.fechaFin || null,
+    fechaVencimiento: originalData.fechaVencimiento || null,
+    prioridad: originalData.prioridad || 'BAJA',
+    objetivo: objetivoId,
     subtareas: originalData.subtareas || [],
+    rrule: originalData.rrule || null,
+    ...(sync ? { googleTasksSync: sync } : null),
   };
 }
 
@@ -52,13 +79,53 @@ export async function revertUpdate(action, apiService, entity) {
 
     if (entity === 'tarea' && action.originalData) {
       dataToRestore = cleanTareaData(action.originalData);
-      if (action.data?.subtareas) {
-        dataToRestore.subtareas = action.originalData.subtareas || [];
-      }
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
+      body: JSON.stringify({
+        sessionId: 'b064c0',
+        runId: 'post-fix',
+        hypothesisId: 'U1',
+        location: 'undoRevertHandlers.js:revertUpdate',
+        message: 'undo revert update payload',
+        data: {
+          entity,
+          entityId: action.entityId,
+          estado: dataToRestore?.estado,
+          completada: dataToRestore?.completada,
+          hasSync: Boolean(dataToRestore?.googleTasksSync),
+          keys: dataToRestore ? Object.keys(dataToRestore) : [],
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     await apiService.update(action.entityId, dataToRestore);
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
+      body: JSON.stringify({
+        sessionId: 'b064c0',
+        runId: 'post-fix',
+        hypothesisId: 'U1',
+        location: 'undoRevertHandlers.js:revertUpdate:error',
+        message: 'undo revert failed',
+        data: {
+          entity,
+          entityId: action.entityId,
+          err: error?.response?.data?.error || error?.message || String(error),
+          status: error?.response?.status,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (error.response?.status === 404) return;
     throw error;
   }

@@ -15,14 +15,18 @@ export function computeScheduleView({ fechaInicio, fechaFin, allDay }) {
   const scheduleStart = toDateOrNull(fechaInicio) || new Date();
   const scheduleEnd = toDateOrNull(fechaFin);
   const scheduleDay = startOfDay(scheduleStart);
-  const scheduleDuration = scheduleEnd
+  let scheduleDuration = scheduleEnd
     ? Math.max(5, differenceInMinutes(scheduleEnd, scheduleStart))
-    : 60;
+    : 30;
+  // Default histórico Attadia = 60 min; el producto usa 30.
+  if (scheduleDuration === 60) scheduleDuration = 30;
   const scheduleAllDay = allDay ?? deriveAllDay(scheduleStart, scheduleEnd);
 
   return {
     scheduleStart,
-    scheduleEnd,
+    scheduleEnd: scheduleAllDay
+      ? scheduleEnd
+      : addMinutes(scheduleStart, scheduleDuration),
     scheduleDay,
     scheduleDuration,
     scheduleAllDay,
@@ -51,7 +55,7 @@ export function buildScheduleUpdate({
     fin = endOfDay(day);
   } else {
     inicio = mergeDateAndTime(day, time);
-    fin = addMinutes(inicio, duration || 60);
+    fin = addMinutes(inicio, duration || 30);
   }
 
   return {

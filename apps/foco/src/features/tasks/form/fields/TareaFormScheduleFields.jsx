@@ -40,7 +40,7 @@ export default function TareaFormScheduleFields({
   onAllDayChange,
   expanded = false,
   showTimeControls = false,
-  durationMin = 60,
+  durationMin = 30,
   onDurationChange,
   showDuration = false,
   showDeadline = false,
@@ -66,7 +66,7 @@ export default function TareaFormScheduleFields({
 
   const startAt = useMemo(() => mergeDateAndTime(day, time), [day, time]);
   const endAt = useMemo(
-    () => addMinutes(startAt, durationMin || 60),
+    () => addMinutes(startAt, durationMin || 30),
     [startAt, durationMin],
   );
 
@@ -132,7 +132,7 @@ export default function TareaFormScheduleFields({
       spacing={TAREA_FORM_PILL_GAP}
       sx={{
         ...tareaFormScheduleStackSx,
-        ...(embeddedInSummary ? taskFormScheduleExpandedContentSx : { width: '100%', minWidth: 0 }),
+        ...(embeddedInSummary ? tareaFormScheduleExpandedContentSx : { width: '100%', minWidth: 0 }),
       }}
     >
       <Stack
@@ -148,7 +148,7 @@ export default function TareaFormScheduleFields({
           variant="schedule"
           onClick={() => setDateOpen(true)}
           aria-label="Cambiar fecha"
-          sx={taskFormScheduleDatePillResponsiveSx}
+          sx={tareaFormScheduleDatePillResponsiveSx}
         >
           {formatDatePill(day)}
         </TareaFormPillButton>
@@ -195,7 +195,7 @@ export default function TareaFormScheduleFields({
       )}
 
       {onAllDayChange && (
-        <Box sx={taskFormScheduleControlsRowSx}>
+        <Box sx={tareaFormScheduleControlsRowSx}>
           <TareaFormAllDaySwitch
             checked={allDay}
             onChange={handleAllDayChange}
@@ -209,7 +209,7 @@ export default function TareaFormScheduleFields({
       )}
 
       {showRecurrencePicker && (
-        <Box sx={taskFormScheduleRecurrenceWrapSx}>
+        <Box sx={tareaFormScheduleRecurrenceWrapSx}>
           <TareaFormRecurrencePicker
             variant="schedule"
             value={recurrenceRrule}

@@ -18,17 +18,22 @@ Attadia sincroniza **Google Tasks** (tareas ↔ objetivos) y, opcionalmente, **G
 
 - OAuth scope: `calendar.readonly`
 - Rutas: `/api/google-calendar/*` (auth, status, sync, calendars)
-- Eventos importados: `tipo: EVENTO`, sin objetivo, campos en `googleCalendarSync`
+- Eventos importados: `tipo: EVENTO`, sin objetivo, campos en `googleCalendarSync` (incluye `allDay`, `htmlLink`)
 - Aparecen en **calendario/agenda** de Foco; no en listas Ahora/Luego
+- **Read-only**: update/delete API responde 403; UI abre `htmlLink` en Google
+- Tokens Calendar **no** se escriben en `googleTasksConfig` (scopes distintos)
+- Cleanup: solo `status=cancelled` o calendarios deseleccionados (no por fuera de ventana)
 - Habilitar **Google Calendar API** en GCP y añadir el scope al consent screen
 
 Variables opcionales:
 
 ```bash
-# GCAL_LOOKBACK_DAYS=14
-# GCAL_HORIZON_DAYS=120
+# GCAL_LOOKBACK_DAYS=14      # días hacia atrás (default)
+# GCAL_HORIZON_DAYS=120      # días hacia adelante (default) — UI: "14 + 120 días"
 # GCAL_SKIP_EVENT_TYPES=workingLocation,focusTime
 ```
+
+`googleCalendarConfig.syncDirection` es siempre `from_google` (v1). El valor legacy `bidirectional` se fuerza a import-only.
 
 La vista de semana de Google Calendar mezcla **eventos** (citables por API) y **tasks** (solo fecha por Tasks API). Atta importa cada uno por su canal.
 

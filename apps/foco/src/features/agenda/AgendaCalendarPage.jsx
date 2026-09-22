@@ -5,7 +5,10 @@ import { startOfDay } from 'date-fns';
 import { useResponsive } from '@shared/hooks';
 import { useHabits, useRutinas } from '@shared/context';
 import { usePageWithHistory } from '@shared/hooks';
-import { applyTimedMoveToTask } from '@shared/utils/calendar/calendarDragUtils';
+import {
+  applyAllDayMoveToTask,
+  applyTimedMoveToTask,
+} from '@shared/utils/calendar/calendarDragUtils';
 import { isTaskCompleted } from '@shared/utils/agendaRules';
 import { getNormalizedToday } from '@shared/utils/dateUtils';
 import { TareaForm, buildTareaPayload, syncTareaToGoogleInBackground, syncTareaStatusToGoogleInBackground } from '../tasks/form';
@@ -237,26 +240,27 @@ export default function AgendaCalendarPage() {
     openQuickCreate(quickCreateFallbackRef.current, start, 'EVENTO');
   }, [openQuickCreate]);
 
-  const handleEventMove = useCallback(async (calendarEvent, newStart, newEnd) => {
+  const handleEventMove = useCallback(async (calendarEvent, newStart, newEnd, opts = {}) => {
     const target = resolveAgendaTask(calendarEvent?.task);
     if (!target?._id) return;
     if (target?.virtual) {
       enqueueSnackbar('No se puede mover esta ocurrencia sin ancla en la serie', { variant: 'warning' });
       return;
     }
+    if (target?.googleCalendarSync?.googleEventId) {
+      enqueueSnackbar('Los eventos de Google Calendar son de solo lectura', { variant: 'info' });
+      return;
+    }
     if (isTaskCompleted(target)) return;
 
-    const datePatch = applyTimedMoveToTask(target, newStart, newEnd);
+    const toAllDay = Boolean(opts.allDay);
+    const datePatch = toAllDay
+      ? applyAllDayMoveToTask(target, newStart)
+      : applyTimedMoveToTask(target, newStart, newEnd);
 
-    setTareas((prev) => prev.map((t) => {
-      if (t._id === target._id) return { ...t, ...datePatch };
-      const sid = String(t.serieId?._id || t.serieId || '');
-      const targetSid = String(target.serieId?._id || target.serieId || '');
-      if (sid && sid === targetSid) {
-        return { ...t, ...datePatch, virtual: t.virtual };
-      }
-      return t;
-    }));
+    setTareas((prev) => prev.map((t) => (
+      t._id === target._id ? { ...t, ...datePatch } : t
+    )));
 
     try {
       const payload = buildTareaPayload(
@@ -270,6 +274,22 @@ export default function AgendaCalendarPage() {
         },
         { editingTarea: target, objetivos },
       );
+      // Payload de fechas + sync mínimo (sin mezclar paths dotted).
+      if (payload.googleTasksSync && typeof payload.googleTasksSync === 'object') {
+        Object.keys(payload).forEach((key) => {
+          if (key.startsWith('googleTasksSync.')) delete payload[key];
+        });
+        const sync = payload.googleTasksSync;
+        payload.googleTasksSync = {
+          enabled: Boolean(sync.enabled),
+          googleTaskId: sync.googleTaskId ?? null,
+          googleTaskListId: sync.googleTaskListId ?? null,
+          syncStatus: 'pending',
+          needsSync: true,
+          hasTimedSchedule: Boolean(sync.hasTimedSchedule) && !toAllDay,
+          localVersion: sync.localVersion || 0,
+        };
+      }
       const saved = await updateWithHistory(target._id, payload, target);
       syncTareaToGoogleInBackground(saved || { ...target, ...payload }, {
         onSynced: () => enqueueSnackbar('Sincronizada con Google Tasks', { variant: 'info' }),
@@ -384,7 +404,16 @@ export default function AgendaCalendarPage() {
         position: 'relative',
         px: { xs: 0, sm: 1, md: 2 },
         width: '100%',
-        height: isMobile ? 'calc(100vh - 160px)' : 'calc(100vh - 170px)',
+        height: {
+          xs: 'calc(100dvh - 160px)',
+          sm: 'calc(100vh - 170px)',
+        },
+        '@supports not (height: 100dvh)': {
+          height: {
+            xs: 'calc(100vh - 160px)',
+            sm: 'calc(100vh - 170px)',
+          },
+        },
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',

@@ -46,8 +46,28 @@ export const parseScheduleFromNotes = (notes) => {
     if (!Number.isNaN(parsedFin.getTime())) fechaFin = parsedFin;
   }
 
-  return { fechaInicio, fechaFin };
+  return healLegacyHourSchedule({ fechaInicio, fechaFin });
 };
+
+/** Default histórico Attadia = 60 min → normalizar a 30. */
+export function healLegacyHourSchedule(schedule) {
+  if (!schedule?.fechaInicio) return schedule;
+  const start = schedule.fechaInicio instanceof Date
+    ? schedule.fechaInicio
+    : new Date(schedule.fechaInicio);
+  if (Number.isNaN(start.getTime())) return schedule;
+
+  let fin = schedule.fechaFin
+    ? (schedule.fechaFin instanceof Date ? schedule.fechaFin : new Date(schedule.fechaFin))
+    : null;
+  if (fin && Number.isNaN(fin.getTime())) fin = null;
+
+  if (fin && fin.getTime() - start.getTime() === 60 * 60 * 1000) {
+    fin = new Date(start.getTime() + 30 * 60 * 1000);
+  }
+
+  return { fechaInicio: start, fechaFin: fin };
+}
 
 export const stripScheduleFromNotes = (notes) => {
   const text = String(notes || '');

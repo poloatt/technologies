@@ -106,12 +106,8 @@ export async function completeCalendarOAuth(userId, code) {
     }
   }
 
-  if (tokens.access_token) {
-    update['googleTasksConfig.accessToken'] = tokens.access_token;
-    if (tokens.refresh_token) {
-      update['googleTasksConfig.refreshToken'] = tokens.refresh_token;
-    }
-  }
+  // No escribir en googleTasksConfig: el scope de Calendar puede ser solo
+  // calendar.readonly y pisaría un refresh válido de Tasks.
 
   await Users.findByIdAndUpdate(userId, update);
 
@@ -212,8 +208,11 @@ export const updateConfig = async (req, res) => {
     if (Array.isArray(selectedCalendarIds) && selectedCalendarIds.length > 0) {
       update['googleCalendarConfig.selectedCalendarIds'] = selectedCalendarIds;
     }
-    if (syncDirection === 'from_google' || syncDirection === 'bidirectional') {
-      update['googleCalendarConfig.syncDirection'] = syncDirection;
+    if (syncDirection === 'from_google') {
+      update['googleCalendarConfig.syncDirection'] = 'from_google';
+    } else if (syncDirection === 'bidirectional') {
+      // v1 solo import (calendar.readonly); no hay writers hacia Google
+      update['googleCalendarConfig.syncDirection'] = 'from_google';
     }
 
     if (Object.keys(update).length === 0) {

@@ -1,22 +1,27 @@
 export const DAY_START_HOUR = 6;
 export const DAY_END_HOUR = 23;
 export const SLOT_MINUTES = 30;
+/** Snap de arrastre estilo Google Calendar (15 min). */
+export const DRAG_SNAP_MINUTES = 15;
 export const SLOTS_PER_HOUR = 2;
-/** Altura de cada media hora en la rejilla (48px/hora). */
-export const HALF_SLOT_HEIGHT_PX = 24;
+/** Altura de cada media hora (≈ Google Calendar densito). */
+export const HALF_SLOT_HEIGHT_PX = 28;
 /** Altura de una hora completa (etiquetas + franjas). */
 export const SLOT_HEIGHT_PX = HALF_SLOT_HEIGHT_PX * SLOTS_PER_HOUR;
 export const DEFAULT_DURATION_MINUTES = 30;
-export const MIN_EVENT_HEIGHT_PX = 18;
-export const ALL_DAY_ROW_MIN_HEIGHT = 36;
-/** Máximo de chips “todo el día” visibles antes de “+N más” (estilo Google Calendar). */
-export const ALL_DAY_MAX_VISIBLE = 2;
+/** Chip TAREA = media hora de grilla (30 min / duración desconocida). */
+export const TASK_PILL_HEIGHT_PX = HALF_SLOT_HEIGHT_PX;
+/** EVENTO: altura mínima ≈ media hora. */
+export const MIN_EVENT_HEIGHT_PX = HALF_SLOT_HEIGHT_PX;
+export const ALL_DAY_ROW_MIN_HEIGHT = 18;
+/** Máximo de chips “todo el día” visibles antes de “+N más”. */
+export const ALL_DAY_MAX_VISIBLE = 3;
 /** Máximo de bloques con hora visibles por día. */
 export const MAX_TIMED_EVENTS_VISIBLE = 16;
-export const TIME_COLUMN_WIDTH = 52;
+export const TIME_COLUMN_WIDTH = 56;
 
 /** Fixed chrome heights so day ↔ week toggles do not shift the time grid. */
-export const DATE_HEADER_MIN_HEIGHT = 80;
+export const DATE_HEADER_MIN_HEIGHT = 72;
 export const CONTEXT_BAR_MIN_HEIGHT = 52;
 
 export const calendarGridColumns = (dayCount = 7) =>
@@ -62,3 +67,13 @@ export const getGridHeightPx = () =>
 
 export const getTotalGridMinutes = () =>
   (DAY_END_HOUR - DAY_START_HOUR + 1) * 60;
+
+/** Minutos desde medianoche → offset px desde el top de la grilla timed. */
+export const startMinutesToTopPx = (minsFromMidnight) =>
+  ((minsFromMidnight - DAY_START_HOUR * 60) / SLOT_MINUTES) * HALF_SLOT_HEIGHT_PX;
+
+/** Duración en minutos → altura px (mínimo 1 snap de drag). */
+export const durationMinutesToHeightPx = (durationMin) => {
+  const mins = Math.max(DRAG_SNAP_MINUTES, durationMin || DEFAULT_DURATION_MINUTES);
+  return (mins / SLOT_MINUTES) * HALF_SLOT_HEIGHT_PX;
+};

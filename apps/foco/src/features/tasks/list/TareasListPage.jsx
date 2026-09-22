@@ -52,8 +52,11 @@ function taskKey(tarea) {
   return String(tarea?._id ?? tarea?.id ?? '');
 }
 
-export function TareasListPage() {
-  const pageView = useTareasPageView();
+/**
+ * Lista Now/Later. Separada de la ruta para que en vista agenda NO monte
+ * useTareasPageController (evita doble useScopedUndoHandler con AgendaCalendarPage).
+ */
+function TareasListPageContent() {
   const controller = useTareasPageController();
   const [desktopOpenTask, setDesktopOpenTask] = useState(null);
 
@@ -100,7 +103,6 @@ export function TareasListPage() {
     return fresh || desktopOpenTask.tarea;
   }, [openKey, openSource, desktopOpenTask, tareasAhora, tareasLuego]);
 
-  // Cerrar si la tarea ya no está en la lista.
   useEffect(() => {
     if (isMobile || !openKey || !openSource) return undefined;
     const list = openSource === 'ahora' ? tareasAhora : tareasLuego;
@@ -125,10 +127,6 @@ export function TareasListPage() {
     onUpdateEstado: tareasTableCommonProps.onUpdateEstado,
     onRefreshData: tareasTableCommonProps.onRefreshData,
   }), [objetivos, tareasTableCommonProps]);
-
-  if (pageView === 'agenda') {
-    return <AgendaCalendarPage />;
-  }
 
   const renderDesktopDetail = (sourceView) => (
     <TareaDetailPopup
@@ -232,6 +230,15 @@ export function TareasListPage() {
       </Box>
     </Box>
   );
+}
+
+export function TareasListPage() {
+  const pageView = useTareasPageView();
+  // Agenda monta su propio usePageWithHistory; no montar el de la lista.
+  if (pageView === 'agenda') {
+    return <AgendaCalendarPage />;
+  }
+  return <TareasListPageContent />;
 }
 
 export default TareasListPage;

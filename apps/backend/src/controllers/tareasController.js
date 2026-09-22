@@ -30,10 +30,39 @@ class TareasController extends BaseController {
     this.addSubtarea = this.addSubtarea.bind(this);
     this.removeSubtarea = this.removeSubtarea.bind(this);
     this.create = this.create.bind(this);
+    this.update = this.update.bind(this);
     this.updateEstado = this.updateEstado.bind(this);
     this.getAgenda = this.getAgenda.bind(this);
     this.getList = this.getList.bind(this);
     this.delete = this.delete.bind(this);
+  }
+
+  isGoogleCalendarReadonly(item) {
+    return String(item?.tipo || '').toUpperCase() === 'EVENTO'
+      && Boolean(item?.googleCalendarSync?.googleEventId);
+  }
+
+  /**
+   * PUT /api/tareas/:id — imports de Google Calendar son read-only (scope calendar.readonly).
+   */
+  async update(req, res) {
+    try {
+      const existing = await Tareas.findById(req.params.id)
+        .select('tipo googleCalendarSync');
+      if (!existing) {
+        return res.status(404).json({ message: 'Recurso no encontrado' });
+      }
+      if (this.isGoogleCalendarReadonly(existing)) {
+        return res.status(403).json({
+          error: 'Los eventos de Google Calendar son de solo lectura',
+          code: 'GOOGLE_CALENDAR_READONLY',
+        });
+      }
+      return super.update(req, res);
+    } catch (error) {
+      console.error('Error en update tarea:', error);
+      return res.status(500).json({ error: error.message });
+    }
   }
 
   /**
@@ -45,6 +74,13 @@ class TareasController extends BaseController {
       const item = await Tareas.findById(req.params.id);
       if (!item) {
         return res.status(404).json({ message: 'Recurso no encontrado' });
+      }
+
+      if (this.isGoogleCalendarReadonly(item)) {
+        return res.status(403).json({
+          error: 'Los eventos de Google Calendar son de solo lectura',
+          code: 'GOOGLE_CALENDAR_READONLY',
+        });
       }
 
       const googleTaskId = item.googleTasksSync?.googleTaskId;
@@ -537,6 +573,18 @@ class TareasController extends BaseController {
 
       if (!['PENDIENTE', 'EN_PROGRESO', 'COMPLETADA', 'CANCELADA'].includes(estado)) {
         return res.status(400).json({ error: 'Estado no válido' });
+      }
+
+      const existing = await this.Model.findById(req.params.id)
+        .select('tipo googleCalendarSync');
+      if (!existing) {
+        return res.status(404).json({ error: 'Tarea no encontrada' });
+      }
+      if (this.isGoogleCalendarReadonly(existing)) {
+        return res.status(403).json({
+          error: 'Los eventos de Google Calendar son de solo lectura',
+          code: 'GOOGLE_CALENDAR_READONLY',
+        });
       }
 
       const update = { estado, completada: estado === 'COMPLETADA' };

@@ -1,8 +1,12 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import {
   TextField,
   Box,
+  Alert,
+  Button,
+  Link,
 } from '@mui/material';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
   TareaFormTipoSelector,
   TAREA_FORM_TIPO_ALL,
@@ -126,6 +130,21 @@ const TareaForm = ({
   const { handleFileChange, removeFile } = useTareaFormAttachments(setFormData);
 
   const isHabitMode = formData.tipo === 'HABITO';
+  const isGoogleCalendarReadonly = useMemo(() => {
+    const sync = formData.googleCalendarSync || initialData?.googleCalendarSync;
+    const tipo = formData.tipo || initialData?.tipo;
+    return String(tipo || '').toUpperCase() === 'EVENTO'
+      && Boolean(sync?.googleEventId);
+  }, [formData.googleCalendarSync, formData.tipo, initialData]);
+  const calendarHtmlLink = formData.googleCalendarSync?.htmlLink
+    || initialData?.googleCalendarSync?.htmlLink
+    || null;
+
+  const openInGoogleCalendar = () => {
+    if (calendarHtmlLink) {
+      window.open(calendarHtmlLink, '_blank', 'noopener,noreferrer');
+    }
+  };
   const canSelectHabit = !isEditing && !initialData?._id;
 
   useEffect(() => {
@@ -236,6 +255,11 @@ const TareaForm = ({
   };
 
   const handleSubmit = async () => {
+    if (isGoogleCalendarReadonly) {
+      if (calendarHtmlLink) openInGoogleCalendar();
+      else onClose?.();
+      return;
+    }
     if (isHabitMode) {
       if (!validateHabitForm(formData.titulo, errors, setErrors)) return;
       setSaving(true);
@@ -377,10 +401,13 @@ const TareaForm = ({
         // Persist enable before one-shot sync so export queue picks it up
         await clienteAxios.put(`/api/tareas/${formData._id}`, {
           googleTasksSync: {
-            ...(formData.googleTasksSync || {}),
             enabled: true,
-            needsSync: true,
+            googleTaskId: formData.googleTasksSync?.googleTaskId ?? null,
+            googleTaskListId: formData.googleTasksSync?.googleTaskListId ?? null,
             syncStatus: 'pending',
+            needsSync: true,
+            hasTimedSchedule: Boolean(formData.googleTasksSync?.hasTimedSchedule),
+            localVersion: formData.googleTasksSync?.localVersion || 0,
           },
         });
       }
@@ -435,7 +462,7 @@ const TareaForm = ({
   const toolsSlot = hasTools
     ? actionsToolbar({
       onAttach: handleFileChange,
-      canGoogleSync: Boolean(isEditing && formData._id && !isHabitMode),
+      canGoogleSync: Boolean(isEditing && formData._id && !isHabitMode && !isGoogleCalendarReadonly),
       handleSyncToGoogle,
       syncingToGoogle,
       googleTasksSync: formData.googleTasksSync,
@@ -447,9 +474,13 @@ const TareaForm = ({
       pinned={footerOutside}
       onSave={handleSubmit}
       saving={saving}
-      saveLabel={isEditing ? 'Actualizar' : 'Guardar'}
-      showCancel={footerOutside}
-      onCancel={footerOutside ? onClose : undefined}
+      saveLabel={
+        isGoogleCalendarReadonly
+          ? (calendarHtmlLink ? 'Abrir en Google' : 'Cerrar')
+          : (isEditing ? 'Actualizar' : 'Guardar')
+      }
+      showCancel={footerOutside || isGoogleCalendarReadonly}
+      onCancel={(footerOutside || isGoogleCalendarReadonly) ? onClose : undefined}
       cancelLabel="Cerrar"
     />
   );
@@ -464,6 +495,39 @@ const TareaForm = ({
         : {})}
     >
         <TareaFormHeader onClose={footerOutside ? undefined : onClose}>
+          {isGoogleCalendarReadonly && (
+            <Alert
+              severity="info"
+              sx={{ mb: 1.5 }}
+              action={calendarHtmlLink ? (
+                <Button
+                  color="inherit"
+                  size="small"
+                  endIcon={<OpenInNewIcon fontSize="small" />}
+                  onClick={openInGoogleCalendar}
+                >
+                  Google
+                </Button>
+              ) : undefined}
+            >
+              Evento de Google Calendar (solo lectura).
+              {calendarHtmlLink ? (
+                <>
+                  {' '}
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="body2"
+                    onClick={openInGoogleCalendar}
+                    sx={{ verticalAlign: 'baseline' }}
+                  >
+                    Abrir en Google Calendar
+                  </Link>
+                </>
+              ) : null}
+            </Alert>
+          )}
+
           {hasTools && !isHabitMode && (
             <Box sx={{ mb: 1.25 }}>
               {toolsSlot}
@@ -532,7 +596,9 @@ const TareaForm = ({
                 error={!!errors.titulo}
                 helperText={errors.titulo}
                 required
-                autoFocus
+                autoFocus={!isGoogleCalendarReadonly}
+                disabled={isGoogleCalendarReadonly}
+                InputProps={{ readOnly: isGoogleCalendarReadonly }}
                 sx={{ flex: 1, minWidth: 0, ...tareaFormTitleFieldSx }}
               />
             </TareaFormHeaderTitleRow>
@@ -557,19 +623,23 @@ const TareaForm = ({
         ) : (
         <TareaFormAdvancedFields
           formData={formData}
-          setFormData={setFormData}
+          setFormData={isGoogleCalendarReadonly ? () => {} : setFormData}
           errors={errors}
           objetivos={objetivos}
           objetivoId={objetivoId}
           showFechaInicio
-          showSubtareas
-          onCreateObjetivo={() => setIsObjetivoFormOpen(true)}
-          onToggleSubtarea={handleToggleSubtarea}
-          onAttach={handleFileChange}
+          showSubtareas={!isGoogleCalendarReadonly}
+          onCreateObjetivo={isGoogleCalendarReadonly ? undefined : () => setIsObjetivoFormOpen(true)}
+          onToggleSubtarea={isGoogleCalendarReadonly ? undefined : handleToggleSubtarea}
+          onAttach={isGoogleCalendarReadonly ? undefined : handleFileChange}
           currentUserId={user?.id || user?._id}
-          onDelegateRequest={onDelegateRequest || (() => setDelegateOpen(true))}
-          showGoogleSyncToggle
-          onToggleGoogleSync={handleToggleGoogleSync}
+          onDelegateRequest={
+            isGoogleCalendarReadonly
+              ? undefined
+              : (onDelegateRequest || (() => setDelegateOpen(true)))
+          }
+          showGoogleSyncToggle={!isGoogleCalendarReadonly}
+          onToggleGoogleSync={isGoogleCalendarReadonly ? undefined : handleToggleGoogleSync}
         />
         )}
 

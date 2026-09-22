@@ -4,6 +4,7 @@
 import {
   appendScheduleToNotes,
   isTimedScheduleInstant,
+  stripScheduleFromNotes,
 } from '@shared/utils/googleTasksScheduleNotes';
 
 function normalizeObjetivoId(value) {
@@ -20,6 +21,7 @@ export function findObjetivoById(objetivos, objetivoId) {
 
 /**
  * Alinea googleTasksSync con el objetivo elegido (lista de Google correcta).
+ * Devuelve un objeto plano mínimo (sin basura de spreads de docs Mongoose).
  */
 export function mergeGoogleTasksSyncForSave(formData, { editingTarea = null, objetivos = [] } = {}) {
   const newObjetivoId = normalizeObjetivoId(formData.objetivo);
@@ -33,21 +35,24 @@ export function mergeGoogleTasksSyncForSave(formData, { editingTarea = null, obj
   const enabled = formSync.enabled ?? prevSync.enabled ?? false;
 
   if (!enabled && !prevSync.enabled) {
-    return formData.googleTasksSync || { enabled: false };
+    return { enabled: false };
   }
 
   const objetivo = findObjetivoById(objetivos, newObjetivoId);
   const listFromObjetivo = objetivo?.googleTasksSync?.googleTaskListId || null;
 
   const merged = {
-    ...prevSync,
-    ...formSync,
     enabled,
+    googleTaskId: formSync.googleTaskId ?? prevSync.googleTaskId ?? null,
+    googleTaskListId: listFromObjetivo
+      || formSync.googleTaskListId
+      || prevSync.googleTaskListId
+      || null,
+    syncStatus: formSync.syncStatus || prevSync.syncStatus || 'pending',
+    needsSync: Boolean(formSync.needsSync ?? prevSync.needsSync),
+    hasTimedSchedule: Boolean(formSync.hasTimedSchedule ?? prevSync.hasTimedSchedule),
+    localVersion: formSync.localVersion ?? prevSync.localVersion ?? 0,
   };
-
-  if (listFromObjetivo) {
-    merged.googleTaskListId = listFromObjetivo;
-  }
 
   if (
     objetivoChanged
@@ -55,13 +60,14 @@ export function mergeGoogleTasksSyncForSave(formData, { editingTarea = null, obj
   ) {
     merged.needsSync = true;
     merged.syncStatus = 'pending';
-    merged.localVersion = (merged.localVersion || prevSync.localVersion || 0) + 1;
+    merged.localVersion = (merged.localVersion || 0) + 1;
   }
 
   return merged;
 }
 
-export function buildTareaPayload(formData, { editingTarea = null, objetivos = [] } = {}) {  const toISOString = (dateValue, fallback = null) => {
+export function buildTareaPayload(formData, { editingTarea = null, objetivos = [] } = {}) {
+  const toISOString = (dateValue, fallback = null) => {
     if (!dateValue) return fallback;
     try {
       if (typeof dateValue === 'string') {
@@ -87,6 +93,7 @@ export function buildTareaPayload(formData, { editingTarea = null, objetivos = [
   const tipo = formData.tipo === 'EVENTO' ? 'EVENTO' : 'TAREA';
   const fechaFin = toISOString(formData.fechaFin, null);
   const fechaVencimiento = toISOString(formData.fechaVencimiento, null);
+  const clearTimed = Boolean(formData.clearTimedSchedule || formData.allDay);
 
   const payload = {
     titulo: formData.titulo,
@@ -112,11 +119,21 @@ export function buildTareaPayload(formData, { editingTarea = null, objetivos = [
   const endDate = fechaFin
     ? new Date(fechaFin)
     : (fechaVencimiento ? new Date(fechaVencimiento) : null);
-  const timed = tipo === 'TAREA'
+  const timed = !clearTimed
+    && tipo === 'TAREA'
     && startDate
     && endDate
     && isTimedScheduleInstant(startDate, endDate);
-  if (timed) {
+
+  if (clearTimed) {
+    payload.descripcion = stripScheduleFromNotes(payload.descripcion);
+    payload.googleTasksSync = {
+      ...payload.googleTasksSync,
+      hasTimedSchedule: false,
+      needsSync: true,
+      syncStatus: 'pending',
+    };
+  } else if (timed) {
     payload.descripcion = appendScheduleToNotes(payload.descripcion, startDate, endDate);
     payload.googleTasksSync = {
       ...payload.googleTasksSync,
@@ -125,7 +142,6 @@ export function buildTareaPayload(formData, { editingTarea = null, objetivos = [
       syncStatus: 'pending',
     };
   }
-
   if (editingTarea) {
     payload.usuario = editingTarea.usuario;
     payload.orden = editingTarea.orden;

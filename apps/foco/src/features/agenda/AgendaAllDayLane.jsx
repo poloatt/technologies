@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import TaskEventBlock from '@shared/components/tasks/TaskEventBlock';
+import DraggableAllDayEvent from './dnd/DraggableAllDayEvent';
+import DroppableAllDayLane from './dnd/DroppableAllDayLane';
 
 /**
  * Franja “todo el día” estilo Google Calendar: muestra hasta maxVisible y “+N más”.
+ * Con dndEnabled, la franja es droppable aunque esté vacía.
  */
 export default function AgendaAllDayLane({
+  day,
   events = [],
   maxVisible = 2,
   onEventClick,
   onToggleComplete,
   compact = true,
+  dndEnabled = false,
 }) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
@@ -20,9 +24,7 @@ export default function AgendaAllDayLane({
   const showToggle = hiddenCount > 0;
   const visible = expanded || !showToggle ? list : list.slice(0, maxVisible);
 
-  if (list.length === 0) return null;
-
-  return (
+  const body = (
     <Box
       sx={{
         width: '100%',
@@ -31,15 +33,17 @@ export default function AgendaAllDayLane({
         gap: 0.25,
         py: 0.25,
         px: 0.25,
+        minHeight: dndEnabled ? 28 : undefined,
       }}
     >
       {visible.map((ev) => (
-        <TaskEventBlock
+        <DraggableAllDayEvent
           key={String(ev.task._id ?? ev.task.id)}
           event={ev}
           compact={compact}
-          onClick={onEventClick}
+          onEventClick={onEventClick}
           onToggleComplete={onToggleComplete}
+          dndEnabled={dndEnabled}
         />
       ))}
       {showToggle && (
@@ -66,5 +70,16 @@ export default function AgendaAllDayLane({
         </ButtonBase>
       )}
     </Box>
+  );
+
+  if (!dndEnabled || !day) {
+    if (list.length === 0) return null;
+    return body;
+  }
+
+  return (
+    <DroppableAllDayLane day={day}>
+      {body}
+    </DroppableAllDayLane>
   );
 }

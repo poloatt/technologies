@@ -2,15 +2,20 @@ import { google } from 'googleapis';
 import { Users, Tareas } from '../models/index.js';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
-import { mapGoogleEventToTareaFields } from '../utils/googleCalendarEventMapper.js';
+import {
+  FALLBACK_EVENT_COLORS,
+  mapGoogleEventToTareaFields,
+} from '../utils/googleCalendarEventMapper.js';
 
 const LOOKBACK_DAYS = parseInt(process.env.GCAL_LOOKBACK_DAYS || process.env.GTASKS_LIST_VIRTUAL_LOOKBACK_DAYS || '14', 10);
 const HORIZON_DAYS = parseInt(process.env.GCAL_HORIZON_DAYS || process.env.GTASKS_LIST_VIRTUAL_HORIZON_DAYS || '120', 10);
+const GCAL_API = 'https://www.googleapis.com/calendar/v3';
 
 class GoogleCalendarService {
   constructor() {
     this.oauthClients = new Map();
     this.calendarClients = new Map();
+    this._eventColorMapByUser = new Map();
   }
 
   getOAuthClient(userId) {
@@ -67,11 +72,6 @@ class GoogleCalendarService {
           'googleCalendarConfig.tokenError': null,
           'googleCalendarConfig.tokenErrorDate': null,
         };
-        if (tokens.refresh_token && current?.googleTasksConfig?.enabled) {
-          update['googleTasksConfig.accessToken'] = tokens.access_token;
-          update['googleTasksConfig.refreshToken'] = tokens.refresh_token;
-          update['googleTasksConfig.lastTokenRefresh'] = new Date();
-        }
         await Users.findByIdAndUpdate(userId, update);
       });
       oauth._attadiaCalendarTokensListener = true;
@@ -98,26 +98,91 @@ class GoogleCalendarService {
   }
 
   async listAllEvents(calendarId, userId, timeMin, timeMax) {
-    const calendar = this.getCalendarApi(userId);
+    // Raw HTTP: googleapis@131 no tipa eventLabelVersion / eventLabelId.
+    const oauth = this.getOAuthClient(userId);
     const items = [];
     let pageToken;
 
     do {
-      const response = await calendar.events.list({
-        calendarId,
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        showDeleted: true,
-        maxResults: 250,
-        pageToken,
+      const { data } = await oauth.request({
+        url: `${GCAL_API}/calendars/${encodeURIComponent(calendarId)}/events`,
+        method: 'GET',
+        params: {
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+          showDeleted: true,
+          maxResults: 250,
+          pageToken,
+          eventLabelVersion: 1,
+        },
       });
-      items.push(...(response.data.items || []));
-      pageToken = response.data.nextPageToken;
+      items.push(...(data.items || []));
+      pageToken = data.nextPageToken;
     } while (pageToken);
 
     return items;
+  }
+
+  /**
+   * Labels con nombre del calendario (Estudio, Salud, …).
+   * @returns {{ byId: Record<string, { id: string, name: string|null, backgroundColor: string|null }> }}
+   */
+  async getCalendarEventLabels(calendarId, userId) {
+    const oauth = this.getOAuthClient(userId);
+    try {
+      const { data } = await oauth.request({
+        url: `${GCAL_API}/calendars/${encodeURIComponent(calendarId)}`,
+        method: 'GET',
+      });
+      const byId = {};
+      for (const label of data?.labelProperties?.eventLabels || []) {
+        if (!label?.id) continue;
+        byId[label.id] = {
+          id: label.id,
+          name: label.name ? String(label.name).trim() : null,
+          backgroundColor: label.backgroundColor || null,
+        };
+      }
+      return { byId };
+    } catch (err) {
+      logger.warn(`No se pudieron leer labels de ${calendarId}: ${err.message}`);
+      return { byId: {} };
+    }
+  }
+
+  async getEventColorMap(userId) {
+    const uid = String(userId);
+    if (this._eventColorMapByUser.has(uid)) {
+      return this._eventColorMapByUser.get(uid);
+    }
+    try {
+      const calendar = this.getCalendarApi(userId);
+      const response = await calendar.colors.get({});
+      const event = response.data?.event || {};
+      const map = { ...FALLBACK_EVENT_COLORS };
+      for (const [id, swatch] of Object.entries(event)) {
+        if (swatch?.background) map[id] = swatch.background;
+      }
+      this._eventColorMapByUser.set(uid, map);
+      return map;
+    } catch (err) {
+      logger.warn(`No se pudo leer colors.get: ${err.message}`);
+      return { ...FALLBACK_EVENT_COLORS };
+    }
+  }
+
+  async getCalendarListBackgroundMap(userId) {
+    const calendar = this.getCalendarApi(userId);
+    const response = await calendar.calendarList.list({ minAccessRole: 'reader' });
+    const map = {};
+    for (const cal of response.data.items || []) {
+      if (!cal?.id) continue;
+      map[cal.id] = cal.backgroundColor || null;
+      if (cal.primary) map.primary = cal.backgroundColor || null;
+    }
+    return map;
   }
 
   async listCalendars(userId) {
@@ -131,6 +196,13 @@ class GoogleCalendarService {
       backgroundColor: cal.backgroundColor,
       selected: Boolean(cal.selected),
     }));
+  }
+
+  appearanceUnchanged(existingSync, mappedSync) {
+    return (existingSync?.eventLabelId || null) === (mappedSync?.eventLabelId || null)
+      && (existingSync?.eventLabelName || null) === (mappedSync?.eventLabelName || null)
+      && (existingSync?.colorId || null) === (mappedSync?.colorId || null)
+      && (existingSync?.backgroundColor || null) === (mappedSync?.backgroundColor || null);
   }
 
   async syncEventsFromGoogle(userId, options = {}) {
@@ -153,15 +225,29 @@ class GoogleCalendarService {
       calendars: calendarIds.length,
     };
 
-    const seenKeys = new Set();
+    const eventColorsById = await this.getEventColorMap(userId);
+    let calendarBgById = {};
+    try {
+      calendarBgById = await this.getCalendarListBackgroundMap(userId);
+    } catch (err) {
+      logger.warn(`calendarList para colores default: ${err.message}`);
+    }
 
     for (const calendarId of calendarIds) {
       try {
+        const { byId: labelsById } = await this.getCalendarEventLabels(calendarId, userId);
         const events = await this.listAllEvents(calendarId, userId, from, to);
+        const calendarBackgroundColor = calendarBgById[calendarId]
+          || (calendarId === 'primary' ? calendarBgById.primary : null)
+          || null;
 
         for (const event of events) {
           try {
-            const mapped = mapGoogleEventToTareaFields(event, calendarId);
+            const mapped = mapGoogleEventToTareaFields(event, calendarId, {
+              labelsById,
+              eventColorsById,
+              calendarBackgroundColor,
+            });
             if (!mapped) {
               results.skipped++;
               continue;
@@ -177,9 +263,6 @@ class GoogleCalendarService {
               continue;
             }
 
-            const key = `${calendarId}::${mapped.googleCalendarSync.googleEventId}`;
-            seenKeys.add(key);
-
             const existing = await Tareas.findOne({
               usuario: userId,
               'googleCalendarSync.googleEventId': mapped.googleCalendarSync.googleEventId,
@@ -190,8 +273,10 @@ class GoogleCalendarService {
               if (existing.googleCalendarSync?.etag === mapped.googleCalendarSync.etag
                 && existing.titulo === mapped.titulo
                 && existing.descripcion === mapped.descripcion
+                && Boolean(existing.googleCalendarSync?.allDay) === Boolean(mapped.googleCalendarSync?.allDay)
                 && existing.fechaInicio?.getTime() === mapped.fechaInicio?.getTime()
-                && existing.fechaFin?.getTime() === mapped.fechaFin?.getTime()) {
+                && existing.fechaFin?.getTime() === mapped.fechaFin?.getTime()
+                && this.appearanceUnchanged(existing.googleCalendarSync, mapped.googleCalendarSync)) {
                 results.skipped++;
                 continue;
               }
@@ -225,29 +310,17 @@ class GoogleCalendarService {
       }
     }
 
-    const importedInWindow = await Tareas.find({
+    // EVENTOs de calendarios ya no seleccionados → eliminar import local
+    const deselected = await Tareas.find({
       usuario: userId,
       tipo: 'EVENTO',
       'googleCalendarSync.googleEventId': { $exists: true, $ne: null },
-      $or: [
-        { fechaInicio: { $gte: from, $lte: to } },
-        {
-          tipo: 'EVENTO',
-          fechaInicio: { $lte: to },
-          fechaFin: { $gte: from },
-        },
-      ],
-    }).select('_id googleCalendarSync').lean();
+      'googleCalendarSync.googleCalendarId': { $nin: calendarIds },
+    }).select('_id').lean();
 
-    for (const doc of importedInWindow) {
-      const calId = doc.googleCalendarSync?.googleCalendarId;
-      const evId = doc.googleCalendarSync?.googleEventId;
-      if (!calId || !evId) continue;
-      const key = `${calId}::${evId}`;
-      if (!seenKeys.has(key) && calendarIds.includes(calId)) {
-        await Tareas.deleteOne({ _id: doc._id });
-        results.deleted++;
-      }
+    for (const doc of deselected) {
+      await Tareas.deleteOne({ _id: doc._id });
+      results.deleted++;
     }
 
     await Users.findByIdAndUpdate(userId, {

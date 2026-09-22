@@ -12,6 +12,7 @@ import {
   taskFormBodyTextSx,
   taskFormCaptionTextSx,
 } from '../components/forms/tareaFormTokens';
+import { TASK_PILL_HEIGHT_PX } from '../utils/calendar/calendarLayout';
 
 /** Ancho de la barra de acento por estado (borde izquierdo). */
 export const TASK_ACCENT_BAR_WIDTH = 4;
@@ -215,60 +216,125 @@ export function getTaskRowSx({
   };
 }
 
-/** Bloque de evento/tarea en calendario (franja o rejilla horaria). */
+/** Bloque de evento/tarea en calendario (paridad visual Google Calendar). */
 export function getTaskEventBlockSx({
   theme,
   accent,
   completed = false,
   compact = false,
   timedCompact = false,
+  isEvento = false,
   minHeight,
 }) {
+  // EVENTO: bloque sólido que ocupa la duración (ligeramente transparente para ver TAREA encima)
+  if (isEvento && timedCompact) {
+    return {
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 0.25,
+      px: 0.75,
+      py: 0.375,
+      borderRadius: '4px',
+      border: 'none',
+      bgcolor: alpha(accent, theme.palette.mode === 'dark' ? 0.88 : 0.92),
+      color: theme.palette.getContrastText(accent),
+      opacity: completed ? 0.7 : 1,
+      cursor: 'pointer',
+      overflow: 'hidden',
+      height: '100%',
+      minHeight: minHeight ?? 20,
+      boxSizing: 'border-box',
+      transition: 'filter 0.12s ease',
+      '&:hover': {
+        filter: 'brightness(1.08)',
+      },
+    };
+  }
+
+  // TAREA timed: pill fina tipo Google Tasks en Calendar
+  if (timedCompact && !isEvento) {
+    const pillBg = theme.palette.mode === 'dark'
+      ? alpha(theme.palette.common.white, completed ? 0.06 : 0.10)
+      : alpha(theme.palette.common.black, completed ? 0.06 : 0.08);
+    return {
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 0.5,
+      px: 0.75,
+      py: 0,
+      borderRadius: '999px',
+      border: 'none',
+      bgcolor: pillBg,
+      opacity: completed ? 0.72 : 1,
+      cursor: 'pointer',
+      overflow: 'hidden',
+      height: '100%',
+      maxHeight: '100%',
+      minHeight: minHeight ?? `${TASK_PILL_HEIGHT_PX}px`,
+      boxSizing: 'border-box',
+      transition: 'background-color 0.12s ease',
+      '&:hover': {
+        bgcolor: theme.palette.mode === 'dark'
+          ? alpha(theme.palette.common.white, completed ? 0.09 : 0.14)
+          : alpha(theme.palette.common.black, completed ? 0.09 : 0.12),
+      },
+    };
+  }
+
+  // All-day / compact chips — misma altura que pill timed (media hora)
+  const soft = theme.palette.mode === 'dark'
+    ? alpha(accent, completed ? 0.14 : 0.28)
+    : alpha(accent, completed ? 0.10 : 0.18);
+
   return {
     position: 'relative',
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: timedCompact ? 0.25 : 0.5,
-    px: timedCompact ? 0.5 : 0.75,
-    py: timedCompact ? 0 : (compact ? 0.35 : 0.5),
-    borderRadius: timedCompact ? 0.75 : HUB_SECTION.sectionRadius / 3,
-    border: '1px solid',
-    borderColor: alpha(accent, theme.palette.mode === 'dark' ? 0.28 : 0.22),
-    borderLeft: `3px solid ${accent}`,
-    bgcolor: theme.palette.mode === 'dark'
-      ? alpha(accent, completed ? 0.10 : 0.18)
-      : alpha(accent, completed ? 0.06 : 0.12),
-    opacity: completed ? 0.65 : 1,
+    alignItems: 'center',
+    gap: 0.5,
+    px: 0.75,
+    py: 0,
+    borderRadius: isEvento ? '4px' : '999px',
+    border: 'none',
+    bgcolor: isEvento ? accent : soft,
+    color: isEvento ? theme.palette.getContrastText(accent) : undefined,
+    opacity: completed ? 0.55 : 1,
     cursor: 'pointer',
     overflow: 'hidden',
-    height: timedCompact ? '100%' : 'auto',
-    minHeight: minHeight ?? (timedCompact ? 18 : (compact ? 30 : 36)),
+    height: `${TASK_PILL_HEIGHT_PX}px`,
+    maxHeight: `${TASK_PILL_HEIGHT_PX}px`,
+    minHeight: 0,
     boxSizing: 'border-box',
-    transition: 'filter 0.15s ease, background-color 0.15s ease',
+    transition: 'filter 0.12s ease',
     '&:hover': {
-      filter: 'brightness(1.06)',
-      bgcolor: theme.palette.mode === 'dark'
-        ? alpha(accent, completed ? 0.14 : 0.22)
-        : alpha(accent, completed ? 0.08 : 0.16),
+      filter: 'brightness(0.97)',
     },
   };
 }
 
-export const taskEventTitleSx = (timedCompact = false, completed = false) => ({
+export const taskEventTitleSx = (timedCompact = false, completed = false, isEvento = false) => ({
   ...taskFormBodyTextSx,
-  fontWeight: 600,
-  fontSize: timedCompact ? '0.6875rem' : '0.75rem',
-  lineHeight: 1.15,
+  fontWeight: isEvento ? 600 : 500,
+  fontSize: timedCompact
+    ? (isEvento ? '0.75rem' : '0.8125rem')
+    : '0.8125rem',
+  lineHeight: 1.2,
+  letterSpacing: '-0.01em',
   display: 'block',
   textDecoration: completed ? 'line-through' : 'none',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  opacity: completed && !isEvento ? 0.75 : 1,
 });
 
 export const taskEventTimeSx = {
   ...taskFormCaptionTextSx,
   fontSize: '0.6875rem',
+  fontWeight: 400,
+  opacity: 0.9,
+  lineHeight: 1.2,
 };
 
 /** Contenedor de lista (spacing entre grupos). */

@@ -20,7 +20,6 @@ import {
   appendScheduleToNotes,
   isTimedScheduleInstant,
   parseScheduleFromNotes,
-  taskHasTimedSchedule,
 } from '../../../shared/utils/googleTasksScheduleNotes.js';
 
 class GoogleTasksService {
@@ -132,17 +131,23 @@ class GoogleTasksService {
     let pageToken = undefined;
     do {
       const resp = await this.executeWithRetry(
-        () => tasksApi.tasks.list({
-          tasklist: taskListId,
-          showCompleted: options.showCompleted ?? true,
-          showHidden: options.showHidden ?? true,
-          showDeleted: options.showDeleted ?? false,
-          maxResults: options.maxResults ?? 100,
-          fields: options.fields ?? 'items(id,title,notes,status,updated,due,parent,position),nextPageToken',
-          pageToken,
-          // updatedMin solo para import desde Google (no usar para cache usada en subtareas)
-          updatedMin: options.updatedMin
-        }),
+        () => {
+          const params = {
+            tasklist: taskListId,
+            showCompleted: options.showCompleted ?? true,
+            showHidden: options.showHidden ?? true,
+            showDeleted: options.showDeleted ?? false,
+            maxResults: options.maxResults ?? 100,
+            pageToken,
+            updatedMin: options.updatedMin,
+          };
+          // fields: null → sin mask (payload completo para probe / futures)
+          if (options.fields !== null) {
+            params.fields = options.fields
+              ?? 'items(id,title,notes,status,updated,due,parent,position),nextPageToken';
+          }
+          return tasksApi.tasks.list(params);
+        },
         `listar tareas de TaskList ${taskListId}`,
         userId
       );
@@ -686,7 +691,7 @@ class GoogleTasksService {
               () => tasksApi.tasks.get({
                 tasklist: taskListId,
                 task: tarea.googleTasksSync.googleTaskId,
-                fields: 'id,title,status,notes'
+                fields: 'id,title,status,notes,due'
               }),
               `obtener tarea actual ${tarea.titulo}`,
               userId
@@ -773,12 +778,15 @@ class GoogleTasksService {
         parentGoogleTaskId = googleTask.data.id;
       }
 
-      // Actualizar estado de sincronización
+      // Actualizar estado de sincronización (limpiar needsSync o el pending sticky bloquea imports)
+      const syncedAt = new Date();
       await Tareas.findByIdAndUpdate(tareaId, {
-        'googleTasksSync.lastSyncDate': new Date(),
+        'googleTasksSync.lastSyncDate': syncedAt,
+        'googleTasksSync.updated': syncedAt,
         'googleTasksSync.syncStatus': 'synced',
+        'googleTasksSync.needsSync': false,
         'googleTasksSync.syncErrors': [],
-        'googleTasksSync.syncingStartedAt': null // Limpiar timestamp
+        'googleTasksSync.syncingStartedAt': null,
       });
 
       // Devolver datos consistentes aun cuando no hubo PATCH/INSERT
@@ -1069,6 +1077,42 @@ class GoogleTasksService {
 
           for (const googleTask of mainTasks) {
             try {
+              // #region agent log
+              {
+                const t = String(googleTask?.title || '');
+                if (/yogurt|aspirar|limpiar|medialuna|medualuna|🛁|🧹|🥛|🥐/i.test(t)) {
+                  const dueRaw = googleTask?.due || null;
+                  let dueHasClock = false;
+                  if (dueRaw) {
+                    const m = String(dueRaw).match(/T(\d{2}):(\d{2})/);
+                    if (m) dueHasClock = !(m[1] === '00' && m[2] === '00');
+                  }
+                  fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
+                    body: JSON.stringify({
+                      sessionId: 'b064c0',
+                      runId: 'gcal-time-probe',
+                      hypothesisId: 'G1',
+                      location: 'googleTasksService.js:importLoop',
+                      message: 'raw Google Task payload (schedule probe)',
+                      data: {
+                        title: t.slice(0, 80),
+                        id: googleTask?.id,
+                        due: dueRaw,
+                        dueHasClock,
+                        notesHead: String(googleTask?.notes || '').slice(0, 200),
+                        keys: Object.keys(googleTask || {}),
+                        status: googleTask?.status,
+                        updated: googleTask?.updated,
+                      },
+                      timestamp: Date.now(),
+                    }),
+                  }).catch(() => {});
+                }
+              }
+              // #endregion
+
               let tarea = existingByGoogleId.get(googleTask.id);
 
               if (tarea) {
@@ -1078,11 +1122,8 @@ class GoogleTasksService {
                   this.applyNotesFromGoogle(tarea, googleTask);
                   tarea.titulo = this.cleanTitle(tarea.titulo || googleTask.title);
                 }
-                // Estado completado en Google siempre gana; due avanza si Google es más reciente
+                // Con export pendiente no pisar completion local; due solo si Google es más reciente
                 if (localPending) {
-                  if (this.statusDiffersFromGoogle(tarea, googleTask)) {
-                    this.applyGoogleStatusFromGoogle(tarea, googleTask, { preservePendingExport: true });
-                  }
                   if (this.shouldApplyGoogleDueDespitePending(tarea, googleTask)) {
                     this.applyGoogleDueFromGoogle(tarea, googleTask);
                   }
@@ -1532,6 +1573,7 @@ class GoogleTasksService {
         $or: [
           // Tareas con sincronización pendiente
           { 'googleTasksSync.syncStatus': 'pending' },
+          { 'googleTasksSync.syncStatus': 'error' },
           { 'googleTasksSync.needsSync': true },
           // Tareas que NO tienen googleTaskId (nunca se han sincronizado)
           { 'googleTasksSync.googleTaskId': { $exists: false } },
@@ -1594,10 +1636,14 @@ class GoogleTasksService {
       results.metrics.timings.exportToGoogleMs = Date.now() - stepT0;
       }
 
-      // Actualizar última sincronización del usuario
-      await Users.findByIdAndUpdate(userId, {
-        'googleTasksConfig.lastSync': new Date()
-      });
+      // No avanzar lastSync si el export cortó por cuota (dejaría pendientes fuera de updatedMin)
+      if (!results.quotaHit) {
+        await Users.findByIdAndUpdate(userId, {
+          'googleTasksConfig.lastSync': new Date()
+        });
+      } else {
+        logger.warn('⛔️ lastSync no actualizado: export incompleto por cuota de Google');
+      }
 
       results.meta.finishedAt = new Date();
       results.metrics.timings.totalMs = results.meta.finishedAt.getTime() - results.meta.startedAt.getTime();
@@ -1767,6 +1813,9 @@ class GoogleTasksService {
   }
 
   shouldImportFromGoogle(tarea, googleTask) {
+    if (this.hasLocalPendingGoogleSync(tarea)) {
+      return this.shouldApplyGoogleDueDespitePending(tarea, googleTask);
+    }
     return (
       this.shouldImportContentFromGoogle(tarea, googleTask)
       || this.shouldRefreshGoogleStatus(tarea, googleTask)
@@ -1903,21 +1952,35 @@ class GoogleTasksService {
   }
 
   applyNotesFromGoogle(tarea, googleTask) {
+    const localPending = this.hasLocalPendingGoogleSync(tarea);
+    const prevTimed = Boolean(tarea.googleTasksSync?.hasTimedSchedule);
+    const prevNeedsSync = tarea.googleTasksSync?.needsSync;
+    const prevSyncStatus = tarea.googleTasksSync?.syncStatus;
+
     const notes = googleTask.notes || '';
     const parsed = this.parseSubtasksFromNotes(notes);
     parsed.descripcion = cleanDescriptionFromGoogleNotes(notes);
     tarea.updateFromGoogleTask(googleTask, parsed);
 
     const schedule = parseScheduleFromNotes(notes);
+    if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
     if (schedule?.fechaInicio) {
       tarea.fechaInicio = schedule.fechaInicio;
-      tarea.fechaVencimiento = schedule.fechaFin || schedule.fechaInicio;
+      const end = schedule.fechaFin || schedule.fechaInicio;
+      tarea.fechaVencimiento = end;
       if (schedule.fechaFin) tarea.fechaFin = schedule.fechaFin;
-      if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
       tarea.googleTasksSync.hasTimedSchedule = true;
-    } else if (taskHasTimedSchedule(tarea)) {
-      if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
-      tarea.googleTasksSync.hasTimedSchedule = true;
+    } else if (!localPending) {
+      // Sin Horario Attadia en notes de Google: limpiar flag sticky
+      tarea.googleTasksSync.hasTimedSchedule = false;
+    } else {
+      tarea.googleTasksSync.hasTimedSchedule = prevTimed;
+    }
+
+    // updateFromGoogleTask limpia needsSync; restaurar si el export local sigue pendiente
+    if (localPending) {
+      tarea.googleTasksSync.needsSync = prevNeedsSync;
+      tarea.googleTasksSync.syncStatus = prevSyncStatus;
     }
   }
 
@@ -1992,18 +2055,34 @@ class GoogleTasksService {
     }
   }
 
+  /** Normaliza due de Google (date-only o RFC3339) a YYYY-MM-DD para comparar. */
+  normalizeDueForCompare(due) {
+    if (due == null || due === '') return '';
+    const raw = String(due).trim();
+    const dayMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (dayMatch) return dayMatch[1];
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0, 10);
+  }
+
   /**
-   * Compara campos relevantes para evitar PATCH innecesario
+   * Compara campos relevantes para evitar PATCH innecesario.
+   * Incluye due: sin él, moves all-day (solo cambian el día) se omiten.
    */
   equalsForPatch(remote, local) {
     const pick = (o) => ({
       title: o?.title || '',
       status: o?.status || '',
-      notes: o?.notes || ''
+      notes: o?.notes || '',
+      due: this.normalizeDueForCompare(o?.due),
     });
     const a = pick(remote);
     const b = pick(local);
-    return a.title === b.title && a.status === b.status && a.notes === b.notes;
+    return a.title === b.title
+      && a.status === b.status
+      && a.notes === b.notes
+      && a.due === b.due;
   }
 
   /**

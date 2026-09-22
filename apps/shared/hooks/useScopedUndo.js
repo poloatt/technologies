@@ -178,6 +178,9 @@ function buildApiServicesForScope(scope, routesMap, currentPath) {
   return apiServices;
 }
 
+// Dedup global: evita doble revert si dos páginas del mismo scope escuchan undoAction.
+const processedUndoActionIds = new Set();
+
 /**
  * Handler de undo scoped: solo procesa acciones del scope montado.
  */
@@ -185,7 +188,6 @@ export function useScopedUndoHandler(scope, fetchData, onError = console.error, 
   const location = useLocation();
   const { routesMap } = useActionHistoryRoutes();
   const listenerRef = useRef(null);
-  const processedActionsRef = useRef(new Set());
   const depsRef = useRef(deps);
 
   useEffect(() => {
@@ -208,8 +210,32 @@ export function useScopedUndoHandler(scope, fetchData, onError = console.error, 
       const action = event.detail;
       if (!action || action.scope !== scope) return;
 
-      if (processedActionsRef.current.has(action.id)) return;
-      processedActionsRef.current.add(action.id);
+      if (processedUndoActionIds.has(action.id)) return;
+      processedUndoActionIds.add(action.id);
+
+      // #region agent log
+      fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
+        body: JSON.stringify({
+          sessionId: 'b064c0',
+          runId: 'post-fix',
+          hypothesisId: 'U2',
+          location: 'useScopedUndo.js:handleUndoAction',
+          message: 'scoped undo handler fired',
+          data: {
+            scope,
+            actionId: action.id,
+            entity: action.entity,
+            type: action.type,
+            entityId: action.entityId,
+            origCompletada: action.originalData?.completada,
+            newCompletada: action.data?.completada,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
 
       try {
         await revertAction(action, {
@@ -234,7 +260,6 @@ export function useScopedUndoHandler(scope, fetchData, onError = console.error, 
         window.removeEventListener('undoAction', listenerRef.current);
         listenerRef.current = null;
       }
-      processedActionsRef.current.clear();
     };
   }, [scope, fetchData, onError, apiServices]);
 }

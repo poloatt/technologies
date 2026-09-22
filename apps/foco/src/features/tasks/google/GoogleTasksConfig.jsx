@@ -642,7 +642,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
         enqueueSnackbar('Sincronización automática desactivada', { variant: 'info' });
       } else {
         await clienteAxios.post('/api/google-tasks/auto-sync/start');
-        enqueueSnackbar('Sincronización automática activada (cada ~10 min)', { variant: 'success' });
+        enqueueSnackbar('Sincronización automática activada (cada ~15 min)', { variant: 'success' });
       }
       await loadAutoSyncStatus();
     } catch {
@@ -800,7 +800,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
               {isAdmin && (
                 <SettingRow
                   label="Auto-sync"
-                  hint={autoSync.isRunning ? 'Cada ~10 min' : 'Desactivado'}
+                  hint={autoSync.isRunning ? 'Cada ~15 min' : 'Desactivado'}
                   control={(
                     <FormControlLabel
                       control={(
@@ -993,7 +993,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
               )}
 
               <Typography variant="caption" color="text.secondary" sx={{ pt: 0.5, ...tareaFormCaptionTextSx }}>
-                Solo importación · ventana ±6 meses
+                Solo importación (read-only) · últimos 14 días + próximos 120 días
               </Typography>
 
               <Box sx={{ pt: 1 }}>

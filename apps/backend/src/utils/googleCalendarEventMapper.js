@@ -79,13 +79,89 @@ export function mapGoogleEventDates(event) {
   return null;
 }
 
-export function mapGoogleEventToTareaFields(event, calendarId) {
+/**
+ * Resuelve color/categoría de un evento Google:
+ * 1) Labels con nombre (eventLabelId → labelProperties.eventLabels)
+ * 2) colorId legacy (palette fija / colors.get)
+ * 3) color del calendario (Predeterminada)
+ */
+export function resolveGoogleEventAppearance(event, {
+  labelsById = {},
+  eventColorsById = {},
+  calendarBackgroundColor = null,
+} = {}) {
+  const eventLabelId = (event?.eventLabelId && String(event.eventLabelId).trim()) || null;
+  if (eventLabelId) {
+    const label = labelsById[eventLabelId];
+    if (label?.backgroundColor) {
+      return {
+        eventLabelId,
+        eventLabelName: (label.name && String(label.name).trim()) || null,
+        colorId: null,
+        backgroundColor: normalizeHexColor(label.backgroundColor),
+      };
+    }
+  }
+
+  const colorId = event?.colorId != null ? String(event.colorId) : null;
+  if (colorId) {
+    const swatch = eventColorsById[colorId] ?? FALLBACK_EVENT_COLORS[colorId];
+    const bg = typeof swatch === 'string'
+      ? swatch
+      : (swatch?.background || swatch?.backgroundColor || null);
+    if (bg) {
+      return {
+        eventLabelId: null,
+        eventLabelName: null,
+        colorId,
+        backgroundColor: normalizeHexColor(bg),
+      };
+    }
+  }
+
+  return {
+    eventLabelId: null,
+    eventLabelName: null,
+    colorId: null,
+    backgroundColor: normalizeHexColor(calendarBackgroundColor),
+  };
+}
+
+function normalizeHexColor(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    const [, r, g, b] = trimmed;
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return null;
+}
+
+/** Palette clásica de event colorId (colors.get → event). */
+export const FALLBACK_EVENT_COLORS = {
+  1: '#a4bdfc',
+  2: '#7ae7bf',
+  3: '#dbadff',
+  4: '#ff887c',
+  5: '#fbd75b',
+  6: '#ffb878',
+  7: '#46d6db',
+  8: '#e1e1e1',
+  9: '#5484ed',
+  10: '#51b749',
+  11: '#dc2127',
+};
+
+export function mapGoogleEventToTareaFields(event, calendarId, appearanceOptions = {}) {
   if (!event?.id) return null;
   if (event.status === 'cancelled') return { cancelled: true, googleEventId: event.id, calendarId };
   if (!shouldImportEventType(event.eventType)) return null;
 
   const dates = mapGoogleEventDates(event);
   if (!dates) return null;
+
+  const appearance = resolveGoogleEventAppearance(event, appearanceOptions);
 
   return {
     titulo: (event.summary || '').trim() || '(Sin título)',
@@ -101,8 +177,13 @@ export function mapGoogleEventToTareaFields(event, calendarId) {
       googleCalendarId: calendarId,
       etag: event.etag || null,
       htmlLink: event.htmlLink || null,
+      allDay: Boolean(dates.allDay),
       status: event.status || 'confirmed',
       eventType: event.eventType || 'default',
+      eventLabelId: appearance.eventLabelId,
+      eventLabelName: appearance.eventLabelName,
+      colorId: appearance.colorId,
+      backgroundColor: appearance.backgroundColor,
       lastSyncDate: new Date(),
     },
   };

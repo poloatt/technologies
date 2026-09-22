@@ -8,12 +8,20 @@ import {
 describe('googleTasksScheduleNotes', () => {
   test('round-trip schedule block in notes', () => {
     const start = new Date(2026, 5, 16, 14, 0, 0, 0);
-    const end = new Date(2026, 5, 16, 15, 0, 0, 0);
+    const end = new Date(2026, 5, 16, 14, 45, 0, 0);
     const notes = appendScheduleToNotes('Mi tarea', start, end);
     const parsed = parseScheduleFromNotes(notes);
     expect(parsed.fechaInicio.getHours()).toBe(14);
-    expect(parsed.fechaFin.getHours()).toBe(15);
+    expect(parsed.fechaFin.getMinutes()).toBe(45);
     expect(stripScheduleFromNotes(notes)).toBe('Mi tarea');
+  });
+
+  test('parseScheduleFromNotes heals legacy 60-min blocks to 30', () => {
+    const start = new Date(2026, 5, 16, 14, 0, 0, 0);
+    const end = new Date(2026, 5, 16, 15, 0, 0, 0);
+    const notes = appendScheduleToNotes('Mi tarea', start, end);
+    const parsed = parseScheduleFromNotes(notes);
+    expect(parsed.fechaFin.getTime() - parsed.fechaInicio.getTime()).toBe(30 * 60 * 1000);
   });
 
   test('taskHasTimedSchedule detects notes block and local wall-clock', () => {

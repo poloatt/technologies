@@ -120,6 +120,7 @@ const userSchema = new mongoose.Schema({
     },
     syncDirection: {
       type: String,
+      // Legacy 'bidirectional' accepted in DB; API/service force from_google (v1 import-only)
       enum: ['from_google', 'bidirectional'],
       default: 'from_google',
     },

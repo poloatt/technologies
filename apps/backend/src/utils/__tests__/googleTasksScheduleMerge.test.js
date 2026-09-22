@@ -16,6 +16,20 @@ describe('mergeGoogleDueWithLocalSchedule', () => {
     expect(tarea.googleTasksSync.hasTimedSchedule).toBe(true);
   });
 
+  test('preserves timed schedule when notes schedule block present', () => {
+    const tarea = {
+      fechaInicio: new Date(2026, 5, 10, 9, 0, 0, 0),
+      fechaVencimiento: new Date(2026, 5, 10, 10, 0, 0, 0),
+      descripcion: 'Horario Attadia:\ninicio: 2026-06-10T12:00:00.000Z\nfin: 2026-06-10T13:00:00.000Z',
+      googleTasksSync: { hasTimedSchedule: true },
+    };
+
+    mergeGoogleDueWithLocalSchedule(tarea, '2026-06-20T00:00:00.000Z');
+
+    expect(tarea.fechaInicio.getUTCHours()).toBe(12);
+    expect(tarea.googleTasksSync.hasTimedSchedule).toBe(true);
+  });
+
   test('date-only Google due sets noon local start/end', () => {
     const tarea = {
       fechaInicio: null,

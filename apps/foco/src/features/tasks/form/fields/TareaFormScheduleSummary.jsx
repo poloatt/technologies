@@ -30,7 +30,7 @@ export default function TareaFormScheduleSummary({
   onAllDayChange,
   fechaInicio: fechaInicioProp,
   fechaFin: fechaFinProp,
-  durationMin = 60,
+  durationMin = 30,
   onDurationChange,
   showDeadline = false,
   deadline = null,
@@ -66,7 +66,7 @@ export default function TareaFormScheduleSummary({
   const fechaFin = fechaFinProp ?? (() => {
     if (!fechaInicio) return null;
     const end = new Date(fechaInicio);
-    end.setMinutes(end.getMinutes() + (durationMin || 60));
+    end.setMinutes(end.getMinutes() + (durationMin || 30));
     return end;
   })();
 
