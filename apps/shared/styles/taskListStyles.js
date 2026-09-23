@@ -239,7 +239,7 @@ export function getTaskEventBlockSx({
       border: 'none',
       bgcolor: alpha(accent, theme.palette.mode === 'dark' ? 0.88 : 0.92),
       color: theme.palette.getContrastText(accent),
-      opacity: completed ? 0.7 : 1,
+      opacity: completed ? 0.55 : 1,
       cursor: 'pointer',
       overflow: 'hidden',
       height: '100%',
@@ -255,8 +255,8 @@ export function getTaskEventBlockSx({
   // TAREA timed: pill fina tipo Google Tasks en Calendar
   if (timedCompact && !isEvento) {
     const pillBg = theme.palette.mode === 'dark'
-      ? alpha(theme.palette.common.white, completed ? 0.06 : 0.10)
-      : alpha(theme.palette.common.black, completed ? 0.06 : 0.08);
+      ? alpha(theme.palette.common.white, 0.10)
+      : alpha(theme.palette.common.black, 0.08);
     return {
       position: 'relative',
       display: 'flex',
@@ -267,7 +267,7 @@ export function getTaskEventBlockSx({
       borderRadius: '999px',
       border: 'none',
       bgcolor: pillBg,
-      opacity: completed ? 0.72 : 1,
+      opacity: completed ? 0.5 : 1,
       cursor: 'pointer',
       overflow: 'hidden',
       height: '100%',
@@ -277,16 +277,16 @@ export function getTaskEventBlockSx({
       transition: 'background-color 0.12s ease',
       '&:hover': {
         bgcolor: theme.palette.mode === 'dark'
-          ? alpha(theme.palette.common.white, completed ? 0.09 : 0.14)
-          : alpha(theme.palette.common.black, completed ? 0.09 : 0.12),
+          ? alpha(theme.palette.common.white, 0.14)
+          : alpha(theme.palette.common.black, 0.12),
       },
     };
   }
 
   // All-day / compact chips — misma altura que pill timed (media hora)
   const soft = theme.palette.mode === 'dark'
-    ? alpha(accent, completed ? 0.14 : 0.28)
-    : alpha(accent, completed ? 0.10 : 0.18);
+    ? alpha(accent, 0.28)
+    : alpha(accent, 0.18);
 
   return {
     position: 'relative',
@@ -299,7 +299,7 @@ export function getTaskEventBlockSx({
     border: 'none',
     bgcolor: isEvento ? accent : soft,
     color: isEvento ? theme.palette.getContrastText(accent) : undefined,
-    opacity: completed ? 0.55 : 1,
+    opacity: completed ? 0.5 : 1,
     cursor: 'pointer',
     overflow: 'hidden',
     height: `${TASK_PILL_HEIGHT_PX}px`,
@@ -323,10 +323,10 @@ export const taskEventTitleSx = (timedCompact = false, completed = false, isEven
   letterSpacing: '-0.01em',
   display: 'block',
   textDecoration: completed ? 'line-through' : 'none',
+  textDecorationThickness: completed ? '1px' : undefined,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  opacity: completed && !isEvento ? 0.75 : 1,
 });
 
 export const taskEventTimeSx = {

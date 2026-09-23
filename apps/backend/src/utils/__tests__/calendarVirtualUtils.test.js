@@ -29,6 +29,59 @@ describe('dedupeSerieInstancesForAgenda', () => {
     expect(deduped).toHaveLength(1);
     expect(deduped[0]._id).toBe('a1');
   });
+
+  test('keeps the Google anchor and a later occurrence on another day', () => {
+    const doneDay = new Date(2026, 8, 20, 0, 15, 0, 0);
+    const nextDay = new Date(2026, 8, 27, 0, 15, 0, 0);
+    const tasks = [
+      {
+        _id: 'anchor',
+        serieId: 'serie-1',
+        fechaInicio: doneDay,
+        fechaVencimiento: doneDay,
+        completada: true,
+        estado: 'COMPLETADA',
+        googleTasksSync: { googleTaskId: 'gt-1' },
+      },
+      {
+        _id: 'next',
+        serieId: 'serie-1',
+        fechaInicio: nextDay,
+        fechaVencimiento: nextDay,
+        completada: false,
+        estado: 'PENDIENTE',
+        googleTasksSync: { localOccurrence: true },
+      },
+    ];
+
+    const deduped = dedupeSerieInstancesForAgenda(tasks);
+    expect(deduped.map((t) => t._id).sort()).toEqual(['anchor', 'next']);
+  });
+
+  test('same day prefers the real clock over a 00:15 Google anchor', () => {
+    const day = new Date(2026, 8, 23, 0, 15, 0, 0);
+    const real = new Date(2026, 8, 23, 17, 45, 0, 0);
+    const realEnd = new Date(2026, 8, 23, 18, 15, 0, 0);
+    const tasks = [
+      {
+        _id: 'anchor',
+        serieId: 'serie-1',
+        fechaInicio: day,
+        fechaVencimiento: day,
+        googleTasksSync: { googleTaskId: 'gt-1' },
+      },
+      {
+        _id: 'timed',
+        serieId: 'serie-1',
+        fechaInicio: real,
+        fechaFin: realEnd,
+        fechaVencimiento: realEnd,
+        googleTasksSync: {},
+      },
+    ];
+    const deduped = dedupeSerieInstancesForAgenda(tasks);
+    expect(deduped.map((t) => t._id)).toEqual(['timed']);
+  });
 });
 
 describe('dedupeAgendaTasksByGoogleDay', () => {

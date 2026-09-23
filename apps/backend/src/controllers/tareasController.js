@@ -184,9 +184,9 @@ class TareasController extends BaseController {
         rangeFrom,
         rangeTo,
       );
-      if (!include) {
-        docs = filterDocsForListView(docs, { includeCompleted: false });
-      }
+      // La grilla muestra las completadas del rango (tachadas), como Google Calendar.
+      // Canceladas y desvinculadas siguen fuera.
+      docs = filterDocsForListView(docs, { includeCompleted: true });
 
       // #region agent log
       {

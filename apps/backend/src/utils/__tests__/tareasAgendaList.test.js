@@ -45,6 +45,33 @@ describe('filterDocsForListView', () => {
     expect(filtered[0].titulo).toBe('Open');
   });
 
+  test('keeps a recent completed recurring occurrence and hides an old one', () => {
+    const now = new Date();
+    const recent = new Date(now);
+    recent.setDate(now.getDate() - 3);
+    const docs = [
+      {
+        _id: '1',
+        titulo: 'Pastas hecha',
+        serieId: 'serie-1',
+        fechaVencimiento: recent,
+        estado: 'COMPLETADA',
+        completada: true,
+      },
+      {
+        _id: '2',
+        titulo: 'Antigua',
+        serieId: 'serie-old',
+        fechaVencimiento: new Date('2019-06-01T12:00:00.000Z'),
+        estado: 'COMPLETADA',
+        completada: true,
+      },
+      { _id: '3', titulo: 'Open', fechaVencimiento: now, estado: 'PENDIENTE' },
+    ];
+    const filtered = filterDocsForListView(docs, { view: 'ahora' }, now);
+    expect(filtered.map((t) => t.titulo).sort()).toEqual(['Open', 'Pastas hecha']);
+  });
+
   test('excludes completed via googleTasksSync.completed only', () => {
     const now = new Date();
     const docs = [

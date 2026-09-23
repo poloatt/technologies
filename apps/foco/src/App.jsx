@@ -42,7 +42,7 @@ function AppContent() {
     if (!user) return undefined;
     const warm = () => {
       prefetchTasksForList(false);
-      prefetchTasksForCalendar(null, 'week', false);
+      prefetchTasksForCalendar(null, 'week', true);
       prefetchObjetivosLight();
       // Precargar chunks de rutas frecuentes para no ver Suspense al entrar.
       import('./pages/Tareas').catch(() => {});

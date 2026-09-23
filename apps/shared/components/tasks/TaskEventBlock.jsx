@@ -84,7 +84,7 @@ export default function TaskEventBlock({
         ...(timedCompact && !isEvento
           ? { height: '100%', maxHeight: '100%', minHeight: 0 }
           : null),
-        ...(isVirtual ? { opacity: 0.72 } : null),
+        ...(isVirtual && !completed ? { opacity: 0.72 } : null),
       }}
     >
       {showTaskToggle && (
@@ -110,10 +110,10 @@ export default function TaskEventBlock({
             height: 18,
             minWidth: 18,
             minHeight: 18,
-            color: completed ? 'success.main' : 'text.secondary',
+            color: 'text.secondary',
             // No iniciar drag ni abrir el form al completar
             touchAction: 'manipulation',
-            '&:hover': { bgcolor: 'transparent', color: completed ? 'success.light' : 'text.primary' },
+            '&:hover': { bgcolor: 'transparent', color: 'text.primary' },
           }}
         >
           {completed ? (
@@ -168,7 +168,8 @@ export default function TaskEventBlock({
                 sx={{
                   fontWeight: 400,
                   fontSize: 'inherit',
-                  opacity: 0.75,
+                  opacity: completed ? 1 : 0.75,
+                  textDecoration: 'inherit',
                 }}
               >
                 {`, ${startLabel}`}

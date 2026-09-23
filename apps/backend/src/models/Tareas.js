@@ -674,7 +674,7 @@ tareaSchema.pre('save', async function(next) {
 tareaSchema.pre('save', function(next) {
   // Solo actualizar automáticamente si las subtareas fueron modificadas o es nueva
   // Y solo si el estado no fue establecido explícitamente
-  if (this.isModified('subtareas') || this.isNew) {
+  if ((this.isModified('subtareas') || this.isNew) && !this.$locals?.skipGoogleSyncMark) {
     if (this.subtareas && this.subtareas.length > 0) {
       const todasCompletadas = this.subtareas.every(st => st.completada);
       const algunaCompletada = this.subtareas.some(st => st.completada);

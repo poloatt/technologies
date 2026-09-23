@@ -17,6 +17,19 @@ const LIST_VIRTUAL_HORIZON_DAYS = parseInt(
   process.env.GTASKS_LIST_VIRTUAL_HORIZON_DAYS || '90',
   10,
 );
+const RECENT_COMPLETION_DAYS = 14;
+
+function isRecentRecurringCompletion(task, now = new Date()) {
+  if (!task?.serieId || !agendaListRules.isTaskCompleted(task)) return false;
+  const raw = task.fechaVencimiento || task.fechaInicio;
+  if (!raw) return false;
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return false;
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - RECENT_COMPLETION_DAYS);
+  return dt.getTime() >= start.getTime();
+}
 
 function buildUserAccessClause(userId) {
   return {
@@ -54,6 +67,15 @@ export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo) {
   const to = new Date(rangeTo);
   from.setHours(0, 0, 0, 0);
   to.setHours(23, 59, 59, 999);
+
+  try {
+    const { ensureOpenRecurringPeriods, realignPlaceholderRecurringClocks } = await import('../services/googleTasksRecurrenceService.js');
+    await ensureOpenRecurringPeriods(userId);
+    await realignPlaceholderRecurringClocks(userId);
+  } catch (err) {
+    // La lista igual se arma con lo que ya está persistido.
+    console.warn('ensureOpenRecurringPeriods:', err?.message || err);
+  }
 
   // Series y tareas reales son independientes: se cargan en paralelo.
   // El frontend solo usa el id de serieId (no rrule/activa/dtstart), por eso no
@@ -163,7 +185,9 @@ export function filterDocsForListView(docs, options = {}, now = new Date()) {
     if (isTaskCancelled(t)) return false;
     // Desvinculadas de Google (eliminadas allí) no deben aparecer en activas.
     if (t.googleTasksSync?.syncStatus === 'unlinked') return false;
-    if (!includeCompleted && isTaskCompleted(t)) return false;
+    if (!includeCompleted && isTaskCompleted(t)) {
+      if (!isRecentRecurringCompletion(t, now)) return false;
+    }
     if (view === 'ahora') return isInAhora(t, now);
     if (view === 'luego') return isInLuego(t, now);
     return true;

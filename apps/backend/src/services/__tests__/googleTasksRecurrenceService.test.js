@@ -27,7 +27,7 @@ jest.unstable_mockModule('../../models/index.js', () => ({
   TareaSeries: MockTareaSeries,
 }));
 
-const { reconcileSeriesFromGoogle } = await import('../googleTasksRecurrenceService.js');
+const { reconcileSeriesFromGoogle, pickNextOccurrenceDate } = await import('../googleTasksRecurrenceService.js');
 
 describe('reconcileSeriesFromGoogle', () => {
   beforeEach(() => {
@@ -199,5 +199,62 @@ describe('reconcileSeriesFromGoogle', () => {
     delete process.env.GTASKS_ASSUME_GOOGLE_RECURRING_SINGLE;
     jest.resetModules();
     await import('../googleTasksRecurrenceService.js');
+  });
+});
+
+describe('pickNextOccurrenceDate', () => {
+  const rrule = 'FREQ=WEEKLY;INTERVAL=1;BYDAY=WE';
+  const dtstart = new Date(2026, 8, 16, 15, 0, 0, 0);
+
+  test('after complete keeps the next week even if it is still ahead', () => {
+    const anchor = new Date(2026, 8, 16, 15, 0, 0, 0);
+    const now = new Date(2026, 8, 23, 11, 0, 0, 0);
+    const next = pickNextOccurrenceDate({
+      rrule,
+      dtstart,
+      anchorDate: anchor,
+      now,
+      mode: 'after-complete',
+    });
+    expect(next).not.toBeNull();
+    expect(next.getDate()).toBe(23);
+    expect(next.getMonth()).toBe(8);
+  });
+
+  test('current period is not added when the next weekday has not arrived', () => {
+    const tue = 'FREQ=WEEKLY;INTERVAL=1;BYDAY=TU';
+    const anchor = new Date(2026, 8, 22, 18, 15, 0, 0);
+    const now = new Date(2026, 8, 23, 11, 0, 0, 0);
+    const next = pickNextOccurrenceDate({
+      rrule: tue,
+      dtstart: anchor,
+      anchorDate: anchor,
+      now,
+      mode: 'current-if-due',
+    });
+    expect(next).toBeNull();
+  });
+
+  test('does not roll a completion from years ago onto this week', () => {
+    const next = pickNextOccurrenceDate({
+      rrule,
+      dtstart: new Date(2020, 6, 15, 12, 0, 0, 0),
+      anchorDate: new Date(2020, 6, 15, 12, 0, 0, 0),
+      now: new Date(2026, 8, 23, 11, 0, 0, 0),
+      mode: 'after-complete',
+    });
+    expect(next).toBeNull();
+  });
+
+  test('a daily task completed a few days ago still gets today', () => {
+    const next = pickNextOccurrenceDate({
+      rrule: 'FREQ=DAILY;INTERVAL=1',
+      dtstart: new Date(2026, 5, 18, 12, 0, 0, 0),
+      anchorDate: new Date(2026, 8, 20, 0, 15, 0, 0),
+      now: new Date(2026, 8, 23, 11, 0, 0, 0),
+      mode: 'after-complete',
+    });
+    expect(next).not.toBeNull();
+    expect(next.getDate()).toBe(23);
   });
 });

@@ -14,7 +14,7 @@ import {
   sameCalendarDay,
   weekdayToRruleByday,
 } from '../utils/recurrenceUtils.js';
-import { applySerieTimeToOccurrence } from '../utils/calendarVirtualUtils.js';
+import { applySerieTimeToOccurrence, isPlaceholderWallClock, pickRealWallClock } from '../utils/calendarVirtualUtils.js';
 import { isTaskCompleted } from '../utils/agendaListRules.js';
 import { mergeGoogleDueWithLocalSchedule } from '../utils/googleTasksScheduleMerge.js';
 
@@ -279,11 +279,15 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
       const gt = googleById.get(t.googleTasksSync?.googleTaskId);
       let needsStatusSync = false;
       if (gt) {
-        const googleCompleted = gt.status === 'completed';
+        const googleCompleted = gt.status === 'completed' || gt.hidden === true;
         const localCompleted =
           Boolean(t.completada)
           || String(t.estado || '').toUpperCase() === 'COMPLETADA';
         needsStatusSync = googleCompleted !== localCompleted;
+        // La fila de Google es una sola. needsAction es el próximo turno, no desmarca la ocurrencia ya hecha.
+        if (needsStatusSync && localCompleted && !googleCompleted && t.serieId) {
+          needsStatusSync = false;
+        }
         if (needsStatusSync) {
           t.completada = googleCompleted;
           t.estado = googleCompleted ? 'COMPLETADA' : 'PENDIENTE';
@@ -302,6 +306,7 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
 
       if (!needsSave) continue;
 
+      t.$locals = { ...(t.$locals || {}), skipGoogleSyncMark: true };
       t.serieId = serie._id;
       t.descripcion = cleaned;
       if (dueFromGoogle) {
@@ -492,8 +497,325 @@ export async function expandAllSeriesForUser(googleTasksService, userId, options
   return totals;
 }
 
+function rollWindowMs(rrule) {
+  const src = String(rrule || '');
+  const freq = src.match(/FREQ=([A-Z]+)/)?.[1] || 'WEEKLY';
+  const interval = Number(src.match(/INTERVAL=(\d+)/)?.[1] || 1) || 1;
+  const days = { DAILY: 1, WEEKLY: 7, MONTHLY: 31, YEARLY: 366 }[freq] || 7;
+  // Al menos 14 días para no perder un diario completado hace unos días;
+  // tope 21 días para no reabrir series viejas.
+  const spanDays = Math.min(Math.max(days * interval * 2, 14), 21);
+  return spanDays * 24 * 60 * 60 * 1000;
+}
+
+/** La ocurrencia anterior tiene que ser reciente: no reabrir series de hace años. */
+export function isWithinRollWindow(anchorDate, rrule, now = new Date()) {
+  const dt = anchorDate instanceof Date ? anchorDate : new Date(anchorDate);
+  if (Number.isNaN(dt.getTime())) return false;
+  return dt.getTime() >= now.getTime() - rollWindowMs(rrule);
+}
+
+/**
+ * Próxima fecha de una serie.
+ * after-complete: la siguiente a partir de hoy (aunque sea futura).
+ * current-if-due: solo si ese turno ya empezó (hoy o antes); si no, null.
+ */
+export function pickNextOccurrenceDate({
+  rrule,
+  dtstart,
+  anchorDate,
+  now = new Date(),
+  mode = 'after-complete',
+}) {
+  if (!rrule || !anchorDate || !isWithinRollWindow(anchorDate, rrule, now)) return null;
+  const anchor = new Date(anchorDate);
+  if (Number.isNaN(anchor.getTime())) return null;
+  const from = new Date(anchor);
+  from.setDate(from.getDate() + 1);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + HORIZON_DAYS);
+  const start = dtstart instanceof Date ? dtstart : new Date(dtstart);
+  const upcoming = expandSerie(rrule, start, from, to);
+  if (!upcoming.length) return null;
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setHours(23, 59, 59, 999);
+
+  if (mode === 'current-if-due') {
+    const due = upcoming.filter((d) => new Date(d).getTime() <= endOfToday.getTime());
+    if (!due.length) return null;
+    return new Date(due[due.length - 1]);
+  }
+
+  const next = upcoming.find((d) => new Date(d).getTime() >= startOfToday.getTime());
+  return new Date(next || upcoming[upcoming.length - 1]);
+}
+
+function applyAnchorWallClock(nextDue, anchorTask, serieDtstart) {
+  let due = applySerieTimeToOccurrence(nextDue, serieDtstart);
+  const anchorStart = anchorTask?.fechaInicio instanceof Date
+    ? anchorTask.fechaInicio
+    : (anchorTask?.fechaInicio ? new Date(anchorTask.fechaInicio) : null);
+  if (
+    anchorStart
+    && !Number.isNaN(anchorStart.getTime())
+    && (anchorTask.googleTasksSync?.hasTimedSchedule || !isDateOnlyLike(anchorStart))
+  ) {
+    due = new Date(due);
+    due.setHours(anchorStart.getHours(), anchorStart.getMinutes(), anchorStart.getSeconds(), 0);
+  }
+  return due;
+}
+
+function occurrenceEnd(anchorTask, nextStart) {
+  const prevStart = anchorTask?.fechaInicio instanceof Date
+    ? anchorTask.fechaInicio
+    : (anchorTask?.fechaInicio ? new Date(anchorTask.fechaInicio) : null);
+  const prevEndRaw = anchorTask?.fechaFin || anchorTask?.fechaVencimiento;
+  const prevEnd = prevEndRaw instanceof Date ? prevEndRaw : (prevEndRaw ? new Date(prevEndRaw) : null);
+  if (prevStart && prevEnd && !Number.isNaN(prevEnd.getTime()) && prevEnd > prevStart) {
+    return new Date(nextStart.getTime() + (prevEnd.getTime() - prevStart.getTime()));
+  }
+  return nextStart;
+}
+
+/**
+ * Crea la próxima ocurrencia pendiente sin mover la anterior.
+ * La fila ya completada (o la atrasada sin hacer) se queda en su fecha.
+ */
+export async function materializeNextOpenOccurrence(userId, tarea, options = {}) {
+  const mode = options.mode || 'after-complete';
+  const now = options.now instanceof Date ? options.now : new Date();
+  if (!tarea?.serieId || tarea.esExcepcionSerie) return null;
+
+  const serie = await TareaSeries.findOne({ _id: tarea.serieId, usuario: userId });
+  if (!serie?.rrule) return null;
+
+  const anchorRaw = tarea.fechaVencimiento || tarea.fechaInicio;
+  const nextDay = pickNextOccurrenceDate({
+    rrule: serie.rrule,
+    dtstart: serie.dtstart,
+    anchorDate: anchorRaw,
+    now,
+    mode,
+  });
+  if (!nextDay) return null;
+
+  let nextDue = applyAnchorWallClock(nextDay, tarea, serie.dtstart);
+  let nextEnd = occurrenceEnd(tarea, nextDue);
+  if (isPlaceholderWallClock(nextDue, { hasDuration: nextEnd > nextDue })) {
+    const clock = await resolveSerieRealClock(userId, serie._id);
+    if (clock) {
+      nextDue = new Date(nextDue);
+      nextDue.setHours(clock.hours, clock.minutes, 0, 0);
+      nextEnd = new Date(nextDue.getTime() + clock.durationMs);
+    }
+  }
+  const dayStart = new Date(nextDue);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(nextDue);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  const existing = await Tareas.findOne({
+    usuario: userId,
+    serieId: serie._id,
+    esExcepcionSerie: { $ne: true },
+    estado: { $ne: 'CANCELADA' },
+    $or: [
+      { fechaInicio: { $gte: dayStart, $lte: dayEnd } },
+      { fechaVencimiento: { $gte: dayStart, $lte: dayEnd } },
+    ],
+  });
+  if (existing) return existing;
+
+  const exportInstances = serie.googleTasksSync?.exportInstances === true;
+  const nueva = new Tareas({
+    titulo: tarea.titulo || serie.titulo,
+    descripcion: tarea.descripcion || appendRecurrenceToNotes(serie.descripcion || '', serie.rrule),
+    usuario: userId,
+    objetivo: tarea.objetivo || serie.objetivo,
+    serieId: serie._id,
+    fechaInicio: nextDue,
+    fechaFin: nextEnd.getTime() !== nextDue.getTime() ? nextEnd : undefined,
+    fechaVencimiento: nextEnd,
+    prioridad: tarea.prioridad || 'BAJA',
+    estado: 'PENDIENTE',
+    completada: false,
+    googleTasksSync: {
+      enabled: exportInstances,
+      syncStatus: exportInstances ? 'pending' : 'synced',
+      needsSync: exportInstances,
+      hasTimedSchedule: Boolean(tarea.googleTasksSync?.hasTimedSchedule),
+      googleTaskListId: tarea.googleTasksSync?.googleTaskListId || serie.googleTasksSync?.googleTaskListId,
+      localOccurrence: true,
+    },
+  });
+  await nueva.save();
+
+  // #region agent log
+  fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
+    body: JSON.stringify({
+      sessionId: 'b064c0',
+      runId: 'post-fix',
+      hypothesisId: mode === 'current-if-due' ? 'D' : 'C',
+      location: 'googleTasksRecurrenceService.js:materializeNextOpenOccurrence',
+      message: 'spawned next occurrence',
+      data: {
+        title: String(nueva.titulo || '').slice(0, 60),
+        mode,
+        anchor: anchorRaw ? new Date(anchorRaw).toISOString() : null,
+        next: nextDue.toISOString(),
+        keptPrevious: true,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  if (exportInstances && options.syncToGoogle !== false && options.googleTasksService && nueva.objetivo) {
+    try {
+      await options.googleTasksService.syncTaskToGoogle(nueva._id, userId);
+    } catch (err) {
+      logger.warn?.(`No se pudo exportar siguiente ocurrencia de serie: ${err.message}`);
+    }
+  }
+
+  return nueva;
+}
+
+async function resolveSerieRealClock(userId, serieId) {
+  const open = await Tareas.find({
+    usuario: userId,
+    serieId,
+    estado: { $ne: 'CANCELADA' },
+  }).select('fechaInicio fechaFin fechaVencimiento estado completada updatedAt').lean();
+  const fromOpen = pickRealWallClock(open);
+  if (fromOpen) return fromOpen;
+  const cancelled = await Tareas.find({
+    usuario: userId,
+    serieId,
+    estado: 'CANCELADA',
+  })
+    .select('fechaInicio fechaFin fechaVencimiento estado completada updatedAt')
+    .sort({ updatedAt: -1 })
+    .limit(20)
+    .lean();
+  return pickRealWallClock(cancelled);
+}
+
+/**
+ * Mueve instancias periódicas que quedaron en 00:15 / mediodía-sin-hora
+ * al horario real de la serie, para que entren en la grilla y no en todo el día.
+ */
+export async function realignPlaceholderRecurringClocks(userId) {
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(from.getDate() - 14);
+  const to = new Date(now);
+  to.setDate(to.getDate() + 45);
+
+  const pending = await Tareas.find({
+    usuario: userId,
+    serieId: { $exists: true, $ne: null },
+    esExcepcionSerie: { $ne: true },
+    estado: { $nin: ['COMPLETADA', 'CANCELADA'] },
+    completada: { $ne: true },
+    fechaInicio: { $gte: from, $lte: to },
+  }).limit(120);
+
+  const bySerie = new Map();
+  for (const tarea of pending) {
+    const sid = String(tarea.serieId);
+    if (!bySerie.has(sid)) bySerie.set(sid, []);
+    bySerie.get(sid).push(tarea);
+  }
+
+  let updated = 0;
+  for (const [sid, group] of bySerie) {
+    if (!group.some((tarea) => {
+      const start = tarea.fechaInicio ? new Date(tarea.fechaInicio) : null;
+      const end = tarea.fechaFin ? new Date(tarea.fechaFin) : null;
+      const hasDuration = Boolean(start && end && end > start);
+      return start && isPlaceholderWallClock(start, { hasDuration });
+    })) continue;
+
+    const clock = await resolveSerieRealClock(userId, sid);
+    if (!clock) continue;
+
+    for (const tarea of group) {
+      const start = tarea.fechaInicio ? new Date(tarea.fechaInicio) : null;
+      if (!start || Number.isNaN(start.getTime())) continue;
+      const end = tarea.fechaFin ? new Date(tarea.fechaFin) : null;
+      const hasDuration = Boolean(end && end > start);
+      if (!isPlaceholderWallClock(start, { hasDuration })) continue;
+
+      const next = new Date(start);
+      next.setHours(clock.hours, clock.minutes, 0, 0);
+      const nextEnd = new Date(next.getTime() + clock.durationMs);
+      tarea.fechaInicio = next;
+      tarea.fechaFin = nextEnd;
+      tarea.fechaVencimiento = nextEnd;
+      if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
+      tarea.googleTasksSync.hasTimedSchedule = true;
+      tarea.$locals = { ...(tarea.$locals || {}), skipGoogleSyncMark: true };
+      await tarea.save();
+      updated += 1;
+    }
+  }
+  return updated;
+}
+
+/**
+ * Si la ocurrencia anterior sigue pendiente y el turno nuevo ya llegó, agrega ese turno
+ * sin borrar la atrasada.
+ */
+export async function ensureOpenRecurringPeriods(userId, now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const windowStart = new Date(start);
+  windowStart.setDate(windowStart.getDate() - 21);
+
+  const open = await Tareas.find({
+    usuario: userId,
+    serieId: { $exists: true, $ne: null },
+    esExcepcionSerie: { $ne: true },
+    estado: { $nin: ['COMPLETADA', 'CANCELADA'] },
+    completada: { $ne: true },
+    $or: [
+      { fechaVencimiento: { $gte: windowStart, $lt: start } },
+      { fechaInicio: { $gte: windowStart, $lt: start } },
+    ],
+  }).limit(80);
+
+  let created = 0;
+  for (const tarea of open) {
+    const before = await Tareas.countDocuments({
+      usuario: userId,
+      serieId: tarea.serieId,
+      esExcepcionSerie: { $ne: true },
+      estado: { $ne: 'CANCELADA' },
+    });
+    const next = await materializeNextOpenOccurrence(userId, tarea, { mode: 'current-if-due', now });
+    if (!next) continue;
+    const after = await Tareas.countDocuments({
+      usuario: userId,
+      serieId: tarea.serieId,
+      esExcepcionSerie: { $ne: true },
+      estado: { $ne: 'CANCELADA' },
+    });
+    if (after > before) created += 1;
+  }
+  return created;
+}
+
 /**
  * Tras completar una instancia, genera la siguiente ocurrencia local y la exporta.
+ * La instancia completada no se reescribe: queda hecha en su fecha.
  * @param {{ syncToGoogle?: boolean }} options
  */
 export async function generateNextSerieInstance(googleTasksService, tarea, userId, options = {}) {
@@ -509,6 +831,14 @@ export async function generateNextSerieInstance(googleTasksService, tarea, userI
 
   const exportInstances = serie.googleTasksSync?.exportInstances === true;
 
+  if (!exportInstances) {
+    return materializeNextOpenOccurrence(userId, tarea, {
+      mode: 'after-complete',
+      syncToGoogle: false,
+      googleTasksService,
+    });
+  }
+
   const completedRaw = tarea.fechaVencimiento || tarea.fechaInicio || new Date();
   const from = new Date(completedRaw);
   from.setDate(from.getDate() + 1);
@@ -519,85 +849,13 @@ export async function generateNextSerieInstance(googleTasksService, tarea, userI
   const upcoming = expandSerie(serie.rrule, new Date(serie.dtstart), from, to);
   if (!upcoming.length) return null;
 
-  // Si el usuario completó hace semanas, saltar ocurrencias ya pasadas.
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const nextDate = upcoming.find((d) => {
     const x = d instanceof Date ? d : new Date(d);
     return x.getTime() >= startOfToday.getTime();
   }) || upcoming[upcoming.length - 1];
-  let nextDue = applySerieTimeToOccurrence(nextDate, serie.dtstart);
-
-  // Conservar reloj de pared del ancla timed (Emails 13:15, Brusquettas 16:15, …)
-  const anchorStart = tarea.fechaInicio instanceof Date
-    ? tarea.fechaInicio
-    : (tarea.fechaInicio ? new Date(tarea.fechaInicio) : null);
-  if (
-    anchorStart
-    && !Number.isNaN(anchorStart.getTime())
-    && (tarea.googleTasksSync?.hasTimedSchedule || !isDateOnlyLike(anchorStart))
-  ) {
-    nextDue = new Date(nextDue);
-    nextDue.setHours(
-      anchorStart.getHours(),
-      anchorStart.getMinutes(),
-      anchorStart.getSeconds(),
-      0,
-    );
-  }
-
-  if (!exportInstances) {
-    let anchor = tarea.googleTasksSync?.googleTaskId ? tarea : null;
-    if (!anchor) {
-      anchor = await Tareas.findOne({
-        usuario: userId,
-        serieId: serie._id,
-        esExcepcionSerie: { $ne: true },
-        'googleTasksSync.googleTaskId': { $exists: true, $ne: null },
-      });
-    }
-    if (!anchor) {
-      anchor = await Tareas.findOne({
-        usuario: userId,
-        serieId: serie._id,
-        esExcepcionSerie: { $ne: true },
-      }).sort({ 'googleTasksSync.googleTaskId': -1, fechaVencimiento: 1 });
-    }
-    if (!anchor) return null;
-
-    const prevStart = anchor.fechaInicio instanceof Date
-      ? anchor.fechaInicio
-      : (anchor.fechaInicio ? new Date(anchor.fechaInicio) : null);
-    const prevEndRaw = anchor.fechaFin || anchor.fechaVencimiento;
-    const prevEnd = prevEndRaw instanceof Date ? prevEndRaw : (prevEndRaw ? new Date(prevEndRaw) : null);
-
-    anchor.fechaInicio = nextDue;
-    if (prevStart && prevEnd && !Number.isNaN(prevEnd.getTime()) && prevEnd > prevStart) {
-      const durationMs = prevEnd.getTime() - prevStart.getTime();
-      const nextEnd = new Date(nextDue.getTime() + durationMs);
-      anchor.fechaVencimiento = nextEnd;
-      if (anchor.fechaFin) anchor.fechaFin = nextEnd;
-    } else {
-      anchor.fechaVencimiento = nextDue;
-    }
-    anchor.estado = 'PENDIENTE';
-    anchor.completada = false;
-    if (anchor.googleTasksSync) {
-      anchor.googleTasksSync.completed = null;
-      anchor.googleTasksSync.needsSync = Boolean(syncToGoogle && anchor.googleTasksSync.enabled);
-      anchor.googleTasksSync.syncStatus = anchor.googleTasksSync.needsSync ? 'pending' : 'synced';
-    }
-    await anchor.save();
-
-    if (syncToGoogle && googleTasksService && anchor.googleTasksSync?.enabled) {
-      try {
-        await googleTasksService.syncTaskToGoogle(anchor._id, userId);
-      } catch (err) {
-        logger.warn?.(`No se pudo sincronizar ancla tras completar serie: ${err.message}`);
-      }
-    }
-    return anchor;
-  }
+  const nextDue = applyAnchorWallClock(nextDate, tarea, serie.dtstart);
 
   const dayStart = new Date(nextDate);
   dayStart.setHours(0, 0, 0, 0);
@@ -618,15 +876,14 @@ export async function generateNextSerieInstance(googleTasksService, tarea, userI
     return existing;
   }
 
-  const occAt = applySerieTimeToOccurrence(nextDate, serie.dtstart);
   const nueva = new Tareas({
     titulo: serie.titulo,
     descripcion: appendRecurrenceToNotes(serie.descripcion || '', serie.rrule),
     usuario: userId,
     objetivo: serie.objetivo,
     serieId: serie._id,
-    fechaInicio: occAt,
-    fechaVencimiento: occAt,
+    fechaInicio: nextDue,
+    fechaVencimiento: nextDue,
     prioridad: 'BAJA',
     googleTasksSync: {
       enabled: exportInstances,
@@ -638,7 +895,7 @@ export async function generateNextSerieInstance(googleTasksService, tarea, userI
 
   await nueva.save();
 
-  if (exportInstances && nueva.objetivo) {
+  if (exportInstances && syncToGoogle && googleTasksService && nueva.objetivo) {
     try {
       await googleTasksService.syncTaskToGoogle(nueva._id, userId);
     } catch (err) {

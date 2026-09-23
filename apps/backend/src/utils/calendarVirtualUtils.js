@@ -7,6 +7,62 @@ function dayKey(date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function taskStartDate(task) {
+  const raw = task?.fechaInicio || task?.fechaVencimiento;
+  if (!raw) return null;
+  const d = raw instanceof Date ? raw : new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function taskDurationMs(task, start) {
+  const endRaw = task?.fechaFin;
+  if (!endRaw || !start) return 0;
+  const end = endRaw instanceof Date ? endRaw : new Date(endRaw);
+  if (Number.isNaN(end.getTime()) || end <= start) return 0;
+  const ms = end.getTime() - start.getTime();
+  if (ms > 8 * 60 * 60 * 1000) return 0;
+  return ms;
+}
+
+/** 00:15 o mediodía sin duración: relleno de Google Tasks, no un horario de grilla. */
+export function isPlaceholderWallClock(date, { hasDuration = false } = {}) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return false;
+  if (hasDuration && d.getHours() >= 6) return false;
+  if (d.getHours() < 6) return true;
+  if (!hasDuration && d.getHours() === 12 && d.getMinutes() === 0 && d.getSeconds() === 0) return true;
+  if (!hasDuration && d.toISOString().endsWith('T12:00:00.000Z')) return true;
+  return false;
+}
+
+export function taskUsesPlaceholderClock(task) {
+  const start = taskStartDate(task);
+  if (!start) return false;
+  return isPlaceholderWallClock(start, { hasDuration: taskDurationMs(task, start) > 0 });
+}
+
+/** Reloj usable de una serie: prioriza la instancia abierta con hora real. */
+export function pickRealWallClock(tasks = []) {
+  const ranked = [];
+  for (const task of tasks) {
+    const start = taskStartDate(task);
+    if (!start) continue;
+    const durationMs = taskDurationMs(task, start);
+    if (isPlaceholderWallClock(start, { hasDuration: durationMs > 0 })) continue;
+    const estado = String(task.estado || '').toUpperCase();
+    const rank = estado === 'CANCELADA' ? 2 : (isTaskCompleted(task) ? 1 : 0);
+    ranked.push({
+      hours: start.getHours(),
+      minutes: start.getMinutes(),
+      durationMs: durationMs || 30 * 60 * 1000,
+      rank,
+      updated: new Date(task.updatedAt || 0).getTime(),
+    });
+  }
+  ranked.sort((a, b) => (a.rank - b.rank) || (b.updated - a.updated));
+  return ranked[0] || null;
+}
+
 function isDateOnlySerieAnchor(anchor) {
   if (!anchor || Number.isNaN(anchor.getTime())) return false;
   if (anchor.getMinutes() !== 0 || anchor.getSeconds() !== 0) return false;
@@ -115,10 +171,33 @@ export function dedupeSerieInstancesForAgenda(tasks = []) {
     const sid = serieIdStr(t.serieId);
     const anchor = anchorBySerie.get(sid);
     if (anchor && String(t._id) === String(anchor._id)) {
-      return true;
+      if (!taskUsesPlaceholderClock(anchor)) return true;
+      const anchorDay = dayKey(taskStartDate(anchor));
+      const betterSameDay = list.some((other) => {
+        if (String(other._id) === String(anchor._id)) return false;
+        if (serieIdStr(other.serieId) !== sid) return false;
+        const otherStart = taskStartDate(other);
+        if (!otherStart || dayKey(otherStart) !== anchorDay) return false;
+        return !taskUsesPlaceholderClock(other);
+      });
+      return !betterSameDay;
     }
     if (anchor) {
-      return false;
+      const raw = t.fechaVencimiento || t.fechaInicio;
+      const anchorRaw = anchor.fechaVencimiento || anchor.fechaInicio;
+      if (raw && anchorRaw && dayKey(raw) === dayKey(anchorRaw)) {
+        if (taskUsesPlaceholderClock(anchor) && !taskUsesPlaceholderClock(t)) {
+          const key = `${sid}|${dayKey(raw)}`;
+          if (keptPerSerieDay.has(key)) return false;
+          keptPerSerieDay.add(key);
+          return true;
+        }
+        return false;
+      }
+      const key = `${sid}|${dayKey(raw)}`;
+      if (keptPerSerieDay.has(key)) return false;
+      keptPerSerieDay.add(key);
+      return true;
     }
 
     const raw = t.fechaVencimiento || t.fechaInicio;

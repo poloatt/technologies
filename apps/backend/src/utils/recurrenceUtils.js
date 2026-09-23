@@ -284,20 +284,19 @@ export function ensureWeeklyByday(rrule, anchorDate) {
 export function expandSerie(rruleStr, dtstart, from, to) {
   if (!rruleStr || !dtstart || Number.isNaN(new Date(dtstart).getTime())) return [];
 
+  const lines = String(rruleStr).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const freqLine = lines.find((line) => /FREQ=/i.test(line)) || lines[0] || '';
+  const body = freqLine.replace(/^RRULE:/i, '');
+
+  const start = dtstart instanceof Date ? dtstart : new Date(dtstart);
   try {
-    const rule = RRule.fromString(`RRULE:${rruleStr.replace(/^RRULE:/, '')}`);
-    rule.options.dtstart = dtstart;
+    const rule = new RRule({
+      ...RRule.parseString(body),
+      dtstart: start,
+    });
     return rule.between(from, to, true);
   } catch {
-    try {
-      const rule = new RRule({
-        ...RRule.parseString(rruleStr),
-        dtstart,
-      });
-      return rule.between(from, to, true);
-    } catch {
-      return [];
-    }
+    return [];
   }
 }
 

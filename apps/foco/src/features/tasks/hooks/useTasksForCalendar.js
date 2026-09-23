@@ -62,7 +62,7 @@ function prefetchAgendaRange(range, includeCompleted) {
 }
 
 /** Prefetch del rango visible (hoy / semana) para abrir Agenda sin spinner. */
-export function prefetchTasksForCalendar(selectedDate = null, viewMode = 'week', includeCompleted = false) {
+export function prefetchTasksForCalendar(selectedDate = null, viewMode = 'week', includeCompleted = true) {
   const range = computeRange(selectedDate || getNormalizedToday(), viewMode);
   prefetchAgendaRange(range, includeCompleted);
 }
@@ -73,7 +73,8 @@ export function prefetchTasksForCalendar(selectedDate = null, viewMode = 'week',
  */
 export function useTasksForCalendar(selectedDate, viewMode = 'week') {
   const { enqueueSnackbar } = useSnackbar();
-  const [includeCompleted, setIncludeCompleted] = useState(false);
+  // La vista agenda siempre trae completadas del rango visible.
+  const includeCompleted = true;
 
   const range = useMemo(
     () => computeRange(selectedDate || getNormalizedToday(), viewMode),
@@ -90,15 +91,6 @@ export function useTasksForCalendar(selectedDate, viewMode = 'week') {
     initialCache ? normalizeTaskList(initialCache.docs) : []
   ));
   const [isFetching, setIsFetching] = useState(!initialCache || Boolean(initialCache?.stale));
-
-  useEffect(() => {
-    const handleSetShowCompleted = (event) => {
-      const { value } = event.detail || {};
-      if (typeof value === 'boolean') setIncludeCompleted(value);
-    };
-    window.addEventListener('setShowCompleted', handleSetShowCompleted);
-    return () => window.removeEventListener('setShowCompleted', handleSetShowCompleted);
-  }, []);
 
   const rangeRef = useRef({ rangeKey, range, includeCompleted });
   rangeRef.current = { rangeKey, range, includeCompleted };
