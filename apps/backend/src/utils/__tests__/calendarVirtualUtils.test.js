@@ -80,7 +80,7 @@ describe('buildVirtualTasksForRange', () => {
     }
   });
 
-  test('Google-origin series do not expand virtual weeks (only anchor in existingTasks)', () => {
+  test('Google-origin series do not paint virtual weeks over the visible range', () => {
     const dtstart = new Date(2026, 4, 14, 12, 0, 0, 0);
     const series = [
       {

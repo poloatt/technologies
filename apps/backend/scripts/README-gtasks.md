@@ -63,7 +63,8 @@ RRULE:FREQ=WEEKLY;INTERVAL=1
 ```
 
 - Series **creadas en Attadia** (`exportInstances: true`): pueden exportar ocurrencias a Google (lote limitado por `GTASKS_MAX_TASKS_PER_SYNC`).
-- Series **inferidas desde Google** (`exportInstances: false`): una sola tarea en Google; ocurrencias solo en calendario Attadia.
+- Series **inferidas desde Google** (`exportInstances: false`): una sola tarea en Google;
+  el calendario Attadia **expande ocurrencias virtuales** en el rango visible (sin duplicar el día del ancla).
 - Al completar una instancia, genera la siguiente ocurrencia local y la sincroniza.
 
 API: `POST /api/tarea-series`, `PATCH /api/tarea-series/:id`, `DELETE /api/tarea-series/:id`.

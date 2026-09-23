@@ -125,8 +125,16 @@ export const taskToCalendarEvent = (task, objetivos = []) => {
     ? (task?.fechaInicio || task?.inicio || task?.start || task?.fechaVencimiento || task?.vencimiento)
     : (task?.fechaVencimiento || task?.vencimiento || task?.fechaInicio || task?.inicio || task?.start);
 
+  // Local fechaInicio gana sobre notes cuando hay horario timed (drag/form).
+  // Notes (Horario Attadia) son fallback de sync, no fuente de verdad de UI.
+  const localTimedStart = (!allDay && taskHasTimedSchedule(task))
+    ? (getTaskStart(task) || null)
+    : null;
+
   let start = null;
-  if (scheduleFromNotes?.fechaInicio) {
+  if (localTimedStart) {
+    start = localTimedStart;
+  } else if (scheduleFromNotes?.fechaInicio) {
     start = scheduleFromNotes.fechaInicio;
   } else if (tipo === 'EVENTO') {
     start = getTaskStart(task) || getTaskDue(task);
@@ -177,49 +185,10 @@ export const taskToCalendarEvent = (task, objetivos = []) => {
   let end = resolveTimedBlockEnd({
     tipo,
     start,
-    endFromFin,
-    endFromDue,
-    scheduleEnd: scheduleFromNotes?.fechaFin || null,
+    endFromFin: localTimedStart ? endFromFin : (endFromFin || null),
+    endFromDue: localTimedStart ? endFromDue : (endFromDue || null),
+    scheduleEnd: localTimedStart ? null : (scheduleFromNotes?.fechaFin || null),
   });
-
-  // #region agent log
-  if (typeof fetch !== 'undefined') {
-    const title = String(task?.titulo || '').slice(0, 40);
-    if (/yogurt|aspirar|limpiar|00:15|🫧|🚶|🥵/i.test(title)
-      || (start && start.getHours() < 6)
-      || (start && [8, 11].includes(start.getHours()))) {
-      fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
-        body: JSON.stringify({
-          sessionId: 'b064c0',
-          runId: 'pre-fix',
-          hypothesisId: 'A',
-          location: 'agendaCalendarUtils.js:taskToCalendarEvent',
-          message: 'resolved calendar event times',
-          data: {
-            title,
-            tipo,
-            allDay: false,
-            startH: start?.getHours(),
-            startM: start?.getMinutes(),
-            endH: end?.getHours(),
-            endM: end?.getMinutes(),
-            durMin: start && end ? (end - start) / 60000 : null,
-            hasNotesSchedule: Boolean(scheduleFromNotes?.fechaInicio),
-            notesStart: scheduleFromNotes?.fechaInicio?.toISOString?.() || null,
-            notesEnd: scheduleFromNotes?.fechaFin?.toISOString?.() || null,
-            fechaInicio: task?.fechaInicio || null,
-            fechaFin: task?.fechaFin || null,
-            hasTimed: Boolean(task?.googleTasksSync?.hasTimedSchedule),
-            allDayFlag: allDay,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-  }
-  // #endregion
 
   return {
     task,
@@ -389,8 +358,8 @@ export const eventBelongsInAllDayLane = (event) =>
   Boolean(event?.allDay) || isEntirelyBeforeTimedGrid(event);
 
 /**
- * Reparte eventos solapados: EVENTO en columnas; TAREA como bars compactas encima.
- * Las TAREA se pintan después (y con z-index mayor) para no quedar bajo Guia/etc.
+ * Reparte eventos solapados: EVENTO en columnas; TAREA como bars full-width
+ * apiladas verticalmente (estilo Google Calendar Tasks — no columnas aplastadas).
  */
 export const layoutTimedEventsForDay = (events = []) => {
   const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -456,85 +425,45 @@ const layoutColumnEvents = (events = []) => {
   return { items, hiddenCount: 0 };
 };
 
+/** TAREA: pill full-width; si se solapan en el mismo slot, apilar hacia abajo. */
 const layoutCompactTaskBars = (events = []) => {
   const gapPx = 2;
   const pillH = TASK_PILL_HEIGHT_PX;
-  const columnEnds = [];
+  const stackStepPx = pillH + gapPx;
+  const maxStack = MAX_OVERLAP_COLUMNS;
   const placed = [];
   let hiddenCount = 0;
 
   for (const event of events) {
     const startMs = event.start.getTime();
     const endMs = event.end.getTime();
-    let column = columnEnds.findIndex((end) => end <= startMs);
-    if (column === -1) {
-      if (columnEnds.length >= MAX_OVERLAP_COLUMNS) {
-        hiddenCount += 1;
-        continue;
-      }
-      column = columnEnds.length;
-      columnEnds.push(endMs);
-    } else {
-      columnEnds[column] = Math.max(columnEnds[column], endMs);
-    }
-    placed.push({ event, column });
-  }
-
-  const items = placed.map(({ event, column }) => {
-    const startMs = event.start.getTime();
-    const endMs = event.end.getTime();
-    // Ancho según cuántas TAREA se solapan con ESTA (no el máx. del día entero).
-    const peers = placed.filter(
+    const overlapping = placed.filter(
       (p) => p.event.start.getTime() < endMs && p.event.end.getTime() > startMs,
     );
-    const colsInGroup = Math.max(1, ...peers.map((p) => p.column + 1));
-    const widthPct = 100 / colsInGroup;
-    const leftPct = column * widthPct;
-    const pos = getTimedPositionPx(event.start, event.end);
-    const topPx = parseFloat(pos.top);
-
-    const style = {
-      top: `${topPx}px`,
-      height: `${pillH}px`,
-      left: `calc(${leftPct}% + ${gapPx}px)`,
-      width: `calc(${widthPct}% - ${gapPx * 2}px)`,
-    };
-
-    // #region agent log
-    if (typeof fetch !== 'undefined') {
-      const title = String(event.task?.titulo || '').slice(0, 40);
-      if (/yogurt|aspirar|limpiar/i.test(title) || column > 0 || colsInGroup > 1) {
-        fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
-          body: JSON.stringify({
-            sessionId: 'b064c0',
-            runId: 'post-fix',
-            hypothesisId: 'G',
-            location: 'agendaCalendarUtils.js:layoutCompactTaskBars',
-            message: 'task bar column layout',
-            data: {
-              title,
-              pillH,
-              column,
-              colsInGroup,
-              styleWidth: style.width,
-              styleHeight: style.height,
-              startH: event.start?.getHours(),
-              startM: event.start?.getMinutes(),
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
+    const stackIndex = overlapping.length === 0
+      ? 0
+      : Math.max(...overlapping.map((p) => p.stackIndex)) + 1;
+    if (stackIndex >= maxStack) {
+      hiddenCount += 1;
+      continue;
     }
-    // #endregion
+    placed.push({ event, stackIndex });
+  }
+
+  const items = placed.map(({ event, stackIndex }) => {
+    const pos = getTimedPositionPx(event.start, event.end);
+    const topPx = parseFloat(pos.top) + stackIndex * stackStepPx;
 
     return {
       event,
       layer: 'tarea',
-      stackIndex: column,
-      style,
+      stackIndex,
+      style: {
+        top: `${topPx}px`,
+        height: `${pillH}px`,
+        left: '2px',
+        width: 'calc(100% - 4px)',
+      },
     };
   });
 
@@ -579,33 +508,6 @@ const getTimedStartEndMinutes = (start, end, { snap = false } = {}) => {
   if (endMins <= startMins) {
     endMins = Math.min(totalMinutes, startMins + DEFAULT_DURATION_MINUTES);
   }
-
-  // #region agent log
-  if (typeof fetch !== 'undefined' && !snap && (rawStart < 0 || start.getMinutes() === 45 || start.getMinutes() === 30 || start.getHours() < 6)) {
-    fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
-      body: JSON.stringify({
-        sessionId: 'b064c0',
-        runId: 'pre-fix',
-        hypothesisId: 'D',
-        location: 'agendaCalendarUtils.js:getTimedStartEndMinutes',
-        message: 'minute math',
-        data: {
-          h: start.getHours(),
-          m: start.getMinutes(),
-          rawStart,
-          startMins,
-          rawEnd,
-          endMins,
-          clampedPreGrid: rawStart < 0,
-          snap,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
 
   return { startMins, endMins };
 };

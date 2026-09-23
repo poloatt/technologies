@@ -291,6 +291,11 @@ export default function AgendaCalendarPage() {
         };
       }
       const saved = await updateWithHistory(target._id, payload, target);
+      if (saved?._id) {
+        setTareas((prev) => prev.map((t) => (
+          t._id === saved._id ? { ...t, ...saved } : t
+        )));
+      }
       syncTareaToGoogleInBackground(saved || { ...target, ...payload }, {
         onSynced: () => enqueueSnackbar('Sincronizada con Google Tasks', { variant: 'info' }),
         onError: (syncErr) => enqueueSnackbar(

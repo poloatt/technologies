@@ -188,6 +188,43 @@ class TareasController extends BaseController {
         docs = filterDocsForListView(docs, { includeCompleted: false });
       }
 
+      // #region agent log
+      {
+        const sample = docs.slice(0, 40).map((d) => ({
+          t: String(d.titulo || '').slice(0, 40),
+          est: d.estado,
+          done: Boolean(d.completada),
+          virt: Boolean(d.virtual),
+          start: d.fechaInicio ? new Date(d.fechaInicio).toISOString() : null,
+          created: d.createdAt ? new Date(d.createdAt).toISOString() : null,
+          updated: d.updatedAt ? new Date(d.updatedAt).toISOString() : null,
+          serie: Boolean(d.serieId),
+        }));
+        const oldCreated = sample.filter((s) => s.created && s.created < '2024-01-01');
+        fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
+          body: JSON.stringify({
+            sessionId: 'b064c0',
+            runId: 'pre-fix',
+            hypothesisId: 'A',
+            location: 'tareasController.js:getAgenda',
+            message: 'agenda payload sample',
+            data: {
+              include,
+              total: docs.length,
+              completedInPayload: docs.filter((d) => d.completada || d.estado === 'COMPLETADA').length,
+              virtualCount: docs.filter((d) => d.virtual).length,
+              oldCreatedInSample: oldCreated.length,
+              oldTitles: oldCreated.map((s) => s.t),
+              sample,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+
       res.json({ docs, totalDocs: docs.length });
     } catch (error) {
       console.error('Error getAgenda:', error);

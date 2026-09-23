@@ -9,6 +9,10 @@ import {
   getTotalGridMinutes,
   startMinutesToTopPx,
 } from './calendarLayout';
+import {
+  appendScheduleToNotes,
+  stripScheduleFromNotes,
+} from '../googleTasksScheduleNotes';
 
 const isTaskCompletedLight = (t) => {
   if (!t) return false;
@@ -265,13 +269,21 @@ export const computeAllDayMove = (targetDay) => {
   return { newStart, newEnd, allDay: true };
 };
 
-export const applyTimedMoveToTask = (task, newStart, newEnd) => ({
-  fechaInicio: newStart,
-  fechaFin: newEnd,
-  fechaVencimiento: newEnd,
-  clearTimedSchedule: false,
-  googleTasksSync: timedSyncPatch(task),
-});
+export const applyTimedMoveToTask = (task, newStart, newEnd) => {
+  const nextDescripcion = appendScheduleToNotes(
+    stripScheduleFromNotes(task?.descripcion || ''),
+    newStart,
+    newEnd,
+  );
+  return {
+    fechaInicio: newStart,
+    fechaFin: newEnd,
+    fechaVencimiento: newEnd,
+    descripcion: nextDescripcion,
+    clearTimedSchedule: false,
+    googleTasksSync: timedSyncPatch(task),
+  };
+};
 
 export const applyAllDayMoveToTask = (task, targetDay) => {
   const dayStart = startOfDay(targetDay);
@@ -279,6 +291,7 @@ export const applyAllDayMoveToTask = (task, targetDay) => {
     fechaInicio: dayStart,
     fechaFin: null,
     fechaVencimiento: dayStart,
+    descripcion: stripScheduleFromNotes(task?.descripcion || ''),
     clearTimedSchedule: true,
     googleTasksSync: {
       ...(task?.googleTasksSync || {}),

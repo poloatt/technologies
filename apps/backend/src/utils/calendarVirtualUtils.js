@@ -52,6 +52,41 @@ export function applySerieTimeToOccurrence(occ, dtstart) {
   return d;
 }
 
+/** Reloj de pared del ancla Google (fechaInicio timed o noon). */
+function resolveAnchorWallClock(anchor) {
+  if (!anchor) return null;
+  const startRaw = anchor.fechaInicio || anchor.fechaVencimiento;
+  if (!startRaw) return null;
+  const start = startRaw instanceof Date ? startRaw : new Date(startRaw);
+  if (Number.isNaN(start.getTime())) return null;
+  const endRaw = anchor.fechaFin || anchor.fechaVencimiento;
+  const end = endRaw
+    ? (endRaw instanceof Date ? endRaw : new Date(endRaw))
+    : null;
+  const timed = Boolean(
+    anchor.googleTasksSync?.hasTimedSchedule
+    || (!isDateOnlySerieAnchor(start) && (start.getHours() !== 12 || start.getMinutes() !== 0)),
+  );
+  return { start, end: end && !Number.isNaN(end.getTime()) ? end : null, timed };
+}
+
+function applyWallClockToOccurrence(occ, serieDtstart, anchorClock) {
+  const occDate = occ instanceof Date ? new Date(occ.getTime()) : new Date(occ);
+  if (Number.isNaN(occDate.getTime())) return null;
+
+  if (anchorClock?.timed && anchorClock.start) {
+    occDate.setHours(
+      anchorClock.start.getHours(),
+      anchorClock.start.getMinutes(),
+      anchorClock.start.getSeconds(),
+      anchorClock.start.getMilliseconds(),
+    );
+    return occDate;
+  }
+
+  return occurrenceWithSerieTime(occDate, serieDtstart);
+}
+
 function serieIdStr(serieId) {
   if (serieId == null) return '';
   return String(serieId._id ?? serieId);
@@ -129,7 +164,7 @@ export async function loadGoogleAnchorsBySerie(userId, serieIds = []) {
     serieId: { $in: ids },
     'googleTasksSync.googleTaskId': { $exists: true, $ne: null },
   })
-    .select('serieId completada estado googleTasksSync.googleTaskId googleTasksSync.completed')
+    .select('serieId completada estado fechaInicio fechaFin fechaVencimiento googleTasksSync')
     .lean();
 
   const map = new Map();
@@ -187,8 +222,8 @@ export function buildVirtualTasksForRange(
     if (googleSerie && !anchor) continue;
     if (anchor && isTaskCompleted(anchor)) continue;
 
-    // Google Tasks API solo expone la instancia actual (due). No rellenar semanas futuras
-    // con RRULE inferido — eso duplicaba la tarea en todo el calendario.
+    // Google Tasks solo tiene la instancia actual. Expandir el RRULE en el rango
+    // reinyecta tareas de hace años (GSUITE, B corp, recibos 2019) en la semana visible.
     const exportInstances = serie.googleTasksSync?.exportInstances === true;
     if (googleSerie && !exportInstances) continue;
 
@@ -202,8 +237,10 @@ export function buildVirtualTasksForRange(
       continue;
     }
 
+    const anchorClock = resolveAnchorWallClock(anchor);
+
     for (const occ of occurrences) {
-      const occAt = occurrenceWithSerieTime(occ, dtstart);
+      const occAt = applyWallClockToOccurrence(occ, dtstart, anchorClock);
       if (!occAt) continue;
 
       const dk = dayKey(occAt);
@@ -220,6 +257,11 @@ export function buildVirtualTasksForRange(
         serieId: serie._id,
         fechaInicio: occAt,
         fechaVencimiento: occAt,
+        fechaFin: anchorClock?.end
+          ? new Date(
+            occAt.getTime() + (anchorClock.end.getTime() - anchorClock.start.getTime()),
+          )
+          : undefined,
         tipo: 'TAREA',
         estado: 'PENDIENTE',
         completada: false,
@@ -228,6 +270,7 @@ export function buildVirtualTasksForRange(
         googleTasksSync: {
           enabled: false,
           googleTaskListId: serie.googleTasksSync?.googleTaskListId || null,
+          hasTimedSchedule: Boolean(anchorClock?.timed),
         },
       });
     }

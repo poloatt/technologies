@@ -143,7 +143,7 @@ export function inferRecurrenceFromGoogleNotes(notes = '') {
     return 'FREQ=DAILY;INTERVAL=1';
   }
   if (
-    /every\s+week|\bweekly\b|semanalmente|cada\s+semana|todas\s+las\s+semanas|repite\s+cada\s+semana|se\s+repite\s+(cada\s+)?semana|se\s+repite\s+semanalmente|repetir\s+semanalmente|repeats?\s+weekly/.test(
+    /every\s+week|\bweekly\b|semanalmente|cada\s+semana|todas\s+las\s+semanas|repite\s+cada\s+semana|se\s+repite\s+(cada\s+)?semana|se\s+repite\s+semanalmente|repetir\s+semanalmente|repeats?\s+weekly|cada\s+semana,\s*el\s+\w+/.test(
       text,
     )
   ) {

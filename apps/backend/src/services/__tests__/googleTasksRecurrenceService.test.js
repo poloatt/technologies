@@ -123,6 +123,58 @@ describe('reconcileSeriesFromGoogle', () => {
     expect(mockSave).toHaveBeenCalled();
   });
 
+  test('creates weekly series from googleDueHistory with 2 weekly dues', async () => {
+    const due1 = new Date(2026, 4, 13, 12, 0, 0, 0); // Wed
+    const due2 = new Date(2026, 4, 20, 12, 0, 0, 0); // Wed
+    mockFind.mockResolvedValue([
+      taskDoc({
+        _id: 'local-hist',
+        titulo: 'Brusquettas',
+        descripcion: '',
+        googleTasksSync: { googleTaskId: 'gt-brus', googleTaskListId: 'list-rutinas' },
+        fechaVencimiento: due2,
+        fechaInicio: due2,
+        googleDueHistory: [due1, due2],
+      }),
+    ]);
+
+    const stats = await reconcileSeriesFromGoogle(
+      'user1',
+      'obj-rutinas',
+      'list-rutinas',
+      [{ id: 'gt-brus', title: 'Brusquettas', due: due2.toISOString() }],
+    );
+
+    expect(stats.seriesCreated).toBe(1);
+  });
+
+  test('creates series from stored recurrenceHint when notes cleaned', async () => {
+    const due = new Date(2026, 4, 21, 12, 0, 0, 0);
+    mockFind.mockResolvedValue([
+      taskDoc({
+        _id: 'local-hint',
+        titulo: 'Weekly chore',
+        descripcion: 'Solo texto',
+        googleTasksSync: {
+          googleTaskId: 'gt-hint',
+          googleTaskListId: 'list-1',
+          recurrenceHint: 'FREQ=WEEKLY;INTERVAL=1',
+        },
+        fechaVencimiento: due,
+        fechaInicio: due,
+      }),
+    ]);
+
+    const stats = await reconcileSeriesFromGoogle(
+      'user1',
+      'obj1',
+      'list-1',
+      [{ id: 'gt-hint', title: 'Weekly chore', due: due.toISOString() }],
+    );
+
+    expect(stats.seriesCreated).toBe(1);
+  });
+
   test('creates weekly series for single task when ASSUME env is true', async () => {
     jest.resetModules();
     process.env.GTASKS_ASSUME_GOOGLE_RECURRING_SINGLE = 'true';

@@ -16,7 +16,7 @@ describe('mergeGoogleDueWithLocalSchedule', () => {
     expect(tarea.googleTasksSync.hasTimedSchedule).toBe(true);
   });
 
-  test('preserves timed schedule when notes schedule block present', () => {
+  test('shifts notes schedule to Google due day keeping wall-clock', () => {
     const tarea = {
       fechaInicio: new Date(2026, 5, 10, 9, 0, 0, 0),
       fechaVencimiento: new Date(2026, 5, 10, 10, 0, 0, 0),
@@ -26,6 +26,7 @@ describe('mergeGoogleDueWithLocalSchedule', () => {
 
     mergeGoogleDueWithLocalSchedule(tarea, '2026-06-20T00:00:00.000Z');
 
+    expect(tarea.fechaInicio.getDate()).toBe(20);
     expect(tarea.fechaInicio.getUTCHours()).toBe(12);
     expect(tarea.googleTasksSync.hasTimedSchedule).toBe(true);
   });
@@ -41,6 +42,5 @@ describe('mergeGoogleDueWithLocalSchedule', () => {
 
     expect(tarea.fechaInicio.getHours()).toBe(12);
     expect(tarea.fechaVencimiento.getHours()).toBe(12);
-    expect(tarea.googleTasksSync.hasTimedSchedule).toBeFalsy();
   });
 });

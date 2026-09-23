@@ -20,8 +20,8 @@ import { mergeGoogleDueWithLocalSchedule } from '../utils/googleTasksScheduleMer
 
 const HORIZON_DAYS = parseInt(process.env.GTASKS_SERIES_HORIZON_DAYS || '90', 10);
 const EXPAND_LOOKBACK_DAYS = parseInt(process.env.GTASKS_SERIES_LOOKBACK_DAYS || '14', 10);
-/** Mínimo de fechas distintas para inferir RRULE solo por due dates (evita weekly con 2 filas históricas). */
-const MIN_INFERRED_DUE_DATES = parseInt(process.env.GTASKS_MIN_INFERRED_DUE_DATES || '4', 10);
+/** Mínimo de fechas distintas para inferir RRULE solo por due dates. */
+const MIN_INFERRED_DUE_DATES = parseInt(process.env.GTASKS_MIN_INFERRED_DUE_DATES || '2', 10);
 /**
  * Opt-in: inferir semanal cuando Google solo devuelve 1 fila por título.
  * Por defecto false — evita crear cientos de TareaSeries en tareas con fecha única.
@@ -29,17 +29,25 @@ const MIN_INFERRED_DUE_DATES = parseInt(process.env.GTASKS_MIN_INFERRED_DUE_DATE
 const ASSUME_GOOGLE_RECURRING_SINGLE =
   process.env.GTASKS_ASSUME_GOOGLE_RECURRING_SINGLE === 'true';
 
+function isDateOnlyLike(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
+  if (date.getMinutes() !== 0 || date.getSeconds() !== 0) return false;
+  return date.getHours() === 12 || date.getHours() === 0;
+}
+
 function hasExplicitRecurrenceEvidence({
   rruleFromNotes,
   rruleFromGoogleNotes,
   googleRruleForKey,
   inferredFromDueDates,
+  rruleFromStoredHint,
 }) {
   return Boolean(
     rruleFromNotes
     || rruleFromGoogleNotes
     || googleRruleForKey
-    || inferredFromDueDates,
+    || inferredFromDueDates
+    || rruleFromStoredHint,
   );
 }
 
@@ -88,6 +96,7 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
   for (const [googleSerieKey, group] of groups) {
     let rruleFromNotes = null;
     let rruleFromGoogleNotes = null;
+    let rruleFromStoredHint = null;
 
     for (const t of group) {
       const rawNotes =
@@ -98,6 +107,9 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
       if (parsed.rrule) rruleFromNotes = parsed.rrule;
       const googleHint = inferRecurrenceFromGoogleNotes(rawNotes);
       if (googleHint) rruleFromGoogleNotes = googleHint;
+      if (t.googleTasksSync?.recurrenceHint) {
+        rruleFromStoredHint = String(t.googleTasksSync.recurrenceHint);
+      }
     }
 
     let dueDates = collectDueDatesFromTasks(group);
@@ -108,11 +120,24 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
         ...extraGoogleDues.map((d) => ({ fechaVencimiento: d })),
       ]);
     }
+    for (const t of group) {
+      const hist = Array.isArray(t.googleDueHistory) ? t.googleDueHistory : [];
+      if (hist.length) {
+        dueDates = collectDueDatesFromTasks([
+          ...dueDates.map((d) => ({ fechaVencimiento: d })),
+          ...hist.map((d) => ({ fechaVencimiento: d })),
+        ]);
+      }
+    }
     const inferredFromDueDates = dueDates.length >= MIN_INFERRED_DUE_DATES
       ? inferRruleFromDueDates(dueDates)
       : null;
     const googleRruleForKey = googleRruleByKey.get(googleSerieKey) || null;
-    let rrule = rruleFromNotes || googleRruleForKey || rruleFromGoogleNotes || inferredFromDueDates;
+    let rrule = rruleFromNotes
+      || googleRruleForKey
+      || rruleFromGoogleNotes
+      || rruleFromStoredHint
+      || inferredFromDueDates;
 
     const googleAnchors = group.filter((t) => t.googleTasksSync?.googleTaskId);
     const recurrenceAnchor = googleAnchors[0] || group[0];
@@ -133,7 +158,15 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
 
     if (!rrule) continue;
 
-    if (isTaskCompleted(recurrenceAnchor)) {
+    // Ancla local COMPLETADA no desactiva la serie si Google sigue en needsAction
+    // (due ya roló a la próxima semana).
+    const googleAnchorTask = googleById.get(recurrenceAnchor.googleTasksSync?.googleTaskId);
+    const googleStillOpen = Boolean(
+      googleAnchorTask
+      && googleAnchorTask.status !== 'completed'
+      && !googleAnchorTask.deleted,
+    );
+    if (isTaskCompleted(recurrenceAnchor) && !googleStillOpen) {
       const existingSerie = await TareaSeries.findOne({ usuario: userId, googleSerieKey });
       if (existingSerie?.activa) {
         existingSerie.activa = false;
@@ -142,25 +175,20 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
       continue;
     }
 
+    const evidenceArgs = {
+      rruleFromNotes,
+      rruleFromGoogleNotes,
+      googleRruleForKey,
+      inferredFromDueDates,
+      rruleFromStoredHint,
+    };
+
     const fromAssumeHeuristic =
       ASSUME_GOOGLE_RECURRING_SINGLE
       && googleAnchors.length === 1
-      && !hasExplicitRecurrenceEvidence({
-        rruleFromNotes,
-        rruleFromGoogleNotes,
-        googleRruleForKey,
-        inferredFromDueDates,
-      });
+      && !hasExplicitRecurrenceEvidence(evidenceArgs);
 
-    if (
-      !hasExplicitRecurrenceEvidence({
-        rruleFromNotes,
-        rruleFromGoogleNotes,
-        googleRruleForKey,
-        inferredFromDueDates,
-      })
-      && !fromAssumeHeuristic
-    ) {
+    if (!hasExplicitRecurrenceEvidence(evidenceArgs) && !fromAssumeHeuristic) {
       continue;
     }
 
@@ -203,6 +231,9 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
       serie.rrule = rrule;
       serie.dtstart = dtstart;
       serie.titulo = titulo;
+      if (!serie.activa) {
+        serie.activa = true;
+      }
       serie.googleTasksSync = serie.googleTasksSync || {};
       serie.googleTasksSync.googleTaskListId = taskListId;
       serie.googleTasksSync.exportInstances = false;
@@ -211,7 +242,8 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
       const changed =
         prevRrule !== rrule
         || prevTitulo !== titulo
-        || prevDt !== nextDt;
+        || prevDt !== nextDt
+        || serie.isModified('activa');
 
       if (changed) {
         await serie.save();
@@ -462,12 +494,18 @@ export async function expandAllSeriesForUser(googleTasksService, userId, options
 
 /**
  * Tras completar una instancia, genera la siguiente ocurrencia local y la exporta.
+ * @param {{ syncToGoogle?: boolean }} options
  */
-export async function generateNextSerieInstance(googleTasksService, tarea, userId) {
+export async function generateNextSerieInstance(googleTasksService, tarea, userId, options = {}) {
+  const syncToGoogle = options.syncToGoogle !== false;
   if (!tarea?.serieId || tarea.esExcepcionSerie) return null;
 
-  const serie = await TareaSeries.findOne({ _id: tarea.serieId, usuario: userId, activa: true });
+  let serie = await TareaSeries.findOne({ _id: tarea.serieId, usuario: userId });
   if (!serie?.rrule) return null;
+  if (!serie.activa) {
+    serie.activa = true;
+    await serie.save();
+  }
 
   const exportInstances = serie.googleTasksSync?.exportInstances === true;
 
@@ -481,8 +519,32 @@ export async function generateNextSerieInstance(googleTasksService, tarea, userI
   const upcoming = expandSerie(serie.rrule, new Date(serie.dtstart), from, to);
   if (!upcoming.length) return null;
 
-  const nextDate = upcoming[0];
-  const nextDue = applySerieTimeToOccurrence(nextDate, serie.dtstart);
+  // Si el usuario completó hace semanas, saltar ocurrencias ya pasadas.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const nextDate = upcoming.find((d) => {
+    const x = d instanceof Date ? d : new Date(d);
+    return x.getTime() >= startOfToday.getTime();
+  }) || upcoming[upcoming.length - 1];
+  let nextDue = applySerieTimeToOccurrence(nextDate, serie.dtstart);
+
+  // Conservar reloj de pared del ancla timed (Emails 13:15, Brusquettas 16:15, …)
+  const anchorStart = tarea.fechaInicio instanceof Date
+    ? tarea.fechaInicio
+    : (tarea.fechaInicio ? new Date(tarea.fechaInicio) : null);
+  if (
+    anchorStart
+    && !Number.isNaN(anchorStart.getTime())
+    && (tarea.googleTasksSync?.hasTimedSchedule || !isDateOnlyLike(anchorStart))
+  ) {
+    nextDue = new Date(nextDue);
+    nextDue.setHours(
+      anchorStart.getHours(),
+      anchorStart.getMinutes(),
+      anchorStart.getSeconds(),
+      0,
+    );
+  }
 
   if (!exportInstances) {
     let anchor = tarea.googleTasksSync?.googleTaskId ? tarea : null;
@@ -503,13 +565,31 @@ export async function generateNextSerieInstance(googleTasksService, tarea, userI
     }
     if (!anchor) return null;
 
+    const prevStart = anchor.fechaInicio instanceof Date
+      ? anchor.fechaInicio
+      : (anchor.fechaInicio ? new Date(anchor.fechaInicio) : null);
+    const prevEndRaw = anchor.fechaFin || anchor.fechaVencimiento;
+    const prevEnd = prevEndRaw instanceof Date ? prevEndRaw : (prevEndRaw ? new Date(prevEndRaw) : null);
+
     anchor.fechaInicio = nextDue;
-    anchor.fechaVencimiento = nextDue;
+    if (prevStart && prevEnd && !Number.isNaN(prevEnd.getTime()) && prevEnd > prevStart) {
+      const durationMs = prevEnd.getTime() - prevStart.getTime();
+      const nextEnd = new Date(nextDue.getTime() + durationMs);
+      anchor.fechaVencimiento = nextEnd;
+      if (anchor.fechaFin) anchor.fechaFin = nextEnd;
+    } else {
+      anchor.fechaVencimiento = nextDue;
+    }
     anchor.estado = 'PENDIENTE';
     anchor.completada = false;
+    if (anchor.googleTasksSync) {
+      anchor.googleTasksSync.completed = null;
+      anchor.googleTasksSync.needsSync = Boolean(syncToGoogle && anchor.googleTasksSync.enabled);
+      anchor.googleTasksSync.syncStatus = anchor.googleTasksSync.needsSync ? 'pending' : 'synced';
+    }
     await anchor.save();
 
-    if (googleTasksService && anchor.googleTasksSync?.enabled) {
+    if (syncToGoogle && googleTasksService && anchor.googleTasksSync?.enabled) {
       try {
         await googleTasksService.syncTaskToGoogle(anchor._id, userId);
       } catch (err) {

@@ -30,6 +30,25 @@ describe('task calendar classification', () => {
     expect(ev.end.getMinutes()).toBe(45);
   });
 
+  test('timed TAREA prefers local fechaInicio over stale Horario Attadia notes (drag)', () => {
+    const start = new Date(2026, 8, 22, 11, 15, 0, 0);
+    const fin = new Date(2026, 8, 22, 11, 45, 0, 0);
+    const task = {
+      tipo: 'TAREA',
+      titulo: 'Dragged',
+      fechaInicio: start,
+      fechaFin: fin,
+      descripcion: 'Horario Attadia:\ninicio: 2026-09-22T19:15:00.000Z\nfin: 2026-09-22T19:45:00.000Z',
+      googleTasksSync: { hasTimedSchedule: true, googleTaskId: 'gt-1' },
+    };
+    const ev = taskToCalendarEvent(task, []);
+    expect(ev.allDay).toBe(false);
+    expect(ev.start.getHours()).toBe(11);
+    expect(ev.start.getMinutes()).toBe(15);
+    expect(ev.end.getHours()).toBe(11);
+    expect(ev.end.getMinutes()).toBe(45);
+  });
+
   test('timed TAREA remaps legacy 60-min fechaFin / notes to 30 min', () => {
     const start = new Date(2026, 5, 16, 10, 0, 0, 0);
     const finLegacy = new Date(2026, 5, 16, 11, 0, 0, 0);
@@ -198,10 +217,11 @@ describe('task calendar classification', () => {
     expect(items[2].layer).toBe('tarea');
     expect(items[1].style.height).toBe(`${TASK_PILL_HEIGHT_PX}px`);
     expect(items[1].style.height).toBe(`${HALF_SLOT_HEIGHT_PX}px`);
-    // Solapes en columnas (misma top); Yogurt solo → ancho completo en otro test implícito
-    expect(items[1].style.top).toBe(items[2].style.top);
-    expect(items[1].style.left).not.toBe(items[2].style.left);
-    expect(items[1].style.width).toContain('50%');
+    // Solapes: full-width apiladas (misma left, tops distintos)
+    expect(items[1].style.left).toBe(items[2].style.left);
+    expect(items[1].style.width).toContain('100%');
+    expect(items[2].style.width).toContain('100%');
+    expect(parseFloat(items[2].style.top)).toBeGreaterThan(parseFloat(items[1].style.top));
 
     const solo = layoutTimedEventsForDay([
       { task: { tipo: 'TAREA', _id: 'solo' }, start, end, allDay: false },

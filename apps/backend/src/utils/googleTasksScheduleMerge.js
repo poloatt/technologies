@@ -3,6 +3,7 @@ import { parseScheduleFromNotes, taskHasTimedSchedule } from '../../../shared/ut
 
 /**
  * Fusiona due de Google (solo día) con horario local/timed sin pisar la hora del usuario.
+ * El día siempre sigue a Google; el reloj de pared (notes o fechaInicio) se conserva.
  */
 export function mergeGoogleDueWithLocalSchedule(tarea, googleDueRaw) {
   if (!googleDueRaw || !tarea) return;
@@ -12,17 +13,8 @@ export function mergeGoogleDueWithLocalSchedule(tarea, googleDueRaw) {
 
   const sync = tarea.googleTasksSync || {};
   const scheduleFromNotes = parseScheduleFromNotes(tarea.descripcion || '');
-  const hasTimed = taskHasTimedSchedule(tarea) || Boolean(scheduleFromNotes);
+  const hasTimed = taskHasTimedSchedule(tarea) || Boolean(scheduleFromNotes?.fechaInicio);
   const needsSync = sync.needsSync === true;
-
-  if (scheduleFromNotes?.fechaInicio) {
-    tarea.fechaInicio = scheduleFromNotes.fechaInicio;
-    tarea.fechaVencimiento = scheduleFromNotes.fechaFin || scheduleFromNotes.fechaInicio;
-    if (scheduleFromNotes.fechaFin) tarea.fechaFin = scheduleFromNotes.fechaFin;
-    if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
-    tarea.googleTasksSync.hasTimedSchedule = true;
-    return;
-  }
 
   if (!hasTimed && !needsSync) {
     tarea.fechaVencimiento = dueDate;
@@ -30,10 +22,12 @@ export function mergeGoogleDueWithLocalSchedule(tarea, googleDueRaw) {
     return;
   }
 
-  const localStart = tarea.fechaInicio instanceof Date
-    ? new Date(tarea.fechaInicio.getTime())
-    : new Date(tarea.fechaInicio);
-  if (Number.isNaN(localStart.getTime())) {
+  const clockSource = scheduleFromNotes?.fechaInicio
+    || (tarea.fechaInicio instanceof Date
+      ? tarea.fechaInicio
+      : (tarea.fechaInicio ? new Date(tarea.fechaInicio) : null));
+
+  if (!clockSource || Number.isNaN(clockSource.getTime())) {
     tarea.fechaInicio = dueDate;
     tarea.fechaVencimiento = dueDate;
     return;
@@ -41,26 +35,27 @@ export function mergeGoogleDueWithLocalSchedule(tarea, googleDueRaw) {
 
   const newStart = new Date(dueDate);
   newStart.setHours(
-    localStart.getHours(),
-    localStart.getMinutes(),
-    localStart.getSeconds(),
+    clockSource.getHours(),
+    clockSource.getMinutes(),
+    clockSource.getSeconds(),
     0,
   );
   tarea.fechaInicio = newStart;
 
-  const localEndRaw = tarea.fechaFin || tarea.fechaVencimiento;
-  const localEnd = localEndRaw instanceof Date ? localEndRaw : new Date(localEndRaw);
-  if (localEnd && !Number.isNaN(localEnd.getTime()) && localEnd > localStart) {
-    const durationMs = localEnd.getTime() - localStart.getTime();
+  const endSource = scheduleFromNotes?.fechaFin
+    || tarea.fechaFin
+    || tarea.fechaVencimiento;
+  const localEnd = endSource instanceof Date ? endSource : (endSource ? new Date(endSource) : null);
+
+  if (localEnd && !Number.isNaN(localEnd.getTime()) && localEnd.getTime() > clockSource.getTime()) {
+    const durationMs = localEnd.getTime() - clockSource.getTime();
     const newEnd = new Date(newStart.getTime() + durationMs);
     tarea.fechaVencimiento = newEnd;
-    if (tarea.fechaFin) tarea.fechaFin = newEnd;
+    if (tarea.fechaFin || scheduleFromNotes?.fechaFin) tarea.fechaFin = newEnd;
   } else {
     tarea.fechaVencimiento = newStart;
   }
 
   if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
-  if (taskHasTimedSchedule(tarea)) {
-    tarea.googleTasksSync.hasTimedSchedule = true;
-  }
+  tarea.googleTasksSync.hasTimedSchedule = true;
 }

@@ -1117,8 +1117,15 @@ class GoogleTasksService {
 
               if (tarea) {
                 const localPending = this.hasLocalPendingGoogleSync(tarea);
-                const shouldImportContent = this.shouldImportContentFromGoogle(tarea, googleTask);
-                if (shouldImportContent) {
+                const statusMismatch = this.statusDiffersFromGoogle(tarea, googleTask);
+                const dueMismatch = this.googleDueDiffersFromLocal(tarea, googleTask);
+                // Recurrentes Google: tras completar, la API deja needsAction + due nuevo.
+                // El incremental (updatedMin) a veces no trae el task; este path cubre
+                // cuando sí llega. Ver también refreshStaleCompletedGoogleAnchors.
+                const shouldImportContent = this.shouldImportContentFromGoogle(tarea, googleTask)
+                  || statusMismatch
+                  || dueMismatch;
+                if (shouldImportContent && !localPending) {
                   this.applyNotesFromGoogle(tarea, googleTask);
                   tarea.titulo = this.cleanTitle(tarea.titulo || googleTask.title);
                 }
@@ -1130,12 +1137,17 @@ class GoogleTasksService {
                 } else {
                   this.applyGoogleStatusAndDue(tarea, googleTask);
                 }
-                if (shouldImportContent || tarea.isModified()) {
+                if (shouldImportContent || statusMismatch || dueMismatch || tarea.isModified()) {
                   this.markSaveFromGoogleImport(tarea);
                   await tarea.save();
                   syncResults.updated++;
-                  if (shouldImportContent) {
+                  if (shouldImportContent || statusMismatch || dueMismatch) {
                     logger.sync(`📝 Actualizada tarea desde Google: "${googleTask.title}"`);
+                  }
+                  if (googleTask.status === 'completed' || googleTask.hidden) {
+                    await this.rollForwardCompletedGoogleRecurring(tarea, userId);
+                  } else {
+                    await this.reactivateSerieAfterGoogleRollForward(tarea, userId);
                   }
                 } else {
                   syncResults.skippedTasks++;
@@ -1166,6 +1178,22 @@ class GoogleTasksService {
               console.error(`Error al procesar tarea "${googleTask.title}":`, error);
               syncResults.errors.push(`${googleTask.title}: ${error.message}`);
             }
+          }
+
+          // Anclas recurrentes: local COMPLETADA pero Google ya roló a needsAction + due nuevo.
+          // El list incremental (updatedMin) no las trae si Google.updated es viejo.
+          try {
+            const rolled = await this.refreshStaleCompletedGoogleAnchors(
+              userId,
+              taskList.id,
+              objetivo._id,
+              existingByGoogleId,
+            );
+            syncResults.updated += rolled;
+          } catch (rollErr) {
+            logger.warn?.(
+              `No se pudo refrescar anclas completadas en "${taskList.title}": ${rollErr.message}`,
+            );
           }
 
           // Soft-unlink: detectar tareas eliminadas en Google (en cada sync, no solo full import)
@@ -1267,7 +1295,8 @@ class GoogleTasksService {
           }
           } // isFullImport
 
-          if (isFullImport || mainTasks.length > 0) {
+          // Siempre reconciliar series (aunque el incremental no traiga updates):
+          // local puede tener googleDueHistory / recurrenceHint pendientes.
           try {
             const serieStats = await reconcileSeriesFromGoogle(
               userId,
@@ -1280,7 +1309,6 @@ class GoogleTasksService {
             syncResults.series.instancesLinked += serieStats.instancesLinked;
           } catch (serieErr) {
             logger.warn?.(`Reconcile series falló para "${taskList.title}": ${serieErr.message}`);
-          }
           }
 
         } catch (error) {
@@ -1884,6 +1912,195 @@ class GoogleTasksService {
     return googleUpdated.getTime() > syncUpdated.getTime();
   }
 
+  /**
+   * Google Tasks API deja recurrentes como completed+hidden sin exponer la próxima
+   * ocurrencia. Avanzamos el ancla local con RRULE (como hace Calendar en la UI).
+   */
+  async rollForwardCompletedGoogleRecurring(tarea, userId) {
+    if (!tarea) return null;
+    try {
+      const { TareaSeries } = await import('../models/index.js');
+      const {
+        buildGoogleSerieKey,
+        weekdayToRruleByday,
+        ensureWeeklyByday,
+      } = await import('../utils/recurrenceUtils.js');
+      const { generateNextSerieInstance } = await import('./googleTasksRecurrenceService.js');
+
+      let serie = null;
+      if (tarea.serieId) {
+        serie = await TareaSeries.findOne({ _id: tarea.serieId, usuario: userId });
+      }
+      const listId = tarea.googleTasksSync?.googleTaskListId;
+      if (!serie && listId) {
+        const key = buildGoogleSerieKey(listId, tarea.titulo);
+        serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: key });
+      }
+
+      // Crear serie semanal si ya existía evidencia histórica (Emails / Brusquettas)
+      if (!serie && listId) {
+        const hist = Array.isArray(tarea.googleDueHistory) ? tarea.googleDueHistory : [];
+        const anchor = tarea.fechaVencimiento || tarea.fechaInicio || new Date();
+        const byday = weekdayToRruleByday(anchor instanceof Date ? anchor : new Date(anchor));
+        if (byday && (hist.length >= 1 || tarea.googleTasksSync?.hasTimedSchedule)) {
+          let rrule = ensureWeeklyByday(`FREQ=WEEKLY;INTERVAL=1;BYDAY=${byday}`, anchor);
+          serie = new TareaSeries({
+            titulo: tarea.titulo,
+            descripcion: tarea.descripcion || '',
+            usuario: userId,
+            objetivo: tarea.objetivo,
+            rrule,
+            dtstart: anchor,
+            googleSerieKey: buildGoogleSerieKey(listId, tarea.titulo),
+            googleTasksSync: {
+              enabled: true,
+              googleTaskListId: listId,
+              exportInstances: false,
+              lastSyncDate: new Date(),
+            },
+            activa: true,
+          });
+          await serie.save();
+          logger.sync(`📅 Serie semanal creada al completar en Google: "${tarea.titulo}"`);
+        }
+      }
+
+      if (!serie) return null;
+
+      if (!serie.activa) {
+        serie.activa = true;
+        await serie.save();
+      }
+      if (String(tarea.serieId || '') !== String(serie._id)) {
+        tarea.serieId = serie._id;
+        this.markSaveFromGoogleImport(tarea);
+        await tarea.save();
+      }
+
+      // No empujar a Google aquí: la API ya marcó completed+hidden; solo agenda local.
+      const next = await generateNextSerieInstance(this, tarea, userId, { syncToGoogle: false });
+      if (next) {
+        logger.sync(
+          `➡️ Roll-forward local tras complete Google: "${tarea.titulo}" → ${next.fechaVencimiento?.toISOString?.() || ''}`,
+        );
+      }
+      return next;
+    } catch (err) {
+      logger.warn?.(`rollForwardCompletedGoogleRecurring: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Tras importar needsAction + nuevo due, reactivar TareaSeries inactiva y vincular ancla.
+   */
+  async reactivateSerieAfterGoogleRollForward(tarea, userId) {
+    if (!tarea || tarea.completada || String(tarea.estado || '').toUpperCase() === 'COMPLETADA') {
+      return;
+    }
+    try {
+      const { TareaSeries } = await import('../models/index.js');
+      const { buildGoogleSerieKey } = await import('../utils/recurrenceUtils.js');
+      const listId = tarea.googleTasksSync?.googleTaskListId;
+      if (!listId) return;
+
+      let serie = null;
+      if (tarea.serieId) {
+        serie = await TareaSeries.findOne({ _id: tarea.serieId, usuario: userId });
+      }
+      if (!serie) {
+        const key = buildGoogleSerieKey(listId, tarea.titulo);
+        serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: key });
+      }
+      if (!serie) return;
+
+      let dirty = false;
+      if (!serie.activa) {
+        serie.activa = true;
+        dirty = true;
+      }
+      if (String(tarea.serieId || '') !== String(serie._id)) {
+        tarea.serieId = serie._id;
+        this.markSaveFromGoogleImport(tarea);
+        await tarea.save();
+      }
+      if (dirty) {
+        await serie.save();
+        logger.sync(`🔁 Serie reactivada tras roll-forward Google: "${serie.titulo}"`);
+      }
+    } catch (err) {
+      logger.warn?.(`reactivateSerieAfterGoogleRollForward: ${err.message}`);
+    }
+  }
+
+  /**
+   * Fetch puntual de tareas locales COMPLETADA con googleTaskId — el incremental las omite.
+   * Si Google está en needsAction, aplica status+due (próxima ocurrencia semanal).
+   */
+  async refreshStaleCompletedGoogleAnchors(userId, taskListId, objetivoId, existingByGoogleId) {
+    const stale = await Tareas.find({
+      usuario: userId,
+      objetivo: objetivoId,
+      'googleTasksSync.googleTaskListId': taskListId,
+      'googleTasksSync.googleTaskId': { $exists: true, $ne: null },
+      $or: [
+        { completada: true },
+        { estado: 'COMPLETADA' },
+      ],
+    }).limit(80);
+
+    if (!stale.length) return 0;
+
+    const tasksApi = this.getTasksApi(userId);
+    let updated = 0;
+
+    for (const tarea of stale) {
+      const googleTaskId = tarea.googleTasksSync?.googleTaskId;
+      if (!googleTaskId) continue;
+      // Ya procesada en el lote incremental
+      if (existingByGoogleId?.has(googleTaskId)) continue;
+
+      try {
+        const res = await this.executeWithRetry(
+          () => tasksApi.tasks.get({
+            tasklist: taskListId,
+            task: googleTaskId,
+            // fields omitidos: el cliente a veces rompe con fields parciales
+          }),
+          `refrescar ancla ${tarea.titulo}`,
+          userId,
+        );
+        const googleTask = res?.data;
+        if (!googleTask || googleTask.deleted) continue;
+
+        if (googleTask.status === 'completed' || googleTask.hidden) {
+          const rolled = await this.rollForwardCompletedGoogleRecurring(tarea, userId);
+          if (rolled) {
+            existingByGoogleId?.set(googleTaskId, rolled);
+            updated += 1;
+          }
+          continue;
+        }
+
+        this.applyNotesFromGoogle(tarea, googleTask);
+        this.applyGoogleStatusAndDue(tarea, googleTask);
+        this.markSaveFromGoogleImport(tarea);
+        await tarea.save();
+        existingByGoogleId?.set(googleTaskId, tarea);
+        await this.reactivateSerieAfterGoogleRollForward(tarea, userId);
+        updated += 1;
+        logger.sync(
+          `🔄 Ancla recurrente reabierta desde Google: "${tarea.titulo}" → ${tarea.fechaVencimiento?.toISOString?.() || ''}`,
+        );
+      } catch (err) {
+        if (err?.code === 404 || err?.response?.status === 404) continue;
+        logger.warn?.(`refreshStaleCompletedGoogleAnchors "${tarea.titulo}": ${err.message}`);
+      }
+    }
+
+    return updated;
+  }
+
   /** Tareas desvinculadas antes del fix quedaban visibles en RETRASADAS — archivarlas. */
   async repairPreviouslyUnlinkedTasks(userId) {
     const stale = await Tareas.find({
@@ -1964,11 +2181,21 @@ class GoogleTasksService {
 
     const schedule = parseScheduleFromNotes(notes);
     if (!tarea.googleTasksSync) tarea.googleTasksSync = {};
+
+    const recurrenceHint = inferRecurrenceFromGoogleNotes(notes)
+      || resolveRruleFromNotes(notes);
+    if (recurrenceHint) {
+      tarea.googleTasksSync.recurrenceHint = recurrenceHint;
+    }
+
     if (schedule?.fechaInicio) {
-      tarea.fechaInicio = schedule.fechaInicio;
-      const end = schedule.fechaFin || schedule.fechaInicio;
-      tarea.fechaVencimiento = end;
-      if (schedule.fechaFin) tarea.fechaFin = schedule.fechaFin;
+      // Con export local pendiente no pisar el horario que acaba de arrastrar el usuario
+      if (!localPending) {
+        tarea.fechaInicio = schedule.fechaInicio;
+        const end = schedule.fechaFin || schedule.fechaInicio;
+        tarea.fechaVencimiento = end;
+        if (schedule.fechaFin) tarea.fechaFin = schedule.fechaFin;
+      }
       tarea.googleTasksSync.hasTimedSchedule = true;
     } else if (!localPending) {
       // Sin Horario Attadia en notes de Google: limpiar flag sticky

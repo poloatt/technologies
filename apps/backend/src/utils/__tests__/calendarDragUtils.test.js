@@ -2,6 +2,7 @@ import { parseISO, startOfDay } from 'date-fns';
 import {
   allDayDropId,
   applyAllDayMoveToTask,
+  applyTimedMoveToTask,
   computeAllDayMove,
   computeAllDayToTimedMove,
   computeEventMove,
@@ -92,6 +93,20 @@ describe('calendar drag utils', () => {
     expect(newStart.getHours()).toBe(DAY_START_HOUR + 1);
     expect(newStart.getMinutes()).toBe(0);
     expect(newEnd.getTime() - newStart.getTime()).toBe(DEFAULT_DURATION_MINUTES * 60 * 1000);
+  });
+
+  test('applyTimedMoveToTask rewrites Horario Attadia notes', () => {
+    const task = {
+      descripcion: 'Nota\n\nHorario Attadia:\ninicio: 2026-05-18T12:00:00.000Z\nfin: 2026-05-18T12:30:00.000Z',
+      googleTasksSync: { hasTimedSchedule: true, googleTaskId: 'g1' },
+    };
+    const newStart = new Date(2026, 4, 18, 16, 15, 0, 0);
+    const newEnd = new Date(2026, 4, 18, 16, 45, 0, 0);
+    const patch = applyTimedMoveToTask(task, newStart, newEnd);
+    expect(patch.fechaInicio).toEqual(newStart);
+    expect(patch.descripcion).toContain('Horario Attadia:');
+    expect(patch.descripcion).toContain(newStart.toISOString());
+    expect(patch.descripcion).not.toContain('2026-05-18T12:00:00.000Z');
   });
 
   test('computeAllDayMove and applyAllDayMoveToTask clear timed schedule', () => {
