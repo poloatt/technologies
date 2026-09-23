@@ -452,7 +452,7 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
     >
 
-      <DialogContent sx={{ flex: 1, overflowY: 'auto', py: 0, px: 0 }}>
+      <DialogContent sx={{ flex: 1, minHeight: 0, overflowY: 'auto', py: 0, px: 0 }}>
 
         <TareaFormHeader onClose={onClose}>
 
@@ -576,29 +576,25 @@ const HabitFormDialog = ({ open, onClose, editingHabit = null, editingSection = 
 
 
 
-        <TareaFormFooter
-
-          onSave={handleSave}
-
-          saving={isSaving}
-
-          saveLabel={isSaving ? 'Guardando...' : (isEditing ? 'Guardar cambios' : 'Agregar hábito')}
-
-          leftAction={isEditing ? (
-            <Button
-              color="error"
-              size="small"
-              onClick={handleDelete}
-              disabled={!canDelete || isSaving}
-              sx={{ textTransform: 'none' }}
-            >
-              Eliminar hábito
-            </Button>
-          ) : null}
-
-        />
-
       </DialogContent>
+
+      <TareaFormFooter
+        pinned
+        onSave={handleSave}
+        saving={isSaving}
+        saveLabel={isSaving ? 'Guardando...' : (isEditing ? 'Guardar cambios' : 'Agregar hábito')}
+        leftAction={isEditing ? (
+          <Button
+            color="error"
+            size="small"
+            onClick={handleDelete}
+            disabled={!canDelete || isSaving}
+            sx={{ textTransform: 'none' }}
+          >
+            Eliminar hábito
+          </Button>
+        ) : null}
+      />
 
     </Dialog>
 

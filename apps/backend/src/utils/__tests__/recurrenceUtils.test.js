@@ -45,6 +45,11 @@ Subtareas:
     expect(inferRecurrenceFromGoogleNotes('Se repite cada semana')).toMatch(/FREQ=WEEKLY/i);
   });
 
+  test('inferRecurrenceFromGoogleNotes detects every N days', () => {
+    expect(inferRecurrenceFromGoogleNotes('Se repite cada 3 días')).toBe('FREQ=DAILY;INTERVAL=3');
+    expect(inferRecurrenceFromGoogleNotes('every 4 days')).toBe('FREQ=DAILY;INTERVAL=4');
+  });
+
   test('cleanDescriptionFromGoogleNotes strips recurrence and subtareas', () => {
     const notes = `Mi nota real
 
@@ -81,6 +86,17 @@ RRULE:FREQ=WEEKLY;INTERVAL=1`;
     expect(rrule).toBeTruthy();
     expect(rrule).toMatch(/FREQ=WEEKLY/i);
     expect(rrule).toMatch(/BYDAY=/i);
+  });
+
+  test('inferRruleFromDueDates detects every 3 days', () => {
+    const dates = [
+      new Date(2026, 8, 1, 12, 0, 0),
+      new Date(2026, 8, 4, 12, 0, 0),
+      new Date(2026, 8, 7, 12, 0, 0),
+    ];
+    const rrule = inferRruleFromDueDates(dates);
+    expect(rrule).toMatch(/FREQ=DAILY/i);
+    expect(rrule).toMatch(/INTERVAL=3/);
   });
 
   test('inferRruleFromDueDates adds BYDAY=WE for Wednesday-only dates', () => {

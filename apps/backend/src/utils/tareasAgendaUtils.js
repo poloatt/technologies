@@ -18,6 +18,32 @@ const LIST_VIRTUAL_HORIZON_DAYS = parseInt(
   10,
 );
 const RECENT_COMPLETION_DAYS = 14;
+const MAINTENANCE_COOLDOWN_MS = 60_000;
+const maintenanceInFlight = new Set();
+const maintenanceLastRun = new Map();
+
+/** No bloquea la lectura de agenda/lista. Como mucho una pasada por usuario por minuto. */
+function scheduleRecurringAgendaMaintenance(userId) {
+  const key = String(userId || '');
+  if (!key || maintenanceInFlight.has(key)) return;
+  const last = maintenanceLastRun.get(key) || 0;
+  if (Date.now() - last < MAINTENANCE_COOLDOWN_MS) return;
+  maintenanceInFlight.add(key);
+  maintenanceLastRun.set(key, Date.now());
+  (async () => {
+    try {
+      const { ensureOpenRecurringPeriods, realignPlaceholderRecurringClocks } = await import(
+        '../services/googleTasksRecurrenceService.js'
+      );
+      await ensureOpenRecurringPeriods(userId);
+      await realignPlaceholderRecurringClocks(userId);
+    } catch (err) {
+      console.warn('ensureOpenRecurringPeriods:', err?.message || err);
+    } finally {
+      maintenanceInFlight.delete(key);
+    }
+  })();
+}
 
 function isRecentRecurringCompletion(task, now = new Date()) {
   if (!task?.serieId || !agendaListRules.isTaskCompleted(task)) return false;
@@ -68,15 +94,6 @@ export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo) {
   from.setHours(0, 0, 0, 0);
   to.setHours(23, 59, 59, 999);
 
-  try {
-    const { ensureOpenRecurringPeriods, realignPlaceholderRecurringClocks } = await import('../services/googleTasksRecurrenceService.js');
-    await ensureOpenRecurringPeriods(userId);
-    await realignPlaceholderRecurringClocks(userId);
-  } catch (err) {
-    // La lista igual se arma con lo que ya está persistido.
-    console.warn('ensureOpenRecurringPeriods:', err?.message || err);
-  }
-
   // Series y tareas reales son independientes: se cargan en paralelo.
   // El frontend solo usa el id de serieId (no rrule/activa/dtstart), por eso no
   // se popula serieId. Se excluyen campos pesados no usados por el calendario
@@ -106,6 +123,7 @@ export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo) {
     merged.push(doc);
   }
 
+  scheduleRecurringAgendaMaintenance(userId);
   return merged.map(transformAgendaDoc);
 }
 

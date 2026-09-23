@@ -475,14 +475,17 @@ export function TareaFormPillSelect({
         anchorEl={anchor}
         open={open}
         onClose={close}
-        disablePortal
+        disableScrollLock
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        sx={{ zIndex: (theme) => theme.zIndex.modal + 400 }}
         slotProps={{
           paper: {
             sx: {
               minWidth: Math.max(TASK_FORM_STANDARD_PILL_WIDTH, anchor?.offsetWidth || 0),
               maxHeight: 320,
+              bgcolor: 'background.paper',
+              backgroundImage: 'none',
             },
           },
         }}

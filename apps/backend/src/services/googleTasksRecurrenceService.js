@@ -654,6 +654,7 @@ export async function materializeNextOpenOccurrence(userId, tarea, options = {})
     },
   });
   await nueva.save();
+  nueva.$locals = { ...(nueva.$locals || {}), createdThisCall: true };
 
   // #region agent log
   fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
@@ -794,21 +795,8 @@ export async function ensureOpenRecurringPeriods(userId, now = new Date()) {
 
   let created = 0;
   for (const tarea of open) {
-    const before = await Tareas.countDocuments({
-      usuario: userId,
-      serieId: tarea.serieId,
-      esExcepcionSerie: { $ne: true },
-      estado: { $ne: 'CANCELADA' },
-    });
     const next = await materializeNextOpenOccurrence(userId, tarea, { mode: 'current-if-due', now });
-    if (!next) continue;
-    const after = await Tareas.countDocuments({
-      usuario: userId,
-      serieId: tarea.serieId,
-      esExcepcionSerie: { $ne: true },
-      estado: { $ne: 'CANCELADA' },
-    });
-    if (after > before) created += 1;
+    if (next?.$locals?.createdThisCall) created += 1;
   }
   return created;
 }

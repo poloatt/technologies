@@ -269,6 +269,7 @@ export default function TareaFormScheduleFields({
           open={startOpen}
           anchorEl={startPillRef.current}
           onClose={() => setStartOpen(false)}
+          mobileCenter
         >
           <PopoverInlineTimePicker
             value={time}
@@ -284,6 +285,7 @@ export default function TareaFormScheduleFields({
           open={endOpen}
           anchorEl={endPillRef.current}
           onClose={() => setEndOpen(false)}
+          mobileCenter
         >
           <PopoverInlineTimePicker
             value={endTimeAt}

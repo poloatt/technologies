@@ -1922,7 +1922,9 @@ class GoogleTasksService {
     if (!local) return true;
     const localDt = local instanceof Date ? local : new Date(local);
     if (Number.isNaN(localDt.getTime())) return true;
-    return Math.abs(localDt.getTime() - due.getTime()) > 60_000;
+    return localDt.getFullYear() !== due.getFullYear()
+      || localDt.getMonth() !== due.getMonth()
+      || localDt.getDate() !== due.getDate();
   }
 
   /** Due de Google avanza aunque haya export local pendiente (p. ej. recurrente completada en Google). */

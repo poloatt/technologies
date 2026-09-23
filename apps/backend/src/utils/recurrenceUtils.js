@@ -135,6 +135,12 @@ export function inferRecurrenceFromGoogleNotes(notes = '') {
   const text = String(notes || '').toLowerCase();
   if (!text.trim()) return null;
 
+  const everyNDays = text.match(/(?:every|cada)\s+(\d+)\s+(?:d[ií]as?|days?)\b/);
+  if (everyNDays) {
+    const interval = Math.max(1, Number(everyNDays[1]) || 1);
+    return `FREQ=DAILY;INTERVAL=${interval}`;
+  }
+
   if (
     /every\s+day|each\s+day|\bdaily\b|diariamente|cada\s+d[ií]a|todos\s+los\s+d[ií]as|repite\s+cada\s+d[ií]a|se\s+repite\s+diariamente/.test(
       text,
@@ -246,7 +252,7 @@ export function inferRruleFromDueDates(dates = []) {
   } else if (avgGap >= 360 && avgGap <= 370) {
     freq = RRule.YEARLY;
     interval = 1;
-  } else if (avgGap >= 1 && avgGap <= 2) {
+  } else if (avgGap >= 1 && avgGap < 6) {
     freq = RRule.DAILY;
     interval = Math.max(1, Math.round(avgGap));
   } else {

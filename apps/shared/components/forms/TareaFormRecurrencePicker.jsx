@@ -6,6 +6,7 @@ import { TareaFormPillButton, tareaFormPillChevronSx } from './tareaFormUi';
 const PRESETS = [
   { id: 'none', label: 'No se repite', rrule: null },
   { id: 'daily', label: 'Cada día', rrule: 'FREQ=DAILY;INTERVAL=1' },
+  { id: 'every-n', label: 'Cada X días', rrule: 'every-n' },
   { id: 'weekly', label: 'Cada semana', rrule: 'FREQ=WEEKLY;INTERVAL=1' },
   { id: 'monthly', label: 'Cada mes', rrule: 'FREQ=MONTHLY;INTERVAL=1' },
   { id: 'yearly', label: 'Cada año', rrule: 'FREQ=YEARLY;INTERVAL=1' },
@@ -16,6 +17,12 @@ export function labelForRrule(rrule) {
   if (!rrule) return 'No se repite';
   const found = PRESETS.find((p) => p.rrule === rrule);
   if (found) return found.label;
+  const everyNDays = String(rrule).match(/^FREQ=DAILY;INTERVAL=(\d+)$/i);
+  if (everyNDays) {
+    const interval = Number(everyNDays[1]);
+    if (interval <= 1) return 'Cada día';
+    return `Cada ${interval} días`;
+  }
   return 'Recurrencia personalizada';
 }
 
@@ -27,6 +34,8 @@ export default function TareaFormRecurrencePicker({
 }) {
   const [anchor, setAnchor] = useState(null);
   const [customOpen, setCustomOpen] = useState(false);
+  const [everyNOpen, setEveryNOpen] = useState(false);
+  const [everyN, setEveryN] = useState(2);
   const [customRrule, setCustomRrule] = useState(
     value && !PRESETS.some((p) => p.rrule === value) ? value : 'FREQ=WEEKLY;INTERVAL=1',
   );
@@ -36,10 +45,18 @@ export default function TareaFormRecurrencePicker({
   const handleSelect = (preset) => {
     setAnchor(null);
     if (preset.id === 'custom') {
+      setEveryNOpen(false);
       setCustomOpen(true);
       return;
     }
+    if (preset.id === 'every-n') {
+      setCustomOpen(false);
+      setEveryNOpen(true);
+      onChange?.(`FREQ=DAILY;INTERVAL=${Math.max(2, Number(everyN) || 2)}`);
+      return;
+    }
     setCustomOpen(false);
+    setEveryNOpen(false);
     onChange?.(preset.rrule);
   };
 
@@ -62,6 +79,24 @@ export default function TareaFormRecurrencePicker({
           </MenuItem>
         ))}
       </Menu>
+
+      {everyNOpen && (
+        <Box sx={{ width: '100%', flexBasis: '100%' }}>
+          <TextField
+            size="small"
+            type="number"
+            label="Cada cuántos días"
+            value={everyN}
+            onChange={(e) => {
+              const next = Math.max(2, Math.min(365, Number(e.target.value) || 2));
+              setEveryN(next);
+              onChange?.(`FREQ=DAILY;INTERVAL=${next}`);
+            }}
+            inputProps={{ min: 2, max: 365 }}
+            sx={{ mt: 0.5, maxWidth: 180 }}
+          />
+        </Box>
+      )}
 
       {customOpen && (
         <Box sx={{ width: '100%', flexBasis: '100%' }}>

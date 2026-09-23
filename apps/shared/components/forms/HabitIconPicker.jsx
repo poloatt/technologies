@@ -70,7 +70,13 @@ function HabitIconPickerGrid({
               if (!IconComp) return null;
               const selected = value === name;
               return (
-                <Tooltip key={name} title={label} arrow placement="top">
+                <Tooltip
+                  key={name}
+                  title={label}
+                  arrow
+                  placement="top"
+                  PopperProps={{ sx: { zIndex: (theme) => theme.zIndex.modal + 500 } }}
+                >
                   <IconButton
                     role="option"
                     aria-selected={selected}
@@ -146,7 +152,13 @@ export default function HabitIconPicker({
   };
 
   const popover = (
-    <PickerPopover open={open} anchorEl={anchorEl} onClose={handleClose}>
+    <PickerPopover
+      open={open}
+      anchorEl={anchorEl}
+      onClose={handleClose}
+      disablePortal={false}
+      zIndex={(theme) => theme.zIndex.modal + 400}
+    >
       <HabitIconPickerGrid
         listId={listId}
         ariaLabel={ariaLabel}
