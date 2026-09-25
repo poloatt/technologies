@@ -182,7 +182,14 @@ export default function BodyMap({ controles = [], items = [], selectedZone, onSe
         />
       )}
       {layer === 'huesos' && (
-        <Box sx={{ width: '100%', mt: 1, alignSelf: 'stretch' }}>
+        <Box
+          sx={{
+            width: (theme) => `calc(100% + ${theme.spacing(2)})`,
+            mx: -1,
+            mt: 1,
+            alignSelf: 'stretch',
+          }}
+        >
           {(boneZone === 'brazos' || boneZone === 'piernas') && (
             <TareaFormTipoSelector
               value={side || ''}
@@ -191,7 +198,7 @@ export default function BodyMap({ controles = [], items = [], selectedZone, onSe
                 { value: 'l', label: 'Izquierdo' },
                 { value: 'r', label: 'Derecho' },
               ]}
-              sx={{ mb: 1 }}
+              sx={{ mb: 1, px: 1 }}
             />
           )}
           {sections.map((section) => {
@@ -213,6 +220,7 @@ export default function BodyMap({ controles = [], items = [], selectedZone, onSe
                     borderColor: 'divider',
                     bgcolor: marked ? 'action.selected' : 'transparent',
                     color: 'text.primary',
+                    px: 1,
                   }}
                 >
                   <Box

@@ -66,6 +66,7 @@ export function SubgroupBoneList({
             borderColor: 'divider',
             bgcolor: marked ? '#121212' : 'transparent',
             color: 'text.secondary',
+            px: 1,
           }}
         >
           <Box
