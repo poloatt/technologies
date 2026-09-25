@@ -20,6 +20,10 @@
     "./habits": {
       "import": "./habits/index.js"
     },
+    "./pulso": {
+      "import": "./pulso/index.js"
+    },
+    "./pulso/*": "./pulso/*",
     "./habits/*": "./habits/*",
     "./styles/*": "./styles/*",
     "./layouts/*": "./layouts/*",

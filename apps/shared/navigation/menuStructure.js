@@ -100,8 +100,8 @@ export const modulos = [
     path: '/datacorporal',
     subItems: [
       { id: 'datacorporal', title: 'Data corporal', icon: 'monitorHeart', path: '/datacorporal', canAdd: true },
-      { id: 'dieta', title: 'Dieta', icon: 'restaurant', path: '/dieta', isUnderConstruction: true },
-      { id: 'lab', title: 'Lab', icon: 'science', path: '/lab', isUnderConstruction: true }
+      { id: 'dieta', title: 'Dieta', icon: 'restaurant', path: '/dieta', canAdd: true },
+      { id: 'lab', title: 'Lab', icon: 'science', path: '/lab', canAdd: true }
     ]
   },
   {

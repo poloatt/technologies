@@ -1,27 +1,22 @@
 import express from 'express';
 import { dietasController } from '../controllers/dietasController.js';
 import { checkAuth } from '../middleware/auth.js';
-import { checkRole } from '../middleware/checkRole.js';
-import { checkOwnership } from '../middleware/checkOwnership.js';
-import { Dietas } from '../models/index.js';
-import { ROLES } from '../config/constants.js';
 
 const router = express.Router();
 
-// Todas las rutas requieren autenticación
 router.use(checkAuth);
 
-// Rutas para usuarios autenticados
-router.get('/', dietasController.getAll);
-router.post('/', dietasController.create);
+router.get('/plan', dietasController.getPlan);
+router.put('/plan', dietasController.updatePlan);
 
-// Rutas administrativas
-router.get('/admin/all', [checkRole([ROLES.ADMIN])], dietasController.getAllAdmin);
-router.get('/admin/stats', [checkRole([ROLES.ADMIN])], dietasController.getAdminStats);
+router.get('/recetas', dietasController.getRecetas);
+router.post('/recetas', dietasController.createReceta);
+router.put('/recetas/:id', dietasController.updateReceta);
+router.delete('/recetas/:id', dietasController.deleteReceta);
 
-// Rutas que requieren ser dueño del recurso
-router.get('/:id', [checkOwnership(Dietas)], dietasController.getById);
-router.put('/:id', [checkOwnership(Dietas)], dietasController.update);
-router.delete('/:id', [checkOwnership(Dietas)], dietasController.delete);
+router.get('/menu', dietasController.getMenu);
+router.put('/menu', dietasController.upsertMenu);
 
-export default router; 
+router.get('/habit-captions', dietasController.getHabitCaptions);
+
+export default router;

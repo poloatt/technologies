@@ -5,7 +5,11 @@ const dataCorporalSchema = createSchema({
   fecha: {
     type: Date,
     default: Date.now,
-    unique: true
+  },
+  origen: {
+    type: String,
+    enum: ['manual', 'samsung'],
+    default: 'manual',
   },
   weight: {
     type: Number,
@@ -44,4 +48,33 @@ const dataCorporalSchema = createSchema({
   ...commonFields
 });
 
-export const DataCorporal = mongoose.model('DataCorporal', dataCorporalSchema); 
+dataCorporalSchema.index(
+  { usuario: 1, fecha: 1 },
+  { unique: true, name: 'usuario_fecha_unique' },
+);
+
+export const DataCorporal = mongoose.model('DataCorporal', dataCorporalSchema);
+
+async function syncDataCorporalIndexes() {
+  try {
+    const indexes = await DataCorporal.collection.indexes();
+    const legacy = indexes.find((idx) => (
+      idx.unique
+      && idx.key
+      && idx.key.fecha === 1
+      && idx.key.usuario == null
+    ));
+    if (legacy?.name) {
+      await DataCorporal.collection.dropIndex(legacy.name);
+    }
+    await DataCorporal.syncIndexes();
+  } catch (error) {
+    console.error('DataCorporal index sync:', error.message);
+  }
+}
+
+if (mongoose.connection.readyState === 1) {
+  syncDataCorporalIndexes();
+} else {
+  mongoose.connection.once('connected', syncDataCorporalIndexes);
+} 

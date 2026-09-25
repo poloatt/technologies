@@ -19,6 +19,7 @@ import {
 } from '@shared/habits';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
+import { useDietHabitCaption } from '../dietHabitCaptionContext';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
@@ -94,6 +95,7 @@ const ChecklistItem = ({
     ? resolveRoutineDisplayName(chain)
     : HABIT_CHAIN_COPY.noRoutine;
   const secondaryText = habitLabel || itemId;
+  const dietCaption = useDietHabitCaption(section, itemId);
   const showMetaRow = !hideMeta;
 
   const horariosConfig = useMemo(
@@ -416,6 +418,11 @@ const ChecklistItem = ({
                 >
                   {secondaryText}
                 </Typography>
+                {dietCaption ? (
+                  <Typography variant="caption" sx={rutinaChecklistMetaSx}>
+                    {dietCaption}
+                  </Typography>
+                ) : null}
               </Box>
             )}
           </Box>

@@ -159,6 +159,16 @@ const tareaSchema = createSchema({
     backgroundColor: String,
     lastSyncDate: Date,
   },
+  /** Etiqueta de dominio (p. ej. salud, proyectada desde Pulso). */
+  etiqueta: {
+    type: String,
+    default: null,
+  },
+  pulsoRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SaludItem',
+    default: null,
+  },
   ...commonFields
 });
 

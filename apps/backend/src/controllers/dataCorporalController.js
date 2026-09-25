@@ -54,6 +54,7 @@ export const dataCorporalController = {
 
       const registro = new DataCorporal({
         ...req.body,
+        origen: req.body.origen === 'samsung' ? 'samsung' : 'manual',
         usuario: req.user._id
       });
 
@@ -81,12 +82,14 @@ export const dataCorporalController = {
         }
       }
 
+      const updates = { ...req.body };
+      delete updates.origen;
       const registro = await DataCorporal.findOneAndUpdate(
         {
           _id: req.params.id,
           usuario: req.user._id
         },
-        req.body,
+        updates,
         { new: true }
       );
 

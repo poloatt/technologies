@@ -35,6 +35,7 @@ import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HabitIconButton } from './ChecklistItem';
 import { resolveEntryLocalData, resolveEntrySection } from '../lib/resolveEntryLocalData';
+import { useDietHabitCaptionsMap } from '../dietHabitCaptionContext';
 
 const DRAG_HANDLE_INNER_SX = {
   display: 'flex',
@@ -142,6 +143,12 @@ export default function RutinaStackHabitRow({
       ? isHabitHorarioCompleted(itemValue, focusHorario)
       : isHabitMarkedCompleteForConfig(entry.config, itemValue);
   });
+
+  const dietCaptions = useDietHabitCaptionsMap();
+  const dietCaption = visibleEntries
+    .map((entry) => dietCaptions?.[resolveEntrySection(entry, section)]?.[entry.itemId])
+    .filter(Boolean)
+    .join(' · ');
 
   if (!visibleEntries.length) return null;
 
@@ -392,6 +399,11 @@ export default function RutinaStackHabitRow({
             {scheduleLegend ? (
               <Typography variant="caption" sx={rutinaChecklistMetaSx}>
                 {scheduleLegend}
+              </Typography>
+            ) : null}
+            {dietCaption ? (
+              <Typography variant="caption" sx={rutinaChecklistMetaSx}>
+                {dietCaption}
               </Typography>
             ) : null}
           </Box>

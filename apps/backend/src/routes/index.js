@@ -22,6 +22,7 @@ import monitoreoRoutes from './monitoreoRoutes.js';
 import perfilRoutes from './perfilRoutes.js';
 import healthRoutes from './healthRoutes.js';
 import dataCorporalRoutes from './dataCorporalRoutes.js';
+import saludRoutes from './saludRoutes.js';
 import bankConnectionRoutes from './bankConnectionRoutes.js';
 import statsRoutes from './statsRoutes.js';
 
@@ -64,6 +65,7 @@ router.use('/rutinas', rutinasRoutes);
 router.use('/labs', labsRoutes);
 router.use('/dietas', dietasRoutes);
 router.use('/datacorporal', dataCorporalRoutes);
+router.use('/salud', saludRoutes);
 
 // Rutas de monitoreo
 router.use('/monitoreo', monitoreoRoutes);

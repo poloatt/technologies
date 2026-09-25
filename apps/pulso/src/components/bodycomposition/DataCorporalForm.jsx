@@ -53,8 +53,12 @@ export const DataCorporalForm = ({
 
   const handleSubmit = () => {
     const dataToSubmit = {
-      ...formData,
-      fecha: new Date(formData.fecha)
+      fecha: new Date(formData.fecha),
+      weight: formData.weight,
+      muscle: formData.muscle,
+      fatPercent: formData.fatPercent,
+      stress: formData.stress,
+      sleep: formData.sleep,
     };
 
     if (initialData?._id) {
@@ -146,6 +150,14 @@ export const DataCorporalForm = ({
             required
             inputProps={{ step: "0.5" }}
           />
+          {initialData?._id && (
+            <TextField
+              label="Origen"
+              value={formData.origen === 'samsung' ? 'Reloj' : 'Manual'}
+              fullWidth
+              InputProps={{ readOnly: true }}
+            />
+          )}
         </Stack>
       </DialogContent>
 

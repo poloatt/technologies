@@ -20,24 +20,29 @@ export default function PulsoToolbarCenter() {
   }), []);
 
   const actions = useMemo(() => {
-    if (section !== 'datacorporal') return [];
+    const addBySection = {
+      datacorporal: { type: 'data-corporal', tooltip: 'Nuevo registro' },
+      dieta: { type: 'dieta', tooltip: 'Nueva receta' },
+      lab: { type: 'salud-item', tooltip: 'Nuevo ítem de salud' },
+    };
+    const add = addBySection[section];
+    if (!add) return [];
 
-    const tooltip = 'Nuevo registro';
     return [
       {
         key: 'add',
         icon: (
           <ToolbarAddButton
             buttonSx={commonButtonSx}
-            aria-label={tooltip}
+            aria-label={add.tooltip}
             onClick={() => {
               window.dispatchEvent(new CustomEvent('headerAddButtonClicked', {
-                detail: { type: 'data-corporal' },
+                detail: { type: add.type },
               }));
             }}
           />
         ),
-        label: tooltip,
+        label: add.tooltip,
       },
     ];
   }, [commonButtonSx, section]);

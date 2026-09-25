@@ -46,6 +46,7 @@ export const DataCorporalTable = ({
             <TableCell align="right">Grasa (%)</TableCell>
             <TableCell align="right">Estrés</TableCell>
             <TableCell align="right">Sueño (hrs)</TableCell>
+            <TableCell align="right">Origen</TableCell>
             <TableCell align="right">Acciones</TableCell>
           </TableRow>
         </TableHead>
@@ -53,11 +54,12 @@ export const DataCorporalTable = ({
           {data.map((row) => (
             <TableRow key={row._id}>
               <TableCell>{formatDate(row.fecha)}</TableCell>
-              <TableCell align="right">{row.weight.toFixed(1)}</TableCell>
-              <TableCell align="right">{row.muscle.toFixed(1)}</TableCell>
-              <TableCell align="right">{row.fatPercent.toFixed(1)}</TableCell>
+              <TableCell align="right">{Number(row.weight).toFixed(1)}</TableCell>
+              <TableCell align="right">{Number(row.muscle).toFixed(1)}</TableCell>
+              <TableCell align="right">{Number(row.fatPercent).toFixed(1)}</TableCell>
               <TableCell align="right">{row.stress}</TableCell>
               <TableCell align="right">{row.sleep}</TableCell>
+              <TableCell align="right">{row.origen === 'samsung' ? 'Reloj' : 'Manual'}</TableCell>
               <TableCell align="right">
                 <EntityActions
                   onEdit={() => onEdit(row)}

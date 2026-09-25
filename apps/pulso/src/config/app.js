@@ -32,8 +32,8 @@ export const pulsoConfig = {
   // Features habilitadas
   features: {
     datacorporal: true,
-    dieta: false, // En construcción
-    lab: false,   // En construcción
+    dieta: true,
+    lab: true,
     salud: true,
     analytics: false,
     notifications: true,
