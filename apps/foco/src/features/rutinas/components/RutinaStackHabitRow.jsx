@@ -35,7 +35,7 @@ import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HabitIconButton } from './ChecklistItem';
 import { resolveEntryLocalData, resolveEntrySection } from '../lib/resolveEntryLocalData';
-import { useDietHabitCaptionsMap } from '../dietHabitCaptionContext';
+import { useDietHabitCaptionsMap } from '../dietHabitCaptionContext.jsx';
 
 const DRAG_HANDLE_INNER_SX = {
   display: 'flex',

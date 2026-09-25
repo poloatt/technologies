@@ -1,13 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material';
-import { CommonDate, CommonDetails, EmptyState } from '@shared/components/common';
+import { CommonDate, CommonDetails } from '@shared/components/common';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
 import { BODY_ZONES, SALUD_ESTADOS, SALUD_TIPOS } from '@shared/pulso';
@@ -19,6 +22,8 @@ const TIPO_LABEL = {
   REVISION: 'Revisión',
   COPAGO: 'Copago',
 };
+
+const dialogPaperSx = { borderRadius: 0 };
 
 function emptyItem(controlId) {
   return {
@@ -47,7 +52,7 @@ export function Lab() {
       clienteAxios.get('/api/salud/items'),
     ]);
     setControles(controlesRes.data.controles || []);
-    setItems(itemsRes.data || []);
+    setItems(Array.isArray(itemsRes.data) ? itemsRes.data : []);
   }, []);
 
   useEffect(() => {
@@ -64,11 +69,6 @@ export function Lab() {
     window.addEventListener('headerAddButtonClicked', onAdd);
     return () => window.removeEventListener('headerAddButtonClicked', onAdd);
   }, [controles, selectedZone]);
-
-  const visible = useMemo(() => controles.filter((control) => {
-    if (selectedZone) return control.zona === selectedZone;
-    return control.vencido;
-  }), [controles, selectedZone]);
 
   const saveItem = async () => {
     try {
@@ -96,80 +96,29 @@ export function Lab() {
     }
   };
 
-  const updateIntervalo = async (control, intervaloDias) => {
-    try {
-      await clienteAxios.put(`/api/salud/controles/${control.controlId}`, {
-        ...control,
-        intervaloDias: Number(intervaloDias),
-      });
-      await load();
-    } catch (error) {
-      enqueueSnackbar('Error al actualizar el plazo', { variant: 'error' });
-    }
-  };
-
   return (
     <Box sx={{ px: 0, width: '100%' }}>
-      <CommonDetails title="Lab" showTitle action={(
-        <Button size="small" sx={{ borderRadius: 0 }} onClick={() => setControlOpen(true)}>
-          Nuevo control
-        </Button>
-      )}
+      <CommonDetails
+        title="Lab"
+        showTitle
+        action={(
+          <Button size="small" sx={{ borderRadius: 0 }} onClick={() => setControlOpen(true)}>
+            Nuevo control
+          </Button>
+        )}
       >
         <BodyMap
           controles={controles}
+          items={items}
           selectedZone={selectedZone}
           onSelectZone={setSelectedZone}
         />
-        {visible.length === 0 ? <EmptyState /> : (
-          <Stack spacing={2}>
-            {visible.map((control) => {
-              const related = items.filter((item) => item.controlId === control.controlId);
-              return (
-                <Box key={control.controlId} sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
-                  <Typography variant="subtitle2">{control.label}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {control.lastFecha
-                      ? `Última vez ${new Date(control.lastFecha).toLocaleDateString('es-AR')}`
-                      : 'Sin estudio ni revisión'}
-                    {control.pendiente ? ' · Turno pendiente' : ''}
-                  </Typography>
-                  <TextField
-                    size="small"
-                    type="number"
-                    label="Plazo (días)"
-                    defaultValue={control.intervaloDias}
-                    key={`${control.controlId}-${control.intervaloDias}`}
-                    onBlur={(event) => updateIntervalo(control, event.target.value)}
-                    sx={{ mt: 1, maxWidth: 160 }}
-                  />
-                  <Stack spacing={0.5} sx={{ mt: 1 }}>
-                    {related.map((item) => (
-                      <Typography key={item.id || item._id} variant="body2">
-                        {TIPO_LABEL[item.tipo] || item.tipo}: {item.titulo} · {item.estado}
-                      </Typography>
-                    ))}
-                  </Stack>
-                  <Button
-                    size="small"
-                    sx={{ mt: 1, borderRadius: 0 }}
-                    onClick={() => {
-                      setDraft(emptyItem(control.controlId));
-                      setItemOpen(true);
-                    }}
-                  >
-                    Registrar
-                  </Button>
-                </Box>
-              );
-            })}
-          </Stack>
-        )}
       </CommonDetails>
 
-      {itemOpen && (
-        <Box sx={{ p: 2 }}>
-          <Stack spacing={1}>
+      <Dialog open={itemOpen} onClose={() => setItemOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+        <DialogTitle>Registrar</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ mt: 1 }}>
             <TextField
               select
               size="small"
@@ -218,18 +167,22 @@ export function Lab() {
               size="small"
               label="Notas"
               multiline
+              minRows={2}
               value={draft.notas}
               onChange={(event) => setDraft({ ...draft, notas: event.target.value })}
             />
-            <Button variant="contained" sx={{ borderRadius: 0 }} onClick={saveItem}>Guardar</Button>
-            <Button sx={{ borderRadius: 0 }} onClick={() => setItemOpen(false)}>Cerrar</Button>
           </Stack>
-        </Box>
-      )}
+        </DialogContent>
+        <DialogActions>
+          <Button sx={{ borderRadius: 0 }} onClick={() => setItemOpen(false)}>Cerrar</Button>
+          <Button variant="contained" sx={{ borderRadius: 0 }} onClick={saveItem}>Guardar</Button>
+        </DialogActions>
+      </Dialog>
 
-      {controlOpen && (
-        <Box sx={{ p: 2 }}>
-          <Stack spacing={1}>
+      <Dialog open={controlOpen} onClose={() => setControlOpen(false)} fullWidth maxWidth="xs" PaperProps={{ sx: dialogPaperSx }}>
+        <DialogTitle>Nuevo control</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ mt: 1 }}>
             <TextField
               size="small"
               label="Nombre"
@@ -254,11 +207,13 @@ export function Lab() {
               value={controlDraft.intervaloDias}
               onChange={(event) => setControlDraft({ ...controlDraft, intervaloDias: Number(event.target.value) })}
             />
-            <Button variant="contained" sx={{ borderRadius: 0 }} onClick={saveControl}>Crear control</Button>
-            <Button sx={{ borderRadius: 0 }} onClick={() => setControlOpen(false)}>Cerrar</Button>
           </Stack>
-        </Box>
-      )}
+        </DialogContent>
+        <DialogActions>
+          <Button sx={{ borderRadius: 0 }} onClick={() => setControlOpen(false)}>Cerrar</Button>
+          <Button variant="contained" sx={{ borderRadius: 0 }} onClick={saveControl}>Crear</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

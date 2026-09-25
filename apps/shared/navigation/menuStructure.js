@@ -127,7 +127,7 @@ export const modulos = [
   }
 ];
 
-// Switcher de apps (sidebar desktop + bottom nav móvil) → hub de cada app
+// Switcher de apps (sidebar desktop; bottom nav móvil solo en Caja) → hub de cada app
 export const bottomNavigationItems = [
   {
     id: 'assets',

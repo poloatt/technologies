@@ -15,7 +15,7 @@ import {
 import { RUTINA_NAVIGATION_BAR_CONFIG } from '@shared/config/uiConstants';
 import { Info as InfoIcon } from '@mui/icons-material';
 import clienteAxios from '@shared/config/axios';
-import { DietHabitCaptionProvider } from './dietHabitCaptionContext';
+import { DietHabitCaptionProvider } from './dietHabitCaptionContext.jsx';
 
 function PageStatusMessage({ error }) {
   if (error) {

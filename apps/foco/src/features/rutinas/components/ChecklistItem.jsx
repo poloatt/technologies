@@ -19,7 +19,7 @@ import {
 } from '@shared/habits';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
-import { useDietHabitCaption } from '../dietHabitCaptionContext';
+import { useDietHabitCaption } from '../dietHabitCaptionContext.jsx';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,

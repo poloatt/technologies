@@ -97,6 +97,9 @@ export function Layout() {
 
   const mainContentMargin = getMainContentMargin();
   const mainBottomPadding = getMainBottomPadding(isMobileOrTablet);
+  const mainScrollBottom = isMobileOrTablet
+    ? `calc(${SPACING.bottomNavigationHeight}px + env(safe-area-inset-bottom, 0px))`
+    : 0;
 
   return (
     <FormManagerProvider>
@@ -155,9 +158,9 @@ export function Layout() {
                 top: 0,
                 left: mainContentMargin,
                 right: 0,
-                bottom: 0,
+                bottom: mainScrollBottom,
                 pt: `${mainTopPadding}px`,
-                pb: mainBottomPadding,
+                pb: isMobileOrTablet ? 2 : mainBottomPadding,
                 bgcolor: 'background.default',
                 overflowY: 'auto',
                 overflowX: 'hidden',
@@ -192,7 +195,6 @@ export function Layout() {
               }}>
                 <Outlet />
               </Box>
-              {isMobileOrTablet && <BottomNavigation />}
               <CustomSnackbarProvider />
             </Box>
           </MaybeRutinasProvider>
@@ -236,9 +238,9 @@ export function Layout() {
                 top: 0,
                 left: mainContentMargin,
                 right: 0,
-                bottom: 0,
+                bottom: mainScrollBottom,
                 pt: `${mainTopPadding}px`,
-                pb: mainBottomPadding,
+                pb: isMobileOrTablet ? 2 : mainBottomPadding,
                 bgcolor: 'background.default',
                 overflowY: 'auto',
                 overflowX: 'hidden',
@@ -273,11 +275,11 @@ export function Layout() {
               }}>
                 <Outlet />
               </Box>
-              {isMobileOrTablet && <BottomNavigation />}
               <CustomSnackbarProvider />
             </Box>
           </>
         )}
+        {isMobileOrTablet && <BottomNavigation />}
         {/* Footer health-check: solo desktop; en móvil compite con BottomNavigation */}
         {!isMobileOrTablet && (
           <Box sx={{ position: 'fixed', left: 0, bottom: 0, width: '100vw', zIndex: 1300, height: `${FOOTER_CONFIG.height}px` }}>

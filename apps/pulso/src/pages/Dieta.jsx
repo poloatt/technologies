@@ -12,6 +12,7 @@ import {
 import { CommonActions, CommonDetails, CommonForm, EmptyState } from '@shared/components/common';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
+import { getHabitId } from '@shared/habits';
 import {
   DIET_CHANNELS,
   DIET_SLOTS,
@@ -63,8 +64,13 @@ export function Dieta() {
   const habitOptions = useMemo(() => {
     const options = [];
     Object.entries(habits || {}).forEach(([section, list]) => {
-      (list || []).filter((habit) => habit?.activo !== false).forEach((habit) => {
-        const habitId = habit.id || habit._id;
+      const habitsInSection = Array.isArray(list)
+        ? list
+        : (list && typeof list === 'object'
+          ? Object.values(list).filter((item) => item && typeof item === 'object')
+          : []);
+      habitsInSection.filter((habit) => habit?.activo !== false).forEach((habit) => {
+        const habitId = getHabitId(habit);
         if (!habitId) return;
         options.push({
           value: habitValue(section, habitId),
@@ -230,36 +236,50 @@ export function Dieta() {
               ))}
             </Stack>
             <Typography variant="body2" color="text.secondary">Cocina y cena</Typography>
-            {(plan.vinculos?.cocina || []).map((link, index) => (
+            {(plan.vinculos?.cocina || []).map((link, index) => {
+              const value = habitValue(link.section, link.habitId);
+              const known = habitOptions.some((option) => option.value === value);
+              return (
               <TextField
                 key={link.slot}
                 select
                 size="small"
                 label={DIET_SLOTS.find((slot) => slot.id === link.slot)?.label || link.slot}
-                value={habitValue(link.section, link.habitId)}
+                value={value}
                 onChange={(event) => updateVinculo('cocina', index, event.target.value)}
               >
+                {value && !known ? (
+                  <MenuItem value={value}>{link.habitId}</MenuItem>
+                ) : null}
                 {habitOptions.map((option) => (
                   <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
                 ))}
               </TextField>
-            ))}
+              );
+            })}
             <Typography variant="body2" color="text.secondary">Compras</Typography>
-            {(plan.vinculos?.compras || []).map((link, index) => (
+            {(plan.vinculos?.compras || []).map((link, index) => {
+              const value = habitValue(link.section, link.habitId);
+              const known = !value || habitOptions.some((option) => option.value === value);
+              return (
               <TextField
                 key={link.canal}
                 select
                 size="small"
                 label={SHOP_CHANNELS.find((channel) => channel.id === link.canal)?.label || link.canal}
-                value={habitValue(link.section, link.habitId)}
+                value={value}
                 onChange={(event) => updateVinculo('compras', index, event.target.value)}
               >
                 <MenuItem value="">Sin vínculo</MenuItem>
+                {value && !known ? (
+                  <MenuItem value={value}>{link.habitId}</MenuItem>
+                ) : null}
                 {habitOptions.map((option) => (
                   <MenuItem key={`${link.canal}-${option.value}`} value={option.value}>{option.label}</MenuItem>
                 ))}
               </TextField>
-            ))}
+              );
+            })}
           </Stack>
         )}
       </CommonDetails>
