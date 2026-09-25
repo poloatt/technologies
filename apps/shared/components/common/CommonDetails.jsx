@@ -242,7 +242,8 @@ const EntityDetails = ({
   children, 
   action,
   elevation = 0,
-  showTitle = false
+  showTitle = false,
+  fill = false,
 }) => {
   return (
     <Paper 
@@ -250,7 +251,14 @@ const EntityDetails = ({
       sx={{ 
         backgroundColor: 'background.default',
         height: '100%',
-        border: 'none'
+        border: 'none',
+        ...(fill ? {
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        } : null),
       }}
     >
       {showTitle && (
@@ -259,6 +267,7 @@ const EntityDetails = ({
           alignItems: 'center', 
           justifyContent: 'space-between',
           p: 2,
+          flexShrink: 0,
           borderBottom: '1px solid',
           borderColor: 'divider'
         }}>
@@ -280,7 +289,13 @@ const EntityDetails = ({
       )}
       <Box sx={{ 
         p: 1,
-        minHeight: 100
+        minHeight: fill ? 0 : 100,
+        ...(fill ? {
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        } : null),
       }}>
         {children || (
           <Typography 

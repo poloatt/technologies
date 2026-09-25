@@ -4,7 +4,7 @@ import { SystemButtons } from '@shared/components/common/SystemButtons';
 import { ToolbarAddButton } from '@shared/components/common/ToolbarAddButton';
 import { matchPulsoSection } from './pulsoToolbarPaths';
 
-/** Acciones de contexto Pulso (p. ej. nuevo registro en data corporal). */
+/** Acciones de contexto Pulso (alta según la sección activa). */
 export default function PulsoToolbarCenter() {
   const { pathname } = useLocation();
   const section = matchPulsoSection(pathname);
@@ -21,9 +21,8 @@ export default function PulsoToolbarCenter() {
 
   const actions = useMemo(() => {
     const addBySection = {
-      datacorporal: { type: 'data-corporal', tooltip: 'Nuevo registro' },
-      dieta: { type: 'dieta', tooltip: 'Nueva receta' },
-      lab: { type: 'salud-item', tooltip: 'Nuevo ítem de salud' },
+      data: { type: 'salud-item', tooltip: 'Nuevo ítem de salud' },
+      nutricion: { type: 'nutricion', tooltip: 'Nueva receta' },
     };
     const add = addBySection[section];
     if (!add) return [];

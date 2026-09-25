@@ -21,18 +21,18 @@ export const pulsoConfig = {
   },
   
   // Rutas principales de la app
-  defaultRoute: '/datacorporal',
+  defaultRoute: '/data',
   routes: {
-    datacorporal: '/datacorporal',
-    dieta: '/dieta',
+    data: '/data',
+    nutricion: '/nutricion',
     lab: '/lab',
     salud: '/salud'
   },
   
   // Features habilitadas
   features: {
-    datacorporal: true,
-    dieta: true,
+    data: true,
+    nutricion: true,
     lab: true,
     salud: true,
     analytics: false,

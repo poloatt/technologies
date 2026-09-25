@@ -19,8 +19,8 @@ import { UISettingsProvider } from '@shared/context/UISettingsContext';
 import { useAuth } from '@shared/context/AuthContext';
 
 // Páginas Pulso (lazy)
-const DataCorporal = React.lazy(() => import('./pages/DataCorporal'));
-const Dieta = React.lazy(() => import('./pages/Dieta'));
+const Data = React.lazy(() => import('./pages/Data'));
+const Nutricion = React.lazy(() => import('./pages/Nutricion'));
 const Lab = React.lazy(() => import('./pages/Lab'));
 const Salud = React.lazy(() => import('./pages/Salud'));
 const Perfil = React.lazy(() => import('@shared/pages/Perfil'));
@@ -49,19 +49,21 @@ function App() {
               <ErrorBoundary>
               <Suspense fallback={<AppLoadingScreen />}>
               <Routes>
-                <Route path="/login" element={user ? <Navigate to="/datacorporal" replace /> : <Login />} />
+                <Route path="/login" element={user ? <Navigate to="/data" replace /> : <Login />} />
                 <Route path="/registro" element={<Register />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/auth/callback/*" element={<AuthCallback />} />
                 <Route path="/auth/error" element={<AuthError />} />
 
-                <Route path="/" element={<Navigate to="/datacorporal" replace />} />
+                <Route path="/" element={<Navigate to="/data" replace />} />
 
                 <Route element={<PrivateRoute />}>
                   <Route element={<Layout />}>
-                    <Route path="/datacorporal" element={<DataCorporal />} />
-                    <Route path="/dieta" element={<Dieta />} />
+                    <Route path="/data" element={<Data />} />
+                    <Route path="/nutricion" element={<Nutricion />} />
                     <Route path="/lab" element={<Lab />} />
+                    <Route path="/datacorporal" element={<Navigate to="/data" replace />} />
+                    <Route path="/dieta" element={<Navigate to="/nutricion" replace />} />
                     <Route path="/salud" element={<Salud />} />
 
                     <Route path="/configuracion" element={<Configuracion />} />
@@ -70,7 +72,7 @@ function App() {
                   </Route>
                 </Route>
 
-                <Route path="*" element={<Navigate to="/datacorporal" replace />} />
+                <Route path="*" element={<Navigate to="/data" replace />} />
               </Routes>
               </Suspense>
               </ErrorBoundary>

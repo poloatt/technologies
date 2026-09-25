@@ -157,7 +157,7 @@ export function getCajaBranchById(branchId) {
 /**
  * Ítems para bottom nav móvil.
  * - Foco: páginas hijas (Rutinas, Objetivos, Tareas).
- * - Pulso: secciones del menú (Data corporal, Dieta, Lab).
+ * - Pulso: secciones del menú (Data, Nutrición, Lab).
  * - Caja: switcher de las 3 apps → hub de cada una.
  */
 export function resolveBottomNavItems(appKey = getCurrentAppKey()) {

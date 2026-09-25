@@ -1,7 +1,7 @@
 import { isFocoToolbarPath } from './tiempoToolbarPaths.js';
 
 const CAJA_PATH_PREFIXES = ['/finanzas', '/propiedades'];
-const PULSO_PATH_PREFIXES = ['/datacorporal', '/dieta', '/lab', '/salud'];
+const PULSO_PATH_PREFIXES = ['/data', '/nutricion', '/lab', '/salud', '/datacorporal', '/dieta'];
 
 export function isCajaToolbarPath(path = '') {
   return CAJA_PATH_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));

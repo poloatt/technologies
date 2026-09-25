@@ -171,7 +171,7 @@ export function getBreadcrumbInfo(currentPath) {
 // --- Helpers para navegación entre apps (subdominios) ---
 
 const CAJA_PATHS = ['/finanzas', '/propiedades'];
-const PULSO_PATHS = ['/datacorporal', '/dieta', '/lab'];
+const PULSO_PATHS = ['/data', '/nutricion', '/lab', '/datacorporal', '/dieta'];
 const FOCO_PATHS = ['/rutinas', '/objetivos', '/tareas', '/archivo', '/configuracion'];
 
 const PORT_APP_MAPPING = {

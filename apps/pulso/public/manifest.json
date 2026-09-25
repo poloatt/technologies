@@ -14,9 +14,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Datos corporales",
-      "short_name": "Datos",
-      "url": "/datacorporal?source=pwa",
+      "name": "Data",
+      "short_name": "Data",
+      "url": "/data?source=pwa",
       "icons": [
         {
           "src": "/icons/9a89cb27fb/icon-192x192.png",
@@ -26,9 +26,9 @@
       ]
     },
     {
-      "name": "Dieta",
-      "short_name": "Dieta",
-      "url": "/dieta?source=pwa",
+      "name": "Nutrición",
+      "short_name": "Nutrición",
+      "url": "/nutricion?source=pwa",
       "icons": [
         {
           "src": "/icons/9a89cb27fb/icon-192x192.png",

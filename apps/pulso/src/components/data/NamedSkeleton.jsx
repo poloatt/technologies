@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { FigureBackButton, FigureHelpButton } from '@shared/components/common/FigureCornerIcons';
-import { boneMatchesGroup } from './boneGroups';
+import { boneMatchesGroup, isNeckBone } from './boneGroups';
 import { loadSkeleton } from './skeletonBin';
 const EXTRA = { cabeza: ['ojos'], pecho: ['sangre'], brazos: ['piel'] };
 const BONE = 0xd9d3c7;
@@ -140,12 +140,12 @@ export default function NamedSkeleton({
           return group.worldToLocal(box.getCenter(new THREE.Vector3()));
         };
         const anchors = [];
-        const neckTest = /atlas|axis|cervical|hioides/;
+        const neckTest = (name) => isNeckBone(name);
         const teethTest = /maxilar|mandíbula/;
         ['cabeza', 'pecho'].forEach((zone) => {
           const list = meshes.filter((mesh) => (
             mesh.userData.zone === zone
-            && (zone !== 'cabeza' || (!neckTest.test(mesh.userData.name) && !teethTest.test(mesh.userData.name)))
+            && (zone !== 'cabeza' || (!neckTest(mesh.userData.name) && !teethTest.test(mesh.userData.name)))
           ));
           if (list.length) anchors.push({ id: zone, zone, label: ZONE_LABEL[zone], point: centroidOf(list) });
         });
@@ -163,9 +163,19 @@ export default function NamedSkeleton({
           [neckTest, 'Cuello', 'cuello'],
           [teethTest, 'Dientes', 'dientes'],
         ].forEach(([test, label, groupId]) => {
-          const list = meshes.filter((mesh) => mesh.userData.zone === 'cabeza' && test.test(mesh.userData.name));
+          const list = meshes.filter((mesh) => {
+            const name = mesh.userData.name;
+            const match = typeof test === 'function' ? test(name) : test.test(name);
+            return mesh.userData.zone === 'cabeza' && match;
+          });
           if (list.length) {
-            anchors.push({ id: groupId, zone: 'cabeza', label, groupId, point: centroidOf(list) });
+            anchors.push({
+              id: groupId,
+              zone: groupId === 'cuello' ? 'pecho' : 'cabeza',
+              label,
+              groupId,
+              point: centroidOf(list),
+            });
           }
         });
         [
@@ -219,7 +229,7 @@ export default function NamedSkeleton({
 
         const partTest = (part) => {
           if (part === 'mano') return /metacarpiano|falange|escafoides|semilunar|ganchoso|pisiforme|trapecio|trapezoide|hueso grande/;
-          if (part === 'cuello') return /atlas|axis|cervical|hioides/;
+          if (part === 'cuello') return { test: (name) => isNeckBone(name) };
           if (part === 'dientes') return /maxilar|mandíbula/;
           if (part === 'cadera') return /ilíaco/;
           if (part === 'pie') return /astrágalo|calcáneo|metatarsiano|falange|cuboides|cuneiforme|navicular/;
@@ -236,10 +246,14 @@ export default function NamedSkeleton({
           const name = mesh.userData.name;
           const group = focusGroupRef.current;
           const meshZone = mesh.userData.zone;
+          const neck = isNeckBone(name);
+          if (zone === 'cabeza' && neck) return false;
           if (zone) {
             const inParent = meshZone === zone
-              || (zone === 'pecho' && meshZone === 'abdomen' && (!group || group === 'abdomen'));
+              || (zone === 'pecho' && meshZone === 'abdomen' && (!group || group === 'abdomen'))
+              || (zone === 'pecho' && neck && (!group || group === 'cuello'));
             if (group === 'abdomen' && meshZone !== 'abdomen') return false;
+            if (group === 'cuello' && !neck) return false;
             if (!inParent) return false;
           }
           if (part && !part.test(name)) return false;
@@ -522,8 +536,7 @@ export default function NamedSkeleton({
       sx={{
         position: 'relative',
         alignSelf: 'stretch',
-        width: (theme) => `calc(100% + ${theme.spacing(2)})`,
-        mx: -1,
+        width: '100%',
         height,
         overflow: 'visible',
         flexShrink: 0,

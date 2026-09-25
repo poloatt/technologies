@@ -1,11 +1,17 @@
+export const NECK_TEST = /atlas|axis|cervical|hioides/;
+
+export function isNeckBone(name) {
+  return NECK_TEST.test(name);
+}
+
 const RULES = {
   cabeza: [
     { id: 'craneo', label: 'Cráneo', hint: 'Huesos del cráneo', test: /cráneo|esfenoides|etmoides|frontal|occipital|parietal|temporal|vómer/ },
     { id: 'cara', label: 'Cara', hint: 'Huesos de la cara', test: /cigomático|cornete|lacrimal|nasal|palatino/ },
     { id: 'dientes', label: 'Dientes', hint: 'Maxilar y mandíbula', test: /maxilar|mandíbula/ },
-    { id: 'cuello', label: 'Cuello', hint: 'Vértebras cervicales', test: /atlas|axis|cervical|hioides/ },
   ],
   pecho: [
+    { id: 'cuello', label: 'Cuello', hint: 'Vértebras cervicales', test: NECK_TEST },
     { id: 'costillas', label: 'Costillas', hint: 'Costillas individuales', test: /costilla/ },
     { id: 'columna', label: 'Columna torácica', hint: 'Vértebras y discos', test: /torácica/ },
     { id: 'esternon', label: 'Esternón', hint: 'Manubrio, cuerpo y xifoides', test: /esternón|xifoides|manubrio/ },

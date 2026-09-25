@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { getTaskHorizonCopy } from '@shared/copy/agendaTerminology';
 import { hubSectionTitleSx } from '@shared/styles/hubSectionStyles';
+import { SplitScreen } from '@shared/components/common';
 import AgendaCalendarPage from '../../agenda/AgendaCalendarPage';
 import TareasTable from './TareasTable';
 import TareaDetailPopup from './TareaDetailPopup';
@@ -37,15 +38,6 @@ const scrollableColumnSx = {
   flexDirection: 'column',
   overflow: 'hidden',
   minHeight: 0,
-};
-
-const columnSx = {
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  minWidth: 0,
-  minHeight: 0,
-  overflow: 'hidden',
 };
 
 function taskKey(tarea) {
@@ -115,9 +107,6 @@ function TareasListPageContent() {
     if (isMobile) setDesktopOpenTask(null);
   }, [isMobile]);
 
-  const detailOnLeft = !isMobile && openSource === 'luego';
-  const detailOnRight = !isMobile && openSource === 'ahora';
-
   const detailPopupSharedProps = useMemo(() => ({
     objetivos,
     onSubmit: tareasTableCommonProps.onSubmit,
@@ -167,47 +156,38 @@ function TareasListPageContent() {
               <TareasTable {...tareasTableCommonProps} tareas={tareasAgenda} agendaView={agendaView} />
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <Box sx={columnSx}>
-                {detailOnLeft ? (
-                  renderDesktopDetail('luego')
-                ) : (
-                  <>
-                    <TaskHorizonColumnHeader view="ahora" />
-                    <Box sx={scrollableColumnSx}>
-                      <TareasTable
-                        {...tareasTableCommonProps}
-                        tareas={tareasAhora}
-                        agendaView="ahora"
-                        suppressDetailPopup
-                        onOpenTarea={openFromAhora}
-                      />
-                    </Box>
-                  </>
-                )}
-              </Box>
-
-              <Box sx={{ width: '1px', bgcolor: 'divider', flexShrink: 0, alignSelf: 'stretch' }} />
-
-              <Box sx={columnSx}>
-                {detailOnRight ? (
-                  renderDesktopDetail('ahora')
-                ) : (
-                  <>
-                    <TaskHorizonColumnHeader view="luego" />
-                    <Box sx={scrollableColumnSx}>
-                      <TareasTable
-                        {...tareasTableCommonProps}
-                        tareas={tareasLuego}
-                        agendaView="luego"
-                        suppressDetailPopup
-                        onOpenTarea={openFromLuego}
-                      />
-                    </Box>
-                  </>
-                )}
-              </Box>
-            </Box>
+            <SplitScreen
+              detail={desktopOpenTask ? renderDesktopDetail(openSource) : null}
+              detailSide={openSource === 'luego' ? 'start' : 'end'}
+              start={(
+                <>
+                  <TaskHorizonColumnHeader view="ahora" />
+                  <Box sx={scrollableColumnSx}>
+                    <TareasTable
+                      {...tareasTableCommonProps}
+                      tareas={tareasAhora}
+                      agendaView="ahora"
+                      suppressDetailPopup
+                      onOpenTarea={openFromAhora}
+                    />
+                  </Box>
+                </>
+              )}
+              end={(
+                <>
+                  <TaskHorizonColumnHeader view="luego" />
+                  <Box sx={scrollableColumnSx}>
+                    <TareasTable
+                      {...tareasTableCommonProps}
+                      tareas={tareasLuego}
+                      agendaView="luego"
+                      suppressDetailPopup
+                      onOpenTarea={openFromLuego}
+                    />
+                  </Box>
+                </>
+              )}
+            />
           )}
         </Box>
 

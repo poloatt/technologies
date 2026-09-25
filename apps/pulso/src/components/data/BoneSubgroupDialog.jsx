@@ -37,12 +37,55 @@ function statusOf(controles, items, zona) {
   return { estado, last, archivos };
 }
 
+export function countPhrase(count, unit) {
+  if (count === 1) {
+    if (unit === 'huesos') return '1 hueso';
+    if (unit === 'músculos') return '1 músculo';
+    if (unit === 'órganos') return '1 órgano';
+  }
+  return `${count} ${unit}`;
+}
+
+export function OrganList({ organs = [], selectedId = null, onSelect }) {
+  return organs.map((organ) => {
+    const selected = selectedId === organ.id;
+    return (
+      <Box
+        key={organ.id}
+        component="button"
+        type="button"
+        aria-pressed={selected}
+        onClick={() => onSelect?.(organ.id)}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          width: '100%',
+          textAlign: 'left',
+          border: 0,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: selected ? '#121212' : 'transparent',
+          color: 'text.secondary',
+          py: 0.75,
+          px: 1.5,
+          cursor: 'pointer',
+          font: 'inherit',
+        }}
+      >
+        <Typography variant="body2" component="span" color="inherit">{organ.label}</Typography>
+      </Box>
+    );
+  });
+}
+
 export function SubgroupBoneList({
   zone,
   groups = [],
   boneName = '',
   selectedGroupId = null,
   expandBones = false,
+  showThumbs = true,
+  leafUnit = 'huesos',
   onSelectGroup,
   onSelectBone,
 }) {
@@ -90,17 +133,17 @@ export function SubgroupBoneList({
               font: 'inherit',
             }}
           >
-            <BoneGroupThumb zone={zone} names={group.bones} />
+            {showThumbs ? <BoneGroupThumb zone={zone} names={group.bones} /> : null}
             <Typography variant="body2" component="span" color="inherit">{group.label}</Typography>
             <Typography variant="caption" component="span" color="text.secondary">
-              {group.bones.length} huesos
+              {countPhrase(group.bones.length, leafUnit)}
             </Typography>
           </Box>
           {expandBones ? (
             <CollapseChevron
               asButton
               expanded={open}
-              aria-label={open ? `Cerrar huesos de ${group.label}` : `Ver huesos de ${group.label}`}
+              aria-label={open ? `Cerrar ${leafUnit} de ${group.label}` : `Ver ${leafUnit} de ${group.label}`}
               onClick={(event) => {
                 event.stopPropagation();
                 toggle(group);
@@ -135,7 +178,7 @@ export function SubgroupBoneList({
                 font: 'inherit',
               }}
             >
-              <BoneGroupThumb zone={zone} names={[name]} />
+              {showThumbs ? <BoneGroupThumb zone={zone} names={[name]} /> : null}
               <Typography variant="body2" component="span" color="inherit">{name}</Typography>
             </Box>
           );
@@ -156,6 +199,10 @@ export default function BoneSubgroupDialog({
   onBoneClick,
   onGroupClick,
   groups = [],
+  organs = null,
+  embedded = false,
+  showThumbs = true,
+  leafUnit = 'huesos',
 }) {
   const { estado, last, archivos } = statusOf(controles, items, zone);
   const documents = archivos.length
@@ -166,22 +213,17 @@ export default function BoneSubgroupDialog({
     }))
     : [{ key: 'empty', title: 'Sin documentos', meta: 'Todavía no hay archivos' }];
 
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullScreen
-      sx={{ zIndex: 1600 }}
-      PaperProps={{
-        elevation: 0,
-        sx: {
-          bgcolor: 'background.default',
-          backgroundImage: 'none',
-          borderRadius: 0,
-        },
+  const panel = (
+    <Box
+      sx={{
+        height: embedded ? '100%' : undefined,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'background.default',
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', px: 1, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 1, py: 1, flexShrink: 0, borderBottom: 1, borderColor: 'divider' }}>
         <Typography variant="h6" sx={{ flex: 1, fontSize: '1.05rem', fontWeight: 500, pl: 1 }}>
           {subgroup?.label}
         </Typography>
@@ -189,7 +231,7 @@ export default function BoneSubgroupDialog({
           <CloseIcon sx={{ fontSize: 20 }} />
         </IconButton>
       </Box>
-      <Box sx={{ px: 2, py: 2, overflow: 'auto' }}>
+      <Box sx={{ px: 2, py: 2, overflow: 'auto', flex: 1, minHeight: 0 }}>
         <Box sx={{ ...hubSectionShellSx, mb: 1.5, bgcolor: '#121212' }}>
           <Box sx={{ px: 0.5, py: 0.25 }}>
             <TareaFormRow icon={TareaFormIcons.estado} compact>
@@ -216,19 +258,57 @@ export default function BoneSubgroupDialog({
             </Box>
           ))}
         </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-          Subgrupos
-        </Typography>
-        <SubgroupBoneList
-          key={zone}
-          zone={zone}
-          groups={groups}
-          boneName={boneName}
-          expandBones
-          onSelectGroup={onGroupClick}
-          onSelectBone={onBoneClick}
-        />
+        {organs ? (
+          <OrganList
+            organs={organs}
+            selectedId={boneName}
+            onSelect={onBoneClick}
+          />
+        ) : (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Subgrupos
+            </Typography>
+            <SubgroupBoneList
+              key={zone}
+              zone={zone}
+              groups={groups}
+              boneName={boneName}
+              expandBones
+              showThumbs={showThumbs}
+              leafUnit={leafUnit}
+              onSelectGroup={onGroupClick}
+              onSelectBone={onBoneClick}
+            />
+          </>
+        )}
       </Box>
+    </Box>
+  );
+
+  if (embedded) {
+    if (!open) return null;
+    return panel;
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullScreen
+      sx={{ zIndex: 1600 }}
+      PaperProps={{
+        elevation: 0,
+        sx: {
+          bgcolor: 'background.default',
+          backgroundImage: 'none',
+          borderRadius: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}
+    >
+      {panel}
     </Dialog>
   );
 }

@@ -64,7 +64,7 @@ export const FooterNavigation = () => {
 
   const navigationItems = [
     { path: '/finanzas', icon: <WalletIcon />, label: 'Assets' },
-    { path: '/datacorporal', icon: <CalendarIcon />, label: 'Salud' },
+    { path: '/data', icon: <CalendarIcon />, label: 'Salud' },
     { path: '/rutinas', icon: <TareasIcon />, label: 'Tiempo' }
   ];
 

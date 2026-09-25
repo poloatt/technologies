@@ -97,11 +97,11 @@ export const modulos = [
     id: 'salud',
     title: 'Pulso',
     icon: 'pulso',
-    path: '/datacorporal',
+    path: '/data',
     subItems: [
-      { id: 'datacorporal', title: 'Data corporal', icon: 'monitorHeart', path: '/datacorporal', canAdd: true },
-      { id: 'dieta', title: 'Dieta', icon: 'restaurant', path: '/dieta', canAdd: true },
-      { id: 'lab', title: 'Lab', icon: 'science', path: '/lab', canAdd: true }
+      { id: 'data', title: 'Data', icon: 'monitorHeart', path: '/data', canAdd: true },
+      { id: 'nutricion', title: 'Nutrición', icon: 'restaurant', path: '/nutricion', canAdd: true },
+      { id: 'lab', title: 'Lab', icon: 'science', path: '/lab', canAdd: false }
     ]
   },
   {
@@ -143,9 +143,9 @@ export const bottomNavigationItems = [
     appKey: 'pulso',
     title: 'Pulso',
     icon: 'pulso',
-    path: '/datacorporal',
+    path: '/data',
     type: 'module',
-    activePaths: ['/datacorporal', '/dieta', '/lab']
+    activePaths: ['/data', '/nutricion', '/lab', '/datacorporal', '/dieta']
   },
   {
     id: 'tiempo',

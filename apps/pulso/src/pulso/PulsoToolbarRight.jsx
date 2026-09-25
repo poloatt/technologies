@@ -6,7 +6,7 @@ import useResponsive from '@shared/hooks/useResponsive';
 import { matchPulsoSection } from './pulsoToolbarPaths';
 import { getPulsoNavTargets } from './pulsoNavConfig';
 
-/** Navegación derecha: Data corporal / Dieta / Lab. */
+/** Navegación derecha: Data / Nutrición / Lab. */
 export default function PulsoToolbarRight() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
