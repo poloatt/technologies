@@ -182,7 +182,7 @@ export default function BodyMap({ controles = [], items = [], selectedZone, onSe
         />
       )}
       {layer === 'huesos' && (
-        <Box sx={{ width: '100%', maxWidth: 360, mt: 1 }}>
+        <Box sx={{ width: '100%', mt: 1, alignSelf: 'stretch' }}>
           {(boneZone === 'brazos' || boneZone === 'piernas') && (
             <TareaFormTipoSelector
               value={side || ''}
@@ -273,7 +273,6 @@ export default function BodyMap({ controles = [], items = [], selectedZone, onSe
                   </IconButton>
                 </Box>
                 {open && (
-                  <Box sx={{ pl: 1.5 }}>
                   <SubgroupBoneList
                     key={section.zone}
                     zone={section.zone}
@@ -281,7 +280,6 @@ export default function BodyMap({ controles = [], items = [], selectedZone, onSe
                     selectedGroupId={boneZone === section.zone ? markedGroup : null}
                     onSelectGroup={(groupId) => chooseGroup(section.zone, groupId)}
                   />
-                  </Box>
                 )}
               </Box>
             );
