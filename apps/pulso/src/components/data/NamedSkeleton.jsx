@@ -46,6 +46,7 @@ export default function NamedSkeleton({
   onZonePick,
   onZoomOut,
   onCatalog,
+  active = true,
   width = 188,
   height = 320,
 }) {
@@ -59,7 +60,7 @@ export default function NamedSkeleton({
   const [markers, setMarkers] = useState([]);
   const [licenseHover, setLicenseHover] = useState(false);
   const [licensePinned, setLicensePinned] = useState(false);
-  const licenseOpen = licenseHover || licensePinned;
+  const licenseOpen = active && (licenseHover || licensePinned);
   const markerRefs = useRef({});
   const labelRefs = useRef({});
   const projectRef = useRef(() => {});
@@ -338,7 +339,7 @@ export default function NamedSkeleton({
             const inGroup = isChosen(mesh);
             const solid = !focus || inGroup;
             const mat = mesh.material;
-            const opacity = solid ? 1 : (inZoom(mesh) ? 0.14 : 0.08);
+            const opacity = solid ? 1 : (inZoom(mesh) ? 0.04 : 0.02);
             if (mat.opacity !== opacity || mat.transparent !== !solid) mat.needsUpdate = true;
             mat.opacity = opacity;
             mat.transparent = !solid;

@@ -31,6 +31,7 @@ export function FigureHelpButton({
   onToggle,
   onOpen,
   onClose,
+  label = 'Licencia del esqueleto',
   sx,
 }) {
   return (
@@ -43,7 +44,7 @@ export function FigureHelpButton({
       componentsProps={{ tooltip: { sx: { maxWidth: 260, textAlign: 'center' } } }}
     >
       <IconButton
-        aria-label="Licencia del esqueleto"
+        aria-label={label}
         aria-expanded={open}
         onClick={onToggle}
         onMouseEnter={onOpen}

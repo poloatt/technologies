@@ -1,53 +1,88 @@
 /**
- * Músculos agrupados por región clínica, en el orden en que se reconocen.
- * El detalle fino queda dentro de cada grupo.
+ * Grupos de entrenamiento. Cada uno lista los músculos que se nombran al entrenar.
  */
 export const MUSCLE_SECTIONS = [
   {
+    id: 'cabeza',
     zone: 'cabeza',
     label: 'Cabeza',
-    groups: [
-      { id: 'cara', label: 'Cara', bones: ['Masetero', 'Temporal', 'Expresión'] },
-      { id: 'cuello', label: 'Cuello', bones: ['Esternocleidomastoideo', 'Escalenos'] },
+    muscles: [
+      { id: 'masetero', label: 'Masetero' },
+      { id: 'temporal', label: 'Temporal' },
+      { id: 'expresion', label: 'Expresión' },
+      { id: 'esternocleidomastoideo', label: 'Esternocleidomastoideo' },
+      { id: 'escalenos', label: 'Escalenos' },
+      { id: 'extensores-cuello', label: 'Extensores del cuello' },
     ],
   },
   {
+    id: 'pecho',
     zone: 'pecho',
     label: 'Pecho',
-    groups: [
-      { id: 'pectoral', label: 'Pectoral', bones: ['Pectoral mayor', 'Pectoral menor'] },
-      { id: 'espalda', label: 'Espalda', bones: ['Trapecio', 'Dorsal ancho', 'Romboides', 'Lumbares'] },
-      { id: 'torax', label: 'Caja torácica', bones: ['Serrato', 'Intercostales'] },
+    muscles: [
+      { id: 'pectoral-mayor', label: 'Pectoral mayor' },
+      { id: 'pectoral-menor', label: 'Pectoral menor' },
+      { id: 'serrato', label: 'Serrato' },
     ],
   },
   {
+    id: 'espalda',
+    zone: 'pecho',
+    label: 'Espalda',
+    muscles: [
+      { id: 'dorsal', label: 'Dorsal ancho' },
+      { id: 'trapecio', label: 'Trapecio' },
+      { id: 'romboides', label: 'Romboides' },
+      { id: 'erectores', label: 'Erectores' },
+      { id: 'cuadrado', label: 'Cuadrado lumbar' },
+    ],
+  },
+  {
+    id: 'abdomen',
     zone: 'abdomen',
     label: 'Abdomen',
-    groups: [
-      { id: 'abdominales', label: 'Abdominales', bones: ['Recto abdominal', 'Transverso'] },
-      { id: 'oblicuos', label: 'Oblicuos', bones: ['Oblicuo externo', 'Oblicuo interno'] },
-      { id: 'pelvis', label: 'Suelo pélvico', bones: ['Suelo pélvico'] },
+    muscles: [
+      { id: 'recto', label: 'Recto abdominal' },
+      { id: 'transverso', label: 'Transverso' },
+      { id: 'oblicuo-externo', label: 'Oblicuo externo' },
+      { id: 'oblicuo-interno', label: 'Oblicuo interno' },
+      { id: 'psoas', label: 'Psoas' },
+      { id: 'iliaco', label: 'Ilíaco' },
     ],
   },
   {
+    id: 'brazos',
     zone: 'brazos',
     label: 'Brazos',
-    groups: [
-      { id: 'hombro', label: 'Hombro', bones: ['Deltoides', 'Manguito rotador'] },
-      { id: 'biceps', label: 'Bíceps', bones: ['Bíceps', 'Braquial'] },
-      { id: 'triceps', label: 'Tríceps', bones: ['Tríceps'] },
-      { id: 'antebrazo', label: 'Antebrazo', bones: ['Flexores', 'Extensores'] },
+    muscles: [
+      { id: 'deltoides', label: 'Deltoides' },
+      { id: 'supraespinoso', label: 'Supraespinoso' },
+      { id: 'infraespinoso', label: 'Infraespinoso' },
+      { id: 'subescapular', label: 'Subescapular' },
+      { id: 'redondo-menor', label: 'Redondo menor' },
+      { id: 'biceps', label: 'Bíceps' },
+      { id: 'triceps', label: 'Tríceps' },
+      { id: 'flexores', label: 'Flexores' },
+      { id: 'extensores', label: 'Extensores' },
     ],
   },
   {
+    id: 'piernas',
     zone: 'piernas',
     label: 'Piernas',
-    groups: [
-      { id: 'gluteos', label: 'Glúteos', bones: ['Glúteo mayor', 'Glúteo medio'] },
-      { id: 'cuadriceps', label: 'Cuádriceps', bones: ['Recto femoral', 'Vastos'] },
-      { id: 'isquios', label: 'Isquiotibiales', bones: ['Bíceps femoral', 'Semitendinoso', 'Semimembranoso'] },
-      { id: 'aductores', label: 'Aductores', bones: ['Aductores'] },
-      { id: 'gemelos', label: 'Gemelos', bones: ['Gemelos', 'Sóleo'] },
+    muscles: [
+      { id: 'gluteo-mayor', label: 'Glúteo mayor' },
+      { id: 'gluteo-medio', label: 'Glúteo medio' },
+      { id: 'piriforme', label: 'Piriforme' },
+      { id: 'cuadriceps', label: 'Cuádriceps' },
+      { id: 'biceps-femoral', label: 'Bíceps femoral' },
+      { id: 'semitendinoso', label: 'Semitendinoso' },
+      { id: 'semimembranoso', label: 'Semimembranoso' },
+      { id: 'aductores', label: 'Aductores' },
+      { id: 'gemelos', label: 'Gemelos' },
+      { id: 'soleo', label: 'Sóleo' },
+      { id: 'tibial', label: 'Tibial' },
+      { id: 'peroneos', label: 'Peroneos' },
     ],
   },
 ];

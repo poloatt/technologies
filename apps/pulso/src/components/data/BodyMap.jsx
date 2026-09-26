@@ -1,7 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, IconButton, SvgIcon, Typography } from '@mui/material';
 import StyleOutlinedIcon from '@mui/icons-material/StyleOutlined';
-import { BodyFigure, OrganFigure } from '@shared/components/body';
 import { CollapseChevron, SplitScreen } from '@shared/components/common';
 import { TareaFormTipoSelector } from '@shared/components/forms/tareaFormUi';
 import useResponsive from '@shared/hooks/useResponsive';
@@ -44,6 +43,20 @@ const FOCUS_PARTS = new Set(['mano', 'pie', 'cadera', 'cuello', 'dientes']);
 const ZONE_ORDER = ['cabeza', 'pecho', 'brazos', 'piernas'];
 const ZONE_BONES = { pecho: ['pecho', 'abdomen'] };
 const NamedSkeleton = lazy(() => import('./NamedSkeleton'));
+const MuscleAtlas = lazy(() => import('./MuscleAtlas'));
+const OrganAtlas = lazy(() => import('./OrganAtlas'));
+
+const layerPane = (visible) => ({
+  position: 'absolute',
+  inset: 0,
+  zIndex: 1,
+  opacity: visible ? 1 : 0,
+  visibility: visible ? 'visible' : 'hidden',
+  transition: visible
+    ? 'opacity 220ms ease, visibility 0s linear 0s'
+    : 'opacity 220ms ease, visibility 0s linear 220ms',
+  pointerEvents: visible ? 'auto' : 'none',
+});
 
 function sectionKey(section) {
   return section.id || section.zone;
@@ -57,6 +70,7 @@ export default function BodyMap({
 }) {
   const { isDesktop } = useResponsive();
   const [layer, setLayer] = useState('musculos');
+  const [seenLayers, setSeenLayers] = useState({ musculos: true });
   const [boneName, setBoneName] = useState('');
   const [boneZone, setBoneZone] = useState(null);
   const [markedGroup, setMarkedGroup] = useState(null);
@@ -108,7 +122,6 @@ export default function BodyMap({
     : (layer === 'musculos' ? MUSCLE_SECTIONS : ORGAN_SECTIONS);
   const groupCard = layerSections.find((section) => sectionKey(section) === groupCardZone) || null;
 
-  const onZoneClick = (zoneId) => onSelectZone(selectedZone === zoneId ? null : zoneId);
   const showFullSkeleton = () => {
     setBoneName('');
     setBoneZone(null);
@@ -192,7 +205,7 @@ export default function BodyMap({
       controles={controles}
       items={items}
       groups={groupCard.groups || []}
-      organs={groupCard.organs || null}
+      organs={groupCard.muscles || groupCard.organs || null}
       boneName={boneName}
       showThumbs={showThumbs}
       leafUnit={leafUnit}
@@ -208,17 +221,26 @@ export default function BodyMap({
             zone: groupCard.zone,
             clinicalZone: groupCard.zone,
           });
-        } else if (groupCard.organs) {
-          setBoneName(name);
-          setMarkedGroup(name);
         } else {
           setBoneName(name);
+          setMarkedGroup(name);
         }
       }}
     />
   ) : null;
 
   const showSidePills = layer === 'huesos' && (boneZone === 'brazos' || boneZone === 'piernas');
+
+  useEffect(() => {
+    setSeenLayers((current) => (current[layer] ? current : { ...current, [layer]: true }));
+  }, [layer]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setSeenLayers({ huesos: true, musculos: true, organos: true });
+    }, 700);
+    return () => window.clearTimeout(id);
+  }, []);
 
   const layerSelector = (
     <TareaFormTipoSelector
@@ -245,33 +267,66 @@ export default function BodyMap({
           {layerSelector}
         </Box>
       )}
-      {layer === 'musculos' && (
-        <BodyFigure highlights={highlights} onZoneClick={onZoneClick} />
-      )}
-      {layer === 'huesos' && (
-        <Suspense fallback={<Typography variant="caption">Cargando esqueleto…</Typography>}>
-          <NamedSkeleton
-            height={SKELETON_FRAME}
-            highlights={highlights}
-            activeBone={boneName}
-            focusZone={boneZone}
-            focusSide={side}
-            focusPart={focusPart}
-            focusGroup={markedGroup}
-            onCatalog={setCatalog}
-            onBoneClick={chooseBone}
-            onZonePick={chooseZone}
-            onZoomOut={showFullSkeleton}
-          />
-        </Suspense>
-      )}
-      {layer === 'organos' && (
-        <OrganFigure
-          highlights={highlights}
-          onZoneClick={onZoneClick}
-          showOrgans
-        />
-      )}
+      <Box sx={{ position: 'relative', width: '100%', height: SKELETON_FRAME, flexShrink: 0, alignSelf: 'stretch', overflow: 'hidden' }}>
+        {seenLayers.musculos && (
+          <Box sx={layerPane(layer === 'musculos')} aria-hidden={layer !== 'musculos'}>
+            <Suspense fallback={<Typography variant="caption">Cargando músculos…</Typography>}>
+              <MuscleAtlas
+                active={layer === 'musculos'}
+                height={SKELETON_FRAME}
+                focusZone={layer === 'musculos' ? boneZone : null}
+                focusGroup={layer === 'musculos' ? markedGroup : null}
+                onZoomOut={showFullSkeleton}
+                onZoneClick={(sectionId, muscleId) => {
+                  const section = MUSCLE_SECTIONS.find((item) => item.id === sectionId);
+                  if (!section) return;
+                  if (isDesktop) openSection(section);
+                  else focusSection(section);
+                  if (muscleId) setMarkedGroup(muscleId);
+                }}
+              />
+            </Suspense>
+          </Box>
+        )}
+        {seenLayers.huesos && (
+          <Box sx={layerPane(layer === 'huesos')} aria-hidden={layer !== 'huesos'}>
+            <Suspense fallback={<Typography variant="caption">Cargando esqueleto…</Typography>}>
+              <NamedSkeleton
+                active={layer === 'huesos'}
+                height={SKELETON_FRAME}
+                highlights={highlights}
+                activeBone={boneName}
+                focusZone={layer === 'huesos' ? boneZone : null}
+                focusSide={layer === 'huesos' ? side : null}
+                focusPart={layer === 'huesos' ? focusPart : null}
+                focusGroup={layer === 'huesos' ? markedGroup : null}
+                onCatalog={setCatalog}
+                onBoneClick={chooseBone}
+                onZonePick={chooseZone}
+                onZoomOut={showFullSkeleton}
+              />
+            </Suspense>
+          </Box>
+        )}
+        {seenLayers.organos && (
+          <Box sx={layerPane(layer === 'organos')} aria-hidden={layer !== 'organos'}>
+            <Suspense fallback={<Typography variant="caption">Cargando órganos…</Typography>}>
+              <OrganAtlas
+                active={layer === 'organos'}
+                height={SKELETON_FRAME}
+                focusSystem={layer === 'organos' ? boneZone : null}
+                onZoomOut={showFullSkeleton}
+                onSystemClick={(systemId) => {
+                  const section = ORGAN_SECTIONS.find((item) => item.id === systemId);
+                  if (!section) return;
+                  if (isDesktop) openSection(section);
+                  else focusSection(section);
+                }}
+              />
+            </Suspense>
+          </Box>
+        )}
+      </Box>
       {layerSections.length > 0 && (
         <Box sx={{ width: '100%', mt: 1, alignSelf: 'stretch' }}>
           {layer === 'huesos' && (
@@ -300,10 +355,13 @@ export default function BodyMap({
             const key = sectionKey(section);
             const open = expandedGroup === key;
             const names = (section.groups || []).flatMap((group) => group.bones);
-            const caption = section.organs
-              ? countPhrase(section.organs.length, 'órganos')
-              : (section.groups.length > 1 ? `${section.groups.length} grupos` : null);
-            const expandLabel = section.organs ? 'órganos' : 'subgrupos';
+            const direct = section.muscles || section.organs;
+            const caption = section.muscles
+              ? countPhrase(section.muscles.length, 'músculos')
+              : section.organs
+                ? countPhrase(section.organs.length, 'órganos')
+                : (section.groups.length > 1 ? `${section.groups.length} grupos` : null);
+            const expandLabel = section.muscles ? 'músculos' : section.organs ? 'órganos' : 'subgrupos';
             const marked = groupCardZone === key || boneZone === key;
             return (
               <Box
@@ -392,14 +450,14 @@ export default function BodyMap({
                     />
                   )}
                 </Box>
-                {open && (section.organs ? (
+                {open && (direct ? (
                   <OrganList
-                    organs={section.organs}
+                    organs={direct}
                     selectedId={boneZone === key ? markedGroup : null}
-                    onSelect={(organId) => {
+                    onSelect={(itemId) => {
                       setBoneZone(key);
-                      setMarkedGroup(organId);
-                      setBoneName(organId);
+                      setMarkedGroup(itemId);
+                      setBoneName(itemId);
                       onSelectZone(section.zone);
                       if (isDesktop) setGroupCardZone(key);
                     }}
