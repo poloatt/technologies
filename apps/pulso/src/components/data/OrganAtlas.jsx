@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { FigureBackButton, FigureHelpButton } from '@shared/components/common/FigureCornerIcons';
+import { fitSkin, loadSkin, makeSkin } from './skinShell';
 
 const CDN = 'https://cdn.humanatlas.io/digital-objects/ref-organ';
 
@@ -31,7 +32,6 @@ const MODELS = [
   { id: 'tonsil-r', system: 'respiratorio', zone: 'pecho', url: `${CDN}/palatine-tonsil-male-right/v1.2/assets/3d-vh-m-palatine-tonsil-r.glb`, anchor: [0.02, 1.32, 0.04], size: 0.03 },
   { id: 'lymph', system: 'circulatorio', zone: 'pecho', url: `${CDN}/lymph-node-male/v1.4/assets/3d-nih-m-lymph-node.glb`, anchor: [0.04, 1.2, 0.02], size: 0.04 },
   { id: 'vessels', system: 'circulatorio', zone: 'pecho', url: `${CDN}/blood-vasculature-male/v1.3/assets/3d-vh-m-blood-vasculature.glb`, anchor: [0, 0.8, 0], size: 0.7 },
-  { id: 'skin', system: null, zone: null, url: `${CDN}/skin-male/v1.4/assets/3d-vh-m-skin.glb`, anchor: [0, 0.85, 0], size: 1.7 },
 ];
 
 const gltfCache = new Map();
@@ -280,9 +280,27 @@ export default function OrganAtlas({
       };
       frameRef.current = (system) => goTo(system);
       if (focusRef.current) goTo(focusRef.current);
-      Promise.all(MODELS.filter((model) => !FIRST.has(model.id)).map(take)).then(() => {
+      Promise.all(MODELS.filter((model) => !FIRST.has(model.id)).map(take)).then(async () => {
         if (disposed) return;
         loaded.forEach(placeLocal);
+        try {
+          const gltf = await loadSkin();
+          if (disposed) return;
+          const shell = makeSkin(gltf, THREE);
+          shell.userData = { id: 'skin', system: null, zone: null };
+          const box = new THREE.Box3();
+          loaded.forEach((group) => box.expandByObject(group));
+          if (!box.isEmpty()) {
+            const span = box.getSize(new THREE.Vector3());
+            const mid = box.getCenter(new THREE.Vector3());
+            box.expandByPoint(new THREE.Vector3(mid.x, box.min.y - span.y * 1.05, mid.z));
+            fitSkin(shell, box, THREE);
+            root.add(shell);
+            loaded.push(shell);
+          }
+        } catch {
+          // the organs stay visible if the skin shell fails
+        }
         goTo(focusRef.current, true);
       });
 
@@ -307,7 +325,7 @@ export default function OrganAtlas({
             if (!node.isMesh) return;
             const materials = [].concat(node.material || []);
             materials.forEach((material) => {
-              material.opacity = shell ? (focus ? 0.04 : 0.65) : (active ? 1 : 0.02);
+              material.opacity = shell ? (focus ? 0.04 : 0.5) : (active ? 1 : 0.02);
               material.depthWrite = shell ? false : active;
             });
           });
@@ -394,7 +412,7 @@ export default function OrganAtlas({
         <FigureHelpButton
           open={licenseOpen}
           label="Referencia de los órganos"
-          title="Human Reference Atlas, HuBMAP, CC BY 4.0."
+          title="Órganos: Human Reference Atlas, HuBMAP, CC BY 4.0. Piel: BodyParts3D, © DBCLS, CC BY-SA 2.1 Japón."
           onToggle={() => setLicensePinned((open) => !open)}
           onOpen={() => setLicenseHover(true)}
           onClose={() => setLicenseHover(false)}

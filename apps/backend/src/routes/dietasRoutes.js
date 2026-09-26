@@ -17,6 +17,7 @@ router.delete('/recetas/:id', dietasController.deleteReceta);
 router.get('/menu', dietasController.getMenu);
 router.put('/menu', dietasController.upsertMenu);
 
+router.get('/despensa', dietasController.getDespensa);
 router.get('/habit-captions', dietasController.getHabitCaptions);
 
 export default router;

@@ -15,6 +15,15 @@ const dietaPlanSchema = createSchema({
   proteinas: { type: Number, default: 0, min: 0 },
   carbohidratos: { type: Number, default: 0, min: 0 },
   grasas: { type: Number, default: 0, min: 0 },
+  cadencia: { type: Number, default: 1, min: 1, max: 6 },
+  frecuencia: {
+    type: String,
+    enum: ['DIARIA', 'SEMANAL', 'QUINCENAL'],
+    default: 'SEMANAL',
+  },
+  comidas: { type: mongoose.Schema.Types.Mixed, default: () => [] },
+  huecos: { type: mongoose.Schema.Types.Mixed, default: () => [] },
+  rotacion: { type: mongoose.Schema.Types.Mixed, default: () => [] },
   slots: {
     type: [String],
     default: () => slotIds,

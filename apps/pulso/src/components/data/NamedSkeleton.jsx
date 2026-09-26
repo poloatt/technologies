@@ -2,8 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { FigureBackButton, FigureHelpButton } from '@shared/components/common/FigureCornerIcons';
 import { boneMatchesGroup, isNeckBone } from './boneGroups';
+import { loadSkin, makeSkin, paintSkin } from './skinShell';
 import { loadSkeleton } from './skeletonBin';
-const EXTRA = { cabeza: ['ojos'], pecho: ['sangre'], brazos: ['piel'] };
+const POINT_ZONES = {
+  cabeza: ['cabeza', 'ojos'],
+  pecho: ['pecho', 'abdomen', 'sangre'],
+  brazos: ['brazos', 'piel'],
+  piernas: ['piernas'],
+};
 const BONE = 0xd9d3c7;
 const ZONE_LABEL = {
   cabeza: 'Cabeza',
@@ -26,13 +32,7 @@ function sideOf(name) {
 }
 
 function needsAttention(zone, highlights) {
-  const keys = [zone, ...(EXTRA[zone] || [])];
-  return keys.some((key) => highlights[key] === 'attention' || highlights[key] === 'both');
-}
-
-function resolveZone(zone, highlights) {
-  const keys = [zone, ...(EXTRA[zone] || [])];
-  return keys.find((key) => highlights[key]) || zone;
+  return (POINT_ZONES[zone] || [zone]).some((key) => highlights[key] === 'attention' || highlights[key] === 'both');
 }
 
 export default function NamedSkeleton({
@@ -140,73 +140,24 @@ export default function NamedSkeleton({
           list.forEach((mesh) => box.expandByObject(mesh));
           return group.worldToLocal(box.getCenter(new THREE.Vector3()));
         };
-        const anchors = [];
-        const neckTest = (name) => isNeckBone(name);
-        const teethTest = /maxilar|mandíbula/;
-        ['cabeza', 'pecho'].forEach((zone) => {
-          const list = meshes.filter((mesh) => (
-            mesh.userData.zone === zone
-            && (zone !== 'cabeza' || (!neckTest(mesh.userData.name) && !teethTest.test(mesh.userData.name)))
-          ));
-          if (list.length) anchors.push({ id: zone, zone, label: ZONE_LABEL[zone], point: centroidOf(list) });
-        });
-        const abdomenBones = meshes.filter((mesh) => mesh.userData.zone === 'abdomen');
-        if (abdomenBones.length) {
-          anchors.push({
-            id: 'abdomen',
-            zone: 'pecho',
-            label: 'Abdomen',
-            groupId: 'abdomen',
-            point: centroidOf(abdomenBones),
-          });
-        }
-        [
-          [neckTest, 'Cuello', 'cuello'],
-          [teethTest, 'Dientes', 'dientes'],
-        ].forEach(([test, label, groupId]) => {
-          const list = meshes.filter((mesh) => {
-            const name = mesh.userData.name;
-            const match = typeof test === 'function' ? test(name) : test.test(name);
-            return mesh.userData.zone === 'cabeza' && match;
-          });
-          if (list.length) {
-            anchors.push({
-              id: groupId,
-              zone: groupId === 'cuello' ? 'pecho' : 'cabeza',
-              label,
-              groupId,
-              point: centroidOf(list),
-            });
-          }
-        });
-        [
-          ['brazos', /húmero/, 'Brazos', null],
-          ['brazos', /metacarpiano/, 'Mano', 'mano'],
-          ['piernas', /ilíaco/, 'Cadera', 'cadera'],
-          ['piernas', /fémur/, 'Piernas', null],
-          ['piernas', /metatarsiano/, 'Pie', 'pie'],
-        ].forEach(([zone, test, label, groupId]) => {
-          const list = meshes.filter((mesh) => (
-            mesh.userData.zone === zone
-            && test.test(mesh.userData.name)
-            && sideOf(mesh.userData.name) === 'r'
-          ));
-          if (list.length) {
-            anchors.push({
-              id: groupId || zone,
-              zone,
-              label,
-              groupId,
-              point: centroidOf(list),
-            });
-          }
+        const sectionOf = (mesh) => {
+          const name = mesh.userData.name;
+          if (isNeckBone(name) || mesh.userData.zone === 'abdomen') return 'pecho';
+          return mesh.userData.zone;
+        };
+        const anchors = ['cabeza', 'pecho', 'brazos', 'piernas'].flatMap((zone) => {
+          const list = meshes.filter((mesh) => sectionOf(mesh) === zone);
+          const right = list.filter((mesh) => sideOf(mesh.userData.name) === 'r');
+          const placed = (zone === 'brazos' || zone === 'piernas') && right.length ? right : list;
+          if (!placed.length) return [];
+          return [{ id: zone, zone, label: ZONE_LABEL[zone], point: centroidOf(placed) }];
         });
         if (!disposed) {
-          setMarkers(anchors.map(({ id, zone, label, groupId }) => ({
+          setMarkers(anchors.map(({ id, zone, label }) => ({
             id,
             zone,
             label,
-            groupId: groupId || null,
+            groupId: null,
           })));
         }
         const size = max.clone().sub(min);
@@ -331,10 +282,10 @@ export default function NamedSkeleton({
         renderer.setClearColor(0x000000, 0);
         mount.appendChild(canvas);
 
+        let skin = null;
         const paint = () => {
-          const { attention, primary } = colorsRef.current;
+          const { primary } = colorsRef.current;
           meshes.forEach((mesh) => {
-            const attentionOn = needsAttention(mesh.userData.zone, highlightsRef.current);
             const focus = focusZoneRef.current;
             const inGroup = isChosen(mesh);
             const solid = !focus || inGroup;
@@ -348,16 +299,13 @@ export default function NamedSkeleton({
               mat.color.set(primary);
               mat.emissive.set(primary);
               mat.emissiveIntensity = 0.35;
-            } else if (attentionOn) {
-              mat.color.set(attention);
-              mat.emissive.set(attention);
-              mat.emissiveIntensity = 0.12;
             } else {
               mat.color.set(BONE);
               mat.emissive.set(0x000000);
               mat.emissiveIntensity = 0;
             }
           });
+          paintSkin(skin, focusZoneRef.current ? 0.02 : 0.5);
           renderer.render(scene, camera);
           projectRef.current();
         };
@@ -437,7 +385,7 @@ export default function NamedSkeleton({
             onBoneClickRef.current({
               name: hit.object.userData.name,
               zone: hit.object.userData.zone,
-              clinicalZone: resolveZone(hit.object.userData.zone, highlightsRef.current),
+              clinicalZone: hit.object.userData.zone,
             });
           }
         };
@@ -479,6 +427,12 @@ export default function NamedSkeleton({
         };
         const observer = new ResizeObserver(measure);
         paint();
+        loadSkin().then((gltf) => {
+          if (disposed) return;
+          skin = makeSkin(gltf, THREE);
+          group.add(skin);
+          paint();
+        }).catch(() => {});
         paintRef.current = paint;
         frameRef.current = goTo;
         resizeRef.current = applySize;
@@ -558,7 +512,7 @@ export default function NamedSkeleton({
               onZonePickRef.current?.({
                 zone: marker.zone,
                 groupId: marker.groupId,
-                clinicalZone: resolveZone(marker.zone, highlightsRef.current),
+                clinicalZone: marker.zone,
               });
             }}
             sx={{

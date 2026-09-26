@@ -1,5 +1,23 @@
-import { DietaPlan, Receta, MenuDia } from '../models/index.js';
-import { defaultDietPlanVinculos, resolveDietHabitCaptions } from '@attadia/shared/pulso';
+import {
+  DietaPlan,
+  Receta,
+  MenuDia,
+  Users,
+  Inventarios,
+  Transacciones,
+} from '../models/index.js';
+import {
+  aggregateDietCycle,
+  aggregateMeals,
+  cycleBounds,
+  defaultDietPlanVinculos,
+  matchDespensa,
+  mealsUseSchedule,
+  normalizeDietPlan,
+  planHasRotation,
+  resolveDietHabitCaptions,
+  scheduleToPlan,
+} from '@attadia/shared/pulso';
 
 function userId(req) {
   return req.user?._id || req.user?.id;
@@ -9,6 +27,11 @@ function startOfUtcDay(value) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return null;
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function presentPlan(plan) {
+  const raw = plan?.toObject ? plan.toObject() : { ...(plan || {}) };
+  return { ...raw, ...normalizeDietPlan(raw) };
 }
 
 async function ensurePlan(usuario) {
@@ -22,11 +45,42 @@ async function ensurePlan(usuario) {
   return plan;
 }
 
+function viewPlan(plan, recetas) {
+  if (!mealsUseSchedule(recetas)) return normalizeDietPlan(plan);
+  return scheduleToPlan(recetas, plan?.vinculos);
+}
+
+async function loadDespensa(usuario, plan, recetas, fecha) {
+  const view = viewPlan(plan, recetas);
+  const agregados = mealsUseSchedule(recetas)
+    ? aggregateMeals(recetas)
+    : aggregateDietCycle({ plan: view, recetas });
+  const bounds = cycleBounds(fecha, view.frecuencia || 'SEMANAL');
+  if (!agregados.ingredientes.length) {
+    return { ...bounds, ingredientes: [] };
+  }
+  const inicio = new Date(`${bounds.inicio}T00:00:00.000Z`);
+  const fin = new Date(`${bounds.fin}T00:00:00.000Z`);
+  const [inventario, transacciones] = await Promise.all([
+    Inventarios.find({ usuario }).select('nombre cantidad').lean(),
+    Transacciones.find({
+      usuario,
+      tipo: 'EGRESO',
+      categoria: { $in: ['Comida y Mercado', 'Salud y Belleza'] },
+      fecha: { $gte: inicio, $lt: fin },
+    }).select('descripcion fecha categoria').lean(),
+  ]);
+  return {
+    ...bounds,
+    ingredientes: matchDespensa(agregados.ingredientes, { inventario, transacciones }),
+  };
+}
+
 export const dietasController = {
   getPlan: async (req, res) => {
     try {
       const plan = await ensurePlan(userId(req));
-      res.json(plan);
+      res.json(presentPlan(plan));
     } catch (error) {
       console.error('Error al obtener plan de dieta:', error);
       res.status(500).json({ error: 'Error al obtener el plan' });
@@ -37,13 +91,24 @@ export const dietasController = {
     try {
       const usuario = userId(req);
       await ensurePlan(usuario);
-      const { calorias, proteinas, carbohidratos, grasas, slots, vinculos } = req.body;
+      const next = normalizeDietPlan(req.body);
       const plan = await DietaPlan.findOneAndUpdate(
         { usuario },
-        { calorias, proteinas, carbohidratos, grasas, slots, vinculos },
+        {
+          calorias: next.calorias,
+          proteinas: next.proteinas,
+          carbohidratos: next.carbohidratos,
+          grasas: next.grasas,
+          cadencia: next.cadencia,
+          frecuencia: next.frecuencia,
+          comidas: next.comidas,
+          huecos: next.huecos,
+          rotacion: next.rotacion,
+          vinculos: next.vinculos,
+        },
         { new: true },
       );
-      res.json(plan);
+      res.json(presentPlan(plan));
     } catch (error) {
       console.error('Error al guardar plan de dieta:', error);
       res.status(500).json({ error: 'Error al guardar el plan' });
@@ -130,20 +195,46 @@ export const dietasController = {
     }
   },
 
+  getDespensa: async (req, res) => {
+    try {
+      const usuario = userId(req);
+      const fecha = startOfUtcDay(req.query.fecha);
+      if (!fecha) return res.status(400).json({ error: 'Fecha inválida' });
+      const [plan, recetas] = await Promise.all([
+        ensurePlan(usuario),
+        Receta.find({ usuario }).lean(),
+      ]);
+      const despensa = await loadDespensa(usuario, plan, recetas, req.query.fecha);
+      res.json(despensa);
+    } catch (error) {
+      console.error('Error al calcular la reposición:', error);
+      res.status(500).json({ error: 'Error al calcular la reposición' });
+    }
+  },
+
   getHabitCaptions: async (req, res) => {
     try {
       const usuario = userId(req);
       const fecha = startOfUtcDay(req.query.fecha);
       if (!fecha) return res.status(400).json({ error: 'Fecha inválida' });
-      const [plan, menu, recetas] = await Promise.all([
+      const [plan, menu, recetas, user] = await Promise.all([
         DietaPlan.findOne({ usuario }).lean(),
         MenuDia.findOne({ usuario, fecha }).lean(),
         Receta.find({ usuario }).lean(),
+        Users.findById(usuario).select('customHabits preferences.rutinasConfig').lean(),
       ]);
+      const view = viewPlan(plan, recetas);
+      const despensa = (mealsUseSchedule(recetas) || planHasRotation(plan))
+        ? await loadDespensa(usuario, plan, recetas, req.query.fecha)
+        : null;
       const captions = resolveDietHabitCaptions({
-        plan,
+        plan: view,
         menu,
         recetas,
+        fecha: req.query.fecha,
+        habits: user?.customHabits,
+        habitConfig: user?.preferences?.rutinasConfig,
+        ingredientes: despensa?.ingredientes,
       });
       res.json({ captions });
     } catch (error) {

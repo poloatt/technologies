@@ -1,397 +1,348 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
-  Button,
-  Checkbox,
-  FormControlLabel,
-  MenuItem,
+  IconButton,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material';
-import { CommonActions, CommonDetails, CommonForm, EmptyState } from '@shared/components/common';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import { EmptyState, SplitScreen } from '@shared/components/common';
+import TaskEventBlock from '@shared/components/tasks/TaskEventBlock';
+import TareaFormTitleField from '@shared/components/forms/TareaFormTitleField';
+import {
+  CadenceCircleToggle,
+  CadencePillToggle,
+  getDiaSemanaLetra,
+} from '@shared/components/habits/InlineItemConfigImproved';
+import { DIAS_SEMANA } from '@shared/habits';
+import useResponsive from '@shared/hooks/useResponsive';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
-import { getHabitId } from '@shared/habits';
-import {
-  DIET_CHANNELS,
-  DIET_SLOTS,
-  SHOP_CHANNELS,
-} from '@shared/pulso';
+import { MEAL_FRANJAS } from '@shared/pulso';
 
-function todayInput() {
-  return new Date().toISOString().slice(0, 10);
+const WEEK = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
+
+function mealId(meal) {
+  return String(meal?.id || meal?._id || '');
 }
 
-function parseIngredientes(text) {
-  return String(text || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [nombre, canal] = line.split(',').map((part) => part.trim());
-      const known = DIET_CHANNELS.some((channel) => channel.id === canal);
-      return { nombre, canal: known ? canal : 'super' };
-    })
-    .filter((item) => item.nombre);
+function presentMeal(meal) {
+  return {
+    ...meal,
+    nombre: meal?.nombre || '',
+    frecuencia: meal?.frecuencia === 'DIARIA' ? 'DIARIA' : 'SEMANAL',
+    dias: Array.isArray(meal?.dias) ? meal.dias.map(Number) : [],
+    franjas: Array.isArray(meal?.franjas) && meal.franjas.length ? meal.franjas : [],
+    porciones: Number(meal?.porciones) || 1,
+    ingredientes: Array.isArray(meal?.ingredientes) ? meal.ingredientes : [],
+  };
 }
 
-function formatIngredientes(list) {
-  return (list || []).map((item) => `${item.nombre}, ${item.canal}`).join('\n');
-}
-
-function habitValue(section, habitId) {
-  if (!habitId) return '';
-  return `${section}:${habitId}`;
-}
-
-function splitHabitValue(value) {
-  if (!value) return { section: '', habitId: '' };
-  const [section, habitId] = String(value).split(':');
-  return { section, habitId };
+function payloadOf(meal) {
+  return {
+    nombre: meal.nombre.trim() || 'Nueva comida',
+    slot: meal.slot || 'COMIDA',
+    frecuencia: meal.frecuencia,
+    dias: meal.frecuencia === 'SEMANAL' ? meal.dias : [],
+    franjas: meal.franjas,
+    porciones: Number(meal.porciones) || 1,
+    ingredientes: (meal.ingredientes || [])
+      .filter((item) => item.nombre && item.nombre.trim())
+      .map((item) => ({ nombre: item.nombre.trim() })),
+    calorias: Number(meal.calorias) || 0,
+    proteinas: Number(meal.proteinas) || 0,
+    carbohidratos: Number(meal.carbohidratos) || 0,
+    grasas: Number(meal.grasas) || 0,
+    preparacion: meal.preparacion || '',
+  };
 }
 
 export function Nutricion() {
   const { enqueueSnackbar } = useSnackbar();
-  const [plan, setPlan] = useState(null);
-  const [recetas, setRecetas] = useState([]);
-  const [menu, setMenu] = useState({ slots: {} });
-  const [fecha, setFecha] = useState(todayInput());
-  const [habits, setHabits] = useState({});
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const { isDesktop } = useResponsive();
+  const [meals, setMeals] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const timers = useRef({});
 
-  const habitOptions = useMemo(() => {
-    const options = [];
-    Object.entries(habits || {}).forEach(([section, list]) => {
-      const habitsInSection = Array.isArray(list)
-        ? list
-        : (list && typeof list === 'object'
-          ? Object.values(list).filter((item) => item && typeof item === 'object')
-          : []);
-      habitsInSection.filter((habit) => habit?.activo !== false).forEach((habit) => {
-        const habitId = getHabitId(habit);
-        if (!habitId) return;
-        options.push({
-          value: habitValue(section, habitId),
-          label: habit.label || habitId,
-        });
-      });
-    });
-    return options;
-  }, [habits]);
+  const presented = useMemo(() => meals.map(presentMeal), [meals]);
 
-  const loadRecetas = useCallback(async () => {
+  const loadMeals = useCallback(async () => {
     const response = await clienteAxios.get('/api/dietas/recetas');
-    setRecetas(response.data || []);
-  }, []);
-
-  const loadPlan = useCallback(async () => {
-    const response = await clienteAxios.get('/api/dietas/plan');
-    setPlan(response.data);
-  }, []);
-
-  const loadMenu = useCallback(async (day) => {
-    const response = await clienteAxios.get('/api/dietas/menu', { params: { fecha: day } });
-    setMenu(response.data || { slots: {} });
+    setMeals(response.data || []);
   }, []);
 
   useEffect(() => {
-    Promise.all([
-      loadPlan(),
-      loadRecetas(),
-      clienteAxios.get('/api/users/habits').then((response) => {
-        setHabits(response.data?.habits || {});
-      }),
-    ]).catch(() => {
+    loadMeals().catch(() => {
       enqueueSnackbar('Error al cargar Nutrición', { variant: 'error' });
     });
-  }, [enqueueSnackbar, loadPlan, loadRecetas]);
+  }, [enqueueSnackbar, loadMeals]);
 
-  useEffect(() => {
-    loadMenu(fecha).catch(() => {
-      enqueueSnackbar('Error al cargar el menú', { variant: 'error' });
-    });
-  }, [enqueueSnackbar, fecha, loadMenu]);
+  useEffect(() => () => {
+    Object.values(timers.current).forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  const persist = useCallback((meal) => {
+    const id = mealId(meal);
+    if (!id) return;
+    clearTimeout(timers.current[id]);
+    timers.current[id] = setTimeout(async () => {
+      try {
+        await clienteAxios.put(`/api/dietas/recetas/${id}`, payloadOf(meal));
+      } catch (error) {
+        enqueueSnackbar('Error al guardar la comida', { variant: 'error' });
+      }
+    }, 400);
+  }, [enqueueSnackbar]);
+
+  const updateMeal = (id, next) => {
+    setMeals((current) => current.map((meal) => (mealId(meal) === id ? next : meal)));
+    persist(next);
+  };
+
+  const createMeal = async () => {
+    try {
+      const response = await clienteAxios.post('/api/dietas/recetas', {
+        nombre: 'Nueva comida',
+        slot: 'COMIDA',
+        frecuencia: 'SEMANAL',
+        dias: [],
+        franjas: ['TARDE'],
+        porciones: 1,
+        ingredientes: [],
+      });
+      const created = response.data;
+      setMeals((current) => [created, ...current]);
+      setSelectedId(mealId(created));
+    } catch (error) {
+      enqueueSnackbar('Error al crear la comida', { variant: 'error' });
+    }
+  };
+
+  const deleteMeal = async (meal) => {
+    const id = mealId(meal);
+    try {
+      await clienteAxios.delete(`/api/dietas/recetas/${id}`);
+      setMeals((current) => current.filter((item) => mealId(item) !== id));
+      if (selectedId === id) setSelectedId('');
+    } catch (error) {
+      enqueueSnackbar('Error al eliminar la comida', { variant: 'error' });
+    }
+  };
+
+  const createMealRef = useRef(createMeal);
+  createMealRef.current = createMeal;
 
   useEffect(() => {
     const onAdd = (event) => {
-      if (event.detail?.type === 'nutricion') {
-        setEditing(null);
-        setFormOpen(true);
-      }
+      if (event.detail?.type === 'nutricion') createMealRef.current();
     };
     window.addEventListener('headerAddButtonClicked', onAdd);
     return () => window.removeEventListener('headerAddButtonClicked', onAdd);
   }, []);
 
-  const savePlan = async () => {
-    try {
-      const response = await clienteAxios.put('/api/dietas/plan', plan);
-      setPlan(response.data);
-      enqueueSnackbar('Plan guardado', { variant: 'success' });
-    } catch (error) {
-      enqueueSnackbar('Error al guardar el plan', { variant: 'error' });
-    }
-  };
+  const selected = presented.find((meal) => mealId(meal) === selectedId) || null;
+  const detail = selected ? (
+    <Box sx={{ height: '100%', minHeight: 0, overflow: 'auto', py: 1, px: { xs: 1, sm: 0 } }}>
+      <MealCard
+        meal={selected}
+        onChange={(next) => updateMeal(mealId(selected), next)}
+        onDelete={() => deleteMeal(selected)}
+        onClose={() => setSelectedId('')}
+      />
+    </Box>
+  ) : null;
 
-  const saveMenu = async (nextMenu) => {
-    try {
-      const response = await clienteAxios.put('/api/dietas/menu', {
-        fecha,
-        slots: nextMenu.slots,
-      });
-      setMenu(response.data);
-    } catch (error) {
-      enqueueSnackbar('Error al guardar el menú', { variant: 'error' });
-    }
-  };
-
-  const updateVinculo = (group, index, value) => {
-    const link = splitHabitValue(value);
-    setPlan((current) => {
-      const list = [...(current.vinculos?.[group] || [])];
-      list[index] = { ...list[index], ...link };
-      return { ...current, vinculos: { ...current.vinculos, [group]: list } };
-    });
-  };
-
-  const handleRecetaSubmit = async (formData) => {
-    const payload = {
-      nombre: formData.nombre,
-      slot: formData.slot,
-      calorias: Number(formData.calorias) || 0,
-      proteinas: Number(formData.proteinas) || 0,
-      carbohidratos: Number(formData.carbohidratos) || 0,
-      grasas: Number(formData.grasas) || 0,
-      preparacion: formData.preparacion || '',
-      ingredientes: parseIngredientes(formData.ingredientes),
-    };
-    try {
-      if (editing?.id || editing?._id) {
-        await clienteAxios.put(`/api/dietas/recetas/${editing.id || editing._id}`, payload);
-      } else {
-        await clienteAxios.post('/api/dietas/recetas', payload);
-      }
-      setFormOpen(false);
-      setEditing(null);
-      await loadRecetas();
-      enqueueSnackbar('Receta guardada', { variant: 'success' });
-    } catch (error) {
-      enqueueSnackbar('Error al guardar la receta', { variant: 'error' });
-    }
-  };
-
-  const deleteReceta = async (receta) => {
-    try {
-      await clienteAxios.delete(`/api/dietas/recetas/${receta.id || receta._id}`);
-      await loadRecetas();
-    } catch (error) {
-      enqueueSnackbar('Error al eliminar la receta', { variant: 'error' });
-    }
-  };
-
-  const formFields = [
-    { name: 'nombre', label: 'Nombre', required: true },
-    {
-      name: 'slot',
-      label: 'Comida',
-      type: 'select',
-      required: true,
-      options: DIET_SLOTS.map((slot) => ({ value: slot.id, label: slot.label })),
-    },
-    { name: 'calorias', label: 'Calorías', type: 'number' },
-    { name: 'proteinas', label: 'Proteínas (g)', type: 'number' },
-    { name: 'carbohidratos', label: 'Carbohidratos (g)', type: 'number' },
-    { name: 'grasas', label: 'Grasas (g)', type: 'number' },
-    {
-      name: 'ingredientes',
-      label: 'Ingredientes (una línea: nombre, super|verduleria|rotiseria|cocina)',
-      multiline: true,
-      rows: 4,
-    },
-    { name: 'preparacion', label: 'Preparación', multiline: true, rows: 3 },
-  ];
+  const list = (
+    <MealList
+      meals={presented}
+      selectedId={selectedId}
+      onSelect={setSelectedId}
+    />
+  );
 
   return (
-    <Box sx={{ px: 0, width: '100%' }}>
-      <CommonDetails title="Plan" showTitle action={(
-        <Button size="small" variant="contained" sx={{ borderRadius: 0 }} onClick={savePlan} disabled={!plan}>
-          Guardar plan
-        </Button>
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', width: '100%' }}>
+      {isDesktop ? (
+        <SplitScreen start={list} detail={detail} sx={{ flex: 1, minHeight: 0 }} />
+      ) : (
+        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+          {list}
+          {detail}
+        </Box>
       )}
-      >
-        {!plan ? <EmptyState /> : (
-          <Stack spacing={2}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              {['calorias', 'proteinas', 'carbohidratos', 'grasas'].map((field) => (
-                <TextField
-                  key={field}
-                  size="small"
-                  type="number"
-                  label={field}
-                  value={plan[field] ?? 0}
-                  onChange={(event) => setPlan({ ...plan, [field]: Number(event.target.value) })}
-                />
-              ))}
-            </Stack>
-            <Typography variant="body2" color="text.secondary">Cocina y cena</Typography>
-            {(plan.vinculos?.cocina || []).map((link, index) => {
-              const value = habitValue(link.section, link.habitId);
-              const known = habitOptions.some((option) => option.value === value);
-              return (
-              <TextField
-                key={link.slot}
-                select
-                size="small"
-                label={DIET_SLOTS.find((slot) => slot.id === link.slot)?.label || link.slot}
-                value={value}
-                onChange={(event) => updateVinculo('cocina', index, event.target.value)}
-              >
-                {value && !known ? (
-                  <MenuItem value={value}>{link.habitId}</MenuItem>
-                ) : null}
-                {habitOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-                ))}
-              </TextField>
-              );
-            })}
-            <Typography variant="body2" color="text.secondary">Compras</Typography>
-            {(plan.vinculos?.compras || []).map((link, index) => {
-              const value = habitValue(link.section, link.habitId);
-              const known = !value || habitOptions.some((option) => option.value === value);
-              return (
-              <TextField
-                key={link.canal}
-                select
-                size="small"
-                label={SHOP_CHANNELS.find((channel) => channel.id === link.canal)?.label || link.canal}
-                value={value}
-                onChange={(event) => updateVinculo('compras', index, event.target.value)}
-              >
-                <MenuItem value="">Sin vínculo</MenuItem>
-                {value && !known ? (
-                  <MenuItem value={value}>{link.habitId}</MenuItem>
-                ) : null}
-                {habitOptions.map((option) => (
-                  <MenuItem key={`${link.canal}-${option.value}`} value={option.value}>{option.label}</MenuItem>
-                ))}
-              </TextField>
-              );
-            })}
-          </Stack>
-        )}
-      </CommonDetails>
+    </Box>
+  );
+}
 
-      <CommonDetails title="Recetas" showTitle action={(
-        <Button size="small" variant="contained" sx={{ borderRadius: 0 }} onClick={() => { setEditing(null); setFormOpen(true); }}>
-          Nueva receta
-        </Button>
-      )}
-      >
-        {recetas.length === 0 ? <EmptyState /> : (
-          <Stack spacing={1}>
-            {recetas.map((receta) => (
-              <Box key={receta.id || receta._id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="body2">
-                  {receta.nombre} · {DIET_SLOTS.find((slot) => slot.id === receta.slot)?.label}
-                </Typography>
-                <CommonActions
-                  onEdit={() => {
-                    setEditing({
-                      ...receta,
-                      ingredientes: formatIngredientes(receta.ingredientes),
-                    });
-                    setFormOpen(true);
-                  }}
-                  onDelete={() => deleteReceta(receta)}
-                  itemName="la receta"
-                  size="small"
-                />
-              </Box>
+function mealEvent(meal) {
+  const orderedFranjas = MEAL_FRANJAS.filter((item) => meal.franjas.includes(item.id));
+  return {
+    task: {
+      titulo: meal.nombre || 'Nueva comida',
+      tipo: 'EVENTO',
+      estado: 'PENDIENTE',
+    },
+    start: franjaDate(orderedFranjas[0]?.id, false),
+    end: franjaDate(orderedFranjas[orderedFranjas.length - 1]?.id, true),
+    allDay: orderedFranjas.length === 0,
+  };
+}
+
+function MealList({ meals, selectedId, onSelect }) {
+  return (
+    <Box sx={{ height: '100%', minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1, px: { xs: 1, sm: 0 }, py: 1 }}>
+      {meals.length === 0 ? <EmptyState /> : meals.map((meal) => {
+        const id = mealId(meal);
+        return (
+          <Box
+            key={id}
+            sx={{
+              borderRadius: '4px',
+              outline: id === selectedId ? '1px solid' : 'none',
+              outlineColor: 'primary.main',
+            }}
+          >
+            <TaskEventBlock timedCompact event={mealEvent(meal)} onClick={() => onSelect(id)} />
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function MealCard({ meal, onChange, onDelete, onClose }) {
+  const id = mealId(meal);
+  const toggleDay = (day) => {
+    const dias = meal.dias.includes(day)
+      ? meal.dias.filter((value) => value !== day)
+      : [...meal.dias, day].sort((a, b) => a - b);
+    onChange({ ...meal, dias });
+  };
+  const toggleFranja = (franja) => {
+    const franjas = meal.franjas.includes(franja)
+      ? meal.franjas.filter((value) => value !== franja)
+      : [...meal.franjas, franja];
+    onChange({ ...meal, franjas });
+  };
+  const updateIngredient = (index, patch) => {
+    const ingredientes = meal.ingredientes.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    ));
+    onChange({ ...meal, ingredientes });
+  };
+
+  return (
+    <Box id={`comida-${id}`} sx={{ borderRadius: '4px', overflow: 'hidden' }}>
+      <Stack spacing={1} sx={{ p: 1.5 }} onClick={(event) => event.stopPropagation()}>
+        <TareaFormTitleField
+          value={meal.nombre}
+          onChange={(event) => onChange({ ...meal, nombre: event.target.value })}
+          placeholder="Agregar título"
+          autoFocus
+          action={(
+            <IconButton aria-label="Cerrar comida" size="small" onClick={onClose}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          )}
+        />
+        <TextField
+          size="small"
+          type="number"
+          label="Porciones"
+          value={meal.porciones ?? 1}
+          onChange={(event) => onChange({ ...meal, porciones: event.target.value })}
+          inputProps={{ min: 1, step: 1 }}
+          sx={{ width: 120 }}
+        />
+        <Stack spacing={0.75}>
+          {meal.ingredientes.map((item, index) => (
+            <Stack key={`${id}-ing-${index}`} direction="row" spacing={0.5} alignItems="center">
+              <TextField
+                size="small"
+                label="Ingrediente"
+                value={item.nombre || ''}
+                onChange={(event) => updateIngredient(index, { nombre: event.target.value })}
+                sx={{ flex: 1 }}
+              />
+              <IconButton
+                aria-label="Quitar ingrediente"
+                size="small"
+                onClick={() => onChange({
+                  ...meal,
+                  ingredientes: meal.ingredientes.filter((_, itemIndex) => itemIndex !== index),
+                })}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          ))}
+          <Box>
+            <IconButton
+              aria-label="Agregar ingrediente"
+              size="small"
+              onClick={() => onChange({
+                ...meal,
+                ingredientes: [...meal.ingredientes, { nombre: '' }],
+              })}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </Stack>
+        <Stack direction="row" spacing={0.5}>
+          <CadencePillToggle
+            label="Diaria"
+            selected={meal.frecuencia === 'DIARIA'}
+            onClick={() => onChange({ ...meal, frecuencia: 'DIARIA' })}
+          />
+          <CadencePillToggle
+            label="Semanal"
+            selected={meal.frecuencia === 'SEMANAL'}
+            onClick={() => onChange({ ...meal, frecuencia: 'SEMANAL' })}
+          />
+        </Stack>
+        {meal.frecuencia === 'SEMANAL' && (
+          <Stack direction="row" spacing={0.5}>
+            {WEEK.map((day) => (
+              <CadenceCircleToggle
+                key={day.value}
+                label={getDiaSemanaLetra(day.value)}
+                selected={meal.dias.includes(day.value)}
+                onClick={() => toggleDay(day.value)}
+                ariaLabel={day.label}
+              />
             ))}
           </Stack>
         )}
-      </CommonDetails>
-
-      <CommonDetails title="Menú del día" showTitle>
-        <Stack spacing={1}>
-          <TextField
-            size="small"
-            type="date"
-            label="Fecha"
-            value={fecha}
-            onChange={(event) => setFecha(event.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-          {DIET_SLOTS.map((slot) => {
-            const entry = menu.slots?.[slot.id] || {};
-            const options = recetas.filter((receta) => receta.slot === slot.id);
-            return (
-              <Box key={slot.id}>
-                <TextField
-                  select
-                  fullWidth
-                  size="small"
-                  label={slot.label}
-                  value={entry.recetaId || ''}
-                  onChange={(event) => {
-                    const next = {
-                      ...menu,
-                      slots: {
-                        ...menu.slots,
-                        [slot.id]: { ...entry, recetaId: event.target.value },
-                      },
-                    };
-                    setMenu(next);
-                    saveMenu(next);
-                  }}
-                >
-                  <MenuItem value="">Sin receta</MenuItem>
-                  {options.map((receta) => (
-                    <MenuItem key={receta.id || receta._id} value={receta.id || receta._id}>
-                      {receta.nombre}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <FormControlLabel
-                  control={(
-                    <Checkbox
-                      size="small"
-                      checked={Boolean(entry.comido)}
-                      onChange={(event) => {
-                        const next = {
-                          ...menu,
-                          slots: {
-                            ...menu.slots,
-                            [slot.id]: { ...entry, comido: event.target.checked },
-                          },
-                        };
-                        setMenu(next);
-                        saveMenu(next);
-                      }}
-                    />
-                  )}
-                  label="Comido"
-                />
-              </Box>
-            );
-          })}
+        <Stack direction="row" spacing={0.5}>
+          {MEAL_FRANJAS.map((franja) => (
+            <CadencePillToggle
+              key={franja.id}
+              label={franja.label}
+              selected={meal.franjas.includes(franja.id)}
+              onClick={() => toggleFranja(franja.id)}
+              ariaLabel={`Franja ${franja.label}`}
+            />
+          ))}
         </Stack>
-      </CommonDetails>
-
-      <CommonForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setEditing(null); }}
-        onSubmit={handleRecetaSubmit}
-        title={editing ? 'Editar receta' : 'Nueva receta'}
-        fields={formFields}
-        initialData={editing || { slot: 'CENA' }}
-        isEditing={!!editing}
-      />
+        <Box>
+          <IconButton aria-label="Eliminar comida" size="small" onClick={onDelete}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      </Stack>
     </Box>
   );
+}
+
+function franjaDate(franjaId, end) {
+  const franja = MEAL_FRANJAS.find((item) => item.id === franjaId);
+  if (!franja) return null;
+  const [hours, minutes] = (end ? franja.fin : franja.inicio).split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return date;
 }
 
 export default Nutricion;

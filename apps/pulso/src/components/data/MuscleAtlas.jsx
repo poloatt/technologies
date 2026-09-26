@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { FigureBackButton, FigureHelpButton } from '@shared/components/common/FigureCornerIcons';
 import { facesBack, muscleGroup } from './muscleGroups';
+import { fitSkin, loadSkin, makeSkin, paintSkin } from './skinShell';
 
 const MODEL = '/muscles/body-raw.glb';
 
@@ -121,6 +122,15 @@ export default function MuscleAtlas({
         muscles.push(node);
       });
       scene.add(root);
+      let skin = null;
+      loadSkin().then((gltf) => {
+        if (disposed) return;
+        skin = makeSkin(gltf, THREE);
+        const box = new THREE.Box3();
+        muscles.forEach((mesh) => box.expandByObject(mesh));
+        fitSkin(skin, box, THREE);
+        scene.add(skin);
+      }).catch(() => {});
       if (!muscles.length) {
         setStatus('error');
         return;
@@ -200,6 +210,7 @@ export default function MuscleAtlas({
             material.depthWrite = active;
           });
         });
+        paintSkin(skin, zone ? 0.02 : 0.5);
       };
 
       const raycaster = new THREE.Raycaster();
@@ -305,7 +316,7 @@ export default function MuscleAtlas({
         <FigureHelpButton
           open={licenseOpen}
           label="Referencia de los músculos"
-          title="Z-Anatomy, CC BY-SA 4.0."
+          title="Z-Anatomy, CC BY-SA 4.0. Piel: BodyParts3D, © DBCLS, CC BY-SA 2.1 Japón."
           onToggle={() => setLicensePinned((open) => !open)}
           onOpen={() => setLicenseHover(true)}
           onClose={() => setLicenseHover(false)}

@@ -1,36 +1,86 @@
-export const DIET_SLOTS = [
-  { id: 'DESAYUNO', label: 'Desayuno' },
-  { id: 'ALMUERZO', label: 'Almuerzo' },
-  { id: 'MERIENDA', label: 'Merienda' },
-  { id: 'CENA', label: 'Cena' },
-  { id: 'SNACK', label: 'Snack' },
-];
+import {
+  DIET_CHANNELS,
+  DIET_FREQUENCIES,
+  DIET_SLOTS,
+  DIET_UNITS,
+  HYDRATION_PERMITS,
+  SHOP_CHANNELS,
+  WEEKDAY_LABELS,
+  aggregateDietCycle,
+  buildDietTimeline,
+  cycleBounds,
+  cyclePositionLabel,
+  dayOccurrences,
+  defaultCycleVinculos,
+  dietCycleIndex,
+  foldName,
+  formatCantidad,
+  formatIngredientes,
+  frequencyDays,
+  frequencyScopeLabel,
+  huecoLabel,
+  inferDietRole,
+  listHabits,
+  matchDespensa,
+  mealPlacements,
+  mealsUseSchedule,
+  MEAL_FRANJAS,
+  aggregateMeals,
+  scheduleToPlan,
+  normalizeDietPlan,
+  parseCalendarDate,
+  parseIngredientes,
+  planHasRotation,
+  recetaKey,
+  resolveCycleDietHabitCaptions,
+  resolveDietDay,
+  sumIngredients,
+  sumMacros,
+} from './dietCycle.js';
 
-export const DIET_CHANNELS = [
-  { id: 'super', label: 'Supermercado' },
-  { id: 'verduleria', label: 'Verdulería' },
-  { id: 'rotiseria', label: 'Rotisería' },
-  { id: 'cocina', label: 'Cocina' },
-];
-
-export const SHOP_CHANNELS = DIET_CHANNELS.filter((channel) => channel.id !== 'cocina');
+export {
+  DIET_CHANNELS,
+  DIET_FREQUENCIES,
+  DIET_SLOTS,
+  DIET_UNITS,
+  HYDRATION_PERMITS,
+  SHOP_CHANNELS,
+  WEEKDAY_LABELS,
+  aggregateDietCycle,
+  buildDietTimeline,
+  cycleBounds,
+  cyclePositionLabel,
+  dayOccurrences,
+  dietCycleIndex,
+  foldName,
+  formatCantidad,
+  formatIngredientes,
+  frequencyDays,
+  frequencyScopeLabel,
+  huecoLabel,
+  inferDietRole,
+  listHabits,
+  matchDespensa,
+  mealPlacements,
+  mealsUseSchedule,
+  MEAL_FRANJAS,
+  aggregateMeals,
+  scheduleToPlan,
+  normalizeDietPlan,
+  parseCalendarDate,
+  parseIngredientes,
+  planHasRotation,
+  recetaKey,
+  resolveDietDay,
+  sumIngredients,
+  sumMacros,
+};
 
 export function defaultDietPlanVinculos() {
-  return {
-    cocina: DIET_SLOTS.map((slot) => ({
-      slot: slot.id,
-      section: 'nutricion',
-      habitId: 'cocinar',
-    })),
-    compras: SHOP_CHANNELS.map((channel) => ({
-      canal: channel.id,
-      section: '',
-      habitId: '',
-    })),
-  };
+  return defaultCycleVinculos();
 }
 
-function recetaKey(receta) {
+function menuRecetaKey(receta) {
   return String(receta?.id || receta?._id || '');
 }
 
@@ -45,8 +95,8 @@ function addCaption(captions, section, habitId, text) {
  * Texto del menú del día para cada hábito vinculado.
  * No lee ni escribe la completitud de la rutina.
  */
-export function resolveDietHabitCaptions({ plan, menu, recetas } = {}) {
-  const byId = new Map((recetas || []).map((receta) => [recetaKey(receta), receta]));
+function resolveMenuDietHabitCaptions({ plan, menu, recetas } = {}) {
+  const byId = new Map((recetas || []).map((receta) => [menuRecetaKey(receta), receta]));
   const slots = menu?.slots || {};
   const captions = {};
 
@@ -73,4 +123,9 @@ export function resolveDietHabitCaptions({ plan, menu, recetas } = {}) {
   });
 
   return captions;
+}
+
+export function resolveDietHabitCaptions(input = {}) {
+  if (planHasRotation(input.plan)) return resolveCycleDietHabitCaptions(input);
+  return resolveMenuDietHabitCaptions(input);
 }

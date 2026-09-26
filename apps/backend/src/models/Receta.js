@@ -21,12 +21,22 @@ const recetaSchema = createSchema({
       enum: DIET_CHANNELS.map((channel) => channel.id),
       default: 'super',
     },
+    cantidad: { type: Number, default: 1, min: 0 },
+    unidad: { type: String, default: 'u', trim: true },
   }],
   calorias: { type: Number, default: 0, min: 0 },
   proteinas: { type: Number, default: 0, min: 0 },
   carbohidratos: { type: Number, default: 0, min: 0 },
   grasas: { type: Number, default: 0, min: 0 },
   preparacion: { type: String, default: '' },
+  porciones: { type: Number, default: 1, min: 1 },
+  frecuencia: {
+    type: String,
+    enum: ['DIARIA', 'SEMANAL'],
+    default: 'SEMANAL',
+  },
+  dias: { type: [Number], default: [] },
+  franjas: { type: [String], default: () => ['TARDE'] },
   ...commonFields,
 });
 

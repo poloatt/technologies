@@ -1,11 +1,11 @@
-import { resolveDietHabitCaptions, defaultDietPlanVinculos } from '@attadia/shared/pulso/dietHabitLink.js';
+import { resolveDietHabitCaptions } from '@attadia/shared/pulso/dietHabitLink.js';
 import { resolveControlStatus } from '@attadia/shared/pulso/controlStatus.js';
 
 describe('resolveDietHabitCaptions', () => {
   it('arma el texto de cocina y de compra sin tocar completitud', () => {
     const plan = {
       vinculos: {
-        ...defaultDietPlanVinculos(),
+        cocina: [{ slot: 'CENA', section: 'nutricion', habitId: 'cocinar' }],
         compras: [
           { canal: 'verduleria', section: 'nutricion', habitId: 'super' },
         ],

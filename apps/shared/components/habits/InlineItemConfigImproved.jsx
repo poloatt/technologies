@@ -39,7 +39,7 @@ const normalizeFrecuencia = (value) => {
 
 
 
-const getDiaSemanaLetra = (diaValue) => {
+export const getDiaSemanaLetra = (diaValue) => {
   const letras = { 0: 'D', 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S' };
   return letras[diaValue] || '';
 };
@@ -75,7 +75,7 @@ function getCadenceToggleSx({ selected = false, disabled = false, circular = fal
   };
 }
 
-function CadenceCircleToggle({
+export function CadenceCircleToggle({
   label,
   selected = false,
   disabled = false,
@@ -97,7 +97,7 @@ function CadenceCircleToggle({
   );
 }
 
-function CadencePillToggle({
+export function CadencePillToggle({
   label,
   selected = false,
   disabled = false,
