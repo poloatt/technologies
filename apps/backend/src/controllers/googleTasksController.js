@@ -278,14 +278,17 @@ export const handleCallback = async (req, res) => {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // Guardar tokens en la base de datos
-    await Users.findByIdAndUpdate(userId, {
+    // Guardar tokens (no pisar refresh si Google no lo reenvía en re-consent)
+    const tokenUpdate = {
       'googleTasksConfig.enabled': true,
       'googleTasksConfig.accessToken': tokens.access_token,
-      'googleTasksConfig.refreshToken': tokens.refresh_token,
       'googleTasksConfig.lastSync': new Date(),
-      'googleTasksConfig.syncDirection': 'bidirectional'
-    });
+      'googleTasksConfig.syncDirection': 'bidirectional',
+    };
+    if (tokens.refresh_token) {
+      tokenUpdate['googleTasksConfig.refreshToken'] = tokens.refresh_token;
+    }
+    await Users.findByIdAndUpdate(userId, tokenUpdate);
 
     if (googleTasksService) {
       await googleTasksService.enableGoogleTasksForAllUserTasks(userId);
@@ -560,11 +563,7 @@ export const manualSync = async (req, res) => {
     // Pasar el usuario completo en lugar de solo el ID para evitar consultas adicionales
     const fullImport = req.body?.fullImport === true;
     const syncResults = await googleTasksService.fullSyncWithUser(req.user, { fullImport });
-    
-    // Actualizar fecha de última sincronización
-    await Users.findByIdAndUpdate(getUserId(req.user), {
-      'googleTasksConfig.lastSync': new Date()
-    });
+    // lastSync lo actualiza el service solo si no hubo quotaHit (evitar saltar pendientes)
 
     // Preparar mensaje informativo
     let message = 'Sincronización completada correctamente';

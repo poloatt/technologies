@@ -37,6 +37,11 @@ const recetaSchema = createSchema({
   },
   dias: { type: [Number], default: [] },
   franjas: { type: [String], default: () => ['TARDE'] },
+  origen: {
+    type: String,
+    enum: ['usuario', 'robin'],
+    default: 'usuario',
+  },
   ...commonFields,
 });
 

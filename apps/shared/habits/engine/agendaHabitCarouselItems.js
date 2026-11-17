@@ -110,7 +110,11 @@ export function getAgendaHabitCarouselItems(mode, {
     diarioBucket,
     rutinaHoy,
     allRutinas,
-    currentTimeOfDay ? { activeFranja: currentTimeOfDay } : {},
+    {
+      habits,
+      customSections,
+      ...(currentTimeOfDay ? { activeFranja: currentTimeOfDay } : {}),
+    },
   );
 
   const entries = mode === 'luego' ? schedule.luego : schedule.ahora;

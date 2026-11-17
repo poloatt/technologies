@@ -207,6 +207,14 @@ const userSchema = new mongoose.Schema({
       default: () => [],
     },
   },
+  robinModel: {
+    type: String,
+    default: 'gemini-3.1-flash-lite',
+  },
+  robinModelChosen: {
+    type: Boolean,
+    default: false,
+  },
   // Hábitos personalizados del usuario (Mixed permite secciones dinámicas)
   customHabits: {
     type: Schema.Types.Mixed,
@@ -236,6 +244,14 @@ const userSchema = new mongoose.Schema({
       ret.id = ret._id;
       delete ret.password;
       delete ret.__v;
+      if (ret.googleTasksConfig) {
+        delete ret.googleTasksConfig.accessToken;
+        delete ret.googleTasksConfig.refreshToken;
+      }
+      if (ret.googleCalendarConfig) {
+        delete ret.googleCalendarConfig.accessToken;
+        delete ret.googleCalendarConfig.refreshToken;
+      }
       return ret;
     }
   }

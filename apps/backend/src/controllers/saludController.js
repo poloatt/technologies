@@ -1,6 +1,7 @@
 import { ControlSalud, SaludItem } from '../models/index.js';
 import { Tareas } from '../models/Tareas.js';
 import { DEFAULT_CONTROLES, resolveControlesStatus } from '@attadia/shared/pulso';
+import { removeRobinFiles } from '../services/robinFiles.js';
 
 function userId(req) {
   return req.user?._id || req.user?.id;
@@ -24,7 +25,7 @@ function tareaPatch(item) {
   };
 }
 
-async function projectTarea(item, usuario) {
+export async function projectSaludItem(item, usuario) {
   const patch = tareaPatch(item);
   if (item.tareaId) {
     await Tareas.findOneAndUpdate(
@@ -84,6 +85,7 @@ export const saludController = {
         zona: req.body.zona,
         label: req.body.label,
         intervaloDias: Number(req.body.intervaloDias) || 365,
+        origen: 'usuario',
       });
       res.status(201).json(control);
     } catch (error) {
@@ -100,6 +102,7 @@ export const saludController = {
           zona: req.body.zona,
           label: req.body.label,
           intervaloDias: Number(req.body.intervaloDias) || 365,
+          origen: 'usuario',
         },
         { new: true },
       );
@@ -121,6 +124,7 @@ export const saludController = {
       if (!control) return res.status(404).json({ error: 'Control no encontrado' });
       const items = await SaludItem.find({ usuario, controlId: control.controlId });
       await Promise.all(items.map((item) => cancelTarea(item.tareaId, usuario)));
+      await Promise.all(items.map((item) => removeRobinFiles(usuario, item.archivos)));
       await SaludItem.deleteMany({ usuario, controlId: control.controlId });
       res.json({ msg: 'Control eliminado' });
     } catch (error) {
@@ -152,8 +156,10 @@ export const saludController = {
         fecha: req.body.fecha,
         estado: req.body.estado || 'PENDIENTE',
         notas: req.body.notas || '',
+        parte: req.body.parte || '',
+        origen: 'usuario',
       });
-      await projectTarea(item, usuario);
+      await projectSaludItem(item, usuario);
       res.status(201).json(item);
     } catch (error) {
       console.error('Error al crear ítem de salud:', error);
@@ -172,8 +178,10 @@ export const saludController = {
       item.fecha = req.body.fecha ?? item.fecha;
       item.estado = req.body.estado ?? item.estado;
       item.notas = req.body.notas ?? item.notas;
+      item.parte = req.body.parte ?? item.parte;
+      item.origen = req.body.origen === 'robin' ? 'robin' : 'usuario';
       await item.save();
-      await projectTarea(item, usuario);
+      await projectSaludItem(item, usuario);
       res.json(item);
     } catch (error) {
       console.error('Error al actualizar ítem de salud:', error);
@@ -187,6 +195,7 @@ export const saludController = {
       const item = await SaludItem.findOneAndDelete({ _id: req.params.id, usuario });
       if (!item) return res.status(404).json({ error: 'Ítem no encontrado' });
       await cancelTarea(item.tareaId, usuario);
+      await removeRobinFiles(usuario, item.archivos);
       res.json({ msg: 'Ítem eliminado' });
     } catch (error) {
       console.error('Error al eliminar ítem de salud:', error);

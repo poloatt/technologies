@@ -157,7 +157,7 @@ describe('habitChainUtils', () => {
     expect(rows[0].entries.map((e) => e.itemId)).toEqual(['cocinar', 'platos']);
   });
 
-  test('groupEntriesIntoDisplayRows orders ahora before sinHacer within a routine', () => {
+  test('groupEntriesIntoDisplayRows keeps chain stepIndex order within a routine', () => {
     const items = [
       {
         itemId: 'morning',
@@ -176,7 +176,23 @@ describe('habitChainUtils', () => {
     const rows = groupEntriesIntoDisplayRows(items);
     expect(rows).toHaveLength(1);
     expect(rows[0].kind).toBe('stack');
-    expect(rows[0].entries.map((e) => e.itemId)).toEqual(['afternoon', 'morning']);
+    expect(rows[0].entries.map((e) => e.itemId)).toEqual(['morning', 'afternoon']);
+  });
+
+  test('groupEntriesIntoDisplayRows keeps single remaining habit as stack chrome', () => {
+    const items = [
+      {
+        itemId: 'shower',
+        section: 'bodyCare',
+        chain: { id: 'morning', stepIndex: 1, stepCount: 2 },
+      },
+    ];
+
+    const rows = groupEntriesIntoDisplayRows(items);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe('stack');
+    expect(rows[0].chainId).toBe('morning');
+    expect(rows[0].entries.map((e) => e.itemId)).toEqual(['shower']);
   });
 
   test('groupHabitsIntoDisplayRows groups routine habits from manager list', () => {

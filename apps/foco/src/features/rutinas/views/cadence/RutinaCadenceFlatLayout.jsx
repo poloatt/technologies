@@ -31,7 +31,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
     cadenceBuckets,
     handleItemClick,
     handleDoneToggle,
-    handleReorderSection,
   } = useRutinaCadenceView();
 
   const diarioBucket = useMemo(
@@ -112,7 +111,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
           localDataBySection={localDataBySection}
           includeDoneSection={false}
           useShortFranjaLabels
-          onReorderSection={handleReorderSection}
           luegoWeekdayGroups={luegoWeekdayGroups}
           hideNotToday={hideNotToday}
         />
@@ -127,7 +125,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
             habitsPreferences={habitPrefs}
             localDataBySection={localDataBySection}
             includeDoneSection={false}
-            onReorderSection={handleReorderSection}
             luegoWeekdayGroupsExtra={flexibleWeekdayGroups}
             hideNotToday={hideNotToday}
           />
@@ -140,12 +137,10 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
           bucket={bucket}
           rutina={rutina}
           readOnly={readOnly}
-          sortable
           habits={habits}
           habitsPreferences={habitPrefs}
           localDataBySection={localDataBySection}
           onItemClick={handleItemClick}
-          onReorderSection={handleReorderSection}
           hideNotToday={hideNotToday}
           hideDone={showDoneSection || isPreview || dayMode === 'future'}
         />

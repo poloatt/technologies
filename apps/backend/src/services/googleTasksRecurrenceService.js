@@ -656,28 +656,6 @@ export async function materializeNextOpenOccurrence(userId, tarea, options = {})
   await nueva.save();
   nueva.$locals = { ...(nueva.$locals || {}), createdThisCall: true };
 
-  // #region agent log
-  fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
-    body: JSON.stringify({
-      sessionId: 'b064c0',
-      runId: 'post-fix',
-      hypothesisId: mode === 'current-if-due' ? 'D' : 'C',
-      location: 'googleTasksRecurrenceService.js:materializeNextOpenOccurrence',
-      message: 'spawned next occurrence',
-      data: {
-        title: String(nueva.titulo || '').slice(0, 60),
-        mode,
-        anchor: anchorRaw ? new Date(anchorRaw).toISOString() : null,
-        next: nextDue.toISOString(),
-        keptPrevious: true,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   if (exportInstances && options.syncToGoogle !== false && options.googleTasksService && nueva.objetivo) {
     try {
       await options.googleTasksService.syncTaskToGoogle(nueva._id, userId);

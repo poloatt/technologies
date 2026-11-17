@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@shared': path.resolve(__dirname, '../shared'),
+        '@attadia/robin/ui': path.resolve(__dirname, '../robin/src/ui/index.js'),
         '@shared/habits': path.resolve(__dirname, '../shared/habits'),
         '@': path.resolve(__dirname, './src'),
       },

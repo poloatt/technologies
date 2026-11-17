@@ -2,6 +2,7 @@ import express from 'express';
 import BankConnectionController from '../controllers/bankConnectionController.js';
 import { checkAuth } from '../middleware/auth.js';
 import { checkOwnership } from '../middleware/checkOwnership.js';
+import { checkRole, ROLES } from '../middleware/checkRole.js';
 import { BankConnection } from '../models/BankConnection.js';
 import { 
   validateMercadoPagoAuthUrl, 
@@ -9,8 +10,15 @@ import {
   validateSyncRequest 
 } from '../middleware/validateMercadoPago.js';
 import rateLimit from 'express-rate-limit';
+import config from '../config/config.js';
 
 const router = express.Router();
+
+/** Endpoints de diagnóstico/prueba MP: solo desarrollo o admin */
+const allowMercadoPagoDebug = (req, res, next) => {
+  if (config.isDev) return next();
+  return checkRole(ROLES.ADMIN)(req, res, next);
+};
 
 // Rate limiting específico para MercadoPago (evitar exceder límites de API)
 const mercadopagoLimiter = rateLimit({
@@ -48,20 +56,18 @@ const syncLimiter = rateLimit({
 // Aplicar autenticación a todas las rutas
 router.use(checkAuth);
 
-// Endpoint temporal para pago de prueba con MercadoPago
-router.post('/pagos/prueba', (req, res) => {
+// Endpoints de prueba/diagnóstico MP (bloqueados en producción salvo admin)
+router.post('/pagos/prueba', allowMercadoPagoDebug, (req, res) => {
   const controller = new BankConnectionController();
   controller.pagoPrueba(req, res);
 });
 
-// Endpoint de diagnóstico para MercadoPago
-router.post('/pagos/diagnostico', (req, res) => {
+router.post('/pagos/diagnostico', allowMercadoPagoDebug, (req, res) => {
   const controller = new BankConnectionController();
   controller.pagoPruebaSimple(req, res);
 });
 
-// Endpoint para probar permisos de token de usuario
-router.post('/mercadopago/probar-token', (req, res) => {
+router.post('/mercadopago/probar-token', allowMercadoPagoDebug, (req, res) => {
   const controller = new BankConnectionController();
   controller.probarTokenUsuario(req, res);
 });

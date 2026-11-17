@@ -82,8 +82,10 @@ export default function RutinaDailyCadenceFranjaLayout({
   }, []);
 
   const franjaSchedule = useMemo(
-    () => groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, rutinas),
-    [bucket, rutina, rutinas],
+    () => groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, rutinas, {
+      habits,
+    }),
+    [bucket, rutina, rutinas, habits],
   );
 
   const franjaGroups = useMemo(

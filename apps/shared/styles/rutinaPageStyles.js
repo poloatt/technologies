@@ -225,7 +225,17 @@ export function getRutinaChecklistDragHandleWidth(mobile = false) {
     : RUTINA_CHECKLIST_DRAG_HANDLE_WIDTH.desktop;
 }
 
-export function getRutinaChecklistDragHandleSlotSx(mobile = false) {
+export function getRutinaChecklistDragHandleSlotSx(mobile = false, { visible = true } = {}) {
+  if (!visible) {
+    return {
+      display: 'none',
+      flex: '0 0 0px',
+      width: 0,
+      minWidth: 0,
+      p: 0,
+      m: 0,
+    };
+  }
   const width = getRutinaChecklistDragHandleWidth(mobile);
   return {
     display: 'flex',
@@ -402,6 +412,52 @@ export const rutinaStackRowHeaderSx = {
   gap: 0.5,
   px: 0.5,
   pb: 0.35,
+  minWidth: 0,
+};
+
+/** Contenedor de rutina con barra de título fina + cuerpo de hábitos. */
+export const rutinaRoutineGroupShellSx = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  minWidth: 0,
+  width: '100%',
+  flex: '1 1 auto',
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: 1.25,
+  overflow: 'hidden',
+  bgcolor: 'background.default',
+};
+
+/** Barra superior ultra fina con el nombre de la rutina. */
+export const rutinaRoutineGroupTitleBarSx = {
+  display: 'flex',
+  alignItems: 'center',
+  minHeight: 18,
+  px: 0.85,
+  py: 0,
+  borderBottom: '1px solid',
+  borderColor: 'divider',
+  bgcolor: 'action.hover',
+};
+
+export const rutinaRoutineGroupTitleTextSx = {
+  fontWeight: 650,
+  fontSize: '0.7rem',
+  lineHeight: 1.2,
+  letterSpacing: 0.15,
+  color: 'text.secondary',
+  maxWidth: '100%',
+};
+
+export const rutinaRoutineGroupBodySx = {
+  display: 'flex',
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 0.75,
+  px: 0.5,
+  py: 0.35,
   minWidth: 0,
 };
 

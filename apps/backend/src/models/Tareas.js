@@ -781,8 +781,16 @@ tareaSchema.index({ serieId: 1 });
 // Tareas por objetivo (panel de Objetivos): { objetivo, usuario }
 tareaSchema.index({ usuario: 1, objetivo: 1 });
 tareaSchema.index({ objetivo: 1 });
-// Búsqueda directa por id de Google Tasks durante la sincronización
-tareaSchema.index({ 'googleTasksSync.googleTaskId': 1 });
+// Un googleTaskId por usuario (partial: evita colisiones con null tras soft-unlink)
+tareaSchema.index(
+  { usuario: 1, 'googleTasksSync.googleTaskId': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      'googleTasksSync.googleTaskId': { $exists: true, $type: 'string' },
+    },
+  },
+);
 tareaSchema.index(
   {
     usuario: 1,

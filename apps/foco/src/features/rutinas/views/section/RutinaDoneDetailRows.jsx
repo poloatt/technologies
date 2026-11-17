@@ -94,6 +94,7 @@ export default function RutinaDoneDetailRows({
               multiSection
               stackVariant={stackVariant}
               rowKeyPrefix="done"
+              showTitleBar={false}
             />
           );
         }

@@ -21,6 +21,14 @@ export const UNDO_SCOPES = {
     entities: ['tarea'],
     paths: ['/archivo'],
   },
+  data: {
+    entities: ['salud_item', 'salud_control', 'receta', 'dieta_plan'],
+    paths: ['/data', '/datacorporal', '/salud'],
+  },
+  nutricion: {
+    entities: ['salud_item', 'salud_control', 'receta', 'dieta_plan'],
+    paths: ['/nutricion', '/dieta'],
+  },
 };
 
 /** Mapa entity → scope por defecto para acciones legacy sin scope. */
@@ -46,6 +54,22 @@ export function resolveUndoScope(path = '') {
 
   const section = matchTiempoSection(path);
   if (section) return section;
+
+  if (
+    path === '/data'
+    || path.startsWith('/data/')
+    || path === '/datacorporal'
+    || path.startsWith('/datacorporal/')
+    || path === '/salud'
+    || path.startsWith('/salud/')
+  ) return 'data';
+
+  if (
+    path === '/nutricion'
+    || path.startsWith('/nutricion/')
+    || path === '/dieta'
+    || path.startsWith('/dieta/')
+  ) return 'nutricion';
 
   return null;
 }

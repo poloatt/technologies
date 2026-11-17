@@ -1,0 +1,20 @@
+{
+  "name": "@attadia/robin",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Robin — IA compartida de Foco, Pulso y Caja. Sin app propia.",
+  "type": "module",
+  "exports": {
+    "./server": "./src/server/index.js",
+    "./ui": "./src/ui/index.js",
+    "./origin": "./src/origin.js"
+  },
+  "scripts": {
+    "test": "node --test src/server/__tests__/*.test.js"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@mui/material": "^5.15.10"
+  }
+}

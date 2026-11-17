@@ -23,12 +23,13 @@ router.delete('/disable', googleTasksController.disconnect);
 router.post('/sync', googleTasksController.manualSync);
 router.post('/sync/task/:taskId', googleTasksController.syncTask);
 router.post('/cleanup', googleTasksController.cleanupDuplicates);
-router.post('/cleanup-tokens', googleTasksController.cleanupInvalidTokens);
+// Limpia tokens de TODOS los usuarios — solo admin
+router.post('/cleanup-tokens', checkRole([ROLES.ADMIN]), googleTasksController.cleanupInvalidTokens);
 
 // Rutas adicionales
 router.get('/stats', googleTasksController.getStats);
 router.get('/task-lists', googleTasksController.getTaskLists);
-// Auditoría y limpieza por objetivo
+// Auditoría y limpieza por objetivo (CLI scoped al usuario autenticado)
 router.post('/audit-project', googleTasksController.auditProject);
 router.post('/cleanup-project', googleTasksController.cleanupProject);
 

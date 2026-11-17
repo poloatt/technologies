@@ -717,11 +717,13 @@ export class BankSyncService {
     }
   }
 
-  // Sincronizar todas las conexiones pendientes
-  async sincronizarTodasLasConexiones() {
+  // Sincronizar conexiones pendientes (usuarioId: solo ese usuario; omitir = todas, p.ej. cron)
+  async sincronizarTodasLasConexiones(usuarioId = null) {
     try {
-      const conexiones = await BankConnection.getConexionesParaSincronizar();
-      console.log(`Sincronizando ${conexiones.length} conexiones bancarias`);
+      const conexiones = await BankConnection.getConexionesParaSincronizar(usuarioId);
+      console.log(`Sincronizando ${conexiones.length} conexiones bancarias`, {
+        scopedToUser: !!usuarioId
+      });
 
       const resultados = [];
       for (const conexion of conexiones) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSnackbar } from 'notistack';
 import { getNextPushDate } from '../utils/taskPushSchedule';
+import { syncTareaStatusToGoogleInBackground } from '../form/tareaGoogleSync';
 
 function normalizeOwnerIds(owners = [], creatorId) {
   const ids = (Array.isArray(owners) ? owners : [])
@@ -143,6 +144,7 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
 
       const response = await updateWithHistory(t._id, updateData, tareaOriginal);
       if (onUpdateEstado) onUpdateEstado(response);
+      syncTareaStatusToGoogleInBackground(response, t);
 
       setEstadoLocal('COMPLETADA');
       if (t.subtareas?.length > 0) setSubtareasLocal(nuevasSubtareas);
@@ -164,6 +166,7 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
 
       const response = await updateWithHistory(t._id, updateData, tareaOriginal);
       if (onUpdateEstado) onUpdateEstado(response);
+      syncTareaStatusToGoogleInBackground(response, t);
 
       setEstadoLocal('PENDIENTE');
       if (t.subtareas?.length > 0) setSubtareasLocal(nuevasSubtareas);
@@ -182,6 +185,7 @@ export function useTareaDetailActions({ tarea, updateWithHistory, onUpdateEstado
       const updated = await updateWithHistory(t._id, { estado: 'CANCELADA', completada: false }, tareaOriginal);
       setEstadoLocal('CANCELADA');
       if (onUpdateEstado) onUpdateEstado(updated);
+      syncTareaStatusToGoogleInBackground(updated, t);
       if (onRefreshData) await onRefreshData();
       enqueueSnackbar('Tarea cancelada exitosamente', { variant: 'success' });
     } catch (error) {

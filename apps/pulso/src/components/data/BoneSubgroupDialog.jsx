@@ -11,6 +11,7 @@ import {
   TareaFormRow,
   TareaFormSecondaryLine,
 } from '@shared/components/forms/tareaFormUi';
+import { RecordOrigin } from '@attadia/robin/ui';
 
 const DONE_TIPOS = new Set(['ESTUDIO', 'REVISION']);
 
@@ -27,7 +28,10 @@ function statusOf(controles, items, zona) {
   const last = related
     .filter((item) => item.estado === 'HECHO' && DONE_TIPOS.has(item.tipo))
     .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0] || null;
-  const archivos = related.flatMap((item) => item.archivos || item.adjuntos || []);
+  const archivos = related.flatMap((item) => (item.archivos || item.adjuntos || []).map((archivo) => ({
+    ...archivo,
+    origen: archivo.origen || item.origen,
+  })));
   let estado = 'Sin datos';
   if (zoneControls.length) {
     if (zoneControls.some((control) => control.vencido)) estado = 'Vencido';
@@ -210,6 +214,7 @@ export default function BoneSubgroupDialog({
       key: archivo.id || archivo.nombre || index,
       title: archivo.nombre || archivo,
       meta: archivo.fecha ? formatFecha(archivo.fecha) : '',
+      origen: archivo.origen,
     }))
     : [{ key: 'empty', title: 'Sin documentos', meta: 'Todavía no hay archivos' }];
 
@@ -245,6 +250,7 @@ export default function BoneSubgroupDialog({
             <Typography variant="body2">Último estudio</Typography>
             <Typography variant="caption" color="text.secondary">
               {last.titulo} · {formatFecha(last.fecha)}
+              <RecordOrigin origen={last.origen} />
             </Typography>
           </Box>
         ) : null}
@@ -255,6 +261,7 @@ export default function BoneSubgroupDialog({
               {document.meta ? (
                 <Typography variant="caption" color="text.secondary">{document.meta}</Typography>
               ) : null}
+              {document.origen ? <RecordOrigin origen={document.origen} /> : null}
             </Box>
           ))}
         </Box>

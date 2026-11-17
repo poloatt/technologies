@@ -48,8 +48,8 @@ export default function RutinaDoneSection({
   );
 
   const { doneOnDay, doneByQuota } = useMemo(
-    () => partitionDoneEntriesByRutinaDay(sectionItems, rutina),
-    [sectionItems, rutina],
+    () => partitionDoneEntriesByRutinaDay(sectionItems, rutina, rutina, { habits }),
+    [sectionItems, rutina, habits],
   );
 
   const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'today';

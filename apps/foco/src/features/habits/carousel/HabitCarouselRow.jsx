@@ -138,7 +138,7 @@ export default function HabitCarouselRow({
       isDragging={isDragging}
       bind={bind}
       onToggle={handleToggle}
-      allowPostpone={isInteractive && mode === 'ahora'}
+      allowPostpone={isInteractive}
       onDefer={handleDefer}
       mobile={mobile}
     />

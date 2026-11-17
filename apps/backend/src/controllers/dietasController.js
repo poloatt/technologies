@@ -105,6 +105,7 @@ export const dietasController = {
           huecos: next.huecos,
           rotacion: next.rotacion,
           vinculos: next.vinculos,
+          origen: req.body.origen === 'robin' ? 'robin' : 'usuario',
         },
         { new: true },
       );
@@ -130,6 +131,7 @@ export const dietasController = {
       const receta = await Receta.create({
         ...req.body,
         usuario: userId(req),
+        origen: 'usuario',
       });
       res.status(201).json(receta);
     } catch (error) {
@@ -142,7 +144,7 @@ export const dietasController = {
     try {
       const receta = await Receta.findOneAndUpdate(
         { _id: req.params.id, usuario: userId(req) },
-        req.body,
+        { ...req.body, origen: req.body.origen === 'robin' ? 'robin' : 'usuario' },
         { new: true },
       );
       if (!receta) return res.status(404).json({ error: 'Receta no encontrada' });

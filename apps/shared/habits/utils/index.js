@@ -25,6 +25,7 @@ export {
   contarCompletadosEnPeriodo,
   obtenerHistorialCompletados,
   getPeriodInterval,
+  getScheduledDatesInPeriod,
   getFrecuenciaLabel,
   getCadenceTypeLabel,
   resolveHabitCompletadosEnPeriodo,
@@ -46,6 +47,7 @@ export {
 
 export {
   sortSectionHabitsByFixedOrder,
+  sortCadenceEntriesByStableOrder,
   sortSectionCarouselBySlot,
   resolveSectionCarouselSlot,
   SECTION_CAROUSEL_SLOTS,

@@ -258,9 +258,10 @@ export function useTareasPageController() {
     const handleGoogleTasksSyncCompleted = async (event) => {
       await fetchDataStable();
       const { results } = event.detail || {};
-      if (results?.fromGoogle?.created > 0 || results?.fromGoogle?.updated > 0) {
+      const fromGoogle = results?.tareas?.fromGoogle || results?.fromGoogle;
+      if (fromGoogle?.created > 0 || fromGoogle?.updated > 0) {
         enqueueSnackbar(
-          `Se han sincronizado ${results.fromGoogle.created + results.fromGoogle.updated} tareas desde Google Tasks`,
+          `Se han sincronizado ${(fromGoogle.created || 0) + (fromGoogle.updated || 0)} tareas desde Google Tasks`,
           { variant: 'info' },
         );
       }

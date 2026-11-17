@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Chip, ListItem, Typography } from '@mui/material';
+import { Box, ListItem, Typography } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
@@ -21,12 +21,13 @@ import { useRutinas } from '@shared/context';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
-  rutinaChecklistContentSx,
-  rutinaChecklistTextColumnSx,
-  rutinaRoutineChipPrimarySx,
   rutinaChecklistMetaSx,
   rutinaChecklistIconColumnSx,
   getRutinaChecklistDragHandleSlotSx,
+  rutinaRoutineGroupShellSx,
+  rutinaRoutineGroupTitleBarSx,
+  rutinaRoutineGroupTitleTextSx,
+  rutinaRoutineGroupBodySx,
 } from '@shared/styles/rutinaPageStyles';
 import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
@@ -62,7 +63,7 @@ function entryHasMultipleFranjas(entry) {
   return horariosConfig.length > 1 && !focusHorario;
 }
 
-/** Fila de rutina: iconos agrupados + chip con nombre de rutina. */
+/** Fila de rutina: barra de título fina + carousel de hábitos. */
 export default function RutinaStackHabitRow({
   entries = [],
   chainId,
@@ -81,6 +82,8 @@ export default function RutinaStackHabitRow({
   allowPostpone = false,
   onDefer = null,
   onPostpone = null,
+  /** Barra de título de rutina (Ahora). Luego/Hecho: solo iconos. */
+  showTitleBar = true,
 }) {
   const { rutinas } = useRutinas();
   const { isMobileOrTablet } = useResponsive();
@@ -205,6 +208,8 @@ export default function RutinaStackHabitRow({
       config: entry.config,
       itemValue,
       label: entry.label || entry.itemId,
+      Icon: entry.Icon || null,
+      chain: entry.chain || null,
     };
     return getPostponeHandlers(postponeEntry, () => buildDeferMenuMeta(entry, franjaFocus));
   };
@@ -359,7 +364,9 @@ export default function RutinaStackHabitRow({
       <Box sx={rutinaChecklistRowSx}>
         <Box
           sx={{
-            ...getRutinaChecklistDragHandleSlotSx(isMobileOrTablet),
+            ...getRutinaChecklistDragHandleSlotSx(isMobileOrTablet, {
+              visible: Boolean(dragHandleListeners),
+            }),
             ...(dragHandleListeners ? { cursor: 'grab' } : null),
           }}
         >
@@ -375,39 +382,73 @@ export default function RutinaStackHabitRow({
             </Box>
           ) : null}
         </Box>
-        <Box sx={rutinaChecklistContentSx}>
-          <Box sx={rutinaChecklistIconColumnSx({
-            compact: isCompact,
-            mobile: isMobileOrTablet,
-            fluid: useFluidIconColumn,
-          })}
+        {showTitleBar ? (
+          <Box
+            sx={{
+              ...rutinaRoutineGroupShellSx,
+              ...(allCompleted ? { opacity: 0.72 } : null),
+            }}
           >
-            {iconColumnContent}
-          </Box>
-          <Box sx={rutinaChecklistTextColumnSx}>
-            <Chip
-              size="small"
-              label={routineName}
-              sx={{
-                ...rutinaRoutineChipPrimarySx,
-                ...(allCompleted ? {
-                  opacity: 0.55,
-                  '& .MuiChip-label': { textDecoration: 'line-through' },
-                } : null),
-              }}
-            />
-            {scheduleLegend ? (
-              <Typography variant="caption" sx={rutinaChecklistMetaSx}>
-                {scheduleLegend}
+            <Box sx={rutinaRoutineGroupTitleBarSx}>
+              <Typography
+                component="span"
+                variant="caption"
+                noWrap
+                title={routineName}
+                sx={{
+                  ...rutinaRoutineGroupTitleTextSx,
+                  ...(allCompleted ? { textDecoration: 'line-through' } : null),
+                }}
+              >
+                {routineName}
               </Typography>
-            ) : null}
-            {dietCaption ? (
-              <Typography variant="caption" sx={rutinaChecklistMetaSx}>
-                {dietCaption}
-              </Typography>
-            ) : null}
+            </Box>
+            <Box sx={rutinaRoutineGroupBodySx}>
+              <Box sx={rutinaChecklistIconColumnSx({
+                compact: isCompact,
+                mobile: isMobileOrTablet,
+                fluid: useFluidIconColumn,
+              })}
+              >
+                {iconColumnContent}
+              </Box>
+              {(scheduleLegend || dietCaption) ? (
+                <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.1 }}>
+                  {scheduleLegend ? (
+                    <Typography variant="caption" sx={rutinaChecklistMetaSx}>
+                      {scheduleLegend}
+                    </Typography>
+                  ) : null}
+                  {dietCaption ? (
+                    <Typography variant="caption" sx={rutinaChecklistMetaSx}>
+                      {dietCaption}
+                    </Typography>
+                  ) : null}
+                </Box>
+              ) : null}
+            </Box>
           </Box>
-        </Box>
+        ) : (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              minWidth: 0,
+              flex: '1 1 auto',
+              ...(allCompleted ? { opacity: 0.72 } : null),
+            }}
+            aria-label={routineName}
+          >
+            <Box sx={rutinaChecklistIconColumnSx({
+              compact: isCompact,
+              mobile: isMobileOrTablet,
+              fluid: useFluidIconColumn,
+            })}
+            >
+              {iconColumnContent}
+            </Box>
+          </Box>
+        )}
       </Box>
       {(allowPostpone && !readOnly) && (
         <HabitItemPostponeMenu
@@ -415,7 +456,17 @@ export default function RutinaStackHabitRow({
           anchorPosition={menuState.anchorPosition}
           postponeLabel={menuState.postponeLabel}
           empujarLabel={menuState.empujarLabel}
+          showActions={menuState.canDefer !== false}
           onClose={closeMenu}
+          habitLabel={menuState.entry?.label || menuState.entry?.itemId}
+          Icon={menuState.entry?.Icon || null}
+          config={menuState.entry?.config || null}
+          rutina={rutina}
+          section={menuState.entry?.section || section}
+          itemId={menuState.entry?.itemId || null}
+          itemValue={menuState.entry?.itemValue}
+          chain={menuState.entry?.chain || entries[0]?.chain}
+          routineName={routineName}
           onPostpone={() => {
             const entry = menuState.entry;
             if (!entry || !menuState.canPostpone) return;

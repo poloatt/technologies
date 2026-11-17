@@ -5,6 +5,7 @@ import { CollapseSectionLabel } from '@shared/components/collapse';
 import {
   collapseSectionStackSx,
   getCollapseSectionCarouselBodySx,
+  getCollapseSectionContentSx,
 } from '@shared/styles/collapseSectionStyles';
 import useResponsive from '@shared/hooks/useResponsive';
 import {
@@ -76,6 +77,7 @@ function ExpandableCarouselSection({
   onDefer,
   /** Contenido expandido custom (p. ej. subsecciones floating de Luego). */
   expandedContent = null,
+  showRoutineTitleBar = true,
 }) {
   const { isMobileOrTablet } = useResponsive();
   const isExpanded = expandedSections.has(sectionKey);
@@ -92,6 +94,7 @@ function ExpandableCarouselSection({
         readOnly={readOnly}
         onToggle={onCarouselToggle}
         centerWhenFits={centerWhenFits}
+        showRoutineTitleBar={showRoutineTitleBar}
       />
     );
   }
@@ -122,6 +125,7 @@ function ExpandableCarouselSection({
             stackVariant={stackVariant}
             allowPostpone={allowPostpone}
             onDefer={onDefer}
+            showRoutineTitleBar={showRoutineTitleBar}
           />
         )
       ) : (
@@ -136,6 +140,7 @@ function ExpandableCarouselSection({
           centerWhenFits={centerWhenFits}
           allowPostpone={allowPostpone}
           onDefer={onDefer}
+          showRoutineTitleBar={showRoutineTitleBar}
         />
       )}
     </CollapseSectionToggle>
@@ -312,6 +317,7 @@ function HabitRows({
   allowPostpone = false,
   onDefer,
   deferredPending = false,
+  showRoutineTitleBar = true,
 }) {
   const { isMobileOrTablet } = useResponsive();
   const effectiveStackVariant = stackVariant;
@@ -351,6 +357,7 @@ function HabitRows({
             allowPostpone={allowPostpone}
             onDefer={onDefer}
             deferredPending={deferredPending}
+            showTitleBar={showRoutineTitleBar}
           />
         );
       }
@@ -443,6 +450,7 @@ function HabitRows({
           allowPostpone={allowPostpone}
           onDefer={onDefer}
           deferredPending={deferredPending}
+          showTitleBar={showRoutineTitleBar}
         />
       );
     }
@@ -569,7 +577,8 @@ export default function RutinaDayGroupList({
   };
 
   const resolveTodaySectionTitle = () => {
-    if (useSectionFranjaLayout && activeFranjaLabel) return activeFranjaLabel;
+    // Vista diaria: Ahora va suelto, sin cabecera ni shell de sección.
+    if (useSectionFranjaLayout) return null;
     if (useFranjaHeadings && sectionLabel) return sectionLabel;
     if (!hideGroupHeadings && !useFranjaHeadings && !useSectionFranjaLayout) {
       return formatGroupHeading(RUTINA_DAY_GROUP_COPY.today);
@@ -596,6 +605,41 @@ export default function RutinaDayGroupList({
       allowPostpone={useSectionFranjaLayout && !readOnly}
       onDefer={handleDefer}
     />
+  );
+
+  /** Ahora: rutinas apiladas; mismo padding/ancho horizontal que Luego y Hecho. */
+  const renderAhoraStack = () => (
+    <Box
+      sx={{
+        ...getCollapseSectionContentSx(isMobileOrTablet),
+        m: 0,
+        width: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.75,
+        '& > .MuiListItem-root': { mb: 0 },
+      }}
+    >
+      <HabitRows
+        items={today}
+        section={section}
+        rutina={rutina}
+        habits={habits}
+        readOnly={readOnly}
+        onItemClick={onItemClick}
+        localData={localData}
+        localDataBySection={localDataBySection}
+        sortable={false}
+        rowKeyPrefix={`${rowKeyPrefix}-ahora`}
+        multiSection={multiSection}
+        stackVariant={effectiveStackVariant}
+        allowPostpone={useSectionFranjaLayout && !readOnly}
+        onDefer={handleDefer}
+        showRoutineTitleBar
+      />
+    </Box>
   );
 
   const sensors = useSensors(
@@ -684,6 +728,7 @@ export default function RutinaDayGroupList({
       allowPostpone={useSectionFranjaLayout && !readOnly}
       onDefer={handleDefer}
       deferredPending
+      showRoutineTitleBar={false}
     />
   );
 
@@ -760,7 +805,9 @@ export default function RutinaDayGroupList({
           )
       )}
       {hasToday && (
-        shouldExpandCarousels && !useSectionFranjaLayout ? (
+        useSectionFranjaLayout ? (
+          renderAhoraStack()
+        ) : shouldExpandCarousels ? (
           <ExpandableCarouselSection
             sectionKey="today"
             label={todaySectionTitle || RUTINA_DAY_GROUP_COPY.today}
@@ -820,6 +867,7 @@ export default function RutinaDayGroupList({
             allowPostpone={useSectionFranjaLayout && !readOnly}
             onDefer={handleDefer}
             expandedContent={unifiedLuegoExpandedContent}
+            showRoutineTitleBar={false}
           />
         ) : (
           <CollapseSectionLabel

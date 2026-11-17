@@ -198,6 +198,35 @@ class GoogleCalendarService {
     }));
   }
 
+  /** Id real del calendario principal (Google alias `primary` → email/id). */
+  async resolvePrimaryCalendarId(userId) {
+    const calendars = await this.listCalendars(userId);
+    const primary = calendars.find((c) => c.primary);
+    return primary?.id || 'primary';
+  }
+
+  /** Reemplaza `primary` por el id real y deduplica. */
+  normalizeSelectedCalendarIds(ids, primaryRealId) {
+    const fallback = primaryRealId || 'primary';
+    const out = [];
+    const seen = new Set();
+    for (const id of ids || []) {
+      const resolved = id === 'primary' ? fallback : id;
+      if (!resolved || seen.has(resolved)) continue;
+      seen.add(resolved);
+      out.push(resolved);
+    }
+    return out.length ? out : [fallback];
+  }
+
+  /** Ids locales a aceptar al buscar EVENTOs (legacy `primary` + id real). */
+  calendarIdLookupKeys(calendarId, primaryRealId) {
+    if (calendarId === 'primary' || (primaryRealId && calendarId === primaryRealId)) {
+      return [...new Set([calendarId, primaryRealId, 'primary'].filter(Boolean))];
+    }
+    return [calendarId];
+  }
+
   appearanceUnchanged(existingSync, mappedSync) {
     return (existingSync?.eventLabelId || null) === (mappedSync?.eventLabelId || null)
       && (existingSync?.eventLabelName || null) === (mappedSync?.eventLabelName || null)
@@ -211,9 +240,16 @@ class GoogleCalendarService {
       throw new Error('Google Calendar no está habilitado para este usuario');
     }
 
-    const calendarIds = user.googleCalendarConfig.selectedCalendarIds?.length
+    const primaryRealId = await this.resolvePrimaryCalendarId(userId);
+    const rawIds = user.googleCalendarConfig.selectedCalendarIds?.length
       ? user.googleCalendarConfig.selectedCalendarIds
       : ['primary'];
+    const calendarIds = this.normalizeSelectedCalendarIds(rawIds, primaryRealId);
+    if (JSON.stringify(rawIds) !== JSON.stringify(calendarIds)) {
+      await Users.findByIdAndUpdate(userId, {
+        'googleCalendarConfig.selectedCalendarIds': calendarIds,
+      });
+    }
 
     const { from, to } = this.buildSyncWindow(options);
     const results = {
@@ -235,10 +271,11 @@ class GoogleCalendarService {
 
     for (const calendarId of calendarIds) {
       try {
+        const lookupKeys = this.calendarIdLookupKeys(calendarId, primaryRealId);
         const { byId: labelsById } = await this.getCalendarEventLabels(calendarId, userId);
         const events = await this.listAllEvents(calendarId, userId, from, to);
         const calendarBackgroundColor = calendarBgById[calendarId]
-          || (calendarId === 'primary' ? calendarBgById.primary : null)
+          || (calendarId === primaryRealId ? calendarBgById.primary : null)
           || null;
 
         for (const event of events) {
@@ -257,7 +294,7 @@ class GoogleCalendarService {
               const deleted = await Tareas.deleteOne({
                 usuario: userId,
                 'googleCalendarSync.googleEventId': mapped.googleEventId,
-                'googleCalendarSync.googleCalendarId': calendarId,
+                'googleCalendarSync.googleCalendarId': { $in: lookupKeys },
               });
               if (deleted.deletedCount) results.deleted++;
               continue;
@@ -266,7 +303,7 @@ class GoogleCalendarService {
             const existing = await Tareas.findOne({
               usuario: userId,
               'googleCalendarSync.googleEventId': mapped.googleCalendarSync.googleEventId,
-              'googleCalendarSync.googleCalendarId': calendarId,
+              'googleCalendarSync.googleCalendarId': { $in: lookupKeys },
             });
 
             if (existing) {
@@ -276,6 +313,7 @@ class GoogleCalendarService {
                 && Boolean(existing.googleCalendarSync?.allDay) === Boolean(mapped.googleCalendarSync?.allDay)
                 && existing.fechaInicio?.getTime() === mapped.fechaInicio?.getTime()
                 && existing.fechaFin?.getTime() === mapped.fechaFin?.getTime()
+                && existing.googleCalendarSync?.googleCalendarId === calendarId
                 && this.appearanceUnchanged(existing.googleCalendarSync, mapped.googleCalendarSync)) {
                 results.skipped++;
                 continue;
@@ -290,6 +328,7 @@ class GoogleCalendarService {
               existing.googleCalendarSync = {
                 ...existing.googleCalendarSync?.toObject?.() || existing.googleCalendarSync,
                 ...mapped.googleCalendarSync,
+                googleCalendarId: calendarId,
               };
               await existing.save();
               results.updated++;
@@ -310,12 +349,17 @@ class GoogleCalendarService {
       }
     }
 
+    // Conservar legacy `primary` mientras migramos ids reales
+    const keepCalendarIds = calendarIds.includes(primaryRealId)
+      ? [...new Set([...calendarIds, 'primary'])]
+      : calendarIds;
+
     // EVENTOs de calendarios ya no seleccionados → eliminar import local
     const deselected = await Tareas.find({
       usuario: userId,
       tipo: 'EVENTO',
       'googleCalendarSync.googleEventId': { $exists: true, $ne: null },
-      'googleCalendarSync.googleCalendarId': { $nin: calendarIds },
+      'googleCalendarSync.googleCalendarId': { $nin: keepCalendarIds },
     }).select('_id').lean();
 
     for (const doc of deselected) {

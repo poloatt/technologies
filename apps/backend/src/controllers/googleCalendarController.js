@@ -206,7 +206,16 @@ export const updateConfig = async (req, res) => {
     const update = {};
 
     if (Array.isArray(selectedCalendarIds) && selectedCalendarIds.length > 0) {
-      update['googleCalendarConfig.selectedCalendarIds'] = selectedCalendarIds;
+      let ids = selectedCalendarIds;
+      if (ids.includes('primary') && isGoogleCalendarEnabled()) {
+        try {
+          const primaryId = await googleCalendarService.resolvePrimaryCalendarId(userId);
+          ids = googleCalendarService.normalizeSelectedCalendarIds(ids, primaryId);
+        } catch (err) {
+          console.warn('No se pudo resolver primary calendar id:', err.message);
+        }
+      }
+      update['googleCalendarConfig.selectedCalendarIds'] = ids;
     }
     if (syncDirection === 'from_google') {
       update['googleCalendarConfig.syncDirection'] = 'from_google';

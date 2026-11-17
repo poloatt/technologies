@@ -1,4 +1,23 @@
 import { check, validationResult } from 'express-validator';
+import config from '../config/config.js';
+
+function getAllowedRedirectOrigins() {
+  const origins = new Set();
+  if (Array.isArray(config.corsOrigins)) {
+    config.corsOrigins.forEach((o) => origins.add(o));
+  }
+  if (config.frontendUrl) origins.add(config.frontendUrl);
+  if (config.frontendUrls) {
+    Object.values(config.frontendUrls).forEach((o) => {
+      if (o) origins.add(o);
+    });
+  }
+  // Dev local habitual
+  ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175',
+   'http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://127.0.0.1:5175'
+  ].forEach((o) => origins.add(o));
+  return origins;
+}
 
 // Validación para la URL de autorización de MercadoPago
 export const validateMercadoPagoAuthUrl = [
@@ -6,26 +25,31 @@ export const validateMercadoPagoAuthUrl = [
     .notEmpty()
     .withMessage('redirect_uri es requerido')
     .custom((value) => {
-      // Validación custom más permisiva para localhost
       try {
         const url = new URL(value);
-        
-        // Permitir http en localhost/127.0.0.1
         const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-        
-        // Validar protocolo
+
         if (!['http:', 'https:'].includes(url.protocol)) {
           throw new Error('redirect_uri debe usar protocolo http o https');
         }
-        
-        // En producción, requerir HTTPS (excepto localhost)
+
         if (process.env.NODE_ENV === 'production' && url.protocol === 'http:' && !isLocalhost) {
           throw new Error('redirect_uri debe usar HTTPS en producción');
         }
-        
+
+        if (!url.pathname.endsWith('/mercadopago/callback')) {
+          throw new Error('redirect_uri debe terminar en /mercadopago/callback');
+        }
+
+        const origin = url.origin;
+        const allowed = getAllowedRedirectOrigins();
+        if (!allowed.has(origin)) {
+          throw new Error('redirect_uri no está en la lista de orígenes permitidos');
+        }
+
         return true;
       } catch (error) {
-        throw new Error('redirect_uri debe ser una URL válida');
+        throw new Error(error.message || 'redirect_uri debe ser una URL válida');
       }
     }),
   (req, res, next) => {
@@ -40,7 +64,6 @@ export const validateMercadoPagoAuthUrl = [
         details: errors.array() 
       });
     }
-    console.log('✅ [MercadoPago] Validación exitosa - redirect_uri:', req.query.redirect_uri);
     next();
   }
 ];
@@ -54,6 +77,13 @@ export const validateMercadoPagoCallback = [
     .withMessage('Código debe ser una cadena de texto')
     .isLength({ min: 10, max: 100 })
     .withMessage('Código debe tener entre 10 y 100 caracteres'),
+  check('state')
+    .notEmpty()
+    .withMessage('Parámetro state es requerido')
+    .isString()
+    .withMessage('State debe ser una cadena de texto')
+    .isLength({ min: 16, max: 128 })
+    .withMessage('State inválido'),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

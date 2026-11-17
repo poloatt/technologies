@@ -16,6 +16,7 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
     franja: null,
     canPostpone: false,
     canEmpujar: false,
+    canDefer: false,
     menuOptions: null,
   });
   const longPressTimerRef = useRef(null);
@@ -43,7 +44,8 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
     const menuMeta = typeof menuMetaOrGetter === 'function'
       ? menuMetaOrGetter()
       : menuMetaOrGetter;
-    if (!menuMeta?.canDefer) return;
+    // canDefer = acciones de posponer; canPreview = mini-card informativa sin deferral.
+    if (!menuMeta?.canDefer && !menuMeta?.canPreview) return;
 
     const {
       postponeLabel,
@@ -51,6 +53,7 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
       franja,
       canPostpone = false,
       canEmpujar = false,
+      canDefer = false,
       menuOptions = null,
     } = menuMeta || {};
 
@@ -58,12 +61,13 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
       open: true,
       entry,
       anchorPosition: { top: clientY, left: clientX },
-      postponeLabel,
-      empujarLabel,
+      postponeLabel: canDefer ? postponeLabel : null,
+      empujarLabel: canDefer ? empujarLabel : null,
       franja,
-      canPostpone,
-      canEmpujar,
-      menuOptions,
+      canPostpone: canDefer && canPostpone,
+      canEmpujar: canDefer && canEmpujar,
+      canDefer: Boolean(canDefer),
+      menuOptions: canDefer ? menuOptions : null,
     });
   }, [enabled]);
 
@@ -96,7 +100,11 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
 
   const getPostponeHandlers = useCallback((entry, menuMetaOrGetter) => {
     if (!enabled || !menuMetaOrGetter) return {};
-    if (typeof menuMetaOrGetter !== 'function' && !menuMetaOrGetter.canDefer) {
+    if (
+      typeof menuMetaOrGetter !== 'function'
+      && !menuMetaOrGetter.canDefer
+      && !menuMetaOrGetter.canPreview
+    ) {
       return {};
     }
 
@@ -108,7 +116,7 @@ export default function useHabitItemContextMenu({ enabled = true } = {}) {
 
     const triggerMenu = (event) => {
       const menuMeta = resolveMenuMeta(menuMetaOrGetter);
-      if (!menuMeta?.canDefer) return;
+      if (!menuMeta?.canDefer && !menuMeta?.canPreview) return;
       event.preventDefault();
       event.stopPropagation();
       clearLongPressTimer();

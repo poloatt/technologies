@@ -13,6 +13,8 @@ describe('undoScopeConfig', () => {
     expect(resolveUndoScope('/rutinas')).toBe('rutinas');
     expect(resolveUndoScope('/foco')).toBeNull();
     expect(resolveUndoScope('/archivo')).toBe('archivo');
+    expect(resolveUndoScope('/data')).toBe('data');
+    expect(resolveUndoScope('/nutricion')).toBe('nutricion');
     expect(resolveUndoScope('/unknown')).toBeNull();
   });
 

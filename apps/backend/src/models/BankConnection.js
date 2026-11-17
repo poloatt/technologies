@@ -159,16 +159,21 @@ bankConnectionSchema.methods.actualizarSincronizacion = function(estado, transac
 };
 
 // Método estático para obtener conexiones que necesitan sincronización
-bankConnectionSchema.statics.getConexionesParaSincronizar = function() {
+// usuarioId opcional: limita a un usuario (endpoints HTTP). Sin filtro = cron/scheduler.
+bankConnectionSchema.statics.getConexionesParaSincronizar = function(usuarioId = null) {
   const ahora = new Date();
-  return this.find({
+  const query = {
     estado: 'ACTIVA',
     'configuracion.sincronizacionAutomatica': true,
     $or: [
       { 'configuracion.proximaSincronizacion': { $lte: ahora } },
       { 'configuracion.proximaSincronizacion': { $exists: false } }
     ]
-  }).populate('cuenta usuario');
+  };
+  if (usuarioId) {
+    query.usuario = usuarioId;
+  }
+  return this.find(query).populate('cuenta usuario');
 };
 
 export const BankConnection = mongoose.model('BankConnection', bankConnectionSchema); 

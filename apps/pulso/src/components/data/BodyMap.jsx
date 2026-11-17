@@ -67,6 +67,7 @@ export default function BodyMap({
   items = [],
   selectedZone,
   onSelectZone,
+  onFocusChange,
 }) {
   const { isDesktop } = useResponsive();
   const [layer, setLayer] = useState('musculos');
@@ -167,6 +168,14 @@ export default function BodyMap({
       bone.zone === 'abdomen' ? 'abdomen' : isNeckBone(bone.name) ? 'pecho' : bone.clinicalZone,
     );
   };
+
+  useEffect(() => {
+    onFocusChange?.({
+      zona: selectedZone || '',
+      parte: layer === 'huesos' ? (markedGroup || '') : (boneName || ''),
+      capa: layer,
+    });
+  }, [boneName, layer, markedGroup, onFocusChange, selectedZone]);
 
   useEffect(() => {
     const key = markedGroup ? `${boneZone}:${markedGroup}` : boneZone;

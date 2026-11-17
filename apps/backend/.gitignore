@@ -31,3 +31,6 @@ coverage/
 # Temp files
 *.tmp
 *.temp
+
+# Archivos que Robin cataloga
+uploads/

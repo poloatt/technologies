@@ -16,6 +16,11 @@ const controlSaludSchema = createSchema({
   },
   label: { type: String, required: true, trim: true },
   intervaloDias: { type: Number, required: true, min: 1, default: 365 },
+  origen: {
+    type: String,
+    enum: ['usuario', 'robin'],
+    default: 'usuario',
+  },
   ...commonFields,
 });
 

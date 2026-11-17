@@ -34,12 +34,12 @@ export function MercadoPagoCallbackPage() {
         return;
       }
       
-      // Validar el parámetro state usando el servicio
-      if (state && !validateState(state)) {
-        console.error('State validation failed:', { received: state });
+      // State CSRF obligatorio
+      if (!state || !validateState(state)) {
+        console.error('State validation failed or missing');
         setError('Error de seguridad: parámetro state inválido o expirado');
         setStatus('error');
-        clearState(); // Limpiar state inválido
+        clearState();
         return;
       }
     

@@ -30,16 +30,51 @@ window.APP_CONFIG = AppConfig
 
 // Definir mapa de rutas para Pulso (vacío por ahora, se puede ampliar)
 const pulsoRoutesMap = {
-  // Ejemplo si luego se habilita historial en Salud:
-  // '/salud': {
-  //   entity: 'medicion',
-  //   apiService: {
-  //     create: (data) => clienteAxios.post('/api/mediciones', data).then(res => res.data),
-  //     update: (id, data) => clienteAxios.put(`/api/mediciones/${id}`, data).then(res => res.data),
-  //     delete: (id) => clienteAxios.delete(`/api/mediciones/${id}`).then(res => res.data),
-  //     getById: (id) => clienteAxios.get(`/api/mediciones/${id}`).then(res => res.data)
-  //   }
-  // },
+  '/data': {
+    entity: 'salud_item',
+    apiService: {
+      create: (data) => clienteAxios.post('/api/salud/items', data).then((res) => res.data),
+      update: (id, data) => clienteAxios.put(`/api/salud/items/${id}`, data).then((res) => res.data),
+      delete: (id) => clienteAxios.delete(`/api/salud/items/${id}`).then((res) => res.data),
+      getById: (id) => clienteAxios.get(`/api/salud/items/${id}`).then((res) => res.data),
+    },
+  },
+  '/data/controles': {
+    entity: 'salud_control',
+    apiService: {
+      create: (data) => clienteAxios.post('/api/salud/controles', data).then((res) => res.data),
+      update: (id, data) => clienteAxios.put(`/api/salud/controles/${id}`, data).then((res) => res.data),
+      delete: (id) => clienteAxios.delete(`/api/salud/controles/${id}`).then((res) => res.data),
+      getById: (id) => clienteAxios.get('/api/salud/controles').then((res) => (
+        (res.data?.controles || []).find((control) => control.controlId === id)
+      )),
+    },
+  },
+  '/nutricion': {
+    entity: 'receta',
+    apiService: {
+      create: (data) => clienteAxios.post('/api/dietas/recetas', data).then((res) => res.data),
+      update: (id, data) => clienteAxios.put(`/api/dietas/recetas/${id}`, data).then((res) => res.data),
+      delete: (id) => clienteAxios.delete(`/api/dietas/recetas/${id}`).then((res) => res.data),
+      getById: (id) => clienteAxios.get('/api/dietas/recetas').then((res) => (
+        (res.data || []).find((meal) => String(meal.id || meal._id) === String(id))
+      )),
+    },
+  },
+  '/nutricion/plan': {
+    entity: 'dieta_plan',
+    apiService: {
+      create: (data) => clienteAxios.put('/api/dietas/plan', data).then((res) => res.data),
+      update: (_id, data) => clienteAxios.put('/api/dietas/plan', data).then((res) => res.data),
+      delete: () => clienteAxios.put('/api/dietas/plan', {
+        calorias: 0,
+        proteinas: 0,
+        carbohidratos: 0,
+        grasas: 0,
+      }).then((res) => res.data),
+      getById: () => clienteAxios.get('/api/dietas/plan').then((res) => res.data),
+    },
+  },
 }
 
 // Reemplazar por montaje condicional de StrictMode

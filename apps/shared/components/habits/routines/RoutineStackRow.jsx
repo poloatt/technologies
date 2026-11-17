@@ -1,15 +1,16 @@
 import React from 'react';
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import {
   rutinaStackRowSx,
   rutinaStackRowInlineSx,
   rutinaStackRowCompactSx,
   rutinaStackRowWrapSx,
   rutinaStackRowWrapCompactSx,
-  rutinaStackRowHeaderSx,
-  rutinaRoutineChipSx,
+  rutinaRoutineGroupShellSx,
+  rutinaRoutineGroupTitleBarSx,
+  rutinaRoutineGroupTitleTextSx,
+  rutinaRoutineGroupBodySx,
 } from '@shared/styles/rutinaPageStyles';
-import { ROUTINE_CHIP_LABEL } from '@shared/habits';
 
 /**
  * Fila horizontal compartida para hábitos de una rutina en listas de rutina.
@@ -31,20 +32,41 @@ export default function RoutineStackRow({
     ? rutinaStackRowCompactSx
     : (isCard ? rutinaStackRowSx : rutinaStackRowInlineSx);
 
+  if (isCard) {
+    return (
+      <Box
+        sx={wrapSx}
+        data-habit-stack={chainId}
+        id={rowKeyPrefix ? `habit-stack-row-${rowKeyPrefix}-${chainId}` : `habit-stack-row-${chainId}`}
+      >
+        <Box sx={rutinaRoutineGroupShellSx}>
+          {chainLabel ? (
+            <Box sx={rutinaRoutineGroupTitleBarSx}>
+              <Typography
+                component="span"
+                variant="caption"
+                noWrap
+                title={chainLabel}
+                sx={rutinaRoutineGroupTitleTextSx}
+              >
+                {chainLabel}
+              </Typography>
+            </Box>
+          ) : null}
+          <Box sx={{ ...rutinaRoutineGroupBodySx, ...rowSx }}>
+            {children}
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={wrapSx}
       data-habit-stack={chainId}
       id={rowKeyPrefix ? `habit-stack-row-${rowKeyPrefix}-${chainId}` : `habit-stack-row-${chainId}`}
     >
-      {isCard && chainLabel && (
-        <Box sx={rutinaStackRowHeaderSx}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {chainLabel}
-          </Typography>
-          <Chip size="small" label={ROUTINE_CHIP_LABEL} sx={rutinaRoutineChipSx} />
-        </Box>
-      )}
       <Box sx={rowSx}>
         {children}
       </Box>

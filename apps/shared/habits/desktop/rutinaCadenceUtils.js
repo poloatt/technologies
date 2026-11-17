@@ -13,6 +13,7 @@ import {
   groupSectionHabitsByDaySchedule,
   sortSectionCarouselBySlot,
   sortSectionHabitsByFixedOrder,
+  sortCadenceEntriesByStableOrder,
   resolveRutinaScheduleBucket,
   isEntryDueOnRutinaDay,
   filterRutinaDoneSectionEntries,
@@ -367,13 +368,8 @@ export function isEntryFranjaSinHacer(entry, activeFranja = null) {
   return resolveEntryFranjaScheduleSlot(entry, activeFranja) === 'sinHacer';
 }
 
-function sortMultiSectionCadenceEntries(entries = []) {
-  return [...entries].sort((a, b) => {
-    const sectionCmp = String(a.sectionLabel || a.section || '')
-      .localeCompare(String(b.sectionLabel || b.section || ''), 'es');
-    if (sectionCmp !== 0) return sectionCmp;
-    return (a.label || '').localeCompare(b.label || '', 'es');
-  });
+function sortMultiSectionCadenceEntries(entries = [], options = {}) {
+  return sortCadenceEntriesByStableOrder(entries, options);
 }
 
 /**
@@ -479,16 +475,21 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutin
   const notToday = bucket?.notToday || [];
   const dayMode = rutina?.fecha ? getRutinaDayMode(rutina.fecha) : 'empty';
   const activeFranja = options.activeFranja || resolveActiveDailyFranja(rutina);
+  const sortOpts = {
+    habits: options.habits ?? null,
+    customSections: options.customSections || [],
+  };
 
   if (dayMode === 'historical') {
     const ahora = sortMultiSectionCadenceEntries(
       today.flatMap((entry) => expandHistoricalPendingByFranja(entry, rutina, allRutinas)),
+      sortOpts,
     );
     return {
       sinHacer: [],
       ahora,
       luego: [],
-      done,
+      done: sortMultiSectionCadenceEntries(done, sortOpts),
       notToday,
       activeFranja,
       activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
@@ -498,9 +499,9 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutin
   if (!isViewingRutinaToday(rutina)) {
     return {
       sinHacer: [],
-      ahora: today,
+      ahora: sortMultiSectionCadenceEntries(today, sortOpts),
       luego: [],
-      done,
+      done: sortMultiSectionCadenceEntries(done, sortOpts),
       notToday,
       activeFranja,
       activeFranjaLabel: RUTINA_DAY_GROUP_COPY.today,
@@ -519,16 +520,17 @@ export function groupDailyCadenceBucketByFranjaSchedule(bucket, rutina, allRutin
   });
 
   // UX: Ahora = franja activa primero (círculo), atrasados después (sin círculo).
+  // Dentro de cada bloque el orden es estable (no salta al marcar/desmarcar).
   const ahoraMerged = [
-    ...sortMultiSectionCadenceEntries(ahora),
-    ...sortMultiSectionCadenceEntries(sinHacer),
+    ...sortMultiSectionCadenceEntries(ahora, sortOpts),
+    ...sortMultiSectionCadenceEntries(sinHacer, sortOpts),
   ];
 
   return {
     sinHacer: [],
     ahora: ahoraMerged,
-    luego: sortMultiSectionCadenceEntries(luego),
-    done,
+    luego: sortMultiSectionCadenceEntries(luego, sortOpts),
+    done: sortMultiSectionCadenceEntries(done, sortOpts),
     notToday,
     activeFranja,
     activeFranjaLabel: resolveGroupViewActiveFranjaLabel(activeFranja, rutina),
@@ -856,15 +858,11 @@ export function groupRutinaHabitsByCadence({
     });
   });
 
-  const sectionSortKey = (entry) => String(entry.sectionLabel || entry.section || '');
+  const sortOpts = { habits, customSections };
 
   return RUTINA_CADENCE_BUCKETS
     .map((bucket) => {
-      const items = bucketsMap[bucket.id].sort((a, b) => {
-        const sectionCmp = sectionSortKey(a).localeCompare(sectionSortKey(b), 'es');
-        if (sectionCmp !== 0) return sectionCmp;
-        return (a.label || '').localeCompare(b.label || '', 'es');
-      });
+      const items = sortCadenceEntriesByStableOrder(bucketsMap[bucket.id], sortOpts);
 
       const today = [];
       const done = [];

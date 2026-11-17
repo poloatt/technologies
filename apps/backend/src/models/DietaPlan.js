@@ -32,6 +32,11 @@ const dietaPlanSchema = createSchema({
     type: mongoose.Schema.Types.Mixed,
     default: defaultDietPlanVinculos,
   },
+  origen: {
+    type: String,
+    enum: ['usuario', 'robin'],
+    default: 'usuario',
+  },
   ...commonFields,
 });
 

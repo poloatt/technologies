@@ -239,6 +239,34 @@ Subtareas:
     expect(googleTasksService.shouldApplyGoogleDueDespitePending(tarea, googleTask)).toBe(true);
   });
 
+  test('shouldSoftUnlinkMissingFromGoogle skips pending local export', () => {
+    const googleIds = new Set(['gt-alive']);
+    const missingSynced = {
+      googleTasksSync: {
+        googleTaskId: 'gt-gone',
+        needsSync: false,
+        syncStatus: 'synced',
+      },
+    };
+    const missingPending = {
+      googleTasksSync: {
+        googleTaskId: 'gt-gone',
+        needsSync: true,
+        syncStatus: 'pending',
+      },
+    };
+    const stillInGoogle = {
+      googleTasksSync: {
+        googleTaskId: 'gt-alive',
+        needsSync: false,
+        syncStatus: 'synced',
+      },
+    };
+    expect(googleTasksService.shouldSoftUnlinkMissingFromGoogle(missingSynced, googleIds)).toBe(true);
+    expect(googleTasksService.shouldSoftUnlinkMissingFromGoogle(missingPending, googleIds)).toBe(false);
+    expect(googleTasksService.shouldSoftUnlinkMissingFromGoogle(stillInGoogle, googleIds)).toBe(false);
+  });
+
   test('pending local blocks content and status; due may still apply', () => {
     const googleTask = {
       status: 'completed',

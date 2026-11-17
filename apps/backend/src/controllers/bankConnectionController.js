@@ -310,13 +310,13 @@ class BankConnectionController extends BaseController {
     }
   }
 
-  // POST /api/bankconnections/sync-all
+  // POST /api/bankconnections/sync-all (solo conexiones del usuario autenticado)
   async sincronizarTodas(req, res) {
     try {
-      const resultado = await this.bankSyncService.sincronizarTodasLasConexiones();
+      const resultado = await this.bankSyncService.sincronizarTodasLasConexiones(req.user.id);
 
       res.json({
-        message: 'Sincronización de todas las conexiones completada',
+        message: 'Sincronización de tus conexiones completada',
         resultado
       });
 
@@ -467,14 +467,18 @@ class BankConnectionController extends BaseController {
       if (!redirectUri) {
         return res.status(400).json({ message: 'redirect_uri es requerido' });
       }
+
+      if (!req.session) {
+        return res.status(500).json({
+          message: 'Sesión no disponible; no se puede iniciar OAuth de forma segura'
+        });
+      }
       
       const { authUrl, state } = getAuthUrl(redirectUri);
       
-      // Guardar el state Y el redirect_uri en la sesión para validarlo en el callback
-      if (req.session) {
-        req.session.mercadopagoState = state;
-        req.session.mercadopagoRedirectUri = redirectUri; // Guardar el redirect_uri original
-      }
+      // Guardar state y redirect_uri en sesión (obligatorios en el callback)
+      req.session.mercadopagoState = state;
+      req.session.mercadopagoRedirectUri = redirectUri;
       
       res.json({ authUrl, state });
     } catch (error) {
@@ -503,21 +507,27 @@ class BankConnectionController extends BaseController {
         return res.status(400).json({ message: 'Código de autorización requerido' });
       }
 
-      // Validar el parámetro state para prevenir CSRF (recomendado por MercadoPago)
-      if (req.session && req.session.mercadopagoState && state !== req.session.mercadopagoState) {
-        console.error('❌ ERROR: Validación de state falló');
+      // Validar state CSRF: obligatorio (sin state en sesión = rechazar)
+      const expectedState = req.session?.mercadopagoState;
+      if (!expectedState || !state || state !== expectedState) {
+        console.error('❌ ERROR: Validación de state falló o ausente');
         logger.error('State validation failed', null, {
-          receivedState: state,
-          expectedState: req.session.mercadopagoState,
+          hasReceivedState: !!state,
+          hasExpectedState: !!expectedState,
           userId: req.user?.id
         });
-        return res.status(400).json({ message: 'Parámetro state inválido' });
+        return res.status(400).json({ message: 'Parámetro state inválido o ausente' });
       }
       
       console.log('✅ State validado correctamente');
 
-      // Usar el redirect_uri guardado en la sesión (debe ser el mismo que se usó para generar authUrl)
-      const redirectUri = req.session?.mercadopagoRedirectUri || `${config.frontendUrl}/mercadopago/callback`;
+      // Usar el redirect_uri guardado en la sesión (mismo que se usó para authUrl)
+      const redirectUri = req.session?.mercadopagoRedirectUri;
+      if (!redirectUri) {
+        return res.status(400).json({
+          message: 'Sesión OAuth incompleta: falta redirect_uri. Reiniciá la conexión.'
+        });
+      }
       console.log('🔄 Intercambiando código por token...');
       console.log('🔄 Redirect URI usado:', redirectUri);
       console.log('🔄 Redirect URI de sesión:', req.session?.mercadopagoRedirectUri);

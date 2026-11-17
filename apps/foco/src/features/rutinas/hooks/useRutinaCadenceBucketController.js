@@ -8,7 +8,7 @@ import useRutinaBucketLocalData from './useRutinaBucketLocalData';
 
 /** Estado compartido para el layout plano de cadencia. */
 export default function useRutinaCadenceBucketController({ rutina, readOnly = false }) {
-  const { habits, customSections, reorderHabits } = useHabits();
+  const { habits, customSections } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const { markItemComplete, patchRutinaSection } = useRutinas();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
@@ -74,15 +74,6 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
     handleItemClick(entrySection, itemId, null, horario);
   }, [handleItemClick]);
 
-  const handleReorderSection = useCallback(async (section, habitIds) => {
-    if (!habitIds?.length || !section) return;
-    try {
-      await reorderHabits(section, habitIds);
-    } catch {
-      // feedback en HabitsContext
-    }
-  }, [reorderHabits]);
-
   return {
     habits,
     customSections,
@@ -91,6 +82,5 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
     cadenceBuckets,
     handleItemClick,
     handleDoneToggle,
-    handleReorderSection,
   };
 }

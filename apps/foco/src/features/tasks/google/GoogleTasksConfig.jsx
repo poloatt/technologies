@@ -37,8 +37,25 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useSnackbar } from 'notistack';
 import clienteAxios from '@shared/config/axios';
+import { getApiBaseUrl } from '@shared/config/apiBaseUrl';
 import { useAuth } from '@shared/context/AuthContext';
 import { useResponsive } from '@shared/hooks';
+
+function isTrustedOAuthMessageOrigin(origin) {
+  if (!origin) return false;
+  const allowed = new Set([window.location.origin]);
+  try {
+    const apiBase = getApiBaseUrl();
+    if (apiBase) allowed.add(new URL(apiBase).origin);
+  } catch {
+    // ignore
+  }
+  // El popup de OAuth carga el host del API (aunque Vite proxyee /api en el front)
+  allowed.add('http://localhost:5000');
+  allowed.add('http://127.0.0.1:5000');
+  allowed.add('https://api.attadia.com');
+  return allowed.has(origin);
+}
 import {
   TareaFormHeader,
   TareaFormFooter,
@@ -296,6 +313,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
       enqueueSnackbar('Completa la autorización de Google Calendar', { variant: 'info' });
 
       const handleAuthMessage = (event) => {
+        if (!isTrustedOAuthMessageOrigin(event.origin)) return;
         if (event.data?.type === 'google_calendar_auth') {
           if (event.data.status === 'success') {
             enqueueSnackbar(event.data.message || 'Google Calendar conectado', { variant: 'success' });
@@ -414,6 +432,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
       enqueueSnackbar('Completa la autorización en la ventana de Google', { variant: 'info' });
 
       const handleAuthMessage = (event) => {
+        if (!isTrustedOAuthMessageOrigin(event.origin)) return;
         if (event.data?.type === 'google_tasks_auth') {
           if (event.data.status === 'success') {
             enqueueSnackbar('Google Tasks conectado', { variant: 'success' });
@@ -974,7 +993,10 @@ const GoogleTasksConfig = ({ open, onClose }) => {
                         control={(
                           <Checkbox
                             size="small"
-                            checked={(calendarConfig.selectedCalendarIds || []).includes(cal.id)}
+                            checked={
+                              (calendarConfig.selectedCalendarIds || []).includes(cal.id)
+                              || (cal.primary && (calendarConfig.selectedCalendarIds || []).includes('primary'))
+                            }
                             onChange={(e) => handleCalendarSelectionChange(cal.id, e.target.checked)}
                             disabled={loading}
                           />

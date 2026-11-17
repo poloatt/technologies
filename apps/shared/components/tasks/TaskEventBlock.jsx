@@ -28,6 +28,7 @@ export default function TaskEventBlock({
   timedCompact = false,
   onClick,
   onToggleComplete,
+  mark = null,
 }) {
   const theme = useTheme();
   const { task, start, end, allDay, objetivo } = event;
@@ -147,6 +148,7 @@ export default function TaskEventBlock({
                   ↻
                 </Typography>
               )}
+              {mark}
             </Typography>
             {showEventMeta && (timeRangeLabel || eventLabelName) && (
               <Typography sx={{ ...taskEventTimeSx, color: eventTextColor, opacity: 0.92 }}>
@@ -181,6 +183,7 @@ export default function TaskEventBlock({
               </Typography>
             )}
             <GoogleTaskOriginMark tarea={task} />
+            {mark}
           </Typography>
         )}
 

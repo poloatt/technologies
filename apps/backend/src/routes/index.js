@@ -25,6 +25,7 @@ import dataCorporalRoutes from './dataCorporalRoutes.js';
 import saludRoutes from './saludRoutes.js';
 import bankConnectionRoutes from './bankConnectionRoutes.js';
 import statsRoutes from './statsRoutes.js';
+import robinRoutes from './robinRoutes.js';
 
 const router = express.Router();
 
@@ -69,5 +70,6 @@ router.use('/salud', saludRoutes);
 
 // Rutas de monitoreo
 router.use('/monitoreo', monitoreoRoutes);
+router.use('/robin', robinRoutes);
 
 export { router };

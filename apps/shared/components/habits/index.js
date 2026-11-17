@@ -11,5 +11,7 @@ export { default as HabitIconScrollRow } from './HabitIconScrollRow.jsx';
 export { shouldUseHabitRowIconCarousel } from './habitRowCarouselUtils.js';
 export { default as AddHabitGroupButton, AddHabitGroupButtonWrap } from './AddHabitGroupButton.jsx';
 export { default as HabitGroupContextMenu } from './HabitGroupContextMenu.jsx';
+export { default as HabitItemPostponeMenu } from './HabitItemPostponeMenu.jsx';
+export { default as HabitCadenceMiniGrid } from './HabitCadenceMiniGrid.jsx';
 export { default as HabitChainAfterPicker } from './HabitChainAfterPicker.jsx';
 export * from './routines/index.js';

@@ -22,6 +22,22 @@ const saludItemSchema = createSchema({
     default: 'PENDIENTE',
   },
   notas: { type: String, default: '' },
+  parte: { type: String, default: '', trim: true },
+  origen: {
+    type: String,
+    enum: ['usuario', 'robin'],
+    default: 'usuario',
+  },
+  archivos: [{
+    id: { type: String, required: true },
+    nombre: { type: String, default: '' },
+    mime: { type: String, default: '' },
+    origen: {
+      type: String,
+      enum: ['usuario', 'robin'],
+      default: 'robin',
+    },
+  }],
   tareaId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tareas',

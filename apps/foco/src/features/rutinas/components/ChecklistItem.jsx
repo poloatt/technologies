@@ -331,7 +331,9 @@ const ChecklistItem = ({
       <Box sx={{ ...rutinaChecklistRowSx, ...(stackCell ? rutinaChecklistStackCellRowSx : null) }}>
         <Box
           sx={{
-            ...getRutinaChecklistDragHandleSlotSx(isMobileOrTablet),
+            ...getRutinaChecklistDragHandleSlotSx(isMobileOrTablet, {
+              visible: Boolean(dragHandleListeners),
+            }),
             ...(dragHandleListeners ? { cursor: 'grab' } : null),
           }}
         >
@@ -438,7 +440,17 @@ const ChecklistItem = ({
           anchorPosition={menuState.anchorPosition}
           postponeLabel={menuState.postponeLabel}
           empujarLabel={menuState.empujarLabel}
+          showActions={menuState.canDefer !== false}
           onClose={closeMenu}
+          habitLabel={habitLabel || itemId}
+          Icon={Icon}
+          config={config}
+          rutina={rutina}
+          section={section}
+          itemId={itemId}
+          itemValue={itemValue}
+          chain={chain}
+          routineName={hasRoutine ? primaryText : null}
           onPostpone={() => {
             if (!menuState.canPostpone) return;
             const defer = onDefer || onPostpone;

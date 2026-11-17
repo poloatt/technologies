@@ -22,6 +22,9 @@ function resolveEntryHorario(entry) {
 }
 
 function resolveCarouselMode(franjaKey, activeFranjaKey) {
+  const key = String(franjaKey || '').toUpperCase();
+  if (key === 'LUEGO') return 'luego';
+  if (key === 'SIN_HACER') return 'ahora';
   const activeIdx = VALID_TIME_OF_DAY.indexOf(activeFranjaKey);
   const franjaIdx = VALID_TIME_OF_DAY.indexOf(franjaKey);
   if (franjaIdx > activeIdx) return 'luego';
@@ -59,12 +62,16 @@ export default function RutinaFranjaIconCarousel({
   allowPostpone = false,
   onDefer = null,
   onPostpone = null,
+  /** Barra de título de rutina: solo Ahora. Luego/Hecho van planos. */
+  showRoutineTitleBar = true,
 }) {
   const theme = useTheme();
   const { isMobileOrTablet } = useResponsive();
   const centerWhenFits = centerWhenFitsProp ?? false;
   const carouselMode = resolveCarouselMode(franjaKey, activeFranjaKey);
   const currentTimeOfDay = resolveViewingTimeOfDay(rutina);
+  // Luego: iconos planos. Ahora / sinHacer: barra de título si el padre lo pide.
+  const effectiveShowTitleBar = Boolean(showRoutineTitleBar) && carouselMode !== 'luego';
 
   const displayRows = useMemo(
     () => groupEntriesIntoDisplayRows(pending),
@@ -187,7 +194,12 @@ export default function RutinaFranjaIconCarousel({
         if (row.kind === 'stack') {
           const stackLabel = resolveStackRoutineLabel(row.entries[0]?.chain);
           return (
-            <RoutineCarouselStackCluster key={`stack-${row.chainId}`} chainId={row.chainId} label={stackLabel}>
+            <RoutineCarouselStackCluster
+              key={`stack-${row.chainId}`}
+              chainId={row.chainId}
+              label={stackLabel}
+              showTitleBar={effectiveShowTitleBar}
+            >
               {row.entries.map((entry) => renderEntryIcon({ ...entry, label: stackLabel }))}
             </RoutineCarouselStackCluster>
           );

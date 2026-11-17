@@ -4,6 +4,7 @@ import {
   findUserHabit,
   getHabitSectionKeys,
 } from '../domain/habitSectionIds.js';
+import { resolveHabitSections } from '../domain/resolveHabitSections.js';
 import { getHabitDisplayLabel } from '../domain/habitDisplayLabels.js';
 import { resolveItemVisibilityByCadence } from '../domain/resolveItemVisibility.js';
 import { resolveRutinaItemConfig } from '../domain/resolveRutinaItemConfig.js';
@@ -108,6 +109,61 @@ export function sortSectionHabitsByFixedOrder(entries, { section, habits = null 
     const indexA = orderIndex.get(a.itemId) ?? Number.MAX_SAFE_INTEGER;
     const indexB = orderIndex.get(b.itemId) ?? Number.MAX_SAFE_INTEGER;
     if (indexA !== indexB) return indexA - indexB;
+    const labelCmp = (a.label || '').localeCompare(b.label || '', 'es');
+    if (labelCmp !== 0) return labelCmp;
+    return String(a.itemId || '').localeCompare(String(b.itemId || ''));
+  });
+}
+
+function resolveEntryStableOrden(entry) {
+  const fromUser = entry?.userHabit?.orden;
+  if (fromUser != null && Number.isFinite(Number(fromUser))) return Number(fromUser);
+  if (entry?.orden != null && Number.isFinite(Number(entry.orden))) return Number(entry.orden);
+  return Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Orden estable multi-sección: orden de secciones + `orden` del hábito + step de rutina.
+ * No depende de completado — evita reordenar al marcar/desmarcar → Hecho hoy.
+ */
+export function sortCadenceEntriesByStableOrder(entries = [], {
+  habits = null,
+  customSections = [],
+} = {}) {
+  const sections = resolveHabitSections(customSections);
+  const sectionIndex = new Map(sections.map((section, index) => [section, index]));
+  const orderBySection = new Map();
+
+  const getSectionOrderMap = (section) => {
+    if (!section) return null;
+    if (!habits) return null;
+    if (!orderBySection.has(section)) {
+      orderBySection.set(
+        section,
+        new Map(getHabitSectionItemIds(section, habits).map((id, index) => [id, index])),
+      );
+    }
+    return orderBySection.get(section);
+  };
+
+  return [...entries].sort((a, b) => {
+    const secA = a.section || '';
+    const secB = b.section || '';
+    const siA = sectionIndex.has(secA) ? sectionIndex.get(secA) : 999;
+    const siB = sectionIndex.has(secB) ? sectionIndex.get(secB) : 999;
+    if (siA !== siB) return siA - siB;
+
+    const mapA = getSectionOrderMap(secA);
+    const mapB = getSectionOrderMap(secB);
+    const indexA = mapA?.has(a.itemId) ? mapA.get(a.itemId) : resolveEntryStableOrden(a);
+    const indexB = mapB?.has(b.itemId) ? mapB.get(b.itemId) : resolveEntryStableOrden(b);
+    if (indexA !== indexB) return indexA - indexB;
+
+    if (a.chain?.id && a.chain.id === b.chain?.id) {
+      const stepDiff = (a.chain?.stepIndex ?? 0) - (b.chain?.stepIndex ?? 0);
+      if (stepDiff !== 0) return stepDiff;
+    }
+
     const labelCmp = (a.label || '').localeCompare(b.label || '', 'es');
     if (labelCmp !== 0) return labelCmp;
     return String(a.itemId || '').localeCompare(String(b.itemId || ''));
@@ -338,20 +394,15 @@ function resolveDoneEntryParams(entry, rutina, rutinaForVisibility) {
   };
 }
 
-function sortDonePartitionEntries(entries = []) {
-  return [...entries].sort((a, b) => {
-    const sectionCmp = String(a.sectionLabel || a.section || '')
-      .localeCompare(String(b.sectionLabel || b.section || ''), 'es');
-    if (sectionCmp !== 0) return sectionCmp;
-    return (a.label || '').localeCompare(b.label || '', 'es');
-  });
-}
-
 /** Separa Hecho en: completados hoy vs cuota del período cumplida sin marcar hoy. */
 export function partitionDoneEntriesByRutinaDay(
   entries = [],
   rutina,
   rutinaForVisibility = rutina,
+  {
+    habits = null,
+    customSections = [],
+  } = {},
 ) {
   const doneOnDay = [];
   const doneByQuota = [];
@@ -372,9 +423,10 @@ export function partitionDoneEntriesByRutinaDay(
     }
   });
 
+  const sortOpts = { habits, customSections };
   return {
-    doneOnDay: sortDonePartitionEntries(doneOnDay),
-    doneByQuota: sortDonePartitionEntries(doneByQuota),
+    doneOnDay: sortCadenceEntriesByStableOrder(doneOnDay, sortOpts),
+    doneByQuota: sortCadenceEntriesByStableOrder(doneByQuota, sortOpts),
   };
 }
 

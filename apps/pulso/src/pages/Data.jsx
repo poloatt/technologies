@@ -14,8 +14,10 @@ import { CommonDate } from '@shared/components/common';
 import useResponsive from '@shared/hooks/useResponsive';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
+import { useScopedPageHistory } from '@shared/hooks/useScopedUndo';
 import { SALUD_ESTADOS, SALUD_TIPOS } from '@shared/pulso';
 import BodyMap from '../components/data/BodyMap';
+import { RobinDock } from '@attadia/robin/ui';
 
 const TIPO_LABEL = {
   TURNO: 'Turno',
@@ -45,6 +47,16 @@ export function Data() {
   const [selectedZone, setSelectedZone] = useState(null);
   const [itemOpen, setItemOpen] = useState(false);
   const [draft, setDraft] = useState(emptyItem());
+  const [focus, setFocus] = useState({ zona: '', parte: '', capa: '' });
+  const [fileDrag, setFileDrag] = useState(false);
+
+  const onFocusChange = useCallback((next) => {
+    setFocus((current) => (
+      current.zona === next.zona && current.parte === next.parte && current.capa === next.capa
+        ? current
+        : next
+    ));
+  }, []);
 
   const load = useCallback(async () => {
     const [controlesRes, itemsRes] = await Promise.all([
@@ -55,9 +67,25 @@ export function Data() {
     setItems(Array.isArray(itemsRes.data) ? itemsRes.data : []);
   }, []);
 
+  const onUndoError = useCallback(() => {
+    enqueueSnackbar('No se pudo deshacer', { variant: 'error' });
+  }, [enqueueSnackbar]);
+
+  useScopedPageHistory(load, onUndoError);
+
   useEffect(() => {
     load().catch(() => enqueueSnackbar('Error al cargar Data', { variant: 'error' }));
   }, [enqueueSnackbar, load]);
+
+  useEffect(() => {
+    const onRobin = (event) => {
+      if (event.detail?.domains?.includes('salud')) {
+        load().catch(() => {});
+      }
+    };
+    window.addEventListener('robin-changed', onRobin);
+    return () => window.removeEventListener('robin-changed', onRobin);
+  }, [load]);
 
   useEffect(() => {
     const onAdd = (event) => {
@@ -87,15 +115,34 @@ export function Data() {
 
   return (
     <Box
+      onDragOver={(event) => {
+        if (!Array.from(event.dataTransfer?.types || []).includes('Files')) return;
+        event.preventDefault();
+        setFileDrag(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        setFileDrag(false);
+      }}
+      onDrop={(event) => {
+        if (event.defaultPrevented) return;
+        if (!event.dataTransfer?.files?.length) return;
+        event.preventDefault();
+        setFileDrag(false);
+        window.dispatchEvent(new CustomEvent('robin-files', {
+          detail: { surface: 'data', files: event.dataTransfer.files },
+        }));
+      }}
       sx={isDesktop
-        ? { px: 0, width: '100%', flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column' }
-        : { px: 0, width: '100%' }}
+        ? { px: 0, width: '100%', flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', outline: fileDrag ? '1px solid' : 'none', outlineColor: 'text.primary' }
+        : { px: 0, width: '100%', outline: fileDrag ? '1px solid' : 'none', outlineColor: 'text.primary' }}
     >
       <BodyMap
         controles={controles}
         items={items}
         selectedZone={selectedZone}
         onSelectZone={setSelectedZone}
+        onFocusChange={onFocusChange}
       />
 
       <Dialog open={itemOpen} onClose={() => setItemOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
@@ -161,6 +208,7 @@ export function Data() {
           <Button variant="contained" sx={{ borderRadius: 0 }} onClick={saveItem}>Guardar</Button>
         </DialogActions>
       </Dialog>
+      <RobinDock surface="data" context={focus} />
     </Box>
   );
 }

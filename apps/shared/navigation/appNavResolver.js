@@ -102,24 +102,26 @@ export function getCajaBranchPages(branchId) {
     .filter(Boolean);
 }
 
-/** Subpáginas Finanzas: solo hub / cards in-page, no en toolbar ni strip contextual. */
-export const FINANZAS_TOOLBAR_EXCLUDE_PAGE_IDS = [
-  'transacciones',
-  'cuentas',
-  'monedas',
-  'recurrente',
-  'inversiones',
-  'deudores',
+/**
+ * Subpáginas Finanzas ocultas en toolbar centro y strip.
+ * - propiedades / inventario: ramas con hub propio
+ * - recurrente: subpage de transacciones (nav contextual)
+ */
+export const FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS = [
   'propiedades',
   'inventario',
+  'recurrente',
 ];
+
+/** @deprecated Usar FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS */
+export const FINANZAS_TOOLBAR_EXCLUDE_PAGE_IDS = FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS;
 
 /**
  * Páginas Finanzas para toolbar centro y strip en subpáginas.
- * Excluye secciones con hub cards (navegación in-page).
+ * Transacciones, Cuentas, Monedas (+ en construcción: Inversiones, Deudores).
  */
 export function getFinanzasBranchPages() {
-  const exclude = new Set(FINANZAS_TOOLBAR_EXCLUDE_PAGE_IDS);
+  const exclude = new Set(FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS);
   return getCajaBranchPages('finanzas').filter((page) => !exclude.has(page.id));
 }
 
@@ -207,6 +209,7 @@ export function resolveCajaToolbarRight(currentPath) {
  * devuelve navegación contextual [page, ...subpages]; si no, todas las pages de la rama.
  */
 function resolveCajaBranchToolbarPages(currentPath, branchId) {
+  // Finanzas: tabs en toolbar centro + strip (Transacciones, Cuentas, Monedas…).
   if (branchId === 'finanzas') {
     return getFinanzasBranchPages();
   }

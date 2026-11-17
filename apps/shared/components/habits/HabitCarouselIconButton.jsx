@@ -170,28 +170,37 @@ export default function HabitCarouselIconButton({
     readOnly: !interactive,
     allowPostpone: allowPostpone && deferMenuSlotAllowed,
   });
+  // Mini-card informativa en cualquier botón interactivo del carrusel.
+  const canOpenPreviewMenu = interactive && Boolean(label || itemId);
   const { menuState, closeMenu, getPostponeHandlers } = useHabitItemContextMenu({
-    enabled: canOpenDeferMenu,
+    enabled: canOpenDeferMenu || canOpenPreviewMenu,
   });
 
   if (isHiddenByDeferral) {
     return null;
   }
   const postponeEntry = { section, itemId, config: itemConfig, itemValue: completadoHoy, label };
-  const resolveMenuMeta = () => resolveHabitDeferralMenuOptions({
-    rutina: rutinaHoy,
-    section,
-    itemId,
-    config: itemConfig,
-    itemValue: completadoHoy,
-    focusHorario: postponeFranja,
-    readOnly: !interactive,
-    allowPostpone: allowPostpone && deferMenuSlotAllowed,
-  });
-  const postponeHandlers = canOpenDeferMenu
+  const resolveMenuMeta = () => {
+    const deferOptions = resolveHabitDeferralMenuOptions({
+      rutina: rutinaHoy,
+      section,
+      itemId,
+      config: itemConfig,
+      itemValue: completadoHoy,
+      focusHorario: postponeFranja,
+      readOnly: !interactive,
+      allowPostpone: allowPostpone && deferMenuSlotAllowed,
+    });
+    return {
+      ...deferOptions,
+      canDefer: Boolean(canOpenDeferMenu && deferOptions?.canDefer),
+      canPreview: canOpenPreviewMenu,
+    };
+  };
+  const postponeHandlers = (canOpenDeferMenu || canOpenPreviewMenu)
     ? getPostponeHandlers(postponeEntry, resolveMenuMeta)
     : {};
-  const postponeEnabled = canOpenDeferMenu;
+  const postponeEnabled = canOpenDeferMenu || canOpenPreviewMenu;
 
   const mergePostponeIconHandlers = (baseHandlers = {}) => ({
     ...baseHandlers,
@@ -356,7 +365,16 @@ export default function HabitCarouselIconButton({
           anchorPosition={menuState.anchorPosition}
           postponeLabel={menuState.postponeLabel}
           empujarLabel={menuState.empujarLabel}
+          showActions={Boolean(menuState.canDefer)}
           onClose={closeMenu}
+          habitLabel={label}
+          Icon={Icon}
+          iconName={iconName}
+          config={itemConfig}
+          rutina={rutinaHoy}
+          section={section}
+          itemId={itemId}
+          itemValue={completadoHoy}
           onPostpone={() => {
             if (!menuState.canPostpone) return;
             const defer = onDefer || onPostpone;
@@ -376,6 +394,7 @@ export default function HabitCarouselIconButton({
             });
           }}
           onIgnoreToday={() => {
+            if (!menuState.canDefer) return;
             const defer = onDefer || onPostpone;
             defer?.(section, itemId, HABIT_DEFERRAL_ACTION.IGNORE, {
               franja: menuState.franja || postponeFranja,

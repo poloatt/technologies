@@ -19,7 +19,9 @@ import { DIAS_SEMANA } from '@shared/habits';
 import useResponsive from '@shared/hooks/useResponsive';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
+import { useScopedPageHistory } from '@shared/hooks/useScopedUndo';
 import { MEAL_FRANJAS } from '@shared/pulso';
+import { RecordOrigin, RobinDock } from '@attadia/robin/ui';
 
 const WEEK = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
 
@@ -71,6 +73,12 @@ export function Nutricion() {
     const response = await clienteAxios.get('/api/dietas/recetas');
     setMeals(response.data || []);
   }, []);
+
+  const onUndoError = useCallback(() => {
+    enqueueSnackbar('No se pudo deshacer', { variant: 'error' });
+  }, [enqueueSnackbar]);
+
+  useScopedPageHistory(loadMeals, onUndoError);
 
   useEffect(() => {
     loadMeals().catch(() => {
@@ -141,6 +149,16 @@ export function Nutricion() {
     return () => window.removeEventListener('headerAddButtonClicked', onAdd);
   }, []);
 
+  useEffect(() => {
+    const onRobin = (event) => {
+      if (event.detail?.domains?.includes('dieta')) {
+        loadMeals().catch(() => {});
+      }
+    };
+    window.addEventListener('robin-changed', onRobin);
+    return () => window.removeEventListener('robin-changed', onRobin);
+  }, [loadMeals]);
+
   const selected = presented.find((meal) => mealId(meal) === selectedId) || null;
   const detail = selected ? (
     <Box sx={{ height: '100%', minHeight: 0, overflow: 'auto', py: 1, px: { xs: 1, sm: 0 } }}>
@@ -162,7 +180,21 @@ export function Nutricion() {
   );
 
   return (
-    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', width: '100%' }}>
+    <Box
+      onDragOver={(event) => {
+        if (!Array.from(event.dataTransfer?.types || []).includes('Files')) return;
+        event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (event.defaultPrevented) return;
+        if (!event.dataTransfer?.files?.length) return;
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('robin-files', {
+          detail: { surface: 'nutricion', files: event.dataTransfer.files },
+        }));
+      }}
+      sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', width: '100%' }}
+    >
       {isDesktop ? (
         <SplitScreen start={list} detail={detail} sx={{ flex: 1, minHeight: 0 }} />
       ) : (
@@ -171,6 +203,10 @@ export function Nutricion() {
           {detail}
         </Box>
       )}
+      <RobinDock
+        surface="nutricion"
+        context={selected ? { comidaId: mealId(selected), comidaNombre: selected.nombre } : null}
+      />
     </Box>
   );
 }
@@ -203,7 +239,12 @@ function MealList({ meals, selectedId, onSelect }) {
               outlineColor: 'primary.main',
             }}
           >
-            <TaskEventBlock timedCompact event={mealEvent(meal)} onClick={() => onSelect(id)} />
+            <TaskEventBlock
+              timedCompact
+              event={mealEvent(meal)}
+              onClick={() => onSelect(id)}
+              mark={<RecordOrigin origen={meal.origen} />}
+            />
           </Box>
         );
       })}
@@ -241,9 +282,12 @@ function MealCard({ meal, onChange, onDelete, onClose }) {
           placeholder="Agregar título"
           autoFocus
           action={(
-            <IconButton aria-label="Cerrar comida" size="small" onClick={onClose}>
-              <CloseIcon fontSize="small" />
-            </IconButton>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <RecordOrigin origen={meal.origen} />
+              <IconButton aria-label="Cerrar comida" size="small" onClick={onClose}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Stack>
           )}
         />
         <TextField

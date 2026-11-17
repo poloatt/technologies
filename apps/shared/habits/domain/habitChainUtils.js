@@ -118,7 +118,9 @@ export function groupHabitsIntoDisplayRows(habits = [], section, habitChains = [
 
 /**
  * Agrupa entradas visibles: hábitos de la misma rutina comparten fila.
- * Dentro de una rutina: franja activa (círculo) primero, atrasados (sin círculo) a la derecha.
+ * Orden interno estable por `chain.stepIndex` (no reordena al marcar franjas).
+ * Mientras quede ≥1 hábito pendiente de una rutina multi-paso, se mantiene el
+ * grupo (barra de título) para no saltar a fila simple al completar parcial.
  * @returns {Array<{ kind: 'single', entry: object } | { kind: 'stack', chainId: string, entries: object[] }>}
  */
 export function groupEntriesIntoDisplayRows(items = []) {
@@ -139,11 +141,9 @@ export function groupEntriesIntoDisplayRows(items = []) {
   });
 
   stackGroups.forEach((group) => {
-    group.entries.sort((a, b) => {
-      const rankDiff = stackFranjaScheduleRank(a) - stackFranjaScheduleRank(b);
-      if (rankDiff !== 0) return rankDiff;
-      return (a.chain?.stepIndex ?? 0) - (b.chain?.stepIndex ?? 0);
-    });
+    group.entries.sort((a, b) => (
+      (a.chain?.stepIndex ?? 0) - (b.chain?.stepIndex ?? 0)
+    ));
   });
 
   const renderedStacks = new Set();
@@ -156,25 +156,14 @@ export function groupEntriesIntoDisplayRows(items = []) {
       const group = stackGroups.get(chain.id);
       if (!group || group.firstIndex !== index) return;
       renderedStacks.add(chain.id);
-      if (group.entries.length <= 1) {
-        rows.push({ kind: 'single', entry: group.entries[0] });
-      } else {
-        rows.push({ kind: 'stack', chainId: chain.id, entries: group.entries });
-      }
+      // Mantener chrome de rutina aunque quede un solo pendiente.
+      rows.push({ kind: 'stack', chainId: chain.id, entries: group.entries });
       return;
     }
     rows.push({ kind: 'single', entry });
   });
 
   return rows;
-}
-
-/** Ahora (círculo) → sinHacer (atrasado) → luego. Sin slot = tratar como ahora. */
-function stackFranjaScheduleRank(entry) {
-  const slot = entry?.franjaScheduleSlot;
-  if (slot === 'sinHacer') return 1;
-  if (slot === 'luego') return 2;
-  return 0;
 }
 
 export const RUTINA_STACK_SORTABLE_PREFIX = 'stack:';

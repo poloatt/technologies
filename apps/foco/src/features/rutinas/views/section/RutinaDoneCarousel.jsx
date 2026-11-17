@@ -157,7 +157,12 @@ export default function RutinaDoneCarousel({
           if (row.kind === 'stack') {
             const stackLabel = resolveStackRoutineLabel(row.entries[0]?.chain);
             return (
-              <RoutineCarouselStackCluster key={`stack-${row.chainId}`} chainId={row.chainId} label={stackLabel}>
+              <RoutineCarouselStackCluster
+                key={`stack-${row.chainId}`}
+                chainId={row.chainId}
+                label={stackLabel}
+                showTitleBar={false}
+              >
                 {row.entries.map((entry) => renderEntryIcon({ ...entry, label: stackLabel }))}
               </RoutineCarouselStackCluster>
             );

@@ -1077,42 +1077,6 @@ class GoogleTasksService {
 
           for (const googleTask of mainTasks) {
             try {
-              // #region agent log
-              {
-                const t = String(googleTask?.title || '');
-                if (/yogurt|aspirar|limpiar|medialuna|medualuna|🛁|🧹|🥛|🥐/i.test(t)) {
-                  const dueRaw = googleTask?.due || null;
-                  let dueHasClock = false;
-                  if (dueRaw) {
-                    const m = String(dueRaw).match(/T(\d{2}):(\d{2})/);
-                    if (m) dueHasClock = !(m[1] === '00' && m[2] === '00');
-                  }
-                  fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
-                    body: JSON.stringify({
-                      sessionId: 'b064c0',
-                      runId: 'gcal-time-probe',
-                      hypothesisId: 'G1',
-                      location: 'googleTasksService.js:importLoop',
-                      message: 'raw Google Task payload (schedule probe)',
-                      data: {
-                        title: t.slice(0, 80),
-                        id: googleTask?.id,
-                        due: dueRaw,
-                        dueHasClock,
-                        notesHead: String(googleTask?.notes || '').slice(0, 200),
-                        keys: Object.keys(googleTask || {}),
-                        status: googleTask?.status,
-                        updated: googleTask?.updated,
-                      },
-                      timestamp: Date.now(),
-                    }),
-                  }).catch(() => {});
-                }
-              }
-              // #endregion
-
               let tarea = existingByGoogleId.get(googleTask.id);
 
               if (tarea) {
@@ -1242,7 +1206,7 @@ class GoogleTasksService {
               'googleTasksSync.googleTaskId': { $exists: true, $ne: null },
             });
             const toUnlink = tareasLocales.filter(
-              (t) => t.googleTasksSync?.googleTaskId && !googleMainIds.has(t.googleTasksSync.googleTaskId),
+              (t) => this.shouldSoftUnlinkMissingFromGoogle(t, googleMainIds),
             );
             if (toUnlink.length > 0) {
               logger.sync(`🧹 Desvinculando ${toUnlink.length} tareas locales que no existen más en Google (soft-unlink)`);
@@ -1810,6 +1774,14 @@ class GoogleTasksService {
     return sync.needsSync === true || sync.syncStatus === 'pending';
   }
 
+  /** Soft-unlink solo si el id ya no está en Google y no hay export local pendiente. */
+  shouldSoftUnlinkMissingFromGoogle(tarea, googleMainIds) {
+    const gtid = tarea?.googleTasksSync?.googleTaskId;
+    if (!gtid || googleMainIds?.has?.(gtid)) return false;
+    if (this.hasLocalPendingGoogleSync(tarea)) return false;
+    return true;
+  }
+
   statusDiffersFromGoogle(tarea, googleTask) {
     const googleCompleted = googleTask?.status === 'completed';
     const localCompleted =
@@ -2202,31 +2174,6 @@ class GoogleTasksService {
         if (!googleTask || googleTask.deleted) continue;
 
         const googleDone = googleTask.status === 'completed' || googleTask.hidden;
-        if (googleDone) {
-          // #region agent log
-          fetch('http://127.0.0.1:7888/ingest/f576597c-5e27-437e-8e5f-1cd13a8697b4', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'b064c0' },
-            body: JSON.stringify({
-              sessionId: 'b064c0',
-              runId: 'post-fix',
-              hypothesisId: 'B',
-              location: 'googleTasksService.js:refreshPendingAnchorsCompletedInGoogle',
-              message: 'local pending vs Google completed',
-              data: {
-                title: String(tarea.titulo || '').slice(0, 60),
-                localEstado: tarea.estado,
-                googleStatus: googleTask.status,
-                hidden: Boolean(googleTask.hidden),
-                googleDue: googleTask.due || null,
-                localStart: tarea.fechaInicio ? new Date(tarea.fechaInicio).toISOString() : null,
-              },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
-        }
-
         if (!googleDone) continue;
 
         await this.pullAnchorBackFromDuplicateNext(tarea, userId);
