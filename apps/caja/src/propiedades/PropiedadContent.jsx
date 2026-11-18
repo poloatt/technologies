@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import { styled, useTheme } from '@mui/material/styles';
 import { Link } from 'react-router-dom';
-import { InquilinoDetail } from '.';
+import InquilinoDetail from './inquilinos/InquilinoDetail';
 import { getInquilinosByPropiedad, getInquilinosByContrato } from '@shared/utils/inquilinosUtils';
 import ContratoDetail from '../propiedades/contratos/ContratoDetail';
 import {
@@ -46,39 +46,17 @@ import { calcularProgresoOcupacion, calcularYearToDate, calcularYearToGo } from 
 import EstadoFinanzasContrato from '../propiedades/contratos/EstadoFinanzasContrato';
 import { CuotasProvider } from './contratos';
 import { calcularEstadoCuotasContrato } from '@shared/utils/contratoUtils';
-import { SeccionUbicacion, SeccionHabitaciones, SeccionDocumentos } from '../propiedades/SeccionesPropiedad';
 import HabitacionesCarouselSection from './HabitacionesCarouselSection';
-
-
-// Constantes de estilo jerárquicas para alineación y separadores
-const SECTION_PADDING_X = 1;
-const SECTION_PADDING_Y = 0.5;
-const SECTION_GAP = 0.5;
-const SECTION_MIN_HEIGHT = '40px';
-const ROW_MIN_HEIGHT = '32px';
-const SEPARATOR_COLOR = 'divider';
-const SEPARATOR_WIDTH = '1px';
-
-// Función para formatear números de forma compacta (k, M, B)
-const formatCompactNumber = (value) => {
-  if (!value || isNaN(value)) return '0';
-  
-  const num = parseFloat(value);
-  if (num === 0) return '0';
-  
-  const absNum = Math.abs(num);
-  const sign = num < 0 ? '-' : '';
-  
-  if (absNum >= 1000000000) {
-    return `${sign}${(absNum / 1000000000).toFixed(1)}B`;
-  } else if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(1)}M`;
-  } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(1)}k`;
-  } else {
-    return `${sign}${absNum.toFixed(0)}`;
-  }
-};
+import {
+  SECTION_PADDING_X,
+  SECTION_PADDING_Y,
+  SECTION_GAP,
+  SECTION_MIN_HEIGHT,
+  ROW_MIN_HEIGHT,
+  SEPARATOR_COLOR,
+  SEPARATOR_WIDTH,
+  formatCompactNumber,
+} from './propiedadSectionLayout';
 
 // Componente Paper estilizado minimalista con fondo del tema
 const GeometricPaper = styled(Paper)(({ theme }) => ({
@@ -1720,54 +1698,17 @@ const PropiedadContent = ({
 };
 
 export default PropiedadContent;
-export { 
+export {
   PropiedadContent,
-  EntityCard, 
-  EntityGrid, 
-  InfoGrid, 
-  StandardSections, 
-  SectionRenderer, 
-  SecondarySectionRenderer, 
+  EntityCard,
+  EntityGrid,
+  InfoGrid,
+  StandardSections,
+  SectionRenderer,
+  SecondarySectionRenderer,
   HabitacionesRenderer,
-  GeometricPaper, 
-  CompactPaper, 
-  GeometricChip, 
+  GeometricPaper,
+  CompactPaper,
+  GeometricChip,
   EntityHeader,
-  SECTION_CONFIGS,
-  formatCompactNumber,
-  SECTION_PADDING_X,
-  crearSeccionesPropiedad // <-- Agregado aquí
-}; 
-
-// --- INICIO: Definición de crearSeccionesPropiedad ---
-const crearSeccionesPropiedad = (propiedad, precio, simboloMoneda, nombreCuenta, moneda, habitaciones, contratos, documentos = [], extendida = false) => {
-  let secciones = [
-    {
-      type: 'primary',
-      render: () => <SeccionUbicacion propiedad={propiedad} />
-    }
-  ];
-  if (extendida) {
-    if (habitaciones && habitaciones.length > 0) {
-      secciones.push({
-        type: 'primary',
-        render: () => <SeccionHabitaciones habitaciones={habitaciones} />
-      });
-    }
-  }
-  const documentosCompletos = [
-    ...(documentos || []),
-    ...(contratos || []).map(contrato => ({
-      ...contrato,
-      categoria: 'CONTRATO',
-      inquilino: contrato.inquilino || (Array.isArray(propiedad?.inquilinos) ? propiedad.inquilinos : []),
-      url: contrato.documentoUrl || `/contratos/${contrato._id}`
-    }))
-  ];
-  secciones.push({
-    type: 'primary',
-    render: () => <SeccionDocumentos documentos={documentosCompletos} propiedad={propiedad} />
-  });
-  return secciones;
 };
-// --- FIN: Definición de crearSeccionesPropiedad ---

@@ -1,5 +1,6 @@
 // Componentes principales
-export { ContratoPropiedadSection, ContratoHabitacionSection, ContratoInquilinosSection, ContratoMontosSection, TIPO_ALQUILER } from './ContratosSection';
+export { ContratoPropiedadSection, ContratoHabitacionSection, ContratoInquilinosSection, ContratoMontosSection } from './ContratosSection';
+export { TIPO_ALQUILER } from './tipoAlquiler';
 export { default as ContratoCuotasSection } from './ContratoCuotasSection';
 export { default as ContratoDetail } from './ContratoDetail';
 export { default as ContratoForm } from './ContratoForm';

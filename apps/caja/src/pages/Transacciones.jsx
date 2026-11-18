@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Chip, Typography } from '@shared/utils/materialImports';
 import {
-  FabNuevaTransaccion,
   TransaccionTable,
   TransaccionForm,
   TransaccionesFlujoVisual,
@@ -321,8 +320,6 @@ export function Transacciones() {
           </Typography>
         </Box>
       )}
-      <FabNuevaTransaccion onClick={handleOpenForm} />
-
       <TransaccionesFlujoVisual
         density="page"
         cuentaId={cuentaFilterId}

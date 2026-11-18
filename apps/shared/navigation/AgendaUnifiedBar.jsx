@@ -75,8 +75,11 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
     : (mainMargin < collapsedWidth ? collapsedWidth : mainMargin);
   const gridMarginRight = collapsedWidth;
 
-  // Caja: centro óptico entre menú y apps. Foco: reserva también el ancho de la nav derecha.
-  const centerTrackLeft = baseCenterInsetLeft;
+  // Caja: slot fijo del botón atrás (visible o no) a la derecha del menú.
+  const cajaBackSlotPx = isCajaPath ? (isMobile ? 32 : 26) : 0;
+
+  // Caja: centro óptico entre menú(+atrás) y apps. Foco: reserva también el ancho de la nav derecha.
+  const centerTrackLeft = baseCenterInsetLeft + cajaBackSlotPx;
   const centerTrackRightInset = isCajaPath
     ? collapsedWidth
     : collapsedWidth + (showDesktopSectionNav ? rightWidth : 0);
@@ -124,7 +127,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
           <CenteredTrack
             isMobileOrTablet={isMobileOrTablet}
             mainMargin={centerTrackLeft}
-            leftWidth={0}
+            leftWidth={isMobileOrTablet ? cajaBackSlotPx : 0}
             rightWidth={centerTrackRightInset}
             height={AGENDA_UNIFIED_BAR_CONFIG.height}
           >

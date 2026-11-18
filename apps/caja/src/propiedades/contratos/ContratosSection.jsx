@@ -1,21 +1,16 @@
 import React, { useEffect } from 'react';
 import { Box, Typography, Autocomplete, Chip, InputAdornment } from '@mui/material';
-import { Home, SingleBed, Person, AttachMoney } from '@mui/icons-material';
+import { Person, AttachMoney } from '@mui/icons-material';
 import { StyledTextField, FormSection, StyledToggleButton } from '@shared/components/common/CommonFormStyles';
 import { getCuentaYMoneda } from '@shared/utils/contratoUtils';
-import { SeccionUbicacion } from '../SeccionesPropiedad';
+import { SeccionUbicacion } from '../SeccionUbicacion';
 import {
   getDocumentId,
   getPropiedadDisplayLabel,
   getHabitacionTipoLabel,
   habitacionMatchesPropiedad,
 } from '../habitacionConstants';
-
-// --- TIPO_ALQUILER ---
-export const TIPO_ALQUILER = [
-  { valor: false, icon: <Home />, label: 'Propiedad', color: '#4caf50' },
-  { valor: true, icon: <SingleBed />, label: 'Habitación', color: '#2196f3' }
-];
+import { TIPO_ALQUILER } from './tipoAlquiler';
 
 // --- ContratoPropiedadSection ---
 export const ContratoPropiedadSection = ({
@@ -50,31 +45,34 @@ export const ContratoPropiedadSection = ({
       />
       {!formData.esMantenimiento && (
         <Box sx={{ display: 'flex', gap: 0.5, alignSelf: 'center', height: '56px', alignItems: 'center' }}>
-          {TIPO_ALQUILER.map((tipo) => (
-            <StyledToggleButton
-              key={String(tipo.valor)}
-              value={tipo.valor}
-              selected={formData.esPorHabitacion === tipo.valor}
-              onClick={() => onTipoAlquilerChange(tipo.valor)}
-              customcolor={tipo.color}
-            >
-              {tipo.icon}
-              <Typography 
-                variant="body2" 
-                className={formData.esPorHabitacion === tipo.valor ? 'selected' : ''}
-                sx={{ 
-                  textTransform: 'capitalize',
-                  fontSize: '0.875rem',
-                  display: formData.esPorHabitacion === tipo.valor ? 'block' : 'none',
-                  '.MuiButtonBase-root:hover &': {
-                    display: 'block'
-                  }
-                }}
+          {TIPO_ALQUILER.map((tipo) => {
+            const Icon = tipo.Icon;
+            return (
+              <StyledToggleButton
+                key={String(tipo.valor)}
+                value={tipo.valor}
+                selected={formData.esPorHabitacion === tipo.valor}
+                onClick={() => onTipoAlquilerChange(tipo.valor)}
+                customcolor={tipo.color}
               >
-                {tipo.label.toLowerCase()}
-              </Typography>
-            </StyledToggleButton>
-          ))}
+                <Icon />
+                <Typography 
+                  variant="body2" 
+                  className={formData.esPorHabitacion === tipo.valor ? 'selected' : ''}
+                  sx={{ 
+                    textTransform: 'capitalize',
+                    fontSize: '0.875rem',
+                    display: formData.esPorHabitacion === tipo.valor ? 'block' : 'none',
+                    '.MuiButtonBase-root:hover &': {
+                      display: 'block'
+                    }
+                  }}
+                >
+                  {tipo.label.toLowerCase()}
+                </Typography>
+              </StyledToggleButton>
+            );
+          })}
         </Box>
       )}
     </Box>
@@ -305,7 +303,6 @@ const ContratosSection = {
   ContratoHabitacionSection,
   ContratoInquilinosSection,
   ContratoMontosSection,
-  TIPO_ALQUILER
 };
 
 export default ContratosSection; 

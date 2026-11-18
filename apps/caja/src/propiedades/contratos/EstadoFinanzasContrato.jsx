@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { SECTION_PADDING_X } from '../';
+import { SECTION_PADDING_X } from '../propiedadSectionLayout';
 import {
   Box,
   Typography,
