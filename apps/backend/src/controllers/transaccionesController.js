@@ -29,6 +29,31 @@ function parseArDay(value, endOfDay = false) {
   return new Date(`${match[1]}-${match[2]}-${match[3]}T${time}-03:00`);
 }
 
+/** Aplica un rango inclusivo de días Argentina. Devuelve un mensaje si el rango es inválido. */
+function applyFechaRange(query, fechaInicio, fechaFin) {
+  if (!fechaInicio && !fechaFin) return null;
+  const range = {};
+  if (fechaInicio) {
+    const inicio = parseArDay(fechaInicio);
+    if (!inicio || Number.isNaN(inicio.getTime())) return 'Fecha de inicio inválida';
+    range.$gte = inicio;
+  }
+  if (fechaFin) {
+    const fin = parseArDay(fechaFin, true);
+    if (!fin || Number.isNaN(fin.getTime())) return 'Fecha de fin inválida';
+    range.$lte = fin;
+  }
+  query.fecha = range;
+  return null;
+}
+
+function applyCuentaFilter(query, cuenta) {
+  if (!cuenta) return null;
+  if (!mongoose.Types.ObjectId.isValid(cuenta)) return 'ID de cuenta inválido';
+  query.cuenta = new mongoose.Types.ObjectId(cuenta);
+  return null;
+}
+
 function arMonthBounds(now = new Date()) {
   const key = formatArDateKey(now);
   const [year, month] = key.split('-').map(Number);
@@ -242,11 +267,8 @@ class TransaccionesController extends BaseController {
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
       if (categoria) query.categoria = categoria;
-      if (fechaInicio || fechaFin) {
-        query.fecha = {};
-        if (fechaInicio) query.fecha.$gte = new Date(fechaInicio);
-        if (fechaFin) query.fecha.$lte = new Date(fechaFin);
-      }
+      const fechaError = applyFechaRange(query, fechaInicio, fechaFin);
+      if (fechaError) return res.status(400).json({ error: fechaError });
 
       const options = {
         page: parseInt(page),
@@ -398,7 +420,8 @@ class TransaccionesController extends BaseController {
         tipo,
         categoria,
         fechaInicio,
-        fechaFin
+        fechaFin,
+        cuenta,
       } = req.query;
 
       const query = { usuario: req.user.id };
@@ -406,11 +429,10 @@ class TransaccionesController extends BaseController {
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
       if (categoria) query.categoria = categoria;
-      if (fechaInicio || fechaFin) {
-        query.fecha = {};
-        if (fechaInicio) query.fecha.$gte = new Date(fechaInicio);
-        if (fechaFin) query.fecha.$lte = new Date(fechaFin);
-      }
+      const fechaError = applyFechaRange(query, fechaInicio, fechaFin);
+      if (fechaError) return res.status(400).json({ error: fechaError });
+      const cuentaError = applyCuentaFilter(query, cuenta);
+      if (cuentaError) return res.status(400).json({ error: cuentaError });
 
       const options = {
         page: parseInt(page),

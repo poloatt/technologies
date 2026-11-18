@@ -100,9 +100,38 @@ async function main() {
     return { count: pagos.length, sample: pagos[0]?.id };
   });
 
-  results.paymentsAll = await testEndpoint('/v1/payments/search (dual deduplicado)', async () => {
-    const pagos = await adapter.getAllPayments({ since: fechaDesde, limit: 10 });
-    return { count: pagos.length };
+  results.paymentsAll = await testEndpoint('/v1/payments/search (dual + P2P)', async () => {
+    const pagos = await adapter.getAllPayments({ since: fechaDesde, limit: 50, maxPages: 4 });
+    const transfers = pagos.filter((p) => p.operation_type === 'money_transfer');
+    return {
+      count: pagos.length,
+      moneyTransfers: transfers.length,
+      sampleTransfer: transfers[0]
+        ? {
+            id: transfers[0].id,
+            amount: transfers[0].transaction_amount,
+            payerId: transfers[0].payer?.id,
+            collectorId: transfers[0].collector_id,
+            status: transfers[0].status,
+            description: transfers[0].description
+          }
+        : null
+    };
+  });
+
+  results.moneyTransferOnly = await testEndpoint('/v1/payments/search operation_type=money_transfer', async () => {
+    const { results: rows, total } = await adapter.searchPayments({
+      since: fechaDesde,
+      limit: 50,
+      filter: { operationType: 'money_transfer' }
+    });
+    return {
+      total,
+      count: rows.length,
+      sample: rows[0]
+        ? { id: rows[0].id, amount: rows[0].transaction_amount, status: rows[0].status }
+        : null
+    };
   });
 
   results.balance = await testEndpoint('/users/{id}/mercadopago_account/balance', async () => {

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Box,
   Chip,
-  Collapse,
   Divider,
   IconButton,
   Table,
@@ -392,9 +391,9 @@ const TransaccionTable = ({
                   </TableCell>
                 </TableRow>
 
-                <TableRow sx={{ display: expanded ? 'table-row' : 'none' }}>
-                  <TableCell sx={{ p: 0, borderBottom: expanded ? undefined : 'none' }}>
-                    <Collapse in={expanded}>
+                {expanded && (
+                <TableRow>
+                  <TableCell sx={{ p: 0 }}>
                       <Box
                         sx={{
                           mx: 1.5,
@@ -539,9 +538,9 @@ const TransaccionTable = ({
                           </Box>
                         )}
                       </Box>
-                    </Collapse>
                   </TableCell>
                 </TableRow>
+                )}
               </React.Fragment>
             );
           })}

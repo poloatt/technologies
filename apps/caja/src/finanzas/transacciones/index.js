@@ -4,6 +4,7 @@ export { default as TransaccionTable } from './TransaccionTable';
 export { default as TransaccionesHubSummary } from './TransaccionesHubSummary';
 export { default as TransaccionesFlujoVisual } from './TransaccionesFlujoVisual';
 export { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
+export { useTransaccionesList } from './useTransaccionesList';
 export {
   DEFAULT_PERIOD_PRESET,
   PERIOD_PRESETS,

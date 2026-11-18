@@ -325,7 +325,26 @@ export class BankSyncService {
       });
 
       const userInfo = await mpAdapter.getUserInfo();
-      console.log('Usuario MercadoPago verificado:', userInfo.nickname || userInfo.email);
+      // Usar siempre el id vivo de /users/me (el guardado en credenciales puede quedar desfasado)
+      const mpUserId = String(userInfo.id || userId);
+      mpAdapter.userId = mpUserId;
+      if (mpUserId && mpUserId !== String(userId)) {
+        try {
+          bankConnection.credenciales.userId = this.encrypt(mpUserId);
+          await bankConnection.save();
+          console.warn('[MP] userId de credenciales actualizado desde /users/me', {
+            storedUserId: userId,
+            mpUserId
+          });
+        } catch (e) {
+          console.warn('[MP] No se pudo persistir userId actualizado:', e.message);
+        }
+      }
+      console.log('Usuario MercadoPago verificado:', {
+        nickname: userInfo.nickname || userInfo.email,
+        mpUserId,
+        storedUserId: userId
+      });
 
       const syncDays = getMpSyncDays();
       const fechaDesde = new Date(Date.now() - syncDays * 24 * 60 * 60 * 1000);
@@ -337,10 +356,13 @@ export class BankSyncService {
       try {
         pagos = await mpAdapter.getAllPayments({
           since: fechaDesde.toISOString(),
-          limit: 100,
-          maxPages: 20
+          limit: 50,
+          maxPages: 40
         });
-        console.log(`✅ Pagos obtenidos (collector + payer): ${pagos.length}`);
+        const p2pCount = pagos.filter(
+          (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
+        ).length;
+        console.log(`✅ Pagos obtenidos: ${pagos.length} (money_transfer P2P: ${p2pCount})`);
       } catch (error) {
         console.error('❌ Error obteniendo pagos:', error.message);
         errores.push({ tipo: 'pagos', error: error.message });
@@ -431,7 +453,7 @@ export class BankSyncService {
       let transaccionesNuevas = 0;
       let transaccionesActualizadas = 0;
 
-      const pagosResult = await this.procesarPagosMercadoPago(pagos, bankConnection, cuenta, userId);
+      const pagosResult = await this.procesarPagosMercadoPago(pagos, bankConnection, cuenta, mpUserId);
       transaccionesNuevas += pagosResult.nuevas;
       transaccionesActualizadas += pagosResult.actualizadas;
 
@@ -474,6 +496,9 @@ export class BankSyncService {
           totalMovimientos: movimientosMerged.length,
           totalSettlementRows: movimientos.length,
           totalAccountMovements: accountMovements.length,
+          transferenciasP2P: pagos.filter(
+            (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
+          ).length,
           transferenciasSettlement: movimientos.filter((m) =>
             esTipoTransferenciaMovimiento(m.transactionType)
           ).length,

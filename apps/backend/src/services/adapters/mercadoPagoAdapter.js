@@ -7,7 +7,7 @@ export class MercadoPagoAdapter {
     this.refreshToken = refreshToken;
     this.userId = userId;
     this.maxRetries = 3;
-    this.timeout = 10000; // 10 segundos
+    this.timeout = 20000; // payments/search P2P puede demorar
   }
 
   // Método helper para retry con exponential backoff
@@ -85,23 +85,39 @@ export class MercadoPagoAdapter {
     });
   }
 
-  async searchPayments({ since, limit = 100, offset = 0, filter = null }) {
+  async searchPayments({ since, limit = 50, offset = 0, filter = null }) {
     return this.withRetry(async () => {
       const params = new URLSearchParams();
+      // Docs MP: sort + criteria por separado (no "date_created.desc")
+      params.append('sort', 'date_created');
+      params.append('criteria', 'desc');
+      // Máximo documentado suele ser 50
+      const pageLimit = Math.min(Number(limit) || 50, 50);
+      params.append('limit', String(pageLimit));
+      params.append('offset', String(offset));
+
       if (since) {
         params.append('range', 'date_created');
         params.append('begin_date', since);
-        params.append('end_date', new Date().toISOString());
+        // MP acepta ISO o relativos (NOW / NOW-90DAYS)
+        const endDate = String(since).startsWith('NOW') ? 'NOW' : new Date().toISOString();
+        params.append('end_date', endDate);
       }
-      params.append('limit', limit.toString());
-      params.append('offset', offset.toString());
-      params.append('sort', 'date_created.desc');
 
       if (filter?.collectorId) {
         params.append('collector.id', String(filter.collectorId));
       }
       if (filter?.payerId) {
         params.append('payer.id', String(filter.payerId));
+      }
+      if (filter?.operationType) {
+        params.append('operation_type', String(filter.operationType));
+      }
+      if (filter?.paymentTypeId) {
+        params.append('payment_type_id', String(filter.paymentTypeId));
+      }
+      if (filter?.status) {
+        params.append('status', String(filter.status));
       }
 
       const url = `https://api.mercadopago.com/v1/payments/search?${params.toString()}`;
@@ -123,24 +139,28 @@ export class MercadoPagoAdapter {
     });
   }
 
-  async fetchAllPaymentsForFilter({ since, pageSize = 100, maxPages = 20, filter }) {
+  async fetchAllPaymentsForFilter({ since, pageSize = 50, maxPages = 20, filter, label = '' }) {
     const all = [];
     let offset = 0;
     let total = Infinity;
+    const size = Math.min(pageSize, 50);
 
     for (let page = 0; page < maxPages && offset < total; page++) {
       const { results, total: pagingTotal } = await this.searchPayments({
         since,
-        limit: pageSize,
+        limit: size,
         offset,
         filter
       });
       total = pagingTotal;
       all.push(...results);
-      if (results.length < pageSize) break;
-      offset += pageSize;
+      if (results.length < size) break;
+      offset += size;
     }
 
+    if (label) {
+      console.log(`[MP] payments/search ${label}: ${all.length} (total API=${total === Infinity ? '?' : total})`);
+    }
     return all;
   }
 
@@ -148,35 +168,99 @@ export class MercadoPagoAdapter {
     return this.getAllPayments({ since, limit });
   }
 
-  async getAllPayments({ since, limit = 100, maxPages = 20 }) {
+  /**
+   * Pagos + transferencias P2P (operation_type=money_transfer).
+   * Las transferencias in-app a otros usuarios MP no salen en WITHDRAWAL del settlement;
+   * hay que pedirlas explícitamente como payments.
+   */
+  async getAllPayments({ since, limit = 50, maxPages = 20 }) {
     const mpUserId = this.userId;
-    const pageSize = Math.min(limit, 100);
-    const results = await Promise.allSettled([
-      this.fetchAllPaymentsForFilter({
+    const pageSize = Math.min(limit, 50);
+
+    const searches = [
+      {
+        label: 'collector',
         since,
-        pageSize,
-        maxPages,
         filter: { collectorId: mpUserId }
-      }),
-      this.fetchAllPaymentsForFilter({
+      },
+      {
+        label: 'payer',
         since,
-        pageSize,
-        maxPages,
         filter: { payerId: mpUserId }
-      })
-    ]);
+      },
+      // P2P in-app: el token OAuth delimita la cuenta
+      {
+        label: 'money_transfer',
+        since,
+        filter: { operationType: 'money_transfer' }
+      },
+      {
+        label: 'money_transfer+payer',
+        since,
+        filter: { operationType: 'money_transfer', payerId: mpUserId }
+      },
+      {
+        label: 'money_transfer+collector',
+        since,
+        filter: { operationType: 'money_transfer', collectorId: mpUserId }
+      },
+      // Fallback relativo (MP acepta NOW-NDAYS) por si el ISO timezone filtra de más
+      {
+        label: 'money_transfer/NOW-90DAYS',
+        since: 'NOW-90DAYS',
+        filter: { operationType: 'money_transfer' }
+      },
+      // Enviar dinero suele ir con account_money
+      {
+        label: 'account_money+payer',
+        since,
+        filter: { paymentTypeId: 'account_money', payerId: mpUserId }
+      },
+      {
+        label: 'account_money (token scope)',
+        since,
+        filter: { paymentTypeId: 'account_money' }
+      }
+    ];
+
+    const results = await Promise.allSettled(
+      searches.map((s) =>
+        this.fetchAllPaymentsForFilter({
+          since: s.since,
+          pageSize,
+          maxPages,
+          filter: s.filter,
+          label: s.label
+        })
+      )
+    );
 
     const all = [];
-    for (const result of results) {
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
       if (result.status === 'fulfilled') {
         all.push(...result.value);
       } else {
-        console.warn('[MP] Búsqueda parcial de pagos falló:', result.reason?.message);
+        console.warn(`[MP] Búsqueda ${searches[i].label} falló:`, result.reason?.message);
       }
     }
 
     const deduped = deduplicarPagos(all);
-    console.log(`Pagos obtenidos (collector + payer): ${deduped.length}`, { userId: mpUserId, since, limit });
+    const transfers = deduped.filter(
+      (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
+    );
+    const accountMoney = deduped.filter(
+      (p) =>
+        String(p.payment_type_id || p.payment_method?.type || '').toLowerCase() === 'account_money'
+    );
+    console.log(`Pagos obtenidos (collector/payer/P2P): ${deduped.length}`, {
+      userId: mpUserId,
+      since,
+      moneyTransfers: transfers.length,
+      accountMoney: accountMoney.length,
+      operationTypes: [...new Set(deduped.map((p) => p.operation_type).filter(Boolean))],
+      sampleTransferIds: transfers.slice(0, 5).map((p) => p.id)
+    });
     return deduped;
   }
 
@@ -206,6 +290,7 @@ export class MercadoPagoAdapter {
    */
   async getAccountMovements({ since, limit = 100, maxPages = 10 }) {
     const pageSize = Math.min(limit, 100);
+    const userId = this.userId;
     const candidates = [
       {
         name: 'v1/account/movements/search',
@@ -233,8 +318,24 @@ export class MercadoPagoAdapter {
           params.append('offset', String(offset));
           return `https://api.mercadopago.com/mercadopago_account/movements/search?${params}`;
         }
-      }
-    ];
+      },
+      userId
+        ? {
+            name: `users/${userId}/mercadopago_account/movements/search`,
+            buildUrl: (offset) => {
+              const params = new URLSearchParams();
+              if (since) {
+                params.append('range', 'date_created');
+                params.append('begin_date', since);
+                params.append('end_date', new Date().toISOString());
+              }
+              params.append('limit', String(pageSize));
+              params.append('offset', String(offset));
+              return `https://api.mercadopago.com/users/${userId}/mercadopago_account/movements/search?${params}`;
+            }
+          }
+        : null
+    ].filter(Boolean);
 
     for (const candidate of candidates) {
       try {
