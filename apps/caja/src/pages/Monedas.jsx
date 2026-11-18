@@ -11,7 +11,6 @@ import {
   sortMonedasByOrden,
   monedaDetailPath,
 } from '../finanzas';
-import SetupContentHeader from '../finanzas/SetupContentHeader';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 import { CommonDetails, CommonForm } from '@shared/components/common';
 import { AddOutlined as AddIcon, RefreshOutlined as RefreshIcon } from '@mui/icons-material';
@@ -366,11 +365,9 @@ export function Monedas({ embedded = false } = {}) {
       {!embedded && <FinanzasSectionNav variant="strip" />}
       {embedded ? (
         <>
-          <SetupContentHeader
-            hint="Las monedas definen cómo se muestran saldos y movimientos en tus cuentas."
-            primaryLabel="Nueva moneda"
-            onPrimary={openCreate}
-          />
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25, lineHeight: 1.45 }}>
+            Las monedas definen saldos y movimientos. Usá + del header para agregar.
+          </Typography>
           {listBody}
         </>
       ) : (

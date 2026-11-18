@@ -3,25 +3,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { getIconByKey } from '@shared/navigation/menuIcons';
 import { SystemButtons } from '@shared/components/common/SystemButtons';
 import useResponsive from '@shared/hooks/useResponsive';
-import { matchCajaSection } from './attaToolbarPaths';
 import {
-  resolveCajaToolbarRight,
   isCajaBranchActive,
+  resolveCajaToolbarRight,
 } from '@shared/navigation/appNavResolver';
+import { matchCajaSection } from './attaToolbarPaths';
+import { commonButtonSx } from './CajaSetupHost';
 
-const commonButtonSx = {
-  width: { xs: 32, sm: 26 },
-  height: { xs: 32, sm: 26 },
-  padding: { xs: 0.25, sm: 0.125 },
-  minWidth: { xs: 32, sm: 26 },
-  minHeight: { xs: 32, sm: 26 },
-  '& .MuiSvgIcon-root': {
-    fontSize: { xs: '1.1rem', sm: '1.1rem' },
-  },
-  '&:hover': { backgroundColor: 'action.hover' },
-};
-
-/** Toolbar derecha Atta (desktop): Finanzas | Propiedades | Inventario. */
+/**
+ * Toolbar derecha Caja (desktop, misma posición/peso que Foco):
+ * solo ramas parent — Finanzas | Propiedades | Inventario.
+ */
 export default function CajaToolbarRight() {
   const navigate = useNavigate();
   const { pathname } = useLocation();

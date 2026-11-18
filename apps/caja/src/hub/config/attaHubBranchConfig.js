@@ -4,10 +4,8 @@ import {
   getPropiedadesBranchPages,
 } from '@shared/navigation/appNavResolver';
 import {
-  CuentasHubSection,
   DeudoresHubSection,
   InversionesHubSection,
-  MonedasHubSection,
   TransaccionesHubSection,
 } from '../../finanzas/hub';
 import { FINANZAS_SECTION_META, FINANZAS_STATS_ENDPOINTS } from '../../finanzas/finanzasSectionMeta';
@@ -31,12 +29,11 @@ export const CAJA_HUB_BRANCHES = {
     statsEndpoints: FINANZAS_STATS_ENDPOINTS,
     hubSectionCards: {
       transacciones: TransaccionesHubSection,
-      cuentas: CuentasHubSection,
-      monedas: MonedasHubSection,
       inversiones: InversionesHubSection,
       deudores: DeudoresHubSection,
     },
-    hubExcludePageIds: [],
+    // Cuentas y Monedas se abren como popup desde el header, no como sección del hub.
+    hubExcludePageIds: ['cuentas', 'monedas'],
     getStripPages: getFinanzasBranchPages,
   },
   propiedades: {

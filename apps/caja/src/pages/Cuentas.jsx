@@ -844,16 +844,12 @@ export function Cuentas({ embedded = false } = {}) {
       />
 
       {embedded ? (
-        <>
-          <SetupContentHeader
-            hint="Administrá tus cuentas y conectá Mercado Pago. Tocá una fila para editarla."
-            primaryLabel="Nueva cuenta"
-            onPrimary={openCreate}
-            secondaryLabel="Conectar MP"
-            onSecondary={() => setIsSyncModalOpen(true)}
-          />
+        <Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25, lineHeight: 1.45 }}>
+            Tocá una fila para editarla. Usá + o sync del header para crear o conectar.
+          </Typography>
           {cuentasList}
-        </>
+        </Box>
       ) : (
         <Box sx={{ mt: 2 }}>
           <SetupContentHeader

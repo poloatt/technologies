@@ -1,34 +1,26 @@
 import React from 'react';
 import {
   Box,
-  Button,
   Dialog,
   IconButton,
   Typography,
 } from '@mui/material';
-import { ArrowBack, OpenInNewOutlined } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { ArrowBack } from '@mui/icons-material';
 import useResponsive from '@shared/hooks/useResponsive';
 
 /**
- * Shell reutilizable para setups contextuales (Monedas, Cuentas, …).
- * Volver cierra; “Abrir página” navega a la ruta completa.
+ * Shell de setup contextual.
+ * Header: volver + título + acciones (sync / +), misma UX que Finanzas toolbar.
  */
 export default function SetupPageDialog({
   open,
   onClose,
   title,
   subtitle,
-  fullPagePath,
+  headerActions = null,
   children,
 }) {
-  const navigate = useNavigate();
   const { isMobile } = useResponsive();
-
-  const openFullPage = () => {
-    onClose?.();
-    if (fullPagePath) navigate(fullPagePath);
-  };
 
   return (
     <Dialog
@@ -79,16 +71,10 @@ export default function SetupPageDialog({
             </Typography>
           ) : null}
         </Box>
-        {fullPagePath ? (
-          <Button
-            size="small"
-            color="inherit"
-            endIcon={<OpenInNewOutlined sx={{ fontSize: 16 }} />}
-            onClick={openFullPage}
-            sx={{ textTransform: 'none', color: 'text.secondary', flexShrink: 0 }}
-          >
-            Página
-          </Button>
+        {headerActions ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+            {headerActions}
+          </Box>
         ) : null}
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 0 }}>
