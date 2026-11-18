@@ -473,13 +473,18 @@ class BankConnectionController extends BaseController {
           message: 'Sesión no disponible; no se puede iniciar OAuth de forma segura'
         });
       }
-      
-      const { authUrl, state } = getAuthUrl(redirectUri);
-      
-      // Guardar state y redirect_uri en sesión (obligatorios en el callback)
+
+      const { authUrl, state, codeVerifier } = getAuthUrl(redirectUri);
+
+      // state + redirect + PKCE verifier (servidor; no exponer al cliente)
       req.session.mercadopagoState = state;
       req.session.mercadopagoRedirectUri = redirectUri;
-      
+      req.session.mercadopagoCodeVerifier = codeVerifier;
+
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+
       res.json({ authUrl, state });
     } catch (error) {
       console.error('Error generando URL de autorización MercadoPago:', error);
@@ -521,19 +526,24 @@ class BankConnectionController extends BaseController {
       
       console.log('✅ State validado correctamente');
 
-      // Usar el redirect_uri guardado en la sesión (mismo que se usó para authUrl)
+      // redirect_uri + PKCE verifier de la sesión (mismos del auth-url)
       const redirectUri = req.session?.mercadopagoRedirectUri;
+      const codeVerifier = req.session?.mercadopagoCodeVerifier;
       if (!redirectUri) {
         return res.status(400).json({
           message: 'Sesión OAuth incompleta: falta redirect_uri. Reiniciá la conexión.'
         });
       }
-      console.log('🔄 Intercambiando código por token...');
+      if (!codeVerifier) {
+        return res.status(400).json({
+          message: 'Sesión OAuth incompleta: falta PKCE code_verifier. Reiniciá la conexión.'
+        });
+      }
+      console.log('🔄 Intercambiando código por token (PKCE)...');
       console.log('🔄 Redirect URI usado:', redirectUri);
-      console.log('🔄 Redirect URI de sesión:', req.session?.mercadopagoRedirectUri);
       console.log('🔄 Frontend URL config:', config.frontendUrl);
-      
-      const tokenData = await exchangeCodeForToken({ code, redirectUri });
+
+      const tokenData = await exchangeCodeForToken({ code, redirectUri, codeVerifier });
       const { access_token: accessToken, refresh_token: refreshToken, user_id: userId } = tokenData;
       
       console.log('✅ Tokens obtenidos exitosamente');
@@ -665,10 +675,11 @@ class BankConnectionController extends BaseController {
         // No fallar la conexión por esto, se puede sincronizar manualmente después
       }
 
-      // Limpiar el state y redirect_uri de la sesión
+      // Limpiar estado OAuth / PKCE de la sesión
       if (req.session) {
         delete req.session.mercadopagoState;
         delete req.session.mercadopagoRedirectUri;
+        delete req.session.mercadopagoCodeVerifier;
       }
 
       res.json({

@@ -363,7 +363,7 @@ export default function TransaccionesFlujoVisual({
           )}
         </Box>
         <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
-          {periodLabel} · {span}
+          {span}
         </Typography>
         {!dense && !loading && !error && (
           <MonedaControl monedas={monedas} activaId={activa.monedaId} onChange={setMonedaElegida} />

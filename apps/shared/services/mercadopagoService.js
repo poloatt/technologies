@@ -9,7 +9,6 @@ import { getRedirectURI } from '../config/mercadopago';
 class MercadoPagoService {
   constructor() {
     this.baseURL = '/api/bankconnections/mercadopago';
-    this.redirectURI = getRedirectURI();
     this.timeout = 30000; // 30 segundos
   }
 
@@ -20,11 +19,12 @@ class MercadoPagoService {
    */
   async getAuthUrl() {
     try {
+      const redirectURI = getRedirectURI();
       console.log('🔵 [MercadoPagoService] getAuthUrl - baseURL:', this.baseURL);
-      console.log('🔵 [MercadoPagoService] getAuthUrl - redirectURI:', this.redirectURI);
+      console.log('🔵 [MercadoPagoService] getAuthUrl - redirectURI:', redirectURI);
       
       const { data } = await clienteAxios.get(`${this.baseURL}/auth-url`, {
-        params: { redirect_uri: this.redirectURI },
+        params: { redirect_uri: redirectURI },
         timeout: this.timeout
       });
       

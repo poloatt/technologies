@@ -75,8 +75,8 @@ export const validateMercadoPagoCallback = [
     .withMessage('Código de autorización es requerido')
     .isString()
     .withMessage('Código debe ser una cadena de texto')
-    .isLength({ min: 10, max: 100 })
-    .withMessage('Código debe tener entre 10 y 100 caracteres'),
+    .isLength({ min: 10, max: 200 })
+    .withMessage('Código debe tener entre 10 y 200 caracteres'),
   check('state')
     .notEmpty()
     .withMessage('Parámetro state es requerido')

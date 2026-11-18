@@ -20,10 +20,10 @@ dotenv.config({ path: envPath });
 
 const CLIENT_ID = process.env.MERCADOPAGO_CLIENT_ID;
 const CLIENT_SECRET = process.env.MERCADOPAGO_CLIENT_SECRET;
-const REDIRECT_URI = 'https://admin.attadia.com/mercadopago/callback';
+const REDIRECT_URI = 'https://caja.attadia.com/mercadopago/callback';
 
 async function testOAuthFlow() {
-  console.log('=== PRUEBA DE FLUJO OAUTH MERCADOPAGO ===');
+  console.log('=== PRUEBA DE FLUJO OAUTH MERCADOPAGO (PKCE S256) ===');
   console.log('Ambiente:', environment);
   console.log('Client ID configurado:', !!CLIENT_ID);
   console.log('Client Secret configurado:', !!CLIENT_SECRET);
@@ -36,25 +36,41 @@ async function testOAuthFlow() {
   }
 
   try {
-    // 1. Generar URL de autorización
-    console.log('1. Generando URL de autorización...');
-    const scopes = ['read', 'offline_access', 'write'].join(' ');
+    // 1. Generar URL de autorización con PKCE
+    console.log('1. Generando URL de autorización con PKCE...');
+    const { createPkcePair } = await import('../src/oauth/mercadoPagoOAuth.js');
+    const scopes = ['read', 'offline_access'].join(' ');
     const state = 'test-state-' + Date.now();
-    
-    const authUrl = `https://auth.mercadopago.com/authorization?client_id=${CLIENT_ID}&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}&scope=${encodeURIComponent(scopes)}&prompt=consent`;
-    
+    const { codeVerifier, codeChallenge, codeChallengeMethod } = createPkcePair();
+
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      response_type: 'code',
+      platform_id: 'mp',
+      redirect_uri: REDIRECT_URI,
+      state,
+      scope: scopes,
+      prompt: 'consent',
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod
+    });
+    const authUrl = `https://auth.mercadopago.com/authorization?${params.toString()}`;
+
     console.log('✅ URL de autorización generada:');
     console.log('   Scopes solicitados:', scopes);
     console.log('   State:', state);
+    console.log('   PKCE method:', codeChallengeMethod);
+    console.log('   code_verifier (guardar para el exchange):', codeVerifier);
     console.log('   URL completa:', authUrl);
     console.log('');
 
     // 2. Verificar configuración de la app
     console.log('2. Verificando configuración de la app...');
-    console.log('   Para que el OAuth funcione correctamente, verifica en MercadoPago Developers:');
-    console.log('   - La app debe tener configurado el redirect_uri:', REDIRECT_URI);
-    console.log('   - La app debe tener permisos para los scopes: read, offline_access, write');
-    console.log('   - La app debe estar en modo PRODUCCIÓN (no sandbox)');
+    console.log('   Panel MP → Configuración avanzada:');
+    console.log('   - Redirect URI exacta:', REDIRECT_URI);
+    console.log('   - PKCE habilitado (recomendado / obligatorio si el toggle está ON)');
+    console.log('   - Scopes: read, offline_access');
+    console.log('   - Credenciales de PRODUCCIÓN activas');
     console.log('');
 
     // 3. Instrucciones para el usuario
@@ -63,13 +79,14 @@ async function testOAuthFlow() {
     console.log(`      ${authUrl}`);
     console.log('   2. Autoriza la aplicación en MercadoPago');
     console.log('   3. Copia el código de autorización de la URL de redirección');
-    console.log('   4. Ejecuta: node test-mercadopago-oauth.js <codigo>');
+    console.log('   4. Ejecuta: node test-mercadopago-oauth.js <codigo> <code_verifier>');
     console.log('');
 
     // Si se proporciona un código, probarlo
     const code = process.argv[2];
+    const verifierArg = process.argv[3] || codeVerifier;
     if (code) {
-      console.log('4. Probando intercambio de código por token...');
+      console.log('4. Probando intercambio de código por token (PKCE)...');
       console.log('   Código recibido:', code);
       
       const params = new URLSearchParams({
@@ -77,7 +94,8 @@ async function testOAuthFlow() {
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
         code: code,
-        redirect_uri: REDIRECT_URI
+        redirect_uri: REDIRECT_URI,
+        code_verifier: verifierArg
       });
 
       const response = await fetch('https://api.mercadopago.com/oauth/token', {

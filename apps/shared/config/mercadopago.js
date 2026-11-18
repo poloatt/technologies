@@ -42,10 +42,17 @@ export const MERCADOPAGO_CONFIG = {
   }
 };
 
-/** Redirect de OAuth MP: siempre el origin actual (evita caer a localhost en prod). */
+/**
+ * Redirect OAuth MP.
+ * En prod Caja/Atta usamos URI canónica registrada en el panel MP
+ * (debe coincidir exacto con Configuración avanzada → Redirect URIs).
+ */
 export const getRedirectURI = () => {
   const { hostname, origin } = window.location;
-  const redirectURI = `${origin}/mercadopago/callback`;
+  const prodHosts = new Set(['caja.attadia.com', 'atta.attadia.com', 'www.caja.attadia.com']);
+  const redirectURI = prodHosts.has(hostname)
+    ? 'https://caja.attadia.com/mercadopago/callback'
+    : `${origin}/mercadopago/callback`;
   console.log('🔵 [MercadoPago] getRedirectURI - hostname:', hostname, 'redirectURI:', redirectURI);
   return redirectURI;
 };
