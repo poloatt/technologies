@@ -21,7 +21,11 @@ export default function HubSectionCard({
   const navigate = useNavigate();
 
   return (
-    <Card elevation={0} sx={{ ...getHubSectionCardSx(isActive), ...cardSx }}>
+    <Card
+      className="hub-section-card"
+      elevation={0}
+      sx={{ ...getHubSectionCardSx(isActive), ...cardSx }}
+    >
       <HubSectionHeader
         title={title}
         iconKey={iconKey}
@@ -31,6 +35,7 @@ export default function HubSectionCard({
       />
 
       <Box
+        className="hub-section-body"
         sx={{ ...hubSectionBodySx, ...bodySx }}
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}

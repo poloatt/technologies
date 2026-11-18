@@ -1,7 +1,12 @@
 /** Rutas del módulo Caja (finanzas / propiedades / inventario). */
 export function matchCajaSection(path = '') {
   if (path === '/finanzas' || path.startsWith('/finanzas/')) return 'finanzas';
-  if (path === '/propiedades/inventario' || path.startsWith('/propiedades/inventario/')) {
+  if (
+    path === '/propiedades/inventario'
+    || path.startsWith('/propiedades/inventario/')
+    || path === '/propiedades/autos'
+    || path.startsWith('/propiedades/autos/')
+  ) {
     return 'inventario';
   }
   if (path === '/propiedades' || path.startsWith('/propiedades/')) return 'propiedades';

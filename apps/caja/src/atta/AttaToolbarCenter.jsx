@@ -1,15 +1,21 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Box, Divider } from '@mui/material';
 import { AutorenewOutlined } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SystemButtons } from '@shared/components/common/SystemButtons';
 import { getIconByKey } from '@shared/navigation/menuIcons';
 import { useEntityActions } from '@shared/components/common/CommonActions';
-import { matchCajaSection } from './attaToolbarPaths';
 import {
-  resolveCajaToolbarCenter,
   isCajaPageActive,
+  resolveCajaToolbarCenterChildren,
 } from '@shared/navigation/appNavResolver';
+import { matchCajaSection } from './attaToolbarPaths';
+import SetupPageDialog from '../finanzas/SetupPageDialog';
+import { MercadoPagoSyncDialog } from '../finanzas/conexiones';
+import {
+  CAJA_TOOLBAR_SETUP_PAGES,
+  renderCajaToolbarSetup,
+} from './cajaToolbarSetups';
 
 const commonButtonSx = {
   width: { xs: 32, sm: 26 },
@@ -22,8 +28,9 @@ const commonButtonSx = {
 };
 
 /**
- * Toolbar centro Atta (móvil y desktop):
- * subpáginas de la rama activa + acciones de contexto (añadir, sincronizar).
+ * Toolbar centro Atta: children del parent activo (menu principal).
+ * Ramas → footer móvil / toolbar derecha desktop.
+ * Actions (sync, +) aparte de los children.
  */
 export default function CajaToolbarCenter() {
   const navigate = useNavigate();
@@ -31,26 +38,30 @@ export default function CajaToolbarCenter() {
   const section = matchCajaSection(pathname);
   const { getEntityConfig, showAddButton } = useEntityActions();
   const entityConfig = getEntityConfig();
+  const [openSetupId, setOpenSetupId] = useState(null);
+  const [syncOpen, setSyncOpen] = useState(false);
 
-  const pages = useMemo(
-    () => resolveCajaToolbarCenter(pathname),
+  const childPages = useMemo(
+    () => resolveCajaToolbarCenterChildren(pathname),
     [pathname],
   );
 
-  const pageActions = useMemo(() => {
+  const childActions = useMemo(() => {
     if (!section) return [];
 
-    return pages.map((page) => {
+    return childPages.map((page) => {
       const isActive = isCajaPageActive(pathname, page);
       const Icon = getIconByKey(page.iconKey);
       const disabled = page.isUnderConstruction;
+      const opensSetup = !!CAJA_TOOLBAR_SETUP_PAGES[page.id];
+
       return {
         key: page.id,
         icon: <Icon />,
         label: page.label,
         tooltip: disabled
           ? `${page.label} (en construcción)`
-          : (isActive ? page.label : `Ir a ${page.label}`),
+          : page.label,
         color: disabled ? 'text.disabled' : (isActive ? 'primary.main' : 'text.secondary'),
         hoverColor: disabled ? 'text.disabled' : 'primary.main',
         disabled,
@@ -62,75 +73,92 @@ export default function CajaToolbarCenter() {
             '&:hover': { bgcolor: 'action.selected' },
           }),
         },
-        onClick: disabled ? undefined : () => navigate(page.path),
+        onClick: disabled
+          ? undefined
+          : () => {
+            if (opensSetup) {
+              setOpenSetupId(page.id);
+              return;
+            }
+            navigate(page.path);
+          },
       };
     });
-  }, [navigate, pages, pathname, section]);
+  }, [childPages, navigate, pathname, section]);
 
-  const contextActions = useMemo(() => {
-    const list = [];
-
-    const isCuentasPage = [
-      '/finanzas/cuentas',
-      '/propiedades/cuentas',
-      '/propiedades/inventario/cuentas',
-    ].includes(pathname);
-
-    if (isCuentasPage) {
-      list.push({
-        key: 'syncCuentas',
-        icon: <AutorenewOutlined />,
-        label: 'Sincronizar',
-        tooltip: 'Sincronizar cuenta',
-        color: 'primary.main',
-        hoverColor: 'primary.main',
-        buttonSx: commonButtonSx,
-        onClick: () => window.dispatchEvent(new CustomEvent('openMercadoPagoConnect')),
-      });
-    }
-
-    return list;
-  }, [pathname]);
+  // Sync disponible en todos los children de Finanzas (junto al +).
+  // El modal vive acá: Cuentas puede no estar montada.
+  const utilityActions = useMemo(() => {
+    if (section !== 'finanzas') return [];
+    return [{
+      key: 'syncCuentas',
+      icon: <AutorenewOutlined />,
+      label: 'Sincronizar',
+      tooltip: 'Sincronizar cuenta',
+      color: 'primary.main',
+      hoverColor: 'primary.main',
+      buttonSx: commonButtonSx,
+      onClick: () => setSyncOpen(true),
+    }];
+  }, [section]);
 
   if (!section) return null;
 
-  const hasPages = pageActions.length > 0;
-  const hasContext = contextActions.length > 0 || (showAddButton && entityConfig);
+  const hasChildren = childActions.length > 0;
+  const hasUtilities = utilityActions.length > 0 || (showAddButton && entityConfig);
+  if (!hasChildren && !hasUtilities) return null;
 
-  if (!hasPages && !hasContext) return null;
+  const openSetup = openSetupId ? CAJA_TOOLBAR_SETUP_PAGES[openSetupId] : null;
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: { xs: 0.02, sm: 0.1 },
-        maxWidth: '100%',
-        overflowX: 'auto',
-        overflowY: 'hidden',
-        scrollbarWidth: 'none',
-        '&::-webkit-scrollbar': { display: 'none' },
-      }}
-    >
-      {hasPages && (
-        <SystemButtons actions={pageActions} gap={{ xs: 0.02, sm: 0.1 }} />
-      )}
-      {hasPages && hasContext && (
-        <Divider
-          orientation="vertical"
-          flexItem
-          sx={{ mx: 0.5, alignSelf: 'center', height: 22, borderColor: 'divider' }}
-        />
-      )}
-      {hasContext && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.02, sm: 0.1 } }}>
-          <SystemButtons actions={contextActions} gap={{ xs: 0.02, sm: 0.1 }} />
-          {showAddButton && entityConfig && (
-            <SystemButtons.AddButton entityConfig={entityConfig} buttonSx={commonButtonSx} />
-          )}
-        </Box>
-      )}
-    </Box>
+    <>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: { xs: 0.02, sm: 0.1 },
+          maxWidth: '100%',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        }}
+      >
+        {hasChildren && (
+          <SystemButtons actions={childActions} gap={{ xs: 0.02, sm: 0.1 }} />
+        )}
+        {hasChildren && hasUtilities && (
+          <Divider
+            orientation="vertical"
+            flexItem
+            sx={{ mx: 0.5, alignSelf: 'center', height: 22, borderColor: 'divider' }}
+          />
+        )}
+        {hasUtilities && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.02, sm: 0.1 } }}>
+            {utilityActions.length > 0 && (
+              <SystemButtons actions={utilityActions} gap={{ xs: 0.02, sm: 0.1 }} />
+            )}
+            {showAddButton && entityConfig && (
+              <SystemButtons.AddButton entityConfig={entityConfig} buttonSx={commonButtonSx} />
+            )}
+          </Box>
+        )}
+      </Box>
+      <SetupPageDialog
+        open={!!openSetup}
+        onClose={() => setOpenSetupId(null)}
+        title={openSetup?.title || ''}
+        subtitle={openSetup?.subtitle}
+        fullPagePath={openSetup?.path}
+      >
+        {openSetupId ? renderCajaToolbarSetup(openSetupId) : null}
+      </SetupPageDialog>
+      <MercadoPagoSyncDialog
+        open={syncOpen}
+        onClose={() => setSyncOpen(false)}
+      />
+    </>
   );
 }

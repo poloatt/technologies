@@ -15,10 +15,13 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   getCajaBranchPages,
-  resolveCajaToolbarCenter,
+  getFinanzasBranchPages,
+  getInventarioBranchPages,
+  getPropiedadesBranchPages,
   isPathActive,
 } from '@shared/navigation/appNavResolver';
 import { DynamicIcon } from '@shared/components/common/DynamicIcon';
+import useResponsive from '@shared/hooks/useResponsive';
 import { useCajaSectionStats } from './useCajaSectionStats';
 import {
   hubSectionBodySx,
@@ -57,6 +60,7 @@ export default function CajaBranchSectionNav({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { isMobile } = useResponsive();
   const { counts, loading } = useCajaSectionStats(statsEndpoints);
 
   const pages = useMemo(() => {
@@ -64,10 +68,12 @@ export default function CajaBranchSectionNav({
       if (stripPages) {
         return typeof stripPages === 'function' ? stripPages() : stripPages;
       }
-      return resolveCajaToolbarCenter(pathname);
+      if (branchId === 'propiedades') return getPropiedadesBranchPages();
+      if (branchId === 'inventario') return getInventarioBranchPages();
+      return getFinanzasBranchPages();
     }
     return getCajaBranchPages(branchId);
-  }, [branchId, pathname, variant, stripPages]);
+  }, [branchId, variant, stripPages]);
 
   const activeId = useMemo(
     () => resolveActiveSectionId(pathname, pages),
@@ -97,6 +103,23 @@ export default function CajaBranchSectionNav({
     branchId === 'finanzas' || branchId === 'propiedades' || branchId === 'inventario'
   );
   const splitComingSoonHub = usesHubCardLayout && comingSoonPages.length > 0;
+  // Página principal (Finanzas): en desktop las secciones van en columna, a ancho completo.
+  const stackHubSections = !isStrip && branchId === 'finanzas';
+
+  const hubStackSx = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 1.5,
+    width: '100%',
+    '& .hub-section-card': {
+      minHeight: 'auto',
+      height: 'auto',
+    },
+    '& .hub-section-body': {
+      minHeight: 'auto',
+      flex: '0 1 auto',
+    },
+  };
 
   const handleNavigate = (page) => {
     if (page.isUnderConstruction) return;
@@ -271,7 +294,40 @@ export default function CajaBranchSectionNav({
     );
   };
 
+  // En mobile las pages viven en BottomNavigation; el strip duplicaría el footer.
+  if (isStrip && isMobile) return null;
   if (pages.length === 0) return null;
+
+  const renderSectionGroup = (sectionPages) => {
+    if (stackHubSections) {
+      return (
+        <Box sx={hubStackSx}>
+          {sectionPages.map((page) => (
+            <Box key={page.id} sx={{ width: '100%' }}>
+              {renderCard(page)}
+            </Box>
+          ))}
+        </Box>
+      );
+    }
+
+    return (
+      <Grid container spacing={1.5} sx={usesHubCardLayout ? hubGridContainerSx : undefined}>
+        {sectionPages.map((page) => (
+          <Grid
+            item
+            key={page.id}
+            xs={12}
+            sm={6}
+            md={4}
+            sx={usesHubCardLayout ? hubGridItemSx : undefined}
+          >
+            {renderCard(page)}
+          </Grid>
+        ))}
+      </Grid>
+    );
+  };
 
   return (
     <Box
@@ -301,13 +357,7 @@ export default function CajaBranchSectionNav({
         </Box>
       ) : splitComingSoonHub ? (
         <>
-          <Grid container spacing={1.5} sx={hubGridContainerSx}>
-            {activePages.map((page) => (
-              <Grid item key={page.id} xs={12} sm={6} md={4} sx={hubGridItemSx}>
-                {renderCard(page)}
-              </Grid>
-            ))}
-          </Grid>
+          {renderSectionGroup(activePages)}
           <Divider sx={{ my: 2.5 }} />
           <Typography
             variant="caption"
@@ -323,29 +373,10 @@ export default function CajaBranchSectionNav({
           >
             Próximamente
           </Typography>
-          <Grid container spacing={1.5} sx={hubGridContainerSx}>
-            {comingSoonPages.map((page) => (
-              <Grid item key={page.id} xs={12} sm={6} md={4} sx={hubGridItemSx}>
-                {renderCard(page)}
-              </Grid>
-            ))}
-          </Grid>
+          {renderSectionGroup(comingSoonPages)}
         </>
       ) : (
-        <Grid container spacing={1.5} sx={usesHubCardLayout ? hubGridContainerSx : undefined}>
-          {(isStrip ? pages : hubPages).map((page) => (
-            <Grid
-              item
-              key={page.id}
-              xs={12}
-              sm={6}
-              md={4}
-              sx={usesHubCardLayout ? hubGridItemSx : undefined}
-            >
-              {renderCard(page)}
-            </Grid>
-          ))}
-        </Grid>
+        renderSectionGroup(hubPages)
       )}
     </Box>
   );

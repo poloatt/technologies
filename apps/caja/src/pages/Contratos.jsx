@@ -26,7 +26,7 @@ import useResponsive from '@shared/hooks/useResponsive';
 import { PropiedadesSectionNav } from '../propiedades';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 
-export function Contratos() {
+export function Contratos({ embedded = false } = {}) {
   const [contratos, setContratos] = useState([]);
   const [relatedData, setRelatedData] = useState({
     propiedades: [],
@@ -334,14 +334,19 @@ export function Contratos() {
     <Box sx={{ px: 0, width: '100%' }}>
       {/* Eliminar <Toolbar /> */}
       
-      <Box sx={{ ...cajaPageLayoutSx, display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <PropiedadesSectionNav variant="strip" />
+      <Box sx={{
+        ...(embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx),
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0,
+      }}>
+        {!embedded && <PropiedadesSectionNav variant="strip" />}
 
         {/* Mostrar todos los contratos juntos */}
         <Box
           sx={{
-            display: isDesktop ? 'flex' : 'block',
-            gap: isDesktop ? 3 : 0,
+            display: isDesktop && !embedded ? 'flex' : 'block',
+            gap: isDesktop && !embedded ? 3 : 0,
             alignItems: 'flex-start',
             width: '100%'
           }}
@@ -368,7 +373,7 @@ export function Contratos() {
               </Box>
             )}
           </Box>
-          {isDesktop && selectedContrato && openDetail && (
+          {isDesktop && !embedded && selectedContrato && openDetail && (
             <Box sx={{ flex: 1.2, minWidth: 0, ml: 2 }}>
               <ContratoDetail
                 open={true}

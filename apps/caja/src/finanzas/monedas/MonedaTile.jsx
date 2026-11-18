@@ -46,6 +46,7 @@ function MonedaTile({
   moneda,
   variant = 'compact',
   fullWidth = false,
+  fillRow = false,
   selected = false,
   onSelect,
   onEdit,
@@ -81,10 +82,10 @@ function MonedaTile({
       sx={{
         ...getMonedaTileSx({ selected, isSelectable: !!isSelectable }),
         height: tileHeight,
-        width: isFullWidth ? '100%' : undefined,
-        minWidth: isFullWidth ? 0 : tileWidth,
-        maxWidth: isFullWidth ? '100%' : tileWidth,
-        flex: isFullWidth ? '1 1 auto' : `0 0 ${tileWidth}px`,
+        width: fillRow ? 'auto' : (isFullWidth ? '100%' : undefined),
+        minWidth: fillRow ? 180 : (isFullWidth ? 0 : tileWidth),
+        maxWidth: fillRow ? '100%' : (isFullWidth ? '100%' : tileWidth),
+        flex: fillRow ? '1 1 180px' : (isFullWidth ? '1 1 auto' : `0 0 ${tileWidth}px`),
         cursor: isSelectable ? 'pointer' : 'default',
       }}
       onClick={isSelectable ? handleCardClick : (e) => e.stopPropagation()}

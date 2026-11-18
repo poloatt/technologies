@@ -3,8 +3,8 @@
  *
  * Niveles Caja (assets):
  * - app: Caja (assets)
- * - branch: Finanzas (hub único; Propiedades e Inventario son secciones in-page)
- * - page: Transacciones, Cuentas, Propiedades… (nivel 2)
+ * - branch: Finanzas, Propiedades e Inventario (hermanas)
+ * - page: destinos de la rama activa (toolbar centro y footer)
  *
  * Foco/Pulso: subItems del módulo = páginas planas (sin rama intermedia).
  */
@@ -43,113 +43,90 @@ function getAssetsModule() {
   return modulos.find((m) => m.id === 'assets') || null;
 }
 
-/** Caja: ramas virtuales Finanzas | Propiedades | Inventario (toolbar derecha desktop). */
+/** Caja: ramas Finanzas | Propiedades | Inventario (toolbar derecha desktop). */
 export function getCajaBranches() {
-  const finanzas = getFinanzasBranch();
-  const propiedades = getPropiedadesSectionNode();
-  const inventario = getInventarioSectionNode();
-
-  return [
-    finanzas && toNavItem(finanzas, 'branch'),
-    propiedades && toNavItem(propiedades, 'branch'),
-    inventario && toNavItem(inventario, 'branch'),
-  ].filter(Boolean);
+  return (getAssetsModule()?.subItems || [])
+    .map((branch) => toNavItem(branch, 'branch'))
+    .filter(Boolean);
 }
 
-function getFinanzasBranch() {
-  return getAssetsModule()?.subItems?.find((s) => s.id === 'finanzas') || null;
+function getCajaBranchNode(branchId) {
+  return getAssetsModule()?.subItems?.find((s) => s.id === branchId) || null;
 }
 
-function getPropiedadesSectionNode() {
-  return getFinanzasBranch()?.subItems?.find((s) => s.id === 'propiedades') || null;
+function pagesForBranch(branchId, { includeSelf = false } = {}) {
+  const branch = getCajaBranchNode(branchId);
+  if (!branch) return [];
+  const nodes = includeSelf ? [branch, ...(branch.subItems || [])] : (branch.subItems || []);
+  return nodes.map((page) => toNavItem(page, 'page', branchId)).filter(Boolean);
 }
 
-function getInventarioSectionNode() {
-  return getFinanzasBranch()?.subItems?.find((s) => s.id === 'inventario') || null;
-}
-
-/** Páginas del hub Propiedades (/propiedades): sección + contratos + inquilinos. */
+/** Páginas del hub Propiedades (/propiedades): la sección y sus hijas. */
 export function getPropiedadesSectionPages() {
-  const section = getPropiedadesSectionNode();
-  if (!section) return [];
-  const pages = [section, ...(section.subItems || [])];
-  return pages.map((page) => toNavItem(page, 'page', 'propiedades')).filter(Boolean);
+  return pagesForBranch('propiedades', { includeSelf: true });
 }
 
-/** Páginas del hub Inventario (/propiedades/inventario). */
+/** Páginas del hub Inventario (/propiedades/inventario): la sección y sus hijas. */
 export function getInventarioSectionPages() {
-  const section = getInventarioSectionNode();
-  if (!section) return [];
-  const pages = [section, ...(section.subItems || [])];
-  return pages.map((page) => toNavItem(page, 'page', 'inventario')).filter(Boolean);
+  return pagesForBranch('inventario', { includeSelf: true });
 }
 
 /** Subpáginas de una rama Caja (todas las del menú, incl. en construcción). */
 export function getCajaBranchPages(branchId) {
-  if (branchId === 'propiedades') {
-    return getPropiedadesSectionPages();
-  }
-  if (branchId === 'inventario') {
-    return getInventarioSectionPages();
-  }
-
-  const assets = getAssetsModule();
-  const branch = assets?.subItems?.find((s) => s.id === branchId);
-  if (!branch?.subItems) return [];
-
-  return branch.subItems
-    .map((page) => toNavItem(page, 'page', branchId))
-    .filter(Boolean);
+  if (branchId === 'propiedades') return getPropiedadesSectionPages();
+  if (branchId === 'inventario') return getInventarioSectionPages();
+  return pagesForBranch(branchId);
 }
 
 /**
- * Subpáginas Finanzas ocultas en toolbar centro y strip.
- * - propiedades / inventario: ramas con hub propio
- * - recurrente: subpage de transacciones (nav contextual)
+ * Fuera del chrome de Finanzas (footer = ramas; pages viven en hub + popups).
+ * - Inversiones / Deudores: hub «Próximamente».
+ * - Recurrentes: subpágina de Transacciones.
+ * - Monedas / Cuentas: setup contextual desde Transacciones.
+ * - Transacciones: destino principal vía hub (no tab de chrome).
  */
 export const FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS = [
-  'propiedades',
-  'inventario',
+  'inversiones',
+  'deudores',
   'recurrente',
+  'monedas',
+  'cuentas',
+  'transacciones',
 ];
 
 /** @deprecated Usar FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS */
 export const FINANZAS_TOOLBAR_EXCLUDE_PAGE_IDS = FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS;
 
-/**
- * Páginas Finanzas para toolbar centro y strip en subpáginas.
- * Transacciones, Cuentas, Monedas (+ en construcción: Inversiones, Deudores).
- */
+function chromePages(pages, excludeIds = []) {
+  const exclude = new Set(excludeIds);
+  return pages.filter((page) => !page.isUnderConstruction && !exclude.has(page.id));
+}
+
+/** Strip Finanzas: vacío (chrome = ramas; pages = hub / setup). */
 export function getFinanzasBranchPages() {
-  const exclude = new Set(FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS);
-  return getCajaBranchPages('finanzas').filter((page) => !exclude.has(page.id));
+  return chromePages(getCajaBranchPages('finanzas'), FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS);
 }
 
-/** Subpáginas Propiedades ocultas en hub/strip (finanzas duplicadas). */
-export const PROPIEDADES_HUB_STRIP_EXCLUDE_PAGE_IDS = [
-  'cuentas',
-  'transacciones',
-];
+/** Reservado: Propiedades ya no duplica Cuentas ni Transacciones. */
+export const PROPIEDADES_HUB_STRIP_EXCLUDE_PAGE_IDS = [];
 
-/** Subpáginas Inventario ocultas en hub/strip. */
+/**
+ * Fuera del chrome de Inventario.
+ * El hub de la rama no es un tab; Autos sigue en construcción.
+ */
 export const INVENTARIO_HUB_STRIP_EXCLUDE_PAGE_IDS = [
-  'inventario-en-propiedades',
+  'inventario',
   'vehiculos',
-  'inventario-sin-ubicacion',
-  'cuentas',
-  'transacciones',
 ];
 
-/** Páginas Propiedades para strip in-page: propiedades, inquilinos, contratos. */
+/** Páginas Propiedades en toolbar centro, strip y footer. */
 export function getPropiedadesBranchPages() {
-  const exclude = new Set(PROPIEDADES_HUB_STRIP_EXCLUDE_PAGE_IDS);
-  return getCajaBranchPages('propiedades').filter((page) => !exclude.has(page.id));
+  return chromePages(getCajaBranchPages('propiedades'), PROPIEDADES_HUB_STRIP_EXCLUDE_PAGE_IDS);
 }
 
-/** Páginas Inventario para strip in-page: solo la sección principal. */
+/** Páginas Inventario en toolbar centro, strip y footer: En propiedades, Sin locación. */
 export function getInventarioBranchPages() {
-  const exclude = new Set(INVENTARIO_HUB_STRIP_EXCLUDE_PAGE_IDS);
-  return getCajaBranchPages('inventario').filter((page) => !exclude.has(page.id));
+  return chromePages(getCajaBranchPages('inventario'), INVENTARIO_HUB_STRIP_EXCLUDE_PAGE_IDS);
 }
 
 export function getCajaBranchById(branchId) {
@@ -157,18 +134,31 @@ export function getCajaBranchById(branchId) {
 }
 
 /**
+ * Bottom nav Caja = mismas ramas que toolbar derecha desktop
+ * (Finanzas | Propiedades | Inventario).
+ */
+export function getCajaBottomNavItems() {
+  return getCajaBranches();
+}
+
+/**
  * Ítems para bottom nav móvil.
  * - Foco: páginas hijas (Rutinas, Objetivos, Tareas).
  * - Pulso: secciones del menú (Data, Nutrición, Lab).
- * - Caja: switcher de las 3 apps → hub de cada una.
+ * - Caja: ramas parent (Finanzas / Propiedades / Inventario).
+ * El switcher de apps vive en AppsButton / sidebar, no en el footer.
  */
-export function resolveBottomNavItems(appKey = getCurrentAppKey()) {
+export function resolveBottomNavItems(appKey = getCurrentAppKey(), currentPath = '') {
   if (appKey === 'foco') {
     return getTiempoBottomNavItems();
   }
 
   if (appKey === 'pulso') {
     return resolveFlatModulePages('salud');
+  }
+
+  if (appKey === 'caja') {
+    return getCajaBottomNavItems(currentPath);
   }
 
   return bottomNavigationItems.map((app) => ({
@@ -182,7 +172,7 @@ export function resolveBottomNavItems(appKey = getCurrentAppKey()) {
   }));
 }
 
-/** Toolbar derecha Caja (desktop): Finanzas | Propiedades | Inventario. */
+/** Ramas Caja + rama activa (footer móvil y toolbar derecha desktop). */
 export function resolveCajaToolbarRight(currentPath) {
   const moduloActivo = findActiveModule(currentPath);
   if (moduloActivo?.id !== 'assets') {
@@ -205,54 +195,23 @@ export function resolveCajaToolbarRight(currentPath) {
 }
 
 /**
- * Si la ruta está en una page con subItems (p. ej. transacciones → recurrentes),
- * devuelve navegación contextual [page, ...subpages]; si no, todas las pages de la rama.
+ * Children del parent activo → toolbar centro del header.
+ * Excluye el hub de la rama y destinos que viven solo en hub / subpages.
  */
-function resolveCajaBranchToolbarPages(currentPath, branchId) {
-  // Finanzas: tabs en toolbar centro + strip (Transacciones, Cuentas, Monedas…).
-  if (branchId === 'finanzas') {
-    return getFinanzasBranchPages();
-  }
+export const CAJA_TOOLBAR_CENTER_EXCLUDE_IDS = {
+  finanzas: ['transacciones', 'inversiones', 'deudores', 'recurrente'],
+  propiedades: ['propiedades'],
+  inventario: ['inventario', 'vehiculos'],
+};
 
-  // Propiedades e Inventario: navegación in-page (hub/strip), sin tabs en toolbar centro.
-  if (branchId === 'propiedades' || branchId === 'inventario') {
-    return [];
-  }
-
-  const assets = getAssetsModule();
-  const branch = assets?.subItems?.find((s) => s.id === branchId);
-  if (!branch?.subItems) return [];
-
-  for (const page of branch.subItems) {
-    if (!page.subItems?.length) continue;
-    const onParent = isPathActive(currentPath, page.path);
-    const onChild = page.subItems.some((sub) => isPathActive(currentPath, sub.path));
-    if (onParent || onChild) {
-      return [
-        toNavItem(page, 'page', branchId),
-        ...page.subItems.map((sub) => toNavItem(sub, 'page', branchId)),
-      ].filter(Boolean);
-    }
-  }
-
-  return getCajaBranchPages(branchId);
-}
-
-/** Toolbar centro Caja (móvil y desktop): subpáginas de la sección activa. */
-export function resolveCajaToolbarCenter(currentPath) {
-  const moduloActivo = findActiveModule(currentPath);
-  if (moduloActivo?.id !== 'assets') return [];
-
-  if (isInventarioBranchRoute(currentPath)) {
-    return resolveCajaBranchToolbarPages(currentPath, 'inventario');
-  }
-  if (
-    currentPath === '/propiedades'
-    || (currentPath.startsWith('/propiedades/') && !isInventarioBranchRoute(currentPath))
-  ) {
-    return resolveCajaBranchToolbarPages(currentPath, 'propiedades');
-  }
-  return resolveCajaBranchToolbarPages(currentPath, 'finanzas');
+/** Ítems del toolbar centro: children del parent activo (menuStructure). */
+export function resolveCajaToolbarCenterChildren(currentPath) {
+  const { activeBranchId } = resolveCajaToolbarRight(currentPath);
+  if (!activeBranchId) return [];
+  return chromePages(
+    getCajaBranchPages(activeBranchId),
+    CAJA_TOOLBAR_CENTER_EXCLUDE_IDS[activeBranchId] || [],
+  );
 }
 
 function isInventarioBranchRoute(pathname) {
@@ -318,21 +277,22 @@ export function resolveFlatModulePagesMap(moduleId) {
 }
 
 /**
- * Hub Caja para botón «atrás» en subpáginas.
- * Finanzas → /finanzas; Propiedades → /finanzas; Inventario → /finanzas.
+ * Hub de la rama para el botón «atrás».
+ * Cada hub (`/finanzas`, `/propiedades`, `/propiedades/inventario`) es raíz:
+ * el cambio de rama es el icono de la derecha, no un atrás hacia Finanzas.
  */
 export function resolveCajaBranchHubPath(pathname) {
   if (pathname === '/finanzas' || pathname.startsWith('/finanzas/')) {
     return pathname === '/finanzas' ? null : '/finanzas';
   }
   if (pathname === '/propiedades/inventario') {
-    return '/finanzas';
+    return null;
   }
-  if (isInventarioBranchRoute(pathname) && pathname !== '/propiedades/inventario') {
+  if (isInventarioBranchRoute(pathname)) {
     return '/propiedades/inventario';
   }
   if (pathname === '/propiedades') {
-    return '/finanzas';
+    return null;
   }
   if (pathname.startsWith('/propiedades/')) {
     return '/propiedades';

@@ -2,16 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
-  Paper,
   Chip,
-  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
   Button,
-  Tooltip,
 } from '@mui/material';
 import { CommonForm, CommonActions } from '@shared/components/common';
 import { 
@@ -25,7 +22,7 @@ import { EmptyState } from '@shared/components/common';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { useAPI } from '@shared/hooks/useAPI';
 import {
-  MercadoPagoConnectButton,
+  MercadoPagoSyncDialog,
   BankConnectionForm,
   BranchFinanzasSectionNav,
   MercadoPagoPartialSyncBanner,
@@ -34,12 +31,17 @@ import {
   cuentaDetailPath,
   useFinanzasBranch,
 } from '../finanzas';
+import SetupContentHeader from '../finanzas/SetupContentHeader';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useResponsive } from '@shared/hooks';
 import { formatFinanzasMonto } from '@shared/utils/formatFinanzasMonto';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 
-export function Cuentas() {
+/**
+ * Listado / gestión de cuentas.
+ * @param {{ embedded?: boolean }} props embedded = setup popup (sin strip de sección).
+ */
+export function Cuentas({ embedded = false } = {}) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [expandedMonedas, setExpandedMonedas] = useState([]);
   const { showValues } = useValuesVisibility();
@@ -195,14 +197,14 @@ export function Cuentas() {
     return () => window.removeEventListener('headerAddButtonClicked', handleHeaderAdd);
   }, [location.pathname]);
 
-  // Escuchar evento global para abrir la conexión de MercadoPago desde la Toolbar
+  // Refetch si el sync se completó desde el toolbar (Cuentas puede estar embebida o no).
   useEffect(() => {
-    const handleOpenMpConnect = () => {
-      setIsSyncModalOpen(true);
+    const handleCuentasRefreshed = () => {
+      refetchCuentas();
     };
-    window.addEventListener('openMercadoPagoConnect', handleOpenMpConnect);
-    return () => window.removeEventListener('openMercadoPagoConnect', handleOpenMpConnect);
-  }, []);
+    window.addEventListener('cuentasRefreshed', handleCuentasRefreshed);
+    return () => window.removeEventListener('cuentasRefreshed', handleCuentasRefreshed);
+  }, [refetchCuentas]);
 
   // Abrir formulario tras redirección si openAdd está en el estado
   useEffect(() => {
@@ -613,13 +615,178 @@ export function Cuentas() {
     }
   };
 
+  const openCreate = () => {
+    setEditingCuenta(null);
+    setIsFormOpen(true);
+  };
+
+  const handleCuentaRowClick = (cuenta) => {
+    const cuentaRowId = cuenta._id || cuenta.id;
+    if (embedded) {
+      // En setup: editar, no abrir el panel de transacciones.
+      handleEdit(cuenta);
+      return;
+    }
+    navigate(cuentaDetailPath(cuentaRowId, branchId), { replace: true });
+  };
+
+  const cuentasList = (
+    <>
+      {isLoading ? (
+        <EmptyState
+          message="Cargando cuentas..."
+          submessage="Un momento mientras preparamos tus datos."
+        />
+      ) : monedas.length === 0 ? (
+        <EmptyState
+          message="Falta configurar monedas"
+          submessage="Creá al menos una moneda para poder agregar cuentas."
+        />
+      ) : cuentas.length === 0 ? (
+        <EmptyState
+          onAdd={openCreate}
+          message="Todavía no hay cuentas"
+          submessage="Creá una cuenta manual o sincronizá Mercado Pago para empezar."
+        />
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          {Object.entries(cuentasAgrupadasPorMoneda).map(([monedaId, grupo]) => {
+            if (!grupo.moneda) return null;
+
+            const cuentasVisibles = grupo.cuentas.filter((cuenta) => {
+              if (embedded) return true;
+              if (!isMobile || !selectedCuentaId) return true;
+              const id = cuenta._id || cuenta.id;
+              return id !== selectedCuentaId;
+            });
+
+            if (cuentasVisibles.length === 0) return null;
+
+            return (
+              <Box
+                key={monedaId}
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  overflow: 'hidden',
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1,
+                    px: 1.5,
+                    py: 0.75,
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    {grupo.moneda.nombre} ({grupo.moneda.simbolo})
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: grupo.balance >= 0 ? grupo.moneda.color || '#75AADB' : 'error.main',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {showValues
+                      ? formatFinanzasMonto(grupo.balance, { simbolo: grupo.moneda.simbolo })
+                      : '****'}
+                  </Typography>
+                </Box>
+
+                <Box>
+                  {cuentasVisibles.map((cuenta) => {
+                    const cuentaRowId = cuenta._id || cuenta.id;
+                    const isSelected = !embedded && selectedCuentaId === cuentaRowId;
+                    const saldo = balances[cuentaRowId] ?? cuenta.saldo ?? 0;
+                    return (
+                      <Box
+                        key={cuentaRowId}
+                        id={`cuenta-row-${cuentaRowId}`}
+                        onClick={() => handleCuentaRowClick(cuenta)}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1,
+                          px: 1.5,
+                          py: 1,
+                          borderBottom: 1,
+                          borderColor: 'divider',
+                          cursor: 'pointer',
+                          bgcolor: isSelected ? 'action.selected' : 'transparent',
+                          '&:last-child': { borderBottom: 0 },
+                          '&:hover': {
+                            bgcolor: isSelected ? 'action.selected' : 'action.hover',
+                          },
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+                          {getTipoIcon(cuenta.tipo)}
+                          <Typography variant="body2" noWrap>
+                            {cuenta.nombre || 'Sin nombre'}
+                          </Typography>
+                          <Chip
+                            label={cuenta.tipo ? cuenta.tipo.replace('_', ' ') : 'OTRO'}
+                            size="small"
+                            variant="outlined"
+                            color={cuenta.tipo ? 'default' : 'warning'}
+                            sx={{
+                              height: 20,
+                              flexShrink: 0,
+                              '& .MuiChip-label': { px: 1, fontSize: '0.7rem' },
+                            }}
+                          />
+                        </Box>
+
+                        <Box
+                          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: saldo >= 0 ? grupo.moneda.color || '#75AADB' : 'error.main',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {showValues
+                              ? formatFinanzasMonto(saldo, { simbolo: grupo.moneda.simbolo })
+                              : '****'}
+                          </Typography>
+                          <CommonActions
+                            onEdit={() => handleEdit(cuenta)}
+                            onDelete={() => handleDelete(cuenta)}
+                            itemName={`la cuenta ${cuenta.nombre}`}
+                          />
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+    </>
+  );
+
   return (
-    <Box sx={cajaPageLayoutSx}>
-      <BranchFinanzasSectionNav branchId={branchId} variant="strip" />
+    <Box sx={embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx}>
+      {!embedded && <BranchFinanzasSectionNav branchId={branchId} variant="strip" />}
       {showGlobalPartialBanner && (
         <MercadoPagoPartialSyncBanner onImportCsv={() => refetchCuentas()} />
       )}
-      {isMobile && selectedCuenta && (
+      {!embedded && isMobile && selectedCuenta && (
         <CuentaTransaccionesPanel
           cuenta={selectedCuenta}
           onRefresh={handleRefreshCuenta}
@@ -627,35 +794,34 @@ export function Cuentas() {
           branchId={branchId}
         />
       )}
-      <CuentaDetailShell
-        open={!isMobile && !!selectedCuenta}
-        onClose={() => navigate(cuentasPath, { replace: true })}
-      >
-        {!isMobile && selectedCuenta && (
-          <CuentaTransaccionesPanel
-            cuenta={selectedCuenta}
-            onRefresh={handleRefreshCuenta}
-            embedded
-            branchId={branchId}
-          />
-        )}
-      </CuentaDetailShell>
-      {/* Modal para crear cuenta (manual o MercadoPago) */}
+      {!embedded && (
+        <CuentaDetailShell
+          open={!isMobile && !!selectedCuenta}
+          onClose={() => navigate(cuentasPath, { replace: true })}
+        >
+          {!isMobile && selectedCuenta && (
+            <CuentaTransaccionesPanel
+              cuenta={selectedCuenta}
+              onRefresh={handleRefreshCuenta}
+              embedded
+              branchId={branchId}
+            />
+          )}
+        </CuentaDetailShell>
+      )}
       <BankConnectionForm
         open={isBankConnectionFormOpen}
         onClose={() => setIsBankConnectionFormOpen(false)}
         onSubmit={async (formData) => {
           try {
-            // Crear la cuenta usando el endpoint de cuentas
             await clienteAxios.post('/api/cuentas', {
               nombre: formData.nombre,
               numero: formData.numero,
               tipo: formData.tipo,
-              activo: true
+              activo: true,
             });
-            
-          setIsBankConnectionFormOpen(false);
-          await refetchCuentas();
+            setIsBankConnectionFormOpen(false);
+            await refetchCuentas();
           } catch (error) {
             console.error('Error creando cuenta:', error);
             throw error;
@@ -663,7 +829,7 @@ export function Cuentas() {
         }}
         isEditing={false}
       />
-      
+
       <CommonForm
         open={isFormOpen}
         onClose={() => {
@@ -676,162 +842,30 @@ export function Cuentas() {
         initialData={editingCuenta || {}}
         isEditing={!!editingCuenta}
       />
-      
-      <Box sx={{ mt: 3 }}>
-        {isLoading ? (
-          <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1, boxShadow: 1 }}>
-            <EmptyState
-              message="Cargando cuentas..."
-              submessage="Por favor espera mientras cargamos tus datos."
-            />
-          </Box>
-        ) : cuentas.length === 0 ? (
-          <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1, boxShadow: 1 }}>
-            <EmptyState onAdd={() => setIsFormOpen(true)} />
-          </Box>
-        ) : (
-          <Box sx={{ mt: 3 }}>
-            {Object.entries(cuentasAgrupadasPorMoneda).map(([monedaId, grupo]) => {
-              if (!grupo.moneda) {
-                return null;
-              }
 
-              const cuentasVisibles = grupo.cuentas.filter((cuenta) => {
-                if (!isMobile || !selectedCuentaId) return true;
-                const id = cuenta._id || cuenta.id;
-                return id !== selectedCuentaId;
-              });
-
-              if (cuentasVisibles.length === 0) {
-                return null;
-              }
-              
-              return (
-                <Paper 
-                  key={monedaId}
-                  sx={{ 
-                    mb: 2, 
-                    overflow: 'hidden',
-                    bgcolor: 'background.paper'
-                  }}
-                >
-                  <Box sx={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    px: 2,
-                    py: 1,
-                    bgcolor: 'background.default',
-                    borderBottom: 1,
-                    borderColor: 'divider'
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        {grupo.moneda.nombre} ({grupo.moneda.simbolo})
-                      </Typography>
-                      <Typography 
-                        variant="subtitle2" 
-                        sx={{ 
-                          color: grupo.balance >= 0 ? grupo.moneda.color || '#75AADB' : 'error.main',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        {showValues ? formatFinanzasMonto(grupo.balance, { simbolo: grupo.moneda.simbolo }) : '****'}
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  <Box>
-                    {cuentasVisibles.map((cuenta) => {
-                      const cuentaRowId = cuenta._id || cuenta.id;
-                      const isSelected = selectedCuentaId === cuentaRowId;
-                      return (
-                        <Box
-                          key={cuentaRowId}
-                          id={`cuenta-row-${cuentaRowId}`}
-                          onClick={() => navigate(cuentaDetailPath(cuentaRowId, branchId), { replace: true })}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            px: 2,
-                            py: 1,
-                            borderBottom: 1,
-                            borderColor: 'divider',
-                            cursor: 'pointer',
-                            bgcolor: isSelected ? 'action.selected' : 'background.paper',
-                            outline: isSelected ? '2px solid' : 'none',
-                            outlineColor: 'primary.main',
-                            outlineOffset: -2,
-                            '&:last-child': {
-                              borderBottom: 0
-                            },
-                            '&:hover': {
-                              bgcolor: isSelected ? 'action.selected' : 'action.hover'
-                            }
-                          }}
-                        >
-                          <Box sx={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: 1,
-                            flex: 1
-                          }}>
-                            {getTipoIcon(cuenta.tipo)}
-                            <Typography variant="body2">
-                              {cuenta.nombre || 'Sin nombre'}
-                            </Typography>
-                            <Chip 
-                              label={cuenta.tipo ? cuenta.tipo.replace('_', ' ') : 'OTRO'}
-                              size="small"
-                              variant="outlined"
-                              color={cuenta.tipo ? 'default' : 'warning'}
-                              sx={{ 
-                                height: 20,
-                                '& .MuiChip-label': {
-                                  px: 1,
-                                  fontSize: '0.75rem'
-                                }
-                              }}
-                            />
-                          </Box>
-                          
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 2,
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Typography 
-                              variant="body2" 
-                              sx={{ 
-                                color: cuenta.saldo >= 0 ? grupo.moneda.color || '#75AADB' : 'error.main',
-                                fontWeight: 500
-                              }}
-                            >
-                              {showValues
-                                ? formatFinanzasMonto(cuenta.saldo, { simbolo: grupo.moneda.simbolo })
-                                : '****'}
-                            </Typography>
-
-                            <CommonActions
-                              onEdit={() => handleEdit(cuenta)}
-                              onDelete={() => handleDelete(cuenta)}
-                              itemName={`la cuenta ${cuenta.nombre}`}
-                            />
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                </Paper>
-              );
-            })}
-          </Box>
-        )}
-      </Box>
+      {embedded ? (
+        <>
+          <SetupContentHeader
+            hint="Administrá tus cuentas y conectá Mercado Pago. Tocá una fila para editarla."
+            primaryLabel="Nueva cuenta"
+            onPrimary={openCreate}
+            secondaryLabel="Conectar MP"
+            onSecondary={() => setIsSyncModalOpen(true)}
+          />
+          {cuentasList}
+        </>
+      ) : (
+        <Box sx={{ mt: 2 }}>
+          <SetupContentHeader
+            hint="Creá cuentas manualmente o sincronizá Mercado Pago. Abrí una fila para ver movimientos."
+            primaryLabel="Nueva cuenta"
+            onPrimary={openCreate}
+            secondaryLabel="Conectar MP"
+            onSecondary={() => setIsSyncModalOpen(true)}
+          />
+          {cuentasList}
+        </Box>
+      )}
 
       {/* Diálogo de confirmación para eliminar */}
       <Dialog
@@ -854,27 +888,11 @@ export function Cuentas() {
         </DialogActions>
       </Dialog>
 
-      {/* Modal de sincronización */}
-      <Dialog open={isSyncModalOpen} onClose={() => setIsSyncModalOpen(false)} maxWidth="xs" fullWidth>
-        <DialogContent>
-          <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>
-            Sincronizar nueva cuenta
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <MercadoPagoConnectButton
-              onSuccess={() => {
-                setIsSyncModalOpen(false);
-                refetchCuentas();
-              }}
-              onError={(error) => {
-                console.error('Error en conexión MercadoPago:', error);
-                // NO cerramos el modal para que el usuario vea el error y pueda reintentar
-              }}
-              fullWidth
-            />
-          </Box>
-        </DialogContent>
-      </Dialog>
+      <MercadoPagoSyncDialog
+        open={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        onSuccess={() => refetchCuentas()}
+      />
     </Box>
   );
 }

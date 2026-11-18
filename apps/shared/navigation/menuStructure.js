@@ -5,11 +5,9 @@ import { TIEMPO_ICON_KEYS, TIEMPO_MODULE_ICON_KEY } from './tiempoIconKeys.js';
 /**
  * Niveles de navegación:
  * - App (Caja/Pulso/Foco): cambio en sidebar / AppsButton
- * - Branch (solo Caja): Finanzas — hub único con secciones in-page
- * - Page: destinos hoja (toolbar/bottom nav en la rama activa)
- * - Subpage (opcional): hijos de una page (p. ej. recurrentes bajo Transacciones)
- *
- * Propiedades e Inventario viven bajo Finanzas (cards en hub /finanzas).
+ * - Branch (solo Caja): Finanzas, Propiedades e Inventario, hermanas
+ * - Page: destinos de la rama activa (toolbar centro en desktop, footer en móvil)
+ * - Subpage (opcional): hijos de una page (p. ej. recurrentes bajo Transacciones), fuera del chrome
  */
 export const modulos = [
   {
@@ -40,56 +38,53 @@ export const modulos = [
               },
             ],
           },
+          // Setups contextuales (popup desde Transacciones); siguen en hub + ruta dedicada.
           { id: 'cuentas', title: 'Cuentas', path: '/finanzas/cuentas', icon: 'accountBalance', canAdd: true },
           { id: 'monedas', title: 'Monedas', path: '/finanzas/monedas', icon: 'currency', canAdd: true },
           { id: 'inversiones', title: 'Inversiones', path: '/finanzas/inversiones', icon: 'inversiones', isUnderConstruction: true },
           { id: 'deudores', title: 'Deudores', path: '/finanzas/deudores', icon: 'personSearch', isUnderConstruction: true },
+        ],
+      },
+      {
+        id: 'propiedades',
+        title: 'Propiedades',
+        icon: 'apartment',
+        path: '/propiedades',
+        canAdd: true,
+        subItems: [
+          { id: 'contratos', title: 'Contratos', path: '/propiedades/contratos', icon: 'description', canAdd: true },
+          { id: 'inquilinos', title: 'Inquilinos', path: '/propiedades/inquilinos', icon: 'person', canAdd: true },
+        ],
+      },
+      {
+        id: 'inventario',
+        title: 'Inventario',
+        icon: 'inventario',
+        path: '/propiedades/inventario',
+        canAdd: true,
+        subItems: [
           {
-            id: 'propiedades',
-            title: 'Propiedades',
+            id: 'inventario-en-propiedades',
+            title: 'En propiedades',
+            path: '/propiedades/inventario/en-propiedades',
             icon: 'apartment',
-            path: '/propiedades',
             canAdd: true,
-            subItems: [
-              { id: 'contratos', title: 'Contratos', path: '/propiedades/contratos', icon: 'description', canAdd: true },
-              { id: 'inquilinos', title: 'Inquilinos', path: '/propiedades/inquilinos', icon: 'person', canAdd: true },
-              { id: 'cuentas', title: 'Cuentas', path: '/propiedades/cuentas', icon: 'accountBalance', canAdd: true },
-              { id: 'transacciones', title: 'Transacciones', path: '/propiedades/transacciones', icon: 'moneyBag', canAdd: true },
-            ],
           },
           {
-            id: 'inventario',
-            title: 'Inventario',
-            icon: 'inventario',
-            path: '/propiedades/inventario',
-            canAdd: true,
-            subItems: [
-              {
-                id: 'inventario-en-propiedades',
-                title: 'En propiedades',
-                path: '/propiedades/inventario/en-propiedades',
-                icon: 'apartment',
-                canAdd: true,
-              },
-              {
-                id: 'vehiculos',
-                title: 'Autos',
-                path: '/propiedades/autos',
-                icon: 'auto',
-                isUnderConstruction: true,
-              },
-              {
-                id: 'inventario-sin-ubicacion',
-                title: 'Sin locación',
-                path: '/propiedades/inventario/sin-ubicacion',
-                icon: 'inventario',
-                canAdd: true,
-              },
-              { id: 'cuentas', title: 'Cuentas', path: '/propiedades/inventario/cuentas', icon: 'accountBalance', canAdd: true },
-              { id: 'transacciones', title: 'Transacciones', path: '/propiedades/inventario/transacciones', icon: 'moneyBag', canAdd: true },
-            ],
+            id: 'vehiculos',
+            title: 'Autos',
+            path: '/propiedades/autos',
+            icon: 'auto',
+            isUnderConstruction: true,
           },
-        ]
+          {
+            id: 'inventario-sin-ubicacion',
+            title: 'Sin locación',
+            path: '/propiedades/inventario/sin-ubicacion',
+            icon: 'inventario',
+            canAdd: true,
+          },
+        ],
       },
     ]
   },
@@ -127,7 +122,7 @@ export const modulos = [
   }
 ];
 
-// Switcher de apps (sidebar desktop; bottom nav móvil solo en Caja) → hub de cada app
+// Switcher de apps (sidebar desktop / AppsButton). Bottom nav móvil usa pages de la app activa.
 export const bottomNavigationItems = [
   {
     id: 'assets',

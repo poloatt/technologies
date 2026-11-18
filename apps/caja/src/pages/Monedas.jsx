@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Button, Box, Tooltip, IconButton } from '@mui/material';
+import { Button, Box, Tooltip, IconButton, Typography } from '@mui/material';
 import {
   FinanzasSectionNav,
   MonedaTile,
@@ -11,6 +11,7 @@ import {
   sortMonedasByOrden,
   monedaDetailPath,
 } from '../finanzas';
+import SetupContentHeader from '../finanzas/SetupContentHeader';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 import { CommonDetails, CommonForm } from '@shared/components/common';
 import { AddOutlined as AddIcon, RefreshOutlined as RefreshIcon } from '@mui/icons-material';
@@ -20,14 +21,19 @@ import { EmptyState } from '@shared/components/common';
 import { useAPI, useResponsive } from '@shared/hooks';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-export function Monedas() {
+/**
+ * Catálogo de monedas.
+ * @param {{ embedded?: boolean }} props embedded = setup popup (sin strip de sección).
+ */
+export function Monedas({ embedded = false } = {}) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingMoneda, setEditingMoneda] = useState(null);
   const { enqueueSnackbar, closeSnackbar } = useSnackbar();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const selectedMonedaId = searchParams.get('id');
+  const [embeddedSelectedId, setEmbeddedSelectedId] = useState(null);
+  const selectedMonedaId = embedded ? embeddedSelectedId : searchParams.get('id');
   const { isDesktop } = useResponsive();
 
   // Usar nuestro hook personalizado para cargar monedas - Optimizaciones
@@ -267,13 +273,19 @@ export function Monedas() {
         variant="full"
         fullWidth={isDesktop}
         selected={selectedMonedaId === monedaId}
-        onSelect={(id) => navigate(monedaDetailPath(id), { replace: true })}
+        onSelect={(id) => {
+          if (embedded) {
+            setEmbeddedSelectedId(id);
+            return;
+          }
+          navigate(monedaDetailPath(id), { replace: true });
+        }}
         onEdit={handleEdit}
         onDelete={handleDelete}
         onToggleActive={handleToggleActive}
       />
     );
-  }, [isDesktop, selectedMonedaId, navigate, handleEdit, handleDelete, handleToggleActive]);
+  }, [embedded, isDesktop, selectedMonedaId, navigate, handleEdit, handleDelete, handleToggleActive]);
 
   const formFields = [
     {
@@ -310,73 +322,94 @@ export function Monedas() {
     }
   ];
 
+  const openCreate = () => {
+    setEditingMoneda(null);
+    setIsFormOpen(true);
+  };
+
+  const listLayout = embedded || isDesktop ? 'column' : 'carousel';
+
+  const listBody = isLoading ? (
+    listLayout === 'column' ? (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.625, width: '100%' }}>
+        <MonedaTileSkeleton count={4} width="100%" />
+      </Box>
+    ) : (
+      <MonedasCarousel>
+        <MonedaTileSkeleton count={4} />
+      </MonedasCarousel>
+    )
+  ) : monedas.length === 0 ? (
+    <EmptyState
+      onAdd={openCreate}
+      message="Todavía no hay monedas"
+      submessage="Agregá ARS, USD u otra moneda antes de crear cuentas."
+    />
+  ) : (
+    <>
+      {embedded && monedas.length > 1 ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Arrastrá el asa para reordenar. El orden se usa en balances y listados.
+        </Typography>
+      ) : null}
+      <MonedasSortableList
+        monedas={monedas}
+        onReorder={handleReorderMonedas}
+        layout={listLayout}
+        renderTile={renderMonedaTile}
+      />
+    </>
+  );
+
   return (
-    <Box sx={cajaPageLayoutSx}>
-      <FinanzasSectionNav variant="strip" />
-      <CommonDetails
-        action={
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Tooltip title="Recargar datos">
-              <IconButton 
+    <Box sx={embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx}>
+      {!embedded && <FinanzasSectionNav variant="strip" />}
+      {embedded ? (
+        <>
+          <SetupContentHeader
+            hint="Las monedas definen cómo se muestran saldos y movimientos en tus cuentas."
+            primaryLabel="Nueva moneda"
+            onPrimary={openCreate}
+          />
+          {listBody}
+        </>
+      ) : (
+        <CommonDetails
+          action={
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Tooltip title="Recargar datos">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    const loadingMsg = enqueueSnackbar('Recargando datos...', {
+                      variant: 'info',
+                      persist: true,
+                    });
+                    refetchMonedas().then(() => {
+                      closeSnackbar(loadingMsg);
+                      enqueueSnackbar('Datos actualizados', { variant: 'success' });
+                    });
+                  }}
+                  sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
+                >
+                  <RefreshIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
                 size="small"
-                onClick={() => {
-                  const loadingMsg = enqueueSnackbar('Recargando datos...', { 
-                    variant: 'info',
-                    persist: true 
-                  });
-                  refetchMonedas().then(() => {
-                    closeSnackbar(loadingMsg);
-                    enqueueSnackbar('Datos actualizados', { variant: 'success' });
-                  });
-                }}
-                sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
+                onClick={openCreate}
+                sx={{ borderRadius: 1, textTransform: 'none' }}
               >
-                <RefreshIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Button 
-              variant="contained" 
-              startIcon={<AddIcon />} 
-              size="small"
-              onClick={() => {
-                setEditingMoneda(null);
-                setIsFormOpen(true);
-              }}
-              sx={{
-                borderRadius: 1,
-                textTransform: 'none'
-              }}
-            >
-              Nueva Moneda
-            </Button>
-          </Box>
-        }
-      >
-        {isLoading ? (
-          isDesktop ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.625, width: '100%' }}>
-              <MonedaTileSkeleton count={4} width="100%" />
+                Nueva Moneda
+              </Button>
             </Box>
-          ) : (
-            <MonedasCarousel>
-              <MonedaTileSkeleton count={4} />
-            </MonedasCarousel>
-          )
-        ) : monedas.length === 0 ? (
-          <EmptyState 
-            onAdd={() => setIsFormOpen(true)}
-            message="No hay monedas configuradas"
-            submessage="Haz clic en el botón para agregar una nueva moneda"
-          />
-        ) : (
-          <MonedasSortableList
-            monedas={monedas}
-            onReorder={handleReorderMonedas}
-            layout={isDesktop ? 'column' : 'carousel'}
-            renderTile={renderMonedaTile}
-          />
-        )}
-      </CommonDetails>
+          }
+        >
+          {listBody}
+        </CommonDetails>
+      )}
 
       <CommonForm
         open={isFormOpen}

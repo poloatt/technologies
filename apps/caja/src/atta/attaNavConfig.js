@@ -4,13 +4,14 @@
 export {
   getCajaBranches,
   getCajaBranchPages,
+  getCajaBottomNavItems,
   getFinanzasBranchPages,
   getPropiedadesBranchPages,
   getPropiedadesSectionPages,
   getInventarioSectionPages,
   getCajaBranchById,
-  resolveCajaToolbarCenter,
   resolveCajaToolbarRight,
+  resolveCajaToolbarCenterChildren,
   isCajaPageActive,
   isCajaBranchActive,
 } from '@shared/navigation/appNavResolver';

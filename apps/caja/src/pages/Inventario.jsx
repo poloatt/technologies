@@ -30,17 +30,29 @@ function resolveInventarioView(pathname) {
   return { mode: 'hub' };
 }
 
-export function Inventario() {
+export function Inventario({
+  embedded = false,
+  embeddedUbicacion,
+  embeddedTitle,
+} = {}) {
   const { pathname } = useLocation();
-  const view = resolveInventarioView(pathname);
+  const view = embedded && embeddedUbicacion
+    ? { mode: 'list', ubicacion: embeddedUbicacion, title: embeddedTitle }
+    : resolveInventarioView(pathname);
 
   return (
     <Box
-      component="main"
-      className="page-main-content"
-      sx={{ ...cajaPageLayoutSx, display: 'flex', flexDirection: 'column' }}
+      component={embedded ? 'div' : 'main'}
+      className={embedded ? undefined : 'page-main-content'}
+      sx={{
+        ...(embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx),
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
-      <InventarioSectionNav variant={view.mode === 'hub' ? 'hub' : 'strip'} />
+      {!embedded && (
+        <InventarioSectionNav variant={view.mode === 'hub' ? 'hub' : 'strip'} />
+      )}
 
       {view.mode === 'list' && (
         <InventarioListView ubicacion={view.ubicacion} title={view.title} />

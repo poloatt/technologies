@@ -1,6 +1,7 @@
 // Componentes de conexiones bancarias
 export { default as GoogleWalletConnectButton } from './GoogleWalletConnectButton';
 export { default as MercadoPagoConnectButton } from './MercadoPagoConnectButton';
+export { default as MercadoPagoSyncDialog } from './MercadoPagoSyncDialog';
 export { default as MercadoPagoDataManager } from './MercadoPagoDataManager';
 export {
   default as MercadoPagoPartialSyncBanner,

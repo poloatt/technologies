@@ -12,7 +12,7 @@ import useResponsive from '@shared/hooks/useResponsive';
 import { PropiedadesSectionNav } from '../propiedades';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 
-export function Inquilinos() {
+export function Inquilinos({ embedded = false } = {}) {
   const [inquilinos, setInquilinos] = useState([]);
   const [propiedades, setPropiedades] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -186,16 +186,21 @@ export function Inquilinos() {
     <Box sx={{ px: 0, width: '100%' }}>
       {/* Eliminar <Toolbar /> */}
 
-      <Box sx={{ ...cajaPageLayoutSx, display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <PropiedadesSectionNav variant="strip" />
+      <Box sx={{
+        ...(embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx),
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0,
+      }}>
+        {!embedded && <PropiedadesSectionNav variant="strip" />}
 
         {/* Filtros de grupos */}
 
         <Box
           sx={{
-            py: 2,
-            display: isDesktop ? 'flex' : 'block',
-            gap: isDesktop ? 3 : 0,
+            py: embedded ? 1 : 2,
+            display: isDesktop && !embedded ? 'flex' : 'block',
+            gap: isDesktop && !embedded ? 3 : 0,
             alignItems: 'flex-start',
             width: '100%'
           }}
@@ -211,7 +216,7 @@ export function Inquilinos() {
               />
             </CommonDetails>
           </Box>
-          {isDesktop && selectedInquilino && (
+          {isDesktop && !embedded && selectedInquilino && (
             <Box sx={{ flex: 1.2, minWidth: 0, ml: 2 }}>
               <InquilinoDetail
                 open={true}

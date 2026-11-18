@@ -2,24 +2,25 @@ import React, { useMemo } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
 import { NAV_TYPO, SPACING } from '../config/uiConstants';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { resolveBottomNavItems } from './appNavResolver';
+import { isCajaBranchActive, resolveBottomNavItems } from './appNavResolver';
 import { DynamicIcon } from '../components/common/DynamicIcon';
 import useResponsive from '../hooks/useResponsive';
 import { getCurrentAppKey, isRouteActive, navigateToAppPath, prefetchAppForPath } from '../utils/navigationUtils';
 
 /**
  * Navegación inferior móvil.
- * Foco y Pulso: secciones del menú de la app. Caja: switcher Caja | Pulso | Foco.
+ * Foco/Pulso: pages. Caja: ramas (Finanzas/Propiedades/Inventario). Apps → AppsButton.
  */
 export default function BottomNavigation() {
   const { theme } = useResponsive();
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
+  const appKey = getCurrentAppKey();
 
   const navItems = useMemo(
-    () => resolveBottomNavItems(getCurrentAppKey()),
-    [currentPath],
+    () => resolveBottomNavItems(appKey, currentPath),
+    [appKey, currentPath],
   );
 
   if (navItems.length === 0) return null;
@@ -78,7 +79,9 @@ export default function BottomNavigation() {
             }}
           >
           {navItems.map((item) => {
-            const isActive = isRouteActive(currentPath, item.activePaths || item.path);
+            const isActive = appKey === 'caja'
+              ? isCajaBranchActive(currentPath, item)
+              : isRouteActive(currentPath, item.activePaths || item.path);
 
             return (
               <React.Fragment key={`${item.id}-${item.path}`}>
