@@ -41,6 +41,16 @@ Subtareas:
     expect(a).not.toBe(c);
   });
 
+  test('buildGoogleSerieKey with googleTaskId separates same titles', () => {
+    const byTitle = buildGoogleSerieKey('list1', 'Gym');
+    const a = buildGoogleSerieKey('list1', 'Gym', 'gt-aaa');
+    const b = buildGoogleSerieKey('list1', 'Gym', 'gt-bbb');
+    const aAgain = buildGoogleSerieKey('list1', 'Gym Renamed', 'gt-aaa');
+    expect(a).not.toBe(byTitle);
+    expect(a).not.toBe(b);
+    expect(a).toBe(aAgain);
+  });
+
   test('inferRecurrenceFromGoogleNotes detects weekly spanish', () => {
     expect(inferRecurrenceFromGoogleNotes('Se repite cada semana')).toMatch(/FREQ=WEEKLY/i);
   });

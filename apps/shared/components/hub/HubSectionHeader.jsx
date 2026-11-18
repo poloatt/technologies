@@ -26,7 +26,7 @@ export default function HubSectionHeader({
       </Typography>
       {onTitleClick ? (
         <ChevronRightOutlined
-          sx={{ fontSize: 20, color: isActive ? 'primary.main' : 'text.disabled' }}
+          sx={{ fontSize: 16, color: isActive ? 'primary.main' : 'text.disabled' }}
         />
       ) : null}
     </Box>

@@ -576,10 +576,41 @@ class GoogleTasksService {
     return newId;
   }
 
+  /**
+   * Claim atómico para export: evita doble insert/patch bajo concurrencia.
+   * Reclama también syncing stale (>5 min).
+   */
+  async claimTaskForGoogleSync(tareaId) {
+    const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+    return Tareas.findOneAndUpdate(
+      {
+        _id: tareaId,
+        $or: [
+          { 'googleTasksSync.syncStatus': { $ne: 'syncing' } },
+          { 'googleTasksSync.syncingStartedAt': { $lte: staleBefore } },
+          { 'googleTasksSync.syncingStartedAt': null },
+          { 'googleTasksSync.syncingStartedAt': { $exists: false } },
+        ],
+      },
+      {
+        $set: {
+          'googleTasksSync.syncStatus': 'syncing',
+          'googleTasksSync.syncingStartedAt': new Date(),
+        },
+      },
+      { new: true },
+    ).populate('objetivo');
+  }
+
   async syncTaskToGoogle(tareaId, userId) {
-    let tarea = await Tareas.findById(tareaId).populate('objetivo');
+    let tarea = await this.claimTaskForGoogleSync(tareaId);
     if (!tarea) {
-      throw new Error('Tarea no encontrada');
+      const exists = await Tareas.exists({ _id: tareaId });
+      if (!exists) {
+        throw new Error('Tarea no encontrada');
+      }
+      logger.dev(`⚠️ Tarea ${tareaId} ya está siendo sincronizada, saltando...`);
+      return;
     }
 
     // Limpiar título básicamente antes de sincronizar
@@ -591,12 +622,6 @@ class GoogleTasksService {
       logger.dev(`🔧 Limpiando título: "${tituloOriginal}" -> "${tituloLimpio}"`);
       tarea.titulo = tituloLimpio;
       await tarea.save();
-    }
-
-    // Protección básica: evitar sincronizaciones concurrentes
-    if (tarea.googleTasksSync?.syncStatus === 'syncing') {
-      logger.dev(`⚠️ Tarea "${tarea.titulo}" ya está siendo sincronizada, saltando...`);
-      return;
     }
 
     await this.setUserCredentials(userId);
@@ -666,22 +691,16 @@ class GoogleTasksService {
       let googleTask;
       let parentGoogleTaskId = tarea.googleTasksSync?.googleTaskId || null;
       
-      // Inicializar googleTasksSync si no existe
+      // Inicializar googleTasksSync si no existe (claim ya marcó syncing)
       if (!tarea.googleTasksSync) {
         tarea.googleTasksSync = {
           enabled: true,
-          syncStatus: 'pending',
+          syncStatus: 'syncing',
           needsSync: true,
-          localVersion: 1
+          localVersion: 1,
         };
       }
 
-      // Marcar como "syncing" para evitar sincronizaciones concurrentes
-      await Tareas.findByIdAndUpdate(tareaId, {
-        'googleTasksSync.syncStatus': 'syncing',
-        'googleTasksSync.syncingStartedAt': new Date()
-      });
-      
       if (tarea.googleTasksSync.googleTaskId) {
         try {
           // Obtener estado actual para evitar PATCH si no hay cambios
@@ -780,6 +799,7 @@ class GoogleTasksService {
 
       // Actualizar estado de sincronización (limpiar needsSync o el pending sticky bloquea imports)
       const syncedAt = new Date();
+      const syncedLocalVersion = tarea.googleTasksSync?.localVersion || 1;
       await Tareas.findByIdAndUpdate(tareaId, {
         'googleTasksSync.lastSyncDate': syncedAt,
         'googleTasksSync.updated': syncedAt,
@@ -787,6 +807,7 @@ class GoogleTasksService {
         'googleTasksSync.needsSync': false,
         'googleTasksSync.syncErrors': [],
         'googleTasksSync.syncingStartedAt': null,
+        'googleTasksSync.lastSyncedLocalVersion': syncedLocalVersion,
       });
 
       // Devolver datos consistentes aun cuando no hubo PATCH/INSERT
@@ -1270,7 +1291,8 @@ class GoogleTasksService {
                 return ub - ua;
               });
               const keep = group[0];
-              const remove = group.slice(1);
+              // Solo borrar shells vacíos del mismo día (evitar borrar tareas legítimas homónimas)
+              const remove = group.slice(1).filter((r) => this.shouldRemoveLocalTitleDedupeCandidate(keep, r));
               if (remove.length > 0) {
                 logger.sync(`🧹 Dedupe local por título: mantener "${keep.titulo}", eliminar ${remove.length}`);
                 await Promise.allSettled(remove.map(r => Tareas.findByIdAndDelete(r._id)));
@@ -1578,7 +1600,7 @@ class GoogleTasksService {
         errors: [],
       };
 
-      const maxTasksPerSync = parseInt(process.env.GTASKS_MAX_TASKS_PER_SYNC || '25', 10);
+      const maxTasksPerSync = parseInt(process.env.GTASKS_MAX_TASKS_PER_SYNC || '50', 10);
       const concurrency = parseInt(process.env.GTASKS_CONCURRENCY || '3', 10);
       results.metrics.batches.concurrency = concurrency;
 
@@ -1603,8 +1625,13 @@ class GoogleTasksService {
         ]
       };
 
+      // Cola FIFO: primero las más viejas / sin id (fairness bajo backlog)
       const tareasLocales = await Tareas.find(tareasQuery)
         .populate('objetivo')
+        .sort({
+          'googleTasksSync.googleTaskId': 1, // null/missing first in ascending
+          updatedAt: 1,
+        })
         .limit(maxTasksPerSync);
       
       logger.sync(`🔄 Procesando hasta ${maxTasksPerSync} tareas (encontradas=${tareasLocales.length}), concurrencia=${concurrency}`);
@@ -1782,6 +1809,31 @@ class GoogleTasksService {
     return true;
   }
 
+  sameLocalCalendarDay(a, b) {
+    const da = a?.fechaVencimiento || a?.fechaInicio;
+    const db = b?.fechaVencimiento || b?.fechaInicio;
+    if (!da && !db) return true;
+    if (!da || !db) return false;
+    const A = da instanceof Date ? da : new Date(da);
+    const B = db instanceof Date ? db : new Date(db);
+    if (Number.isNaN(A.getTime()) || Number.isNaN(B.getTime())) return false;
+    return A.getFullYear() === B.getFullYear()
+      && A.getMonth() === B.getMonth()
+      && A.getDate() === B.getDate();
+  }
+
+  isEmptyLocalTaskShell(tarea) {
+    return !(tarea?.subtareas?.length)
+      && !String(tarea?.descripcion || '').trim();
+  }
+
+  /** Full-import dedupe: solo shells vacíos del mismo día que el keeper. */
+  shouldRemoveLocalTitleDedupeCandidate(keep, candidate) {
+    if (!keep || !candidate) return false;
+    if (!this.isEmptyLocalTaskShell(candidate)) return false;
+    return this.sameLocalCalendarDay(keep, candidate);
+  }
+
   statusDiffersFromGoogle(tarea, googleTask) {
     const googleCompleted = googleTask?.status === 'completed';
     const localCompleted =
@@ -1928,8 +1980,17 @@ class GoogleTasksService {
       }
       const listId = tarea.googleTasksSync?.googleTaskListId;
       if (!serie && listId) {
-        const key = buildGoogleSerieKey(listId, tarea.titulo);
+        const gtid = tarea.googleTasksSync?.googleTaskId || null;
+        const key = buildGoogleSerieKey(listId, tarea.titulo, gtid);
         serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: key });
+        if (!serie && gtid) {
+          const legacyKey = buildGoogleSerieKey(listId, tarea.titulo);
+          serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: legacyKey });
+          if (serie) {
+            serie.googleSerieKey = key;
+            await serie.save();
+          }
+        }
       }
 
       if (!serie) return null;
@@ -1976,8 +2037,17 @@ class GoogleTasksService {
         serie = await TareaSeries.findOne({ _id: tarea.serieId, usuario: userId });
       }
       if (!serie) {
-        const key = buildGoogleSerieKey(listId, tarea.titulo);
+        const gtid = tarea.googleTasksSync?.googleTaskId || null;
+        const key = buildGoogleSerieKey(listId, tarea.titulo, gtid);
         serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: key });
+        if (!serie && gtid) {
+          const legacyKey = buildGoogleSerieKey(listId, tarea.titulo);
+          serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: legacyKey });
+          if (serie) {
+            serie.googleSerieKey = key;
+            await serie.save();
+          }
+        }
       }
       if (!serie) return;
 
@@ -2217,6 +2287,14 @@ class GoogleTasksService {
     const sync = tarea.googleTasksSync || {};
     if (sync.needsSync === true || sync.syncStatus === 'pending') {
       return false;
+    }
+    // Solo si ya hubo un export que marcó lastSyncedLocalVersion (datos legacy: null → LWW por fecha)
+    if (sync.lastSyncedLocalVersion != null) {
+      const localVer = Number(sync.localVersion) || 0;
+      const syncedVer = Number(sync.lastSyncedLocalVersion) || 0;
+      if (localVer > syncedVer) {
+        return false;
+      }
     }
     const googleUpdated = googleTask.updated ? new Date(googleTask.updated) : null;
     if (!googleUpdated || Number.isNaN(googleUpdated.getTime())) {

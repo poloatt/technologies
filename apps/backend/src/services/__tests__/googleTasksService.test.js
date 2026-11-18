@@ -192,15 +192,42 @@ Subtareas:
 
     const staleLocal = {
       updatedAt: new Date('2026-05-18T10:00:00.000Z'),
-      googleTasksSync: { needsSync: false, syncStatus: 'synced', updated: new Date('2026-05-18T10:00:00.000Z') }
+      googleTasksSync: {
+        needsSync: false,
+        syncStatus: 'synced',
+        updated: new Date('2026-05-18T10:00:00.000Z'),
+        localVersion: 2,
+        lastSyncedLocalVersion: 2,
+      }
     };
     expect(googleTasksService.shouldApplyGoogleUpdate(staleLocal, googleTask)).toBe(true);
 
     const freshLocal = {
       updatedAt: new Date('2026-05-18T14:00:00.000Z'),
-      googleTasksSync: { needsSync: false, syncStatus: 'synced', updated: new Date('2026-05-18T14:00:00.000Z') }
+      googleTasksSync: {
+        needsSync: false,
+        syncStatus: 'synced',
+        updated: new Date('2026-05-18T14:00:00.000Z'),
+        localVersion: 3,
+        lastSyncedLocalVersion: 3,
+      }
     };
     expect(googleTasksService.shouldApplyGoogleUpdate(freshLocal, googleTask)).toBe(false);
+  });
+
+  test('shouldApplyGoogleUpdate blocks when localVersion ahead of lastSynced', () => {
+    const googleTask = { updated: '2026-05-18T20:00:00.000Z' };
+    const ahead = {
+      updatedAt: new Date('2026-05-18T10:00:00.000Z'),
+      googleTasksSync: {
+        needsSync: false,
+        syncStatus: 'synced',
+        updated: new Date('2026-05-18T10:00:00.000Z'),
+        localVersion: 5,
+        lastSyncedLocalVersion: 3,
+      },
+    };
+    expect(googleTasksService.shouldApplyGoogleUpdate(ahead, googleTask)).toBe(false);
   });
 
   test('applyGoogleStatusFromGoogle preserves needsSync when local export pending', () => {
@@ -237,6 +264,36 @@ Subtareas:
       },
     };
     expect(googleTasksService.shouldApplyGoogleDueDespitePending(tarea, googleTask)).toBe(true);
+  });
+
+  test('shouldRemoveLocalTitleDedupeCandidate only drops empty same-day shells', () => {
+    const keep = {
+      titulo: 'Comprar',
+      descripcion: 'Lista larga',
+      subtareas: [{ titulo: 'a', completada: false }],
+      fechaInicio: new Date(2026, 4, 20, 12, 0, 0, 0),
+    };
+    const emptySameDay = {
+      titulo: 'Comprar',
+      descripcion: '',
+      subtareas: [],
+      fechaInicio: new Date(2026, 4, 20, 9, 0, 0, 0),
+    };
+    const emptyOtherDay = {
+      titulo: 'Comprar',
+      descripcion: '',
+      subtareas: [],
+      fechaInicio: new Date(2026, 4, 21, 9, 0, 0, 0),
+    };
+    const withNotes = {
+      titulo: 'Comprar',
+      descripcion: 'Otra nota',
+      subtareas: [],
+      fechaInicio: new Date(2026, 4, 20, 9, 0, 0, 0),
+    };
+    expect(googleTasksService.shouldRemoveLocalTitleDedupeCandidate(keep, emptySameDay)).toBe(true);
+    expect(googleTasksService.shouldRemoveLocalTitleDedupeCandidate(keep, emptyOtherDay)).toBe(false);
+    expect(googleTasksService.shouldRemoveLocalTitleDedupeCandidate(keep, withNotes)).toBe(false);
   });
 
   test('shouldSoftUnlinkMissingFromGoogle skips pending local export', () => {

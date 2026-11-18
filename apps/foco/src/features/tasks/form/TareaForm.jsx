@@ -307,8 +307,13 @@ const TareaForm = ({
           rrule: formData.rrule || null,
         };
 
-        onSubmit(formDataToSubmit);
-        onClose();
+        setSaving(true);
+        try {
+          await onSubmit(formDataToSubmit);
+          onClose?.();
+        } finally {
+          setSaving(false);
+        }
       } catch (error) {
         console.error('Error al preparar datos:', error);
         setErrors(prev => ({

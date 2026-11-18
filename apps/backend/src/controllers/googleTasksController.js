@@ -383,12 +383,38 @@ export const updateConfig = async (req, res) => {
   }
 };
 
+async function revokeGoogleOAuthTokens({ accessToken, refreshToken }, label = 'Google') {
+  if (!oauth2Client) return;
+  const token = refreshToken || accessToken;
+  if (!token) return;
+  try {
+    oauth2Client.setCredentials({
+      access_token: accessToken || undefined,
+      refresh_token: refreshToken || undefined,
+    });
+    if (typeof oauth2Client.revokeCredentials === 'function') {
+      await oauth2Client.revokeCredentials();
+    } else if (typeof oauth2Client.revokeToken === 'function') {
+      await oauth2Client.revokeToken(token);
+    }
+  } catch (err) {
+    console.warn(`No se pudo revocar token ${label} en Google:`, err.message);
+  }
+}
+
 /**
  * Desconecta Google Tasks
  */
 export const disconnect = async (req, res) => {
   try {
-    await Users.findByIdAndUpdate(getUserId(req.user), {
+    const userId = getUserId(req.user);
+    const user = await Users.findById(userId).select('googleTasksConfig');
+    await revokeGoogleOAuthTokens({
+      accessToken: user?.googleTasksConfig?.accessToken,
+      refreshToken: user?.googleTasksConfig?.refreshToken,
+    }, 'Google Tasks');
+
+    await Users.findByIdAndUpdate(userId, {
       'googleTasksConfig.enabled': false,
       'googleTasksConfig.accessToken': null,
       'googleTasksConfig.refreshToken': null,

@@ -916,11 +916,16 @@ function HeaderAppsButton({ iconSx }) {
         anchorEl={appsMenuAnchor}
         open={Boolean(appsMenuAnchor)}
         onClose={handleCloseAppsMenu}
+        disableScrollLock
+        ModalProps={{ sx: { zIndex: 1400 } }}
         PaperProps={{
           sx: {
             borderRadius: 1,
-            bgcolor: 'background.default'
-          }
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+            minWidth: 180,
+          },
         }}
       >
         {isStandalonePwa() && (

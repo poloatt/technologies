@@ -40,14 +40,16 @@ export function hubPageScrollSx({
 }
 
 /**
- * Design system de secciones hub (cabecera tintada, shell redondeado, preview).
- * Usado por CAJA (Finanzas, Propiedades, Inventario) y Foco (Tareas: Hábitos, Objetivos).
+ * Design system de secciones hub (cabecera tintada, shell cuadrado, preview).
+ * SSOT compartido por Caja, Foco y Pulso (HubSectionCard / HubSectionShell).
  */
 export const HUB_SECTION = {
-  sectionRadius: 3,
+  /** 0 = esquinas cuadradas en cards/shells hub de las tres apps. */
+  sectionRadius: 0,
   blockGap: 1,
   headerPx: 1.75,
-  headerPy: 1.25,
+  /** Cabeceras hub (Transacciones, etc.): barra compacta. */
+  headerPy: 0.375,
   bodyPx: 1.5,
   bodyPy: 1.25,
 };
@@ -72,7 +74,7 @@ export function getHubCardSx(isActive) {
   };
 }
 
-/** Contenedor exterior redondeado con sombra (hub cards navegables). */
+/** Contenedor exterior cuadrado con sombra (hub cards navegables). */
 export function getHubSectionCardSx(isActive) {
   return {
     ...getHubCardSx(isActive),
@@ -80,6 +82,10 @@ export function getHubSectionCardSx(isActive) {
     backgroundImage: 'none',
     boxShadow: (theme) => (isActive ? theme.shadows[2] : theme.shadows[1]),
     overflow: 'hidden',
+    // Anula MuiPaper-rounded / shape.borderRadius del theme.
+    '&.MuiPaper-rounded': {
+      borderRadius: HUB_SECTION.sectionRadius,
+    },
   };
 }
 
@@ -96,14 +102,20 @@ export const hubSectionShellSx = {
 
 export const hubHeaderActionSx = {
   px: 1,
-  py: 0.75,
-  display: 'block',
+  py: 0.375,
+  display: 'flex',
+  alignItems: 'center',
+  minHeight: 28,
+  height: 28,
+  boxSizing: 'border-box',
 };
 
 export const hubSectionHeaderSx = {
   ...hubHeaderActionSx,
   px: HUB_SECTION.headerPx,
   py: HUB_SECTION.headerPy,
+  minHeight: 28,
+  height: 28,
   borderBottom: 1,
   borderColor: 'divider',
   bgcolor: (theme) =>

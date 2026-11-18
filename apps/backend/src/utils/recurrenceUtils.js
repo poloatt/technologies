@@ -61,9 +61,24 @@ export function normalizeTitleForSerieKey(title = '') {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-export function buildGoogleSerieKey(taskListId, title) {
-  const raw = `${taskListId || ''}|${normalizeTitleForSerieKey(title)}`;
+/**
+ * Clave de serie Google.
+ * Con googleTaskId: una serie por ancla (evita colisión de títulos iguales).
+ * Sin id: fallback legacy por título normalizado (series locales / migración).
+ */
+export function buildGoogleSerieKey(taskListId, title, googleTaskId = null) {
+  const list = taskListId || '';
+  if (googleTaskId) {
+    const raw = `${list}|id:${String(googleTaskId)}`;
+    return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+  }
+  const raw = `${list}|${normalizeTitleForSerieKey(title)}`;
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+}
+
+/** Title-only key (legacy) para migrar series creadas antes del key por id. */
+export function buildLegacyGoogleSerieKey(taskListId, title) {
+  return buildGoogleSerieKey(taskListId, title, null);
 }
 
 export function parseRecurrenceFromNotes(notes = '') {

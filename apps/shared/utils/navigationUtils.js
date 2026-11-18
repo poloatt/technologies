@@ -208,9 +208,13 @@ export function getCurrentAppKey() {
 export function buildAppUrl(appKey, path) {
   const cleanPath = path?.startsWith('/') ? path : `/${path || ''}`;
   // Usar URLs explícitas de envConfig, que ya contemplan dev/prod por import.meta.env
-  const base = currentConfig?.frontendUrls?.[appKey];
-  if (!base) return cleanPath;
-  return `${base}${cleanPath}`;
+  const urls = currentConfig?.frontendUrls || {};
+  // Compat: builds viejos / env residuales con clave `atta` en vez de `caja`.
+  const base = urls[appKey]
+    || (appKey === 'caja' ? urls.atta : null)
+    || (appKey === 'atta' ? urls.caja : null);
+  if (!base || base === 'undefined') return cleanPath;
+  return `${String(base).replace(/\/$/, '')}${cleanPath}`;
 }
 
 export function navigateToAppPath(navigate, targetPath) {

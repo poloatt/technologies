@@ -343,13 +343,27 @@ const GoogleTasksConfig = ({ open, onClose }) => {
   };
 
   const handleDisableGoogleCalendar = async () => {
-    if (!window.confirm('¿Desconectar Google Calendar? Los eventos ya importados se conservan.')) return;
+    if (!window.confirm('¿Desconectar Google Calendar?')) return;
+    const deleteImported = window.confirm(
+      '¿Eliminar también los eventos ya importados de la agenda?',
+    );
     try {
       setLoading(true);
-      await clienteAxios.delete('/api/google-calendar/disconnect');
+      const { data } = await clienteAxios.delete('/api/google-calendar/disconnect', {
+        data: { deleteImported },
+      });
       setCalendarConfig((prev) => ({ ...prev, enabled: false, lastSync: null }));
       setCalendarCalendars([]);
-      enqueueSnackbar('Google Calendar desconectado', { variant: 'info' });
+      const removed = data?.deletedImported || 0;
+      enqueueSnackbar(
+        deleteImported
+          ? `Google Calendar desconectado (${removed} eventos eliminados)`
+          : 'Google Calendar desconectado (eventos conservados)',
+        { variant: 'info' },
+      );
+      if (deleteImported) {
+        window.dispatchEvent(new CustomEvent('googleCalendarSyncCompleted'));
+      }
     } catch {
       enqueueSnackbar('Error al desconectar Calendar', { variant: 'error' });
     } finally {
@@ -359,9 +373,13 @@ const GoogleTasksConfig = ({ open, onClose }) => {
 
   const handleCalendarSelectionChange = async (calendarId, checked) => {
     const current = calendarConfig.selectedCalendarIds || ['primary'];
+    const isPrimaryCal = Boolean(calendarCalendars.find((c) => c.id === calendarId)?.primary);
     const next = checked
-      ? [...new Set([...current, calendarId])]
-      : current.filter((id) => id !== calendarId);
+      ? [...new Set([
+        ...current.filter((id) => !(isPrimaryCal && id === 'primary')),
+        calendarId,
+      ])]
+      : current.filter((id) => id !== calendarId && !(isPrimaryCal && id === 'primary'));
     if (next.length === 0) {
       enqueueSnackbar('Debes seleccionar al menos un calendario', { variant: 'warning' });
       return;
@@ -370,7 +388,14 @@ const GoogleTasksConfig = ({ open, onClose }) => {
       setLoading(true);
       await clienteAxios.put('/api/google-calendar/config', { selectedCalendarIds: next });
       setCalendarConfig((prev) => ({ ...prev, selectedCalendarIds: next }));
-      enqueueSnackbar('Calendarios actualizados', { variant: 'success' });
+      // Sync inmediato para crear/limpiar EVENTOs según la nueva selección
+      try {
+        await clienteAxios.post('/api/google-calendar/sync');
+        window.dispatchEvent(new CustomEvent('googleCalendarSyncCompleted'));
+        enqueueSnackbar('Calendarios actualizados y sincronizados', { variant: 'success' });
+      } catch {
+        enqueueSnackbar('Calendarios guardados; sync pendiente', { variant: 'warning' });
+      }
     } catch {
       enqueueSnackbar('No se pudieron guardar los calendarios', { variant: 'error' });
     } finally {

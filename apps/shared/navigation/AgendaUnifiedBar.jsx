@@ -116,7 +116,15 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
         </Box>
       )}
       {useFocoCenterOverlay && CenterComp && (
-        <Box sx={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none', '& > *': { pointerEvents: 'auto' } }}>
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            // El track es full-width; no debe robar clicks del AppsButton (z-index menor).
+            pointerEvents: 'none',
+          }}
+        >
           <CenteredTrack
             isMobileOrTablet={isMobileOrTablet}
             mainMargin={baseCenterInsetLeft}
@@ -124,7 +132,16 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
             rightWidth={focoCenterRightInset}
             height={AGENDA_UNIFIED_BAR_CONFIG.height}
           >
-            <CenterComp hasSelectedItems={hasSelectedItems} />
+            <Box
+              sx={{
+                pointerEvents: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                maxWidth: '100%',
+              }}
+            >
+              <CenterComp hasSelectedItems={hasSelectedItems} />
+            </Box>
           </CenteredTrack>
         </Box>
       )}
@@ -139,7 +156,7 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
           justifyContent: 'flex-start',
           gap: 0.25,
           pl: 0,
-          zIndex: 4,
+          zIndex: 5,
         }}
       >
         {!isMobileOrTablet && (
@@ -169,7 +186,8 @@ export default function AgendaUnifiedBar({ currentPath = '' }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2,
+          // Por encima del overlay central de Foco (zIndex 3) para que el menú de apps sea clickeable.
+          zIndex: 6,
         }}
       >
         <SystemButtons.AppsButton />

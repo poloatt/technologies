@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import {
   appendRecurrenceToNotes,
   buildGoogleSerieKey,
+  buildLegacyGoogleSerieKey,
   collectDueDatesFromTasks,
   expandSerie,
   inferRecurrenceFromGoogleNotes,
@@ -70,7 +71,7 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
   for (const gt of googleMainTasks) {
     if (gt?.parent) continue;
     if (gt?.id) googleById.set(gt.id, gt);
-    const key = buildGoogleSerieKey(taskListId, normalizeGoogleTitle(gt.title));
+    const key = buildGoogleSerieKey(taskListId, normalizeGoogleTitle(gt.title), gt.id || null);
     const fromNotes = resolveRruleFromNotes(gt.notes || '');
     if (fromNotes) googleRruleByKey.set(key, fromNotes);
     const due = Tareas.parseGoogleDueDate(gt.due);
@@ -88,7 +89,8 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
 
   const groups = new Map();
   for (const tarea of tareas) {
-    const key = buildGoogleSerieKey(taskListId, tarea.titulo);
+    const gtid = tarea.googleTasksSync?.googleTaskId || null;
+    const key = buildGoogleSerieKey(taskListId, tarea.titulo, gtid);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(tarea);
   }
@@ -202,7 +204,17 @@ export async function reconcileSeriesFromGoogle(userId, objetivoId, taskListId, 
 
     rrule = ensureWeeklyByday(rrule, dtstart);
 
+    const anchorGoogleTaskId = recurrenceAnchor.googleTasksSync?.googleTaskId || null;
     let serie = await TareaSeries.findOne({ usuario: userId, googleSerieKey });
+    // Migrar series legacy (clave por título) → clave por googleTaskId
+    if (!serie && anchorGoogleTaskId) {
+      const legacyKey = buildLegacyGoogleSerieKey(taskListId, titulo);
+      const legacySerie = await TareaSeries.findOne({ usuario: userId, googleSerieKey: legacyKey });
+      if (legacySerie) {
+        serie = legacySerie;
+        serie.googleSerieKey = googleSerieKey;
+      }
+    }
 
     if (!serie) {
       serie = new TareaSeries({

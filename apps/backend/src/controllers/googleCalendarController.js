@@ -236,16 +236,56 @@ export const updateConfig = async (req, res) => {
   }
 };
 
+async function revokeCalendarOAuthTokens({ accessToken, refreshToken }) {
+  if (!oauth2Client) return;
+  const token = refreshToken || accessToken;
+  if (!token) return;
+  try {
+    oauth2Client.setCredentials({
+      access_token: accessToken || undefined,
+      refresh_token: refreshToken || undefined,
+    });
+    if (typeof oauth2Client.revokeCredentials === 'function') {
+      await oauth2Client.revokeCredentials();
+    } else if (typeof oauth2Client.revokeToken === 'function') {
+      await oauth2Client.revokeToken(token);
+    }
+  } catch (err) {
+    console.warn('No se pudo revocar token Google Calendar:', err.message);
+  }
+}
+
 export const disconnect = async (req, res) => {
   try {
     const userId = getUserId(req.user);
+    const deleteImported = req.body?.deleteImported === true
+      || req.query?.deleteImported === 'true';
+
+    const user = await Users.findById(userId).select('googleCalendarConfig');
+    await revokeCalendarOAuthTokens({
+      accessToken: user?.googleCalendarConfig?.accessToken,
+      refreshToken: user?.googleCalendarConfig?.refreshToken,
+    });
+
     await Users.findByIdAndUpdate(userId, {
       'googleCalendarConfig.enabled': false,
       'googleCalendarConfig.accessToken': null,
       'googleCalendarConfig.refreshToken': null,
       'googleCalendarConfig.lastSync': null,
     });
-    res.json({ success: true, message: 'Google Calendar desconectado' });
+
+    let deletedImported = 0;
+    if (deleteImported) {
+      deletedImported = await googleCalendarService.deleteImportedEventsForUser(userId);
+    }
+
+    res.json({
+      success: true,
+      message: deleteImported
+        ? `Google Calendar desconectado (${deletedImported} eventos importados eliminados)`
+        : 'Google Calendar desconectado',
+      deletedImported,
+    });
   } catch (error) {
     console.error('Error al desconectar Calendar:', error);
     res.status(500).json({ success: false, error: 'Error al desconectar' });

@@ -326,7 +326,7 @@ import { DynamicIcon } from '../components/common/DynamicIcon';
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  zIndex: 2
+                  zIndex: 6
                 }} ref={rightWidthRef}>
                   <SystemButtons.AppsButton />
               </Box>
@@ -341,7 +341,8 @@ import { DynamicIcon } from '../components/common/DynamicIcon';
                 display: 'flex', 
                 alignItems: 'center', 
                 height: HEADER_CONFIG.height, 
-                gap: 0.25 
+                gap: 0.25,
+                zIndex: 6,
               }}>
                 <SystemButtons.AppsButton />
               </Box>

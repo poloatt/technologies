@@ -227,6 +227,37 @@ class GoogleCalendarService {
     return [calendarId];
   }
 
+  /**
+   * EVENTOs locales en la ventana de sync cuyo googleEventId no apareció en Google
+   * (movidos fuera / hard-delete sin tombstone).
+   */
+  buildInWindowOrphanFilter({ userId, lookupKeys, seenEventIds, from, to }) {
+    return {
+      usuario: userId,
+      tipo: 'EVENTO',
+      'googleCalendarSync.googleCalendarId': { $in: lookupKeys },
+      'googleCalendarSync.googleEventId': {
+        $exists: true,
+        $ne: null,
+        ...(seenEventIds?.size ? { $nin: [...seenEventIds] } : {}),
+      },
+      fechaInicio: { $lte: to },
+      $or: [
+        { fechaFin: { $gte: from } },
+        { fechaFin: null },
+      ],
+    };
+  }
+
+  async deleteImportedEventsForUser(userId) {
+    const result = await Tareas.deleteMany({
+      usuario: userId,
+      tipo: 'EVENTO',
+      'googleCalendarSync.googleEventId': { $exists: true, $ne: null },
+    });
+    return result.deletedCount || 0;
+  }
+
   appearanceUnchanged(existingSync, mappedSync) {
     return (existingSync?.eventLabelId || null) === (mappedSync?.eventLabelId || null)
       && (existingSync?.eventLabelName || null) === (mappedSync?.eventLabelName || null)
@@ -277,9 +308,11 @@ class GoogleCalendarService {
         const calendarBackgroundColor = calendarBgById[calendarId]
           || (calendarId === primaryRealId ? calendarBgById.primary : null)
           || null;
+        const seenEventIds = new Set();
 
         for (const event of events) {
           try {
+            if (event?.id) seenEventIds.add(event.id);
             const mapped = mapGoogleEventToTareaFields(event, calendarId, {
               labelsById,
               eventColorsById,
@@ -343,6 +376,18 @@ class GoogleCalendarService {
           } catch (eventErr) {
             results.errors.push(`${event.summary || event.id}: ${eventErr.message}`);
           }
+        }
+
+        // Fantasmas en ventana: locales que Google ya no listó
+        const orphanDelete = await Tareas.deleteMany(this.buildInWindowOrphanFilter({
+          userId,
+          lookupKeys,
+          seenEventIds,
+          from,
+          to,
+        }));
+        if (orphanDelete.deletedCount) {
+          results.deleted += orphanDelete.deletedCount;
         }
       } catch (calErr) {
         results.errors.push(`Calendario ${calendarId}: ${calErr.message}`);
