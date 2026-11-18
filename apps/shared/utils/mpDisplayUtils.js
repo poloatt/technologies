@@ -17,6 +17,21 @@ export const MP_TRANSACTION_TYPE_LABELS = {
   DISPUTE_SHIPPING: 'Reclamo de envío',
 };
 
+export const MP_MOVEMENT_KIND_LABELS = {
+  PAYMENT: 'Pago',
+  P2P_TRANSFER: 'Transferencia a usuario',
+  EXTERNAL_TRANSFER: 'Transferencia bancaria',
+  CASH_WITHDRAWAL: 'Retiro de efectivo',
+  RESERVE_RELEASE: 'Extracción de reserva',
+  RESERVE_LOCK: 'Envío a reserva',
+  YIELD: 'Rendimiento',
+  REFUND: 'Devolución',
+  CHARGEBACK: 'Contracargo',
+  FEE: 'Comisión',
+  INTERNAL: 'Movimiento interno',
+  UNKNOWN: 'Movimiento',
+};
+
 const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO', 'MERCADOPAGO'];
 
 const PAYMENT_METHOD_LABELS = {
@@ -129,6 +144,10 @@ export function formatMpTransactionTitle(descripcion, origen) {
   }
 
   const meta = getOrigenMetadata(origen);
+  const kindLabel = MP_MOVEMENT_KIND_LABELS[meta.movementKind];
+  if (kindLabel && meta.movementKind !== 'PAYMENT' && meta.movementKind !== 'UNKNOWN') {
+    return kindLabel;
+  }
   if (meta.isTransfer || String(meta.operationType || '').toLowerCase() === 'money_transfer') {
     return 'Transferencia';
   }
@@ -185,13 +204,20 @@ export function buildTransactionListMeta(transaccion, { includeDate = true } = {
 
   if (isMercadoPagoOrigen(origen)) {
     if (origen.tipo === 'MERCADOPAGO_MOVIMIENTO') {
-      parts.push('Wallet');
-      const typeLabel = mapearTipoTransaccionMpDisplay(meta.transactionType);
-      if (typeLabel) parts.push(typeLabel);
-      else if (meta.isTransfer) parts.push('Transferencia');
+      parts.push(meta.isInternal || meta.statsExclude ? 'Interno' : 'Wallet');
+      const kindLabel = MP_MOVEMENT_KIND_LABELS[meta.movementKind];
+      if (kindLabel) parts.push(kindLabel);
+      else {
+        const typeLabel = mapearTipoTransaccionMpDisplay(meta.transactionType);
+        if (typeLabel) parts.push(typeLabel);
+        else if (meta.isTransfer) parts.push('Transferencia');
+      }
     } else {
       parts.push('Mercado Pago');
-      if (meta.isTransfer || String(meta.operationType || '').toLowerCase() === 'money_transfer') {
+      const kindLabel = MP_MOVEMENT_KIND_LABELS[meta.movementKind];
+      if (kindLabel && meta.movementKind !== 'PAYMENT') {
+        parts.push(kindLabel);
+      } else if (meta.isTransfer || String(meta.operationType || '').toLowerCase() === 'money_transfer') {
         parts.push('Transferencia');
       } else {
         const method = formatPaymentMethodLabel(meta.paymentMethod, meta.paymentMethodId);

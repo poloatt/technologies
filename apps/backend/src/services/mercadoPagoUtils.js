@@ -218,6 +218,250 @@ export function esTipoTransferenciaMovimiento(type) {
   );
 }
 
+/**
+ * Clasificación económica para stats (evitar doble conteo).
+ * Extracción reserva → disponible es interno; la transferencia real sí cuenta.
+ */
+export const MP_MOVEMENT_KINDS = {
+  PAYMENT: 'PAYMENT',
+  P2P_TRANSFER: 'P2P_TRANSFER',
+  EXTERNAL_TRANSFER: 'EXTERNAL_TRANSFER',
+  CASH_WITHDRAWAL: 'CASH_WITHDRAWAL',
+  RESERVE_RELEASE: 'RESERVE_RELEASE',
+  RESERVE_LOCK: 'RESERVE_LOCK',
+  YIELD: 'YIELD',
+  REFUND: 'REFUND',
+  CHARGEBACK: 'CHARGEBACK',
+  FEE: 'FEE',
+  INTERNAL: 'INTERNAL',
+  UNKNOWN: 'UNKNOWN'
+};
+
+export const MP_MOVEMENT_KIND_LABELS = {
+  PAYMENT: 'Pago',
+  P2P_TRANSFER: 'Transferencia a usuario',
+  EXTERNAL_TRANSFER: 'Transferencia bancaria',
+  CASH_WITHDRAWAL: 'Retiro de efectivo',
+  RESERVE_RELEASE: 'Extracción de reserva',
+  RESERVE_LOCK: 'Envío a reserva',
+  YIELD: 'Rendimiento',
+  REFUND: 'Devolución',
+  CHARGEBACK: 'Contracargo',
+  FEE: 'Comisión',
+  INTERNAL: 'Movimiento interno',
+  UNKNOWN: 'Movimiento'
+};
+
+const RESERVE_RELEASE_RE =
+  /reserva|reservas|extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|desbloquear|disponible\s+desde\s+reserva|investment.?unlock|reserve_for_.*_cancel|asset_management_withdrawal/i;
+const RESERVE_LOCK_RE =
+  /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|lock.?reserve|parking|invertir|investment.?lock|reserve_for_/i;
+const YIELD_RE =
+  /rendimiento|rendimientos|inter[eé]s|intereses|asset_management_gain|asset_management_loss|yield|ganancia\s+de\s+inversi/i;
+const TRANSFER_RE =
+  /transferencia|transferiste|enviaste\s+dinero|envio\s+de\s+dinero|env[ií]o\s+de\s+dinero|p2p|cvu|cbu|alias|money_transfer/i;
+const INTERNAL_RE =
+  /movimiento\s+interno|ajuste|balance\s+adjustment|pre_payout|pos_payout|available_balance|initial_available/i;
+
+function textoClasificacionMp({ description, transactionType, operationType, paymentMethod, metadata, raw }) {
+  const meta = metadata && typeof metadata === 'object' ? metadata : {};
+  return [
+    description,
+    transactionType,
+    operationType,
+    paymentMethod,
+    raw?.DESCRIPTION,
+    raw?.TRANSACTION_TYPE,
+    meta.concept,
+    meta.detail,
+    meta.type,
+    meta.description,
+    meta.event_type,
+    meta.reason,
+    typeof meta === 'object' ? JSON.stringify(meta) : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+/**
+ * @returns {{ movementKind: string, statsExclude: boolean, label: string, isTransfer: boolean, isInternal: boolean }}
+ */
+export function clasificarMovimientoEconomicoMp(input = {}) {
+  const transactionType = String(
+    input.transactionType || input.TRANSACTION_TYPE || input.type || ''
+  ).toUpperCase();
+  const operationType = String(
+    input.operationType || input.operation_type || input.raw?.OPERATION_TYPE || ''
+  ).toLowerCase();
+  const description = String(
+    input.description || input.DESCRIPTION || input.detail || ''
+  );
+  const paymentMethod = String(
+    input.paymentMethod || input.payment_method || input.PAYMENT_METHOD || ''
+  );
+  const metadata = parseMetadataField(
+    input.metadata || input.METADATA || input.raw?.METADATA || input.raw?.metadata
+  );
+  const netAmount = Number(
+    input.netAmount ?? input.SETTLEMENT_NET_AMOUNT ?? input.amount ?? 0
+  );
+  const blob = textoClasificacionMp({
+    description,
+    transactionType,
+    operationType,
+    paymentMethod,
+    metadata,
+    raw: input.raw
+  });
+
+  // 1) Rendimientos / intereses (sí cuentan como ingreso/egreso financiero)
+  if (YIELD_RE.test(blob) || transactionType === 'CASHBACK') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.YIELD,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.YIELD,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // 2) Reservas: interno (no contar dos veces si después transfieren)
+  if (RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.RESERVE_RELEASE,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE,
+      isTransfer: false,
+      isInternal: true
+    };
+  }
+  if (RESERVE_LOCK_RE.test(blob) && !TRANSFER_RE.test(blob)) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.RESERVE_LOCK,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
+      isTransfer: false,
+      isInternal: true
+    };
+  }
+
+  // 3) Transferencias reales / retiros
+  if (operationType === 'money_transfer' || transactionType === 'MONEY_TRANSFER' || transactionType === 'TRANSFER') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.P2P_TRANSFER,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.P2P_TRANSFER,
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+  if (transactionType === 'WITHDRAWAL' || transactionType === 'BANK_TRANSFER') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.EXTERNAL_TRANSFER,
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+  if (transactionType === 'PAYOUT') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.CASH_WITHDRAWAL,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.CASH_WITHDRAWAL,
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+  if (transactionType === 'WITHDRAWAL_CANCEL') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
+      statsExclude: true, // cancela un retiro: no distorsionar flujo neto como gasto nuevo
+      label: 'Transferencia cancelada',
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+  if (TRANSFER_RE.test(blob)) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.P2P_TRANSFER,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.P2P_TRANSFER,
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+
+  // 4) Comercio / disputas
+  if (transactionType === 'REFUND' || transactionType === 'REFUND_SHIPPING') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.REFUND,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.REFUND,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+  if (transactionType === 'CHARGEBACK' || transactionType === 'DISPUTE' || transactionType.includes('CHARGEBACK') || transactionType.includes('DISPUTE')) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.CHARGEBACK,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.CHARGEBACK,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+  if (INTERNAL_RE.test(blob)) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.INTERNAL,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.INTERNAL,
+      isTransfer: false,
+      isInternal: true
+    };
+  }
+  if (
+    transactionType === 'SETTLEMENT' ||
+    transactionType === 'SETTLEMENT_SHIPPING' ||
+    operationType === 'regular_payment' ||
+    operationType === 'pos_payment'
+  ) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.PAYMENT,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.PAYMENT,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // Heurística: SETTLEMENT/unknown negativo sin descripción de pago → posible salida
+  if (!transactionType && netAmount < 0 && TRANSFER_RE.test(blob)) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.P2P_TRANSFER,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.P2P_TRANSFER,
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+
+  return {
+    movementKind: MP_MOVEMENT_KINDS.UNKNOWN,
+    statsExclude: false,
+    label: MP_MOVEMENT_KIND_LABELS.UNKNOWN,
+    isTransfer: false,
+    isInternal: false
+  };
+}
+
+export function buildStatsExcludeMatch() {
+  // Excluye movimientos internos (reservas, ajustes) del cálculo de ingresos/gastos
+  return { 'origen.metadata.statsExclude': { $ne: true } };
+}
+
 export function extraerContraparteMovimiento(row) {
   const description = (
     row.DESCRIPTION || row.description || row.raw?.DESCRIPTION || row.detail || ''
@@ -309,7 +553,10 @@ export function normalizeAccountMovement(mov) {
   ).toString();
   const detailLower = detail.toLowerCase();
   let transactionType = 'SETTLEMENT';
-  if (
+  if (/reserva|rendimiento|asset_management|parking|inversi/i.test(detailLower)) {
+    // Dejar SETTLEMENT: clasificarMovimientoEconomicoMp distingue reserva/rendimiento
+    transactionType = 'SETTLEMENT';
+  } else if (
     detailLower.includes('transfer') ||
     detailLower.includes('retiro') ||
     detailLower.includes('withdraw') ||
@@ -319,7 +566,8 @@ export function normalizeAccountMovement(mov) {
     transactionType = 'WITHDRAWAL';
   } else if (mov.operation_type) {
     const op = String(mov.operation_type).toUpperCase();
-    if (op === 'MONEY_TRANSFER' || op === 'WITHDRAWAL') transactionType = 'WITHDRAWAL';
+    if (op === 'MONEY_TRANSFER') transactionType = 'MONEY_TRANSFER';
+    else if (op === 'WITHDRAWAL') transactionType = 'WITHDRAWAL';
   }
 
   const sourceId = String(
@@ -376,9 +624,25 @@ export function formatearDescripcionMovimiento(row) {
   const metodo = row.PAYMENT_METHOD || row.payment_method || row.paymentMethod || '';
   const description = limpiarNombreContraparte(row.DESCRIPTION || row.description || '');
   const contraparte = extraerContraparteMovimiento(row);
+  const economic = clasificarMovimientoEconomicoMp(row);
 
   if (contraparte?.name) {
     return `MercadoPago - ${contraparte.name}`;
+  }
+
+  if (economic.movementKind === MP_MOVEMENT_KINDS.RESERVE_RELEASE) {
+    return 'MercadoPago - Extracción de reserva';
+  }
+  if (economic.movementKind === MP_MOVEMENT_KINDS.RESERVE_LOCK) {
+    return 'MercadoPago - Envío a reserva';
+  }
+  if (economic.movementKind === MP_MOVEMENT_KINDS.YIELD) {
+    return description ? `MercadoPago - Rendimiento · ${description}` : 'MercadoPago - Rendimiento';
+  }
+  if (economic.isTransfer) {
+    return description
+      ? `MercadoPago - ${description}`
+      : `MercadoPago - ${economic.label}`;
   }
 
   if (description) {
@@ -389,7 +653,6 @@ export function formatearDescripcionMovimiento(row) {
     return `MercadoPago - ${metodo}`;
   }
 
-  // Evitar persistir "MercadoPago - Pago aprobado" como si fuera el comercio
   if (esTipoTransferenciaMovimiento(tipoRaw)) {
     return `MercadoPago - ${tipoLabel}`;
   }

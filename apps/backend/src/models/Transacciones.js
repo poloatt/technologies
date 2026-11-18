@@ -189,7 +189,11 @@ transaccionSchema.methods.getLabel = function() {
 transaccionSchema.statics.getBalance = async function(cuentaId, options = {}) {
   const { estado = 'PAGADO', fechaFin } = options;
 
-  const match = { cuenta: new mongoose.Types.ObjectId(cuentaId) };
+  const match = {
+    cuenta: new mongoose.Types.ObjectId(cuentaId),
+    // Alineado con getStats: reservas/movimientos internos no distorsionan el balance de flujo
+    'origen.metadata.statsExclude': { $ne: true },
+  };
   const estadoFilter = buildEstadoFilter(estado);
   if (estadoFilter) match.estado = estadoFilter;
   if (fechaFin) match.fecha = { $lte: new Date(fechaFin) };

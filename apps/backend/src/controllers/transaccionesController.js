@@ -98,6 +98,8 @@ class TransaccionesController extends BaseController {
       const query = {
         usuario: new mongoose.Types.ObjectId(req.user.id),
         fecha: { $gte: inicio, $lte: fin },
+        // No contar extracciones de reserva / movimientos internos MP dos veces
+        'origen.metadata.statsExclude': { $ne: true },
       };
       if (cuenta) {
         if (!mongoose.Types.ObjectId.isValid(cuenta)) {

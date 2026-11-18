@@ -15,7 +15,8 @@ import {
   normalizeAccountMovement,
   esTipoTransferenciaMovimiento,
   esTransferenciaPago,
-  limpiarNombreContraparte
+  limpiarNombreContraparte,
+  clasificarMovimientoEconomicoMp
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
@@ -519,6 +520,18 @@ export class BankSyncService {
           transferenciasAccount: accountMovements.filter((m) =>
             esTipoTransferenciaMovimiento(m.transactionType)
           ).length,
+          movementKinds: movimientosMerged.reduce((acc, m) => {
+            const kind = clasificarMovimientoEconomicoMp({
+              transactionType: m.transactionType,
+              description: m.description,
+              netAmount: m.netAmount,
+              raw: m.raw,
+              paymentMethod: m.paymentMethod,
+              operationType: m.payment?.operation_type
+            }).movementKind;
+            acc[kind] = (acc[kind] || 0) + 1;
+            return acc;
+          }, {}),
           totalCsvRows,
           movimientosImportados: movResult.nuevas,
           movimientosOmitidos: movResult.omitidas,
@@ -574,6 +587,37 @@ export class BankSyncService {
         const contraparte = extraerContrapartePago(pago, userId);
         const descripcion = formatearDescripcionPago(pago, userId);
         const isTransfer = esTransferenciaPago(pago);
+        const economic = clasificarMovimientoEconomicoMp({
+          operationType: pago.operation_type,
+          description: pago.description,
+          paymentMethod: pago.payment_method?.type || pago.payment_method_id,
+          metadata: pago.metadata,
+          netAmount: determinarTipoPago(pago, userId) === 'INGRESO'
+            ? Math.abs(pago.transaction_amount || 0)
+            : -Math.abs(pago.transaction_amount || 0)
+        });
+
+        const paymentMeta = {
+          paymentId: pago.id,
+          status: pago.status,
+          statusDetail: pago.status_detail,
+          paymentMethod: pago.payment_method?.type,
+          paymentMethodId: pago.payment_method_id,
+          operationType: pago.operation_type || null,
+          isTransfer: isTransfer || economic.isTransfer,
+          movementKind: economic.movementKind,
+          statsExclude: economic.statsExclude,
+          isInternal: economic.isInternal,
+          description: pago.description || null,
+          statementDescriptor: pago.statement_descriptor || null,
+          itemTitle: pago.additional_info?.items?.[0]?.title || null,
+          businessName: pago.point_of_interaction?.business_info?.name || null,
+          counterpartyName: contraparte?.name || null,
+          counterpartyLabel: contraparte?.label || null,
+          counterpartyRole: contraparte?.role || null,
+          counterpartyId: contraparte?.id || null,
+          counterpartyEmail: contraparte?.email || null
+        };
 
         const transaccionExistente = await Transacciones.findOne({
           cuenta: bankConnection.cuenta,
@@ -583,28 +627,22 @@ export class BankSyncService {
 
         if (transaccionExistente) {
           const prevName = transaccionExistente.origen?.metadata?.counterpartyName;
-          if (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) {
-            transaccionExistente.descripcion = descripcion;
+          const prevKind = transaccionExistente.origen?.metadata?.movementKind;
+          const shouldUpdate =
+            (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
+            !prevKind ||
+            prevKind !== economic.movementKind;
+          if (shouldUpdate) {
+            if (contraparte?.name || economic.isInternal || economic.isTransfer) {
+              transaccionExistente.descripcion = economic.isInternal
+                ? `MercadoPago - ${economic.label}`
+                : descripcion;
+            }
             transaccionExistente.origen.metadata = {
               ...(transaccionExistente.origen.metadata?.toObject?.() ||
                 transaccionExistente.origen.metadata ||
                 {}),
-              paymentId: pago.id,
-              status: pago.status,
-              statusDetail: pago.status_detail,
-              paymentMethod: pago.payment_method?.type,
-              paymentMethodId: pago.payment_method_id,
-              operationType: pago.operation_type || null,
-              isTransfer,
-              description: pago.description || null,
-              statementDescriptor: pago.statement_descriptor || null,
-              itemTitle: pago.additional_info?.items?.[0]?.title || null,
-              businessName: pago.point_of_interaction?.business_info?.name || null,
-              counterpartyName: contraparte?.name || null,
-              counterpartyLabel: contraparte?.label || null,
-              counterpartyRole: contraparte?.role || null,
-              counterpartyId: contraparte?.id || null,
-              counterpartyEmail: contraparte?.email || null
+              ...paymentMeta
             };
             await transaccionExistente.save();
             actualizadas++;
@@ -612,13 +650,17 @@ export class BankSyncService {
           continue;
         }
 
+        const descripcionFinal = economic.isInternal
+          ? `MercadoPago - ${economic.label}`
+          : descripcion;
+
         const nuevaTransaccion = new Transacciones({
-          descripcion,
+          descripcion: descripcionFinal,
           monto,
           montoNeto,
           fecha: new Date(pago.date_created),
           categoria: bankConnection.configuracion?.categorizacionAutomatica
-            ? this.categorizarTransaccion(descripcion)
+            ? this.categorizarTransaccion(descripcionFinal)
             : 'Otro',
           estado: mapearEstadoPago(pago.status),
           tipo: determinarTipoPago(pago, userId),
@@ -631,25 +673,11 @@ export class BankSyncService {
             conexionId: bankConnection._id,
             transaccionId: pago.id.toString(),
             metadata: {
-              paymentId: pago.id,
-              status: pago.status,
-              statusDetail: pago.status_detail,
-              paymentMethod: pago.payment_method?.type,
-              paymentMethodId: pago.payment_method_id,
-              operationType: pago.operation_type || null,
-              isTransfer,
+              ...paymentMeta,
               collectorId: pago.collector_id,
               payerId: pago.payer?.id,
               currencyId: pago.currency_id,
-              installments: pago.installments,
-              description: pago.description || null,
-              statementDescriptor: pago.statement_descriptor || null,
-              itemTitle: pago.additional_info?.items?.[0]?.title || null,
-              counterpartyName: contraparte?.name || null,
-              counterpartyLabel: contraparte?.label || null,
-              counterpartyRole: contraparte?.role || null,
-              counterpartyId: contraparte?.id || null,
-              counterpartyEmail: contraparte?.email || null
+              installments: pago.installments
             }
           }
         });
@@ -706,9 +734,6 @@ export class BankSyncService {
         if (!transaccionId) continue;
 
         const contraparte = this.resolverContraparteMovimiento(mov, userId);
-        const isTransfer =
-          esTipoTransferenciaMovimiento(mov.transactionType) ||
-          esTransferenciaPago(mov.payment || {});
         const rowSource = {
           ...(mov.raw || {}),
           ...mov,
@@ -716,11 +741,33 @@ export class BankSyncService {
           TRANSACTION_TYPE: mov.transactionType || mov.raw?.TRANSACTION_TYPE,
           DESCRIPTION: mov.description || mov.raw?.DESCRIPTION,
           EXTERNAL_REFERENCE: mov.externalReference || mov.raw?.EXTERNAL_REFERENCE,
-          SETTLEMENT_NET_AMOUNT: mov.netAmount ?? mov.raw?.SETTLEMENT_NET_AMOUNT
+          SETTLEMENT_NET_AMOUNT: mov.netAmount ?? mov.raw?.SETTLEMENT_NET_AMOUNT,
+          operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE || null,
+          metadata: mov.raw?.METADATA || mov.payment?.metadata || null
         };
-        const descripcion = mov.payment && userId != null
+        const economic = clasificarMovimientoEconomicoMp({
+          ...rowSource,
+          transactionType: mov.transactionType,
+          operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE,
+          description: mov.description || mov.payment?.description || mov.raw?.DESCRIPTION,
+          paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id,
+          netAmount: mov.netAmount,
+          metadata: mov.raw?.METADATA || mov.payment?.metadata,
+          raw: mov.raw
+        });
+        const isTransfer =
+          economic.isTransfer ||
+          esTipoTransferenciaMovimiento(mov.transactionType) ||
+          esTransferenciaPago(mov.payment || {});
+
+        let descripcion = mov.payment && userId != null && !economic.isInternal
           ? formatearDescripcionPago(mov.payment, userId)
           : formatearDescripcionMovimiento(rowSource);
+        if (economic.isInternal) {
+          descripcion = `MercadoPago - ${economic.label}`;
+        } else if (economic.isTransfer && !contraparte?.name) {
+          descripcion = `MercadoPago - ${economic.label}`;
+        }
 
         const metadataPatch = {
           transactionType: mov.transactionType,
@@ -733,6 +780,9 @@ export class BankSyncService {
           currency: mov.currency,
           source: mov.payment ? 'settlement_enriched' : (mov.source || 'settlement_report'),
           isTransfer,
+          movementKind: economic.movementKind,
+          statsExclude: economic.statsExclude,
+          isInternal: economic.isInternal,
           statementDescriptor: mov.payment?.statement_descriptor || null,
           itemTitle: mov.payment?.additional_info?.items?.[0]?.title || null,
           businessName: mov.payment?.point_of_interaction?.business_info?.name || null,
@@ -750,17 +800,21 @@ export class BankSyncService {
         });
 
         if (transaccionExistente) {
-          const prevName = transaccionExistente.origen?.metadata?.counterpartyName;
+          const prevMeta =
+            transaccionExistente.origen?.metadata?.toObject?.() ||
+            transaccionExistente.origen?.metadata ||
+            {};
+          const prevName = prevMeta.counterpartyName;
           const shouldEnrich =
-            contraparte?.name &&
-            (!prevName || !limpiarNombreContraparte(prevName));
+            (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
+            (isTransfer && !prevMeta.isTransfer) ||
+            prevMeta.movementKind !== economic.movementKind ||
+            Boolean(prevMeta.statsExclude) !== Boolean(economic.statsExclude);
 
-          if (shouldEnrich || (isTransfer && !transaccionExistente.origen?.metadata?.isTransfer)) {
+          if (shouldEnrich) {
             transaccionExistente.descripcion = descripcion;
             transaccionExistente.origen.metadata = {
-              ...(transaccionExistente.origen.metadata?.toObject?.() ||
-                transaccionExistente.origen.metadata ||
-                {}),
+              ...prevMeta,
               ...metadataPatch
             };
             await transaccionExistente.save();

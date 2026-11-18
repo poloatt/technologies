@@ -90,6 +90,8 @@ export class MercadoPagoReportService {
         { key: 'SOURCE_ID' },
         { key: 'EXTERNAL_REFERENCE' },
         { key: 'TRANSACTION_TYPE' },
+        // DESCRIPTION ayuda a detectar reservas / rendimientos / transferencias P2P
+        { key: 'DESCRIPTION' },
         { key: 'TRANSACTION_AMOUNT' },
         { key: 'TRANSACTION_CURRENCY' },
         { key: 'FEE_AMOUNT' },
