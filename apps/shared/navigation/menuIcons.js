@@ -3,7 +3,6 @@ import SvgIcon from '@mui/material/SvgIcon';
 import {
   TrendingUpOutlined,
   AccountBalanceWalletOutlined,
-  CurrencyExchangeOutlined,
   RepeatOutlined,
   PersonSearchOutlined,
   ApartmentOutlined,
@@ -61,7 +60,7 @@ const PulsoCircleOutlined = forwardRef(function PulsoCircleOutlined(props, ref) 
 export const icons = {
   trendingUp: TrendingUpOutlined,
   wallet: AccountBalanceWalletOutlined,
-  currency: CurrencyExchangeOutlined,
+  currency: MonetizationOnOutlined, // $ / peso en círculo (Monedas)
   repeat: RepeatOutlined,
   personSearch: PersonSearchOutlined,
   apartment: ApartmentOutlined,

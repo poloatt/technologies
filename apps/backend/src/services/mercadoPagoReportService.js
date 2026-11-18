@@ -72,8 +72,10 @@ export class MercadoPagoReportService {
     this.userId = userId;
   }
 
-  async configureReport() {
-    const body = {
+  getSettlementConfigBody() {
+    // Columnas oficiales del glosario Account Money. include_withdraw es crítico
+    // para traer transferencias bancarias (WITHDRAWAL / WITHDRAWAL_CANCEL / PAYOUT).
+    return {
       file_name_prefix: `attadia-settlement-${this.userId}`,
       show_fee_prevision: false,
       show_chargeback_cancel: true,
@@ -88,7 +90,6 @@ export class MercadoPagoReportService {
         { key: 'SOURCE_ID' },
         { key: 'EXTERNAL_REFERENCE' },
         { key: 'TRANSACTION_TYPE' },
-        { key: 'DESCRIPTION' },
         { key: 'TRANSACTION_AMOUNT' },
         { key: 'TRANSACTION_CURRENCY' },
         { key: 'FEE_AMOUNT' },
@@ -97,9 +98,32 @@ export class MercadoPagoReportService {
         { key: 'REAL_AMOUNT' },
         { key: 'PAYMENT_METHOD' },
         { key: 'PAYMENT_METHOD_TYPE' },
-        { key: 'METADATA' }
+        { key: 'METADATA' },
+        { key: 'USER_ID' }
       ]
     };
+  }
+
+  async updateReportConfig() {
+    const body = this.getSettlementConfigBody();
+    const response = await fetch(`${MP_BASE}/v1/account/settlement_report/config`, {
+      method: 'PUT',
+      headers: mpAuthHeaders(this.accessToken),
+      body: JSON.stringify(body)
+    });
+
+    if (response.status === 200 || response.status === 201) {
+      console.log('[MP Report] Config actualizada con include_withdraw=true');
+      return response.json();
+    }
+
+    const errorText = await response.text();
+    console.warn('[MP Report] Error actualizando config:', response.status, errorText);
+    return null;
+  }
+
+  async configureReport() {
+    const body = this.getSettlementConfigBody();
 
     const response = await fetch(`${MP_BASE}/v1/account/settlement_report/config`, {
       method: 'POST',
@@ -112,9 +136,10 @@ export class MercadoPagoReportService {
     }
 
     const errorText = await response.text();
-    if (response.status === 409 || errorText.includes('already')) {
-      console.log('[MP Report] Configuración de reporte ya existe, continuando...');
-      return null;
+    if (response.status === 409 || errorText.toLowerCase().includes('already')) {
+      // Config previa pudo haberse creado sin include_withdraw; forzar PUT.
+      console.log('[MP Report] Config ya existe — actualizando para incluir transferencias/retiros...');
+      return this.updateReportConfig();
     }
 
     console.warn('[MP Report] Error configurando reporte:', response.status, errorText);

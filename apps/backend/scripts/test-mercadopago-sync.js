@@ -114,6 +114,23 @@ async function main() {
     return res.json();
   });
 
+  results.accountMovements = await testEndpoint('account/movements (transferencias)', async () => {
+    const movimientos = await adapter.getAccountMovements({
+      since: fechaDesde,
+      limit: 20,
+      maxPages: 2
+    });
+    const sample = movimientos[0]
+      ? {
+          id: movimientos[0].id,
+          amount: movimientos[0].amount,
+          type: movimientos[0].type,
+          detail: movimientos[0].detail || movimientos[0].description
+        }
+      : null;
+    return { count: movimientos.length, sample };
+  });
+
   results.settlementConfig = await testEndpoint('settlement_report/config', async () => {
     const service = new MercadoPagoReportService({ accessToken: ACCESS_TOKEN, userId });
     return service.configureReport();

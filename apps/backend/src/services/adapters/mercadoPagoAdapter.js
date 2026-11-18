@@ -200,71 +200,89 @@ export class MercadoPagoAdapter {
     }).catch(() => ({ available: 0, unavailable: 0 }));
   }
 
-  // Método para obtener movimientos usando el endpoint de account/movements (alternativo)
-  async getAccountMovements({ since, limit = 100 }) {
-    return this.withRetry(async () => {
-      console.log('Obteniendo movimientos de cuenta MercadoPago...', {
-        since: since || 'sin filtro de fecha',
-        limit,
-        userId: this.userId
-      });
-      
-      // Construir URL para el endpoint de movimientos de cuenta
-      let url = 'https://api.mercadopago.com/v1/account/movements/search';
-      const params = new URLSearchParams();
-      
-      if (since) {
-        // Para este endpoint usamos date_created_from y date_created_to
-        params.append('date_created_from', since);
-        // end_date se puede omitir para obtener hasta la fecha actual
-      }
-      
-      // Agregar límite para evitar respuestas muy grandes
-      params.append('limit', limit.toString());
-      
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-      
-      console.log('URL de consulta movimientos de cuenta:', url);
-      
-      const response = await fetch(url, { headers: mpAuthHeaders(this.accessToken) });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response from MercadoPago account movements:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText,
-          userId: this.userId,
-          url
-        });
-        
-        // Manejar errores específicos de MercadoPago
-        if (response.status === 401) {
-          throw new Error('Token de acceso expirado o inválido');
-        } else if (response.status === 403) {
-          throw new Error('Acceso denegado - verificar permisos de la aplicación');
-        } else if (response.status === 429) {
-          throw new Error('Rate limit excedido - intentar más tarde');
+  /**
+   * Movimientos de dinero en cuenta (incluye transferencias / retiros que no
+   * siempre aparecen en payments/search). Prueba endpoints actuales y legacy.
+   */
+  async getAccountMovements({ since, limit = 100, maxPages = 10 }) {
+    const pageSize = Math.min(limit, 100);
+    const candidates = [
+      {
+        name: 'v1/account/movements/search',
+        buildUrl: (offset) => {
+          const params = new URLSearchParams();
+          if (since) {
+            params.append('date_created_from', since);
+            params.append('date_created_to', new Date().toISOString());
+          }
+          params.append('limit', String(pageSize));
+          params.append('offset', String(offset));
+          return `https://api.mercadopago.com/v1/account/movements/search?${params}`;
         }
-        
-        throw new Error(`Error obteniendo movimientos de cuenta: ${response.status} - ${errorText}`);
+      },
+      {
+        name: 'mercadopago_account/movements/search',
+        buildUrl: (offset) => {
+          const params = new URLSearchParams();
+          if (since) {
+            params.append('range', 'date_created');
+            params.append('begin_date', since);
+            params.append('end_date', new Date().toISOString());
+          }
+          params.append('limit', String(pageSize));
+          params.append('offset', String(offset));
+          return `https://api.mercadopago.com/mercadopago_account/movements/search?${params}`;
+        }
       }
-      
-      const data = await response.json();
-      const results = data.results || [];
-      
-      console.log(`Movimientos de cuenta obtenidos: ${results.length}`, {
-        userId: this.userId,
-        since,
-        limit,
-        totalResults: results.length,
-        hasPaging: !!data.paging
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        const results = await this.fetchAllAccountMovements(candidate, pageSize, maxPages);
+        if (results.length > 0 || candidate === candidates[candidates.length - 1]) {
+          console.log(`[MP] Movimientos de cuenta (${candidate.name}): ${results.length}`);
+          return results;
+        }
+      } catch (error) {
+        console.warn(`[MP] ${candidate.name} no disponible:`, error.message);
+      }
+    }
+
+    return [];
+  }
+
+  async fetchAllAccountMovements(candidate, pageSize, maxPages) {
+    const all = [];
+    let offset = 0;
+    let total = Infinity;
+
+    for (let page = 0; page < maxPages && offset < total; page++) {
+      const pageResults = await this.withRetry(async () => {
+        const url = candidate.buildUrl(offset);
+        const response = await fetch(url, { headers: mpAuthHeaders(this.accessToken) });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          if (response.status === 401) throw new Error('Token de acceso expirado o inválido');
+          if (response.status === 403) throw new Error('Acceso denegado - verificar permisos de la aplicación');
+          if (response.status === 429) throw new Error('Rate limit excedido - intentar más tarde');
+          throw new Error(`${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        return {
+          results: data.results || data.elements || (Array.isArray(data) ? data : []),
+          total: data.paging?.total ?? data.total ?? null
+        };
       });
-      
-      return results;
-    });
+
+      all.push(...pageResults.results);
+      if (pageResults.total != null) total = pageResults.total;
+      if (pageResults.results.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return all;
   }
 
   // Método para obtener transacciones usando el endpoint de merchant_orders

@@ -8,7 +8,9 @@ import {
   determinarTipoPago,
   formatearDescripcionPago as fmtDescripcionPago,
   formatearDescripcionMovimiento as fmtDescripcionMov,
-  mapearEstadoPago as mapEstadoPago
+  extraerContrapartePago,
+  mapearEstadoPago as mapEstadoPago,
+  normalizeAccountMovement
 } from './mercadoPagoUtils.js';
 
 export class MercadoPagoDataService {
@@ -37,7 +39,7 @@ export class MercadoPagoDataService {
         {
           tipo: 'modo_diagnostico',
           mensaje:
-            'Solo diagnóstico. La sync real usa bankSyncService (pagos + settlement report). Endpoints legacy account/movements y merchant_orders no aplican a wallet personal.'
+            'Solo diagnóstico. La sync real usa bankSyncService (pagos + settlement WITHDRAWAL + account/movements para transferencias).'
         }
       ];
 
@@ -78,21 +80,50 @@ export class MercadoPagoDataService {
         }
       }
 
+      let movimientosCuentaRaw = [];
+      try {
+        movimientosCuentaRaw = await this.mpAdapter.getAccountMovements({
+          since: fechaDesdeISO,
+          limit,
+          maxPages: 5
+        });
+      } catch (error) {
+        console.warn('Account movements no disponible en diagnóstico:', error.message);
+        errores.push({ tipo: 'account_movements', error: error.message });
+      }
+
+      const movimientosCuentaNorm = movimientosCuentaRaw
+        .map(normalizeAccountMovement)
+        .filter(Boolean);
+
       const resultados = {
         modo: 'diagnostico',
         usuario: userInfo,
         pagos,
-        movimientosCuenta: movimientosReporte.map((row) => ({
-          id: row.sourceId || row.id,
-          description: row.description || row.transactionType || row.raw?.TRANSACTION_TYPE,
-          amount: row.netAmount ?? row.amount,
-          type: (row.netAmount ?? row.amount) >= 0 ? 'credit' : 'debit',
-          status: 'available',
-          date_created: row.date,
-          currency_id: 'ARS',
-          _fromSettlementReport: true
-        })),
+        movimientosCuenta: [
+          ...movimientosReporte.map((row) => ({
+            id: row.sourceId || row.id,
+            description: row.description || row.transactionType || row.raw?.TRANSACTION_TYPE,
+            amount: row.netAmount ?? row.amount,
+            type: (row.netAmount ?? row.amount) >= 0 ? 'credit' : 'debit',
+            status: 'available',
+            date_created: row.date,
+            currency_id: 'ARS',
+            _fromSettlementReport: true
+          })),
+          ...movimientosCuentaNorm.map((row) => ({
+            id: row.sourceId || row.id,
+            description: row.description || row.transactionType,
+            amount: row.netAmount ?? row.amount,
+            type: (row.netAmount ?? row.amount) >= 0 ? 'credit' : 'debit',
+            status: 'available',
+            date_created: row.date,
+            currency_id: row.currency || 'ARS',
+            _fromAccountMovements: true
+          }))
+        ],
         movimientosReporte,
+        movimientosCuentaRaw,
         ordenesComerciante: [],
         reportePendiente,
         avisos,
@@ -102,6 +133,7 @@ export class MercadoPagoDataService {
       console.log('[MP Diagnóstico] Resultado:', {
         totalPagos: resultados.pagos.length,
         totalMovimientosReporte: movimientosReporte.length,
+        totalAccountMovements: movimientosCuentaRaw.length,
         errores: errores.length
       });
 
@@ -213,7 +245,9 @@ export class MercadoPagoDataService {
       const moneda = await this.obtenerOCrearMoneda(pago.currency_id || 'ARS');
       const comisiones = calcComisiones(pago);
       const montoNeto = monto - comisiones.total;
-      const descripcion = fmtDescripcionPago(pago);
+      const userId = this.mpAdapter.userId;
+      const contraparte = extraerContrapartePago(pago, userId);
+      const descripcion = fmtDescripcionPago(pago, userId);
 
       const nuevaTransaccion = new Transacciones({
         descripcion,
@@ -222,7 +256,7 @@ export class MercadoPagoDataService {
         fecha: new Date(pago.date_created),
         categoria: this.categorizarTransaccion(descripcion),
         estado: mapEstadoPago(pago.status),
-        tipo: determinarTipoPago(pago, this.mpAdapter.userId),
+        tipo: determinarTipoPago(pago, userId),
         usuario: this.usuarioId,
         cuenta: cuentaId,
         moneda: moneda._id,
@@ -242,7 +276,15 @@ export class MercadoPagoDataService {
             payerId: pago.payer?.id,
             transactionAmount: pago.transaction_amount,
             netReceivedAmount: pago.transaction_details?.net_received_amount,
-            totalPaidAmount: pago.transaction_details?.total_paid_amount
+            totalPaidAmount: pago.transaction_details?.total_paid_amount,
+            description: pago.description || null,
+            statementDescriptor: pago.statement_descriptor || null,
+            itemTitle: pago.additional_info?.items?.[0]?.title || null,
+            counterpartyName: contraparte?.name || null,
+            counterpartyLabel: contraparte?.label || null,
+            counterpartyRole: contraparte?.role || null,
+            counterpartyId: contraparte?.id || null,
+            counterpartyEmail: contraparte?.email || null
           }
         }
       });

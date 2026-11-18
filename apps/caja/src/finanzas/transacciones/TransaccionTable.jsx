@@ -1,25 +1,34 @@
 import React, { useState } from 'react';
 import {
+  Box,
+  Chip,
+  Collapse,
+  Divider,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableRow,
-  IconButton,
   Tooltip,
-  Collapse,
-  Box,
-  Typography
+  Typography,
 } from '@mui/material';
 import { useResponsive } from '@shared/hooks';
-import { formatFinanzasMontoCompact } from '@shared/utils/formatFinanzasMonto';
+import { formatFinanzasMonto, formatFinanzasMontoCompact } from '@shared/utils/formatFinanzasMonto';
 import {
-  formatMpTransactionDescription,
+  buildTransactionListMeta,
+  formatMpTransactionTitle,
+  formatPaymentMethodLabel,
+  getComisionesTotal,
+  getCounterparty,
+  getOrigenMetadata,
+  hasNetoDistinct,
   isMercadoPagoOrigen,
+  mapearTipoTransaccionMpDisplay,
 } from '@shared/utils/mpDisplayUtils';
 import { getEstadoColor, getStatusIconComponent } from '@shared/components/common/StatusSystem';
-import { 
-  EditOutlined as EditIcon, 
+import {
+  EditOutlined as EditIcon,
   DeleteOutlined as DeleteIcon,
   AccountBalanceOutlined as AccountIcon,
   Receipt,
@@ -29,8 +38,51 @@ import {
   LocalBar as Cocktail,
   DirectionsBus,
   Devices,
-  MoreHoriz
+  MoreHoriz,
+  SouthWestRounded,
+  NorthEastRounded,
+  AccountBalanceWalletOutlined,
 } from '@mui/icons-material';
+
+function DetailRow({ label, value, icon = null }) {
+  if (value == null || value === '') return null;
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        minHeight: 28,
+      }}
+    >
+      <Typography
+        variant="caption"
+        sx={{
+          color: 'text.secondary',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+        {label}
+      </Typography>
+      <Box
+        sx={{
+          fontSize: '0.8125rem',
+          color: 'text.primary',
+          textAlign: 'right',
+          fontWeight: 500,
+          lineHeight: 1.3,
+        }}
+      >
+        {value}
+      </Box>
+    </Box>
+  );
+}
 
 const TransaccionTable = ({
   transacciones,
@@ -47,42 +99,73 @@ const TransaccionTable = ({
     setExpandedRow(expandedRow === id ? null : id);
   };
 
-  const getMontoStyle = (transaccion) => ({
-    fontWeight: 500,
-    color: transaccion.tipo === 'INGRESO' ? 
-      (transaccion.cuenta?.moneda?.color || '#75AADB') : // Color de la moneda o celeste por defecto
-      '#b15757', // Rojo para gastos
-    fontSize: '0.875rem'
-  });
+  const getMontoColor = (transaccion) => (
+    transaccion.tipo === 'INGRESO'
+      ? (transaccion.cuenta?.moneda?.color || 'success.main')
+      : 'error.main'
+  );
 
-  const formatMonto = (monto) => {
+  const formatMonto = (monto, compact = true) => {
     if (!showValues) return '****';
-    return formatFinanzasMontoCompact(monto);
+    const simbolo = '';
+    return compact
+      ? formatFinanzasMontoCompact(monto, { simbolo })
+      : formatFinanzasMonto(monto, { simbolo });
   };
 
-  const formatFechaShort = (fecha) => {
+  const formatFechaFull = (fecha) => {
     const date = new Date(fecha);
-    return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
-  };
-
-  const getEstadoIcon = (estado) => {
-    // Normalizar estado: PAGADO -> COMPLETADA, CANCELADO -> CANCELADA
-    let estadoNormalizado = estado;
-    if (estado === 'PAGADO') estadoNormalizado = 'COMPLETADA';
-    if (estado === 'CANCELADO') estadoNormalizado = 'CANCELADA';
-    
-    const color = getEstadoColor(estadoNormalizado, 'TRANSACCION');
-    const iconElement = getStatusIconComponent(estadoNormalizado, 'TRANSACCION');
-    
-    // Clonar el elemento y aplicar el color
-    return React.cloneElement(iconElement, { 
-      sx: { fontSize: 16, color } 
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString('es-AR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
-  const getCategoriaIcon = (categoria) => {
+  const formatEstado = (estado) => {
+    if (!estado) return '—';
+    let normalized = estado;
+    if (estado === 'PAGADO') normalized = 'COMPLETADA';
+    if (estado === 'CANCELADO') normalized = 'CANCELADA';
+    return normalized.charAt(0) + normalized.slice(1).toLowerCase();
+  };
+
+  const getEstadoIcon = (estado) => {
+    let estadoNormalizado = estado;
+    if (estado === 'PAGADO') estadoNormalizado = 'COMPLETADA';
+    if (estado === 'CANCELADO') estadoNormalizado = 'CANCELADA';
+    const color = getEstadoColor(estadoNormalizado, 'TRANSACCION');
+    const iconElement = getStatusIconComponent(estadoNormalizado, 'TRANSACCION');
+    return React.cloneElement(iconElement, { sx: { fontSize: 16, color } });
+  };
+
+  const getRowIcon = (transaccion) => {
+    const mp = isMercadoPagoOrigen(transaccion.origen);
+    const common = { sx: { fontSize: 18 } };
+
+    if (mp) {
+      return (
+        <AccountBalanceWalletOutlined
+          sx={{
+            ...common.sx,
+            color: transaccion.tipo === 'INGRESO' ? 'success.main' : 'text.secondary',
+          }}
+        />
+      );
+    }
+
+    if (transaccion.tipo === 'INGRESO') {
+      return <SouthWestRounded sx={{ ...common.sx, color: 'success.main' }} />;
+    }
+    if (transaccion.tipo === 'EGRESO') {
+      return <NorthEastRounded sx={{ ...common.sx, color: 'error.main' }} />;
+    }
+
     const iconProps = { sx: { fontSize: 18, color: 'text.secondary' } };
-    switch (categoria) {
+    switch (transaccion.categoria) {
       case 'Contabilidad y Facturas':
         return <Receipt {...iconProps} />;
       case 'Comida y Mercado':
@@ -102,252 +185,364 @@ const TransaccionTable = ({
     }
   };
 
-  const formatEstado = (estado) => {
-    return estado.charAt(0).toUpperCase() + estado.slice(1).toLowerCase();
-  };
-
-  const formatFecha = (fecha) => {
-    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const date = new Date(fecha);
-    return `${date.getDate()}${meses[date.getMonth()]}`;
-  };
+  const simbolo = (t) => t.cuenta?.moneda?.simbolo || '$';
 
   return (
-    <TableContainer 
+    <TableContainer
       sx={{
         width: '100%',
         overflowX: 'auto',
         backgroundColor: 'transparent',
         '& .MuiTableCell-root': {
           border: 'none',
-          py: isAccountDetail ? 1 : 0.75,
+          py: isAccountDetail ? 1.25 : 1,
           px: 1.5,
           fontSize: '0.875rem',
-          height: isAccountDetail ? 'auto' : 32,
-          lineHeight: 1.2,
-          whiteSpace: isAccountDetail ? 'normal' : 'nowrap'
-        },
-        '& .descripcion': {
-          color: 'text.secondary',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          maxWidth: {
-            xs: '180px',
-            sm: '300px',
-            md: '500px'
-          }
+          lineHeight: 1.25,
+          whiteSpace: 'normal',
         },
         '& .MuiTableRow-root': {
-          borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+          borderBottom: '1px solid',
+          borderColor: 'divider',
         },
         '& .MuiTableRow-root:last-of-type': {
-          borderBottom: 'none'
-        }
+          borderBottom: 'none',
+        },
       }}
     >
-      <Table size="small" sx={{ minWidth: isMobile ? 'unset' : 400 }}>
+      <Table size="small" sx={{ minWidth: isMobile ? 'unset' : 420 }}>
         <TableBody>
           {transacciones.map((transaccion) => {
             const rowId = transaccion.id || transaccion._id;
-            const displayDescripcion = formatMpTransactionDescription(
+            const expanded = expandedRow === rowId;
+            const title = formatMpTransactionTitle(
               transaccion.descripcion,
               transaccion.origen
             );
+            const counterparty = getCounterparty(transaccion);
+            const metaLine = buildTransactionListMeta(transaccion, {
+              includeDate: true,
+            });
             const mpOrigen = isMercadoPagoOrigen(transaccion.origen);
+            const meta = getOrigenMetadata(transaccion.origen);
+            const comisionesTotal = getComisionesTotal(transaccion);
+            const showNeto = hasNetoDistinct(transaccion);
+            const methodLabel = formatPaymentMethodLabel(
+              meta.paymentMethod,
+              meta.paymentMethodId
+            );
+            const typeLabel = mapearTipoTransaccionMpDisplay(meta.transactionType);
+            const origenLabel =
+              transaccion.origen?.tipo === 'MERCADOPAGO_MOVIMIENTO'
+                ? 'Movimiento de wallet'
+                : transaccion.origen?.tipo === 'MERCADOPAGO_PAGO'
+                  ? 'Pago Mercado Pago'
+                  : null;
 
             return (
-            <React.Fragment key={rowId}>
-              <TableRow 
-                onClick={() => handleRowClick(rowId)}
-                sx={{
-                  cursor: 'pointer',
-                  transition: 'background-color 0.2s ease',
-                  bgcolor: expandedRow === rowId ? 
-                    'rgba(0, 0, 0, 0.03)' : 'inherit',
-                  '&:hover': {
-                    bgcolor: 'rgba(0, 0, 0, 0.02)',
-                    ...(isAccountDetail ? {} : { transform: 'translateX(4px)' }),
-                  }
-                }}
-              >
-                <TableCell sx={{ 
-                  display: 'flex',
-                  alignItems: isAccountDetail ? 'flex-start' : 'center',
-                  gap: 1
-                }}>
-                  {getCategoriaIcon(transaccion.categoria)}
-                  {isAccountDetail ? (
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography
-                        className="descripcion"
-                        sx={{ color: 'text.primary', fontWeight: 500, display: 'block' }}
+              <React.Fragment key={rowId}>
+                <TableRow
+                  onClick={() => handleRowClick(rowId)}
+                  sx={{
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s ease',
+                    bgcolor: expanded ? 'action.hover' : 'transparent',
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <TableCell sx={{ width: '100%' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+                      <Box
+                        sx={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          bgcolor: 'action.hover',
+                          mt: 0.15,
+                        }}
                       >
-                        {displayDescripcion}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                        {formatFechaShort(transaccion.fecha)}
-                        {mpOrigen ? ' · MP' : ''}
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <Typography className="descripcion">
-                      {displayDescripcion}
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell align="right" sx={{ width: isMobile ? '35%' : '140px', verticalAlign: isAccountDetail ? 'top' : 'middle' }}>
-                  <Typography sx={getMontoStyle(transaccion)}>
-                    {transaccion.cuenta?.moneda?.simbolo} {formatMonto(transaccion.monto)}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-              <TableRow 
-                sx={{ 
-                  display: expandedRow === rowId ? 'table-row' : 'none'
-                }}
-              >
-                <TableCell colSpan={2} sx={{ p: 0 }}>
-                  <Collapse in={expandedRow === rowId}>
-                    <Box sx={{ 
-                      py: 1,
-                      px: 2,
-                      bgcolor: 'rgba(0, 0, 0, 0.02)',
-                      borderRadius: 1,
-                      mx: 1,
-                      my: 0.5
-                    }}>
-                      <Box sx={{ 
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 1
-                      }}>
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}>
-                          <Typography variant="caption" sx={{ 
-                            color: 'text.secondary', 
-                            fontSize: '0.75rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.5
-                          }}>
-                            Fecha
-                          </Typography>
-                          <Typography variant="body2" sx={{ 
-                            fontSize: '0.875rem',
-                            color: 'text.secondary'
-                          }}>
-                            {formatFecha(transaccion.fecha)}
-                          </Typography>
-                        </Box>
+                        {getRowIcon(transaccion)}
+                      </Box>
 
-                        <Box sx={{ 
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}>
-                          <Typography variant="caption" sx={{ 
-                            color: 'text.secondary', 
-                            fontSize: '0.75rem',
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Box
+                          sx={{
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.5
-                          }}>
-                            Estado
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            {getEstadoIcon(transaccion.estado, 'TRANSACCION')}
-                            <Typography variant="body2" sx={{ 
-                              fontSize: '0.875rem',
-                              color: 'text.secondary'
-                            }}>
-                              {formatEstado(transaccion.estado)}
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: 1.5,
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            {counterparty?.label && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block', lineHeight: 1.2, mb: 0.15 }}
+                              >
+                                {counterparty.label}
+                              </Typography>
+                            )}
+                            <Typography
+                              sx={{
+                                fontWeight: 560,
+                                fontSize: '0.875rem',
+                                color: 'text.primary',
+                                lineHeight: 1.3,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}
+                            >
+                              {title}
                             </Typography>
+                          </Box>
+
+                          <Box sx={{ textAlign: 'right', flexShrink: 0, minWidth: 88 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 650,
+                                fontSize: '0.875rem',
+                                color: getMontoColor(transaccion),
+                                fontVariantNumeric: 'tabular-nums',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {transaccion.tipo === 'EGRESO' ? '−' : '+'}
+                              {simbolo(transaccion)} {formatMonto(transaccion.monto)}
+                            </Typography>
+                            {showNeto && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block', fontVariantNumeric: 'tabular-nums' }}
+                              >
+                                neto {simbolo(transaccion)} {formatMonto(transaccion.montoNeto)}
+                              </Typography>
+                            )}
                           </Box>
                         </Box>
 
-                        {transaccion.cuenta && (
-                          <Box sx={{ 
+                        <Box
+                          sx={{
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'space-between'
-                          }}>
-                            <Typography variant="caption" sx={{ 
-                              color: 'text.secondary', 
-                              fontSize: '0.75rem',
+                            flexWrap: 'wrap',
+                            gap: 0.75,
+                            mt: 0.5,
+                          }}
+                        >
+                          <Chip
+                            size="small"
+                            label={transaccion.tipo === 'INGRESO' ? 'Ingreso' : 'Egreso'}
+                            sx={{
+                              height: 20,
+                              fontSize: '0.65rem',
+                              fontWeight: 600,
+                              borderRadius: 1,
+                              bgcolor:
+                                transaccion.tipo === 'INGRESO'
+                                  ? 'success.main'
+                                  : 'error.main',
+                              color: 'common.white',
+                              opacity: 0.9,
+                              '& .MuiChip-label': { px: 0.75 },
+                            }}
+                          />
+                          {mpOrigen && (
+                            <Chip
+                              size="small"
+                              label="MP"
+                              variant="outlined"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.65rem',
+                                fontWeight: 600,
+                                borderRadius: 1,
+                                borderColor: 'divider',
+                                color: 'text.secondary',
+                                '& .MuiChip-label': { px: 0.75 },
+                              }}
+                            />
+                          )}
+                          {metaLine && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{
+                                lineHeight: 1.2,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                maxWidth: { xs: '58vw', sm: 360 },
+                              }}
+                            >
+                              {metaLine}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+
+                <TableRow sx={{ display: expanded ? 'table-row' : 'none' }}>
+                  <TableCell sx={{ p: 0, borderBottom: expanded ? undefined : 'none' }}>
+                    <Collapse in={expanded}>
+                      <Box
+                        sx={{
+                          mx: 1.5,
+                          mb: 1.25,
+                          mt: 0.25,
+                          px: 1.5,
+                          py: 1.25,
+                          borderRadius: 1.5,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          bgcolor: 'background.paper',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                          <DetailRow label="Fecha" value={formatFechaFull(transaccion.fecha)} />
+                          <DetailRow
+                            label="Estado"
+                            value={
+                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                {getEstadoIcon(transaccion.estado)}
+                                {formatEstado(transaccion.estado)}
+                              </Box>
+                            }
+                          />
+                          {transaccion.cuenta?.nombre && (
+                            <DetailRow
+                              label="Cuenta"
+                              icon={<AccountIcon sx={{ fontSize: 14 }} />}
+                              value={transaccion.cuenta.nombre}
+                            />
+                          )}
+                          {transaccion.categoria && (
+                            <DetailRow label="Categoría" value={transaccion.categoria} />
+                          )}
+                          {counterparty?.name && (
+                            <DetailRow
+                              label={counterparty.label || 'Contraparte'}
+                              value={
+                                counterparty.email
+                                  ? `${counterparty.name} (${counterparty.email})`
+                                  : counterparty.name
+                              }
+                            />
+                          )}
+                          {origenLabel && <DetailRow label="Origen" value={origenLabel} />}
+                          {typeLabel && <DetailRow label="Tipo MP" value={typeLabel} />}
+                          {methodLabel && <DetailRow label="Método" value={methodLabel} />}
+                          {meta.description && meta.description !== counterparty?.name && (
+                            <DetailRow label="Detalle MP" value={meta.description} />
+                          )}
+                          {meta.installments > 1 && (
+                            <DetailRow label="Cuotas" value={`${meta.installments}`} />
+                          )}
+
+                          {(showNeto || comisionesTotal > 0) && (
+                            <>
+                              <Divider sx={{ my: 0.5 }} />
+                              <DetailRow
+                                label="Monto bruto"
+                                value={`${simbolo(transaccion)} ${formatMonto(transaccion.monto, false)}`}
+                              />
+                              {comisionesTotal > 0 && (
+                                <DetailRow
+                                  label="Comisiones"
+                                  value={`− ${simbolo(transaccion)} ${formatMonto(comisionesTotal, false)}`}
+                                />
+                              )}
+                              {transaccion.comisiones?.mercadopago > 0 && (
+                                <DetailRow
+                                  label="· Mercado Pago"
+                                  value={`${simbolo(transaccion)} ${formatMonto(transaccion.comisiones.mercadopago, false)}`}
+                                />
+                              )}
+                              {transaccion.comisiones?.financieras > 0 && (
+                                <DetailRow
+                                  label="· Financiación"
+                                  value={`${simbolo(transaccion)} ${formatMonto(transaccion.comisiones.financieras, false)}`}
+                                />
+                              )}
+                              {showNeto && (
+                                <DetailRow
+                                  label="Monto neto"
+                                  value={`${simbolo(transaccion)} ${formatMonto(transaccion.montoNeto, false)}`}
+                                />
+                              )}
+                            </>
+                          )}
+                        </Box>
+
+                        {(onEdit || onDelete) && (
+                          <Box
+                            sx={{
                               display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.5
-                            }}>
-                              <AccountIcon sx={{ fontSize: 16 }} />
-                              Cuenta
-                            </Typography>
-                            <Typography variant="body2" sx={{ 
-                              fontSize: '0.875rem',
-                              color: 'text.secondary'
-                            }}>
-                              {transaccion.cuenta.nombre}
-                            </Typography>
+                              justifyContent: 'flex-end',
+                              gap: 0.5,
+                              mt: 1.25,
+                              pt: 1,
+                              borderTop: '1px solid',
+                              borderColor: 'divider',
+                            }}
+                          >
+                            {onEdit && (
+                              <Tooltip title="Editar" arrow>
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEdit(transaccion);
+                                  }}
+                                  sx={{
+                                    color: 'text.secondary',
+                                    '&:hover': {
+                                      color: 'primary.main',
+                                      bgcolor: theme.palette.primary.main + '14',
+                                    },
+                                  }}
+                                >
+                                  <EditIcon sx={{ fontSize: 18 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            {onDelete && (
+                              <Tooltip title="Eliminar" arrow>
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDelete(transaccion);
+                                  }}
+                                  sx={{
+                                    color: 'text.secondary',
+                                    '&:hover': {
+                                      color: 'error.main',
+                                      bgcolor: theme.palette.error.main + '14',
+                                    },
+                                  }}
+                                >
+                                  <DeleteIcon sx={{ fontSize: 18 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                           </Box>
                         )}
                       </Box>
-
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'flex-end',
-                        gap: 1,
-                        mt: 2,
-                        pt: 1,
-                        borderTop: '1px solid rgba(224, 224, 224, 0.4)'
-                      }}>
-                        {onEdit && (
-                        <Tooltip title="Editar" arrow>
-                          <IconButton 
-                            size="small" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEdit(transaccion);
-                            }}
-                            sx={{ 
-                              color: 'text.secondary',
-                              '&:hover': { 
-                                color: theme.palette.primary.main,
-                                bgcolor: theme.palette.primary.light + '20'
-                              }
-                            }}
-                          >
-                            <EditIcon sx={{ fontSize: 20 }} />
-                          </IconButton>
-                        </Tooltip>
-                        )}
-                        {onDelete && (
-                        <Tooltip title="Eliminar" arrow>
-                          <IconButton 
-                            size="small" 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete(transaccion);
-                            }}
-                            sx={{ 
-                              color: 'text.secondary',
-                              '&:hover': { 
-                                color: theme.palette.error.main,
-                                bgcolor: theme.palette.error.light + '20'
-                              }
-                            }}
-                          >
-                            <DeleteIcon sx={{ fontSize: 20 }} />
-                          </IconButton>
-                        </Tooltip>
-                        )}
-                      </Box>
-                    </Box>
-                  </Collapse>
-                </TableCell>
-              </TableRow>
-            </React.Fragment>
+                    </Collapse>
+                  </TableCell>
+                </TableRow>
+              </React.Fragment>
             );
           })}
         </TableBody>

@@ -8,8 +8,13 @@ import {
   determinarTipoMovimiento,
   formatearDescripcionPago,
   formatearDescripcionMovimiento,
+  extraerContrapartePago,
+  extraerContraparteMovimiento,
   mapearEstadoPago,
-  getMpSyncDays
+  getMpSyncDays,
+  normalizeAccountMovement,
+  esTipoTransferenciaMovimiento,
+  esTransferenciaPago
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
@@ -397,9 +402,27 @@ export class BankSyncService {
         errores.push({ tipo: 'settlement_report', error: error.message });
       }
 
+      // Transferencias/retiros: settlement WITHDRAWAL + account/movements.
+      // payments/search no cubre retiros a CBU/CVU; movements cubre huecos del CSV.
+      let accountMovements = [];
+      try {
+        const rawMovements = await mpAdapter.getAccountMovements({
+          since: fechaDesde.toISOString(),
+          limit: 100,
+          maxPages: 20
+        });
+        accountMovements = rawMovements.map(normalizeAccountMovement).filter(Boolean);
+        console.log(`✅ Movimientos de cuenta (transferencias): ${accountMovements.length}`);
+      } catch (error) {
+        console.warn('⚠️ Account movements no disponible:', error.message);
+        errores.push({ tipo: 'account_movements', error: error.message });
+      }
+
+      const movimientosMerged = this.mergeMovimientosMp(movimientos, accountMovements);
+
       let balance = await mpAdapter.getAccountBalance();
-      if ((!balance.available && !balance.unavailable) && movimientos.length > 0) {
-        const fromReport = extractBalanceFromRows(movimientos);
+      if ((!balance.available && !balance.unavailable) && movimientosMerged.length > 0) {
+        const fromReport = extractBalanceFromRows(movimientosMerged);
         if (fromReport.available != null) {
           balance = { available: fromReport.available, unavailable: 0 };
         }
@@ -412,7 +435,7 @@ export class BankSyncService {
       transaccionesNuevas += pagosResult.nuevas;
       transaccionesActualizadas += pagosResult.actualizadas;
 
-      const movResult = await this.procesarMovimientosReporte(movimientos, bankConnection, cuenta);
+      const movResult = await this.procesarMovimientosReporte(movimientosMerged, bankConnection, cuenta);
       transaccionesNuevas += movResult.nuevas;
       transaccionesActualizadas += movResult.actualizadas;
 
@@ -448,7 +471,15 @@ export class BankSyncService {
         detalles: {
           usuario: userInfo.nickname || userInfo.email,
           totalPagos: pagos.length,
-          totalMovimientos: movimientos.length,
+          totalMovimientos: movimientosMerged.length,
+          totalSettlementRows: movimientos.length,
+          totalAccountMovements: accountMovements.length,
+          transferenciasSettlement: movimientos.filter((m) =>
+            esTipoTransferenciaMovimiento(m.transactionType)
+          ).length,
+          transferenciasAccount: accountMovements.filter((m) =>
+            esTipoTransferenciaMovimiento(m.transactionType)
+          ).length,
           totalCsvRows,
           movimientosImportados: movResult.nuevas,
           movimientosOmitidos: movResult.omitidas,
@@ -463,6 +494,32 @@ export class BankSyncService {
       await bankConnection.actualizarSincronizacion('ERROR', 0, 0, error.message);
       return { exito: false, error: error.message };
     }
+  }
+
+  mergeMovimientosMp(settlementRows = [], accountRows = []) {
+    const byId = new Map();
+    for (const row of settlementRows) {
+      const key = String(row.sourceId || row.id || '');
+      if (key) byId.set(key, row);
+    }
+    for (const row of accountRows) {
+      const key = String(row.sourceId || row.id || '');
+      if (!key) continue;
+      if (!byId.has(key)) {
+        byId.set(key, row);
+        continue;
+      }
+      // Preferir settlement; enriquecer descripción/contraparte si el movement la trae
+      const existing = byId.get(key);
+      if (!existing.description && row.description) {
+        byId.set(key, {
+          ...existing,
+          description: row.description,
+          raw: { ...(existing.raw || {}), DESCRIPTION: row.description, ...(row.raw || {}) }
+        });
+      }
+    }
+    return Array.from(byId.values());
   }
 
   async procesarPagosMercadoPago(pagos, bankConnection, cuenta, userId) {
@@ -483,7 +540,9 @@ export class BankSyncService {
         const comisiones = calcularComisiones(pago);
         const monto = Math.abs(pago.transaction_amount || 0);
         const montoNeto = monto - comisiones.total;
-        const descripcion = formatearDescripcionPago(pago);
+        const contraparte = extraerContrapartePago(pago, userId);
+        const descripcion = formatearDescripcionPago(pago, userId);
+        const isTransfer = esTransferenciaPago(pago);
 
         const nuevaTransaccion = new Transacciones({
           descripcion,
@@ -509,10 +568,20 @@ export class BankSyncService {
               statusDetail: pago.status_detail,
               paymentMethod: pago.payment_method?.type,
               paymentMethodId: pago.payment_method_id,
+              operationType: pago.operation_type || null,
+              isTransfer,
               collectorId: pago.collector_id,
               payerId: pago.payer?.id,
               currencyId: pago.currency_id,
-              installments: pago.installments
+              installments: pago.installments,
+              description: pago.description || null,
+              statementDescriptor: pago.statement_descriptor || null,
+              itemTitle: pago.additional_info?.items?.[0]?.title || null,
+              counterpartyName: contraparte?.name || null,
+              counterpartyLabel: contraparte?.label || null,
+              counterpartyRole: contraparte?.role || null,
+              counterpartyId: contraparte?.id || null,
+              counterpartyEmail: contraparte?.email || null
             }
           }
         });
@@ -551,7 +620,17 @@ export class BankSyncService {
 
         const monto = Math.abs(mov.amount || mov.netAmount || 0);
         const montoNeto = Math.abs(mov.netAmount || monto);
-        const descripcion = formatearDescripcionMovimiento(mov.raw || mov);
+        const rowSource = {
+          ...(mov.raw || {}),
+          ...mov,
+          netAmount: mov.netAmount,
+          TRANSACTION_TYPE: mov.transactionType || mov.raw?.TRANSACTION_TYPE,
+          DESCRIPTION: mov.description || mov.raw?.DESCRIPTION,
+          EXTERNAL_REFERENCE: mov.externalReference || mov.raw?.EXTERNAL_REFERENCE,
+          SETTLEMENT_NET_AMOUNT: mov.netAmount ?? mov.raw?.SETTLEMENT_NET_AMOUNT
+        };
+        const contraparte = extraerContraparteMovimiento(rowSource);
+        const descripcion = formatearDescripcionMovimiento(rowSource);
 
         const transaccion = new Transacciones({
           descripcion,
@@ -581,7 +660,11 @@ export class BankSyncService {
               paymentMethodType: mov.paymentMethodType,
               externalReference: mov.externalReference,
               currency: mov.currency,
-              source: 'settlement_report'
+              source: mov.source || 'settlement_report',
+              isTransfer: esTipoTransferenciaMovimiento(mov.transactionType),
+              counterpartyName: contraparte?.name || null,
+              counterpartyLabel: contraparte?.label || null,
+              counterpartyRole: contraparte?.role || null
             }
           }
         });

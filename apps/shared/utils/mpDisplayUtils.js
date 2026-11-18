@@ -7,6 +7,9 @@ export const MP_TRANSACTION_TYPE_LABELS = {
   WITHDRAWAL: 'Transferencia bancaria',
   WITHDRAWAL_CANCEL: 'Transferencia cancelada',
   PAYOUT: 'Retiro de efectivo',
+  TRANSFER: 'Transferencia',
+  MONEY_TRANSFER: 'Transferencia',
+  BANK_TRANSFER: 'Transferencia bancaria',
   CASHBACK: 'Cashback',
   SETTLEMENT_SHIPPING: 'Envío aprobado',
   REFUND_SHIPPING: 'Devolución de envío',
@@ -14,7 +17,18 @@ export const MP_TRANSACTION_TYPE_LABELS = {
   DISPUTE_SHIPPING: 'Reclamo de envío',
 };
 
-const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO'];
+const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO', 'MERCADOPAGO'];
+
+const PAYMENT_METHOD_LABELS = {
+  credit_card: 'Tarjeta de crédito',
+  debit_card: 'Tarjeta de débito',
+  prepaid_card: 'Tarjeta prepaga',
+  ticket: 'Efectivo / ticket',
+  bank_transfer: 'Transferencia',
+  account_money: 'Dinero en cuenta',
+  digital_currency: 'Moneda digital',
+  atm: 'Cajero',
+};
 
 export function isMercadoPagoOrigen(origen) {
   if (!origen?.tipo) return false;
@@ -25,6 +39,71 @@ export function mapearTipoTransaccionMpDisplay(type) {
   if (!type) return null;
   const key = String(type).toUpperCase();
   return MP_TRANSACTION_TYPE_LABELS[key] || null;
+}
+
+export function getOrigenMetadata(origen) {
+  if (!origen?.metadata) return {};
+  if (typeof origen.metadata.get === 'function') {
+    const obj = {};
+    origen.metadata.forEach((value, key) => {
+      obj[key] = value;
+    });
+    return obj;
+  }
+  return origen.metadata;
+}
+
+export function formatPaymentMethodLabel(method, methodId) {
+  if (!method && !methodId) return null;
+  const base = PAYMENT_METHOD_LABELS[method] || method || null;
+  if (methodId && methodId !== method) {
+    const id = String(methodId).replace(/_/g, ' ');
+    return base ? `${base} · ${id}` : id;
+  }
+  return base;
+}
+
+export function getCounterparty(transaccion) {
+  const meta = getOrigenMetadata(transaccion?.origen);
+  if (meta.counterpartyName) {
+    return {
+      name: meta.counterpartyName,
+      label: meta.counterpartyLabel || (transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de'),
+      role: meta.counterpartyRole || null,
+      email: meta.counterpartyEmail || null,
+    };
+  }
+
+  // Fallback: inferir desde descripción legacy
+  const formatted = formatMpTransactionDescription(transaccion?.descripcion, transaccion?.origen);
+  const cleaned = (formatted || '').replace(/^MercadoPago\s*[-–—]\s*/i, '').trim();
+  if (!cleaned) return null;
+
+  // Evitar títulos que son solo método de pago
+  const methodOnly = /^(credit_card|debit_card|account_money|bank_transfer|ticket|atm)\b/i;
+  if (methodOnly.test(cleaned)) return null;
+
+  return {
+    name: cleaned.split(' · ')[0].split(' (Ref:')[0].trim(),
+    label: transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de',
+    role: null,
+    email: null,
+  };
+}
+
+/**
+ * Título limpio para listado (prioriza negocio / contraparte).
+ */
+export function formatMpTransactionTitle(descripcion, origen) {
+  const counterparty = getCounterparty({ descripcion, origen });
+  if (counterparty?.name) return counterparty.name;
+
+  const formatted = formatMpTransactionDescription(descripcion, origen);
+  if (!formatted) return 'Movimiento';
+
+  let title = formatted.replace(/^MercadoPago\s*[-–—]\s*/i, '').trim();
+  if (!title) return formatted;
+  return title;
 }
 
 /**
@@ -45,6 +124,67 @@ export function formatMpTransactionDescription(descripcion, origen) {
   }
 
   return result;
+}
+
+/**
+ * Meta secundaria para la fila (fecha · canal · método).
+ */
+export function buildTransactionListMeta(transaccion, { includeDate = true } = {}) {
+  const parts = [];
+  const origen = transaccion?.origen;
+  const meta = getOrigenMetadata(origen);
+
+  if (includeDate && transaccion?.fecha) {
+    const date = new Date(transaccion.fecha);
+    if (!Number.isNaN(date.getTime())) {
+      parts.push(
+        date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+      );
+    }
+  }
+
+  if (isMercadoPagoOrigen(origen)) {
+    if (origen.tipo === 'MERCADOPAGO_MOVIMIENTO') {
+      parts.push('Wallet');
+      const typeLabel = mapearTipoTransaccionMpDisplay(meta.transactionType);
+      if (typeLabel) parts.push(typeLabel);
+      else if (meta.isTransfer) parts.push('Transferencia');
+    } else {
+      parts.push('Mercado Pago');
+      if (meta.isTransfer || String(meta.operationType || '').toLowerCase() === 'money_transfer') {
+        parts.push('Transferencia');
+      } else {
+        const method = formatPaymentMethodLabel(meta.paymentMethod, meta.paymentMethodId);
+        if (method) parts.push(method);
+      }
+      if (meta.installments > 1) parts.push(`${meta.installments} cuotas`);
+    }
+    // Si el título ya es la contraparte, no repetir; si no, sumar label corto
+    if (meta.counterpartyLabel && meta.counterpartyName) {
+      // meta line ya tiene método; el título lleva el nombre
+    }
+  } else if (transaccion?.categoria && transaccion.categoria !== 'Otro') {
+    parts.push(transaccion.categoria);
+  }
+
+  return parts.filter(Boolean).join(' · ');
+}
+
+export function getComisionesTotal(transaccion) {
+  const total = Number(transaccion?.comisiones?.total);
+  if (!Number.isNaN(total) && total > 0) return total;
+  const mp = Number(transaccion?.comisiones?.mercadopago) || 0;
+  const fin = Number(transaccion?.comisiones?.financieras) || 0;
+  const envio = Number(transaccion?.comisiones?.envio) || 0;
+  const sum = mp + fin + envio;
+  return sum > 0 ? sum : 0;
+}
+
+export function hasNetoDistinct(transaccion) {
+  const monto = Number(transaccion?.monto);
+  const neto = Number(transaccion?.montoNeto);
+  if (Number.isNaN(monto) || Number.isNaN(neto)) return false;
+  return Math.abs(monto - neto) > 0.009;
 }
 
 export function formatRelativeSyncTime(dateValue) {
