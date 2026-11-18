@@ -63,28 +63,56 @@ export function formatPaymentMethodLabel(method, methodId) {
   return base;
 }
 
+function isGenericCounterpartyName(name) {
+  if (!name) return true;
+  const cleaned = String(name).trim();
+  if (!cleaned) return true;
+  const generic = new Set([
+    ...Object.values(MP_TRANSACTION_TYPE_LABELS),
+    ...Object.keys(MP_TRANSACTION_TYPE_LABELS),
+    'MercadoPago',
+    'Mercado Pago',
+    'Pago',
+    'Movimiento',
+    'Movimiento Mercado Pago',
+    'account_money',
+    'credit_card',
+    'debit_card',
+    'bank_transfer',
+    'ticket',
+    'atm',
+  ].map((v) => String(v).toLowerCase()));
+  return generic.has(cleaned.toLowerCase());
+}
+
 export function getCounterparty(transaccion) {
   const meta = getOrigenMetadata(transaccion?.origen);
-  if (meta.counterpartyName) {
+
+  const metaName = meta.counterpartyName || meta.businessName || meta.itemTitle || null;
+  if (metaName && !isGenericCounterpartyName(metaName)) {
     return {
-      name: meta.counterpartyName,
-      label: meta.counterpartyLabel || (transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de'),
+      name: metaName,
+      label:
+        meta.counterpartyLabel ||
+        (transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de'),
       role: meta.counterpartyRole || null,
       email: meta.counterpartyEmail || null,
     };
   }
 
-  // Fallback: inferir desde descripción legacy
+  // Fallback: inferir desde descripción legacy (sin usar "Pago aprobado" como negocio)
   const formatted = formatMpTransactionDescription(transaccion?.descripcion, transaccion?.origen);
   const cleaned = (formatted || '').replace(/^MercadoPago\s*[-–—]\s*/i, '').trim();
   if (!cleaned) return null;
 
-  // Evitar títulos que son solo método de pago
   const methodOnly = /^(credit_card|debit_card|account_money|bank_transfer|ticket|atm)\b/i;
-  if (methodOnly.test(cleaned)) return null;
+  const candidate = cleaned.split(' · ')[0].split(' (Ref:')[0].trim();
+  if (!candidate || methodOnly.test(candidate) || isGenericCounterpartyName(candidate)) {
+    return null;
+  }
 
   return {
-    name: cleaned.split(' · ')[0].split(' (Ref:')[0].trim(),
+    name: candidate,
     label: transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de',
     role: null,
     email: null,
@@ -96,13 +124,25 @@ export function getCounterparty(transaccion) {
  */
 export function formatMpTransactionTitle(descripcion, origen) {
   const counterparty = getCounterparty({ descripcion, origen });
-  if (counterparty?.name) return counterparty.name;
+  if (counterparty?.name && !isGenericCounterpartyName(counterparty.name)) {
+    return counterparty.name;
+  }
+
+  const meta = getOrigenMetadata(origen);
+  if (meta.isTransfer || String(meta.operationType || '').toLowerCase() === 'money_transfer') {
+    return 'Transferencia';
+  }
+
+  const method = formatPaymentMethodLabel(meta.paymentMethod, meta.paymentMethodId);
+  if (method) return method;
 
   const formatted = formatMpTransactionDescription(descripcion, origen);
-  if (!formatted) return 'Movimiento';
+  if (!formatted) return 'Movimiento Mercado Pago';
 
   let title = formatted.replace(/^MercadoPago\s*[-–—]\s*/i, '').trim();
-  if (!title) return formatted;
+  if (!title || isGenericCounterpartyName(title)) {
+    return 'Movimiento Mercado Pago';
+  }
   return title;
 }
 

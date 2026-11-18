@@ -277,7 +277,7 @@ const TransaccionTable = ({
                           }}
                         >
                           <Box sx={{ minWidth: 0, flex: 1 }}>
-                            {counterparty?.label && (
+                            {counterparty?.label && counterparty?.name && (
                               <Typography
                                 variant="caption"
                                 color="text.secondary"

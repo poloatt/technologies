@@ -168,6 +168,99 @@ export class MercadoPagoAdapter {
     return this.getAllPayments({ since, limit });
   }
 
+  async getPaymentById(paymentId) {
+    if (!paymentId) return null;
+    const id = String(paymentId).trim();
+    if (!/^\d+$/.test(id)) return null;
+
+    return this.withRetry(async () => {
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, {
+        headers: mpAuthHeaders(this.accessToken)
+      });
+
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        const errorText = await response.text();
+        if (response.status === 401) throw new Error('Token de acceso expirado o inválido');
+        if (response.status === 403) return null;
+        if (response.status === 429) throw new Error('Rate limit excedido - intentar más tarde');
+        throw new Error(`Error obteniendo pago ${id}: ${response.status} - ${errorText}`);
+      }
+
+      return response.json();
+    }).catch((error) => {
+      console.warn(`[MP] getPaymentById ${id}:`, error.message);
+      return null;
+    });
+  }
+
+  /**
+   * Enriquece filas del settlement con GET /v1/payments/{SOURCE_ID}
+   * para recuperar comercio / contraparte / money_transfer.
+   */
+  async enrichMovementsWithPayments(movimientos, { concurrency = 5 } = {}) {
+    if (!Array.isArray(movimientos) || movimientos.length === 0) return [];
+
+    const out = [...movimientos];
+    let cursor = 0;
+    let enriched = 0;
+
+    const worker = async () => {
+      while (cursor < out.length) {
+        const index = cursor++;
+        const mov = out[index];
+        const sourceId = String(mov?.sourceId || mov?.id || '').trim();
+        if (!/^\d+$/.test(sourceId)) continue;
+
+        const payment = await this.getPaymentById(sourceId);
+        if (!payment) continue;
+
+        enriched += 1;
+        out[index] = {
+          ...mov,
+          payment,
+          description:
+            payment.description ||
+            payment.statement_descriptor ||
+            mov.description ||
+            '',
+          paymentMethod:
+            payment.payment_type_id ||
+            payment.payment_method?.type ||
+            mov.paymentMethod ||
+            '',
+          paymentMethodType:
+            payment.payment_type_id || mov.paymentMethodType || '',
+          externalReference:
+            payment.external_reference || mov.externalReference || '',
+          transactionType:
+            String(payment.operation_type || '').toLowerCase() === 'money_transfer'
+              ? 'MONEY_TRANSFER'
+              : mov.transactionType,
+          raw: {
+            ...(mov.raw || {}),
+            DESCRIPTION:
+              payment.description ||
+              payment.statement_descriptor ||
+              mov.raw?.DESCRIPTION ||
+              '',
+            METADATA: payment.metadata || mov.raw?.METADATA || null,
+            PAYMENT_METHOD:
+              payment.payment_method_id || payment.payment_type_id || mov.raw?.PAYMENT_METHOD,
+            PAYMENT_METHOD_TYPE:
+              payment.payment_type_id || mov.raw?.PAYMENT_METHOD_TYPE,
+            OPERATION_TYPE: payment.operation_type || null
+          }
+        };
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(concurrency, out.length) }, () => worker());
+    await Promise.all(workers);
+    console.log(`[MP] Settlement enriquecido con payments: ${enriched}/${out.length}`);
+    return out;
+  }
+
   /**
    * Pagos + transferencias P2P (operation_type=money_transfer).
    * Las transferencias in-app a otros usuarios MP no salen en WITHDRAWAL del settlement;

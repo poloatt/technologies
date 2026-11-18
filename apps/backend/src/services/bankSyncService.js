@@ -14,7 +14,8 @@ import {
   getMpSyncDays,
   normalizeAccountMovement,
   esTipoTransferenciaMovimiento,
-  esTransferenciaPago
+  esTransferenciaPago,
+  limpiarNombreContraparte
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
@@ -440,7 +441,15 @@ export class BankSyncService {
         errores.push({ tipo: 'account_movements', error: error.message });
       }
 
-      const movimientosMerged = this.mergeMovimientosMp(movimientos, accountMovements);
+      let movimientosMerged = this.mergeMovimientosMp(movimientos, accountMovements);
+      try {
+        movimientosMerged = await mpAdapter.enrichMovementsWithPayments(movimientosMerged, {
+          concurrency: 5
+        });
+      } catch (error) {
+        console.warn('⚠️ Enrichment de payments falló:', error.message);
+        errores.push({ tipo: 'payment_enrichment', error: error.message });
+      }
 
       let balance = await mpAdapter.getAccountBalance();
       if ((!balance.available && !balance.unavailable) && movimientosMerged.length > 0) {
@@ -457,7 +466,12 @@ export class BankSyncService {
       transaccionesNuevas += pagosResult.nuevas;
       transaccionesActualizadas += pagosResult.actualizadas;
 
-      const movResult = await this.procesarMovimientosReporte(movimientosMerged, bankConnection, cuenta);
+      const movResult = await this.procesarMovimientosReporte(
+        movimientosMerged,
+        bankConnection,
+        cuenta,
+        mpUserId
+      );
       transaccionesNuevas += movResult.nuevas;
       transaccionesActualizadas += movResult.actualizadas;
 
@@ -554,20 +568,49 @@ export class BankSyncService {
 
     for (const pago of pagos) {
       try {
-        const transaccionExistente = await Transacciones.findOne({
-          cuenta: bankConnection.cuenta,
-          'origen.transaccionId': pago.id.toString(),
-          'origen.tipo': { $in: MP_ORIGEN_TIPOS }
-        });
-
-        if (transaccionExistente) continue;
-
         const comisiones = calcularComisiones(pago);
         const monto = Math.abs(pago.transaction_amount || 0);
         const montoNeto = monto - comisiones.total;
         const contraparte = extraerContrapartePago(pago, userId);
         const descripcion = formatearDescripcionPago(pago, userId);
         const isTransfer = esTransferenciaPago(pago);
+
+        const transaccionExistente = await Transacciones.findOne({
+          cuenta: bankConnection.cuenta,
+          'origen.transaccionId': pago.id.toString(),
+          'origen.tipo': { $in: MP_ORIGEN_TIPOS }
+        });
+
+        if (transaccionExistente) {
+          const prevName = transaccionExistente.origen?.metadata?.counterpartyName;
+          if (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) {
+            transaccionExistente.descripcion = descripcion;
+            transaccionExistente.origen.metadata = {
+              ...(transaccionExistente.origen.metadata?.toObject?.() ||
+                transaccionExistente.origen.metadata ||
+                {}),
+              paymentId: pago.id,
+              status: pago.status,
+              statusDetail: pago.status_detail,
+              paymentMethod: pago.payment_method?.type,
+              paymentMethodId: pago.payment_method_id,
+              operationType: pago.operation_type || null,
+              isTransfer,
+              description: pago.description || null,
+              statementDescriptor: pago.statement_descriptor || null,
+              itemTitle: pago.additional_info?.items?.[0]?.title || null,
+              businessName: pago.point_of_interaction?.business_info?.name || null,
+              counterpartyName: contraparte?.name || null,
+              counterpartyLabel: contraparte?.label || null,
+              counterpartyRole: contraparte?.role || null,
+              counterpartyId: contraparte?.id || null,
+              counterpartyEmail: contraparte?.email || null
+            };
+            await transaccionExistente.save();
+            actualizadas++;
+          }
+          continue;
+        }
 
         const nuevaTransaccion = new Transacciones({
           descripcion,
@@ -621,7 +664,37 @@ export class BankSyncService {
     return { nuevas, actualizadas };
   }
 
-  async procesarMovimientosReporte(movimientos, bankConnection, cuenta) {
+  resolverContraparteMovimiento(mov, userId) {
+    if (mov?.payment && userId != null) {
+      const fromPayment = extraerContrapartePago(mov.payment, userId);
+      if (limpiarNombreContraparte(fromPayment?.name)) {
+        return fromPayment;
+      }
+    }
+
+    const rowSource = {
+      ...(mov.raw || {}),
+      ...mov,
+      netAmount: mov.netAmount,
+      TRANSACTION_TYPE: mov.transactionType || mov.raw?.TRANSACTION_TYPE,
+      DESCRIPTION: mov.description || mov.raw?.DESCRIPTION,
+      EXTERNAL_REFERENCE: mov.externalReference || mov.raw?.EXTERNAL_REFERENCE,
+      SETTLEMENT_NET_AMOUNT: mov.netAmount ?? mov.raw?.SETTLEMENT_NET_AMOUNT
+    };
+    const fromRow = extraerContraparteMovimiento(rowSource);
+    if (fromRow?.name) return fromRow;
+
+    // Sin nombre real: no inventar "Pagaste a Pago aprobado"
+    return {
+      role: Number(mov.netAmount) >= 0 ? 'origen' : 'destino',
+      label: null,
+      name: null,
+      id: null,
+      email: null
+    };
+  }
+
+  async procesarMovimientosReporte(movimientos, bankConnection, cuenta, userId = null) {
     let nuevas = 0;
     let actualizadas = 0;
     let omitidas = 0;
@@ -632,19 +705,10 @@ export class BankSyncService {
         const transaccionId = String(mov.sourceId || mov.id);
         if (!transaccionId) continue;
 
-        const transaccionExistente = await Transacciones.findOne({
-          cuenta: bankConnection.cuenta,
-          'origen.transaccionId': transaccionId,
-          'origen.tipo': { $in: MP_ORIGEN_TIPOS }
-        });
-
-        if (transaccionExistente) {
-          omitidas++;
-          continue;
-        }
-
-        const monto = Math.abs(mov.amount || mov.netAmount || 0);
-        const montoNeto = Math.abs(mov.netAmount || monto);
+        const contraparte = this.resolverContraparteMovimiento(mov, userId);
+        const isTransfer =
+          esTipoTransferenciaMovimiento(mov.transactionType) ||
+          esTransferenciaPago(mov.payment || {});
         const rowSource = {
           ...(mov.raw || {}),
           ...mov,
@@ -654,8 +718,61 @@ export class BankSyncService {
           EXTERNAL_REFERENCE: mov.externalReference || mov.raw?.EXTERNAL_REFERENCE,
           SETTLEMENT_NET_AMOUNT: mov.netAmount ?? mov.raw?.SETTLEMENT_NET_AMOUNT
         };
-        const contraparte = extraerContraparteMovimiento(rowSource);
-        const descripcion = formatearDescripcionMovimiento(rowSource);
+        const descripcion = mov.payment && userId != null
+          ? formatearDescripcionPago(mov.payment, userId)
+          : formatearDescripcionMovimiento(rowSource);
+
+        const metadataPatch = {
+          transactionType: mov.transactionType,
+          description: mov.description || mov.payment?.description || null,
+          paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id || null,
+          paymentMethodType: mov.paymentMethodType || mov.payment?.payment_type_id || null,
+          paymentMethodId: mov.payment?.payment_method_id || null,
+          operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE || null,
+          externalReference: mov.externalReference || mov.payment?.external_reference || null,
+          currency: mov.currency,
+          source: mov.payment ? 'settlement_enriched' : (mov.source || 'settlement_report'),
+          isTransfer,
+          statementDescriptor: mov.payment?.statement_descriptor || null,
+          itemTitle: mov.payment?.additional_info?.items?.[0]?.title || null,
+          businessName: mov.payment?.point_of_interaction?.business_info?.name || null,
+          counterpartyName: contraparte?.name || null,
+          counterpartyLabel: contraparte?.label || null,
+          counterpartyRole: contraparte?.role || null,
+          counterpartyId: contraparte?.id || null,
+          counterpartyEmail: contraparte?.email || null
+        };
+
+        const transaccionExistente = await Transacciones.findOne({
+          cuenta: bankConnection.cuenta,
+          'origen.transaccionId': transaccionId,
+          'origen.tipo': { $in: MP_ORIGEN_TIPOS }
+        });
+
+        if (transaccionExistente) {
+          const prevName = transaccionExistente.origen?.metadata?.counterpartyName;
+          const shouldEnrich =
+            contraparte?.name &&
+            (!prevName || !limpiarNombreContraparte(prevName));
+
+          if (shouldEnrich || (isTransfer && !transaccionExistente.origen?.metadata?.isTransfer)) {
+            transaccionExistente.descripcion = descripcion;
+            transaccionExistente.origen.metadata = {
+              ...(transaccionExistente.origen.metadata?.toObject?.() ||
+                transaccionExistente.origen.metadata ||
+                {}),
+              ...metadataPatch
+            };
+            await transaccionExistente.save();
+            actualizadas++;
+          } else {
+            omitidas++;
+          }
+          continue;
+        }
+
+        const monto = Math.abs(mov.amount || mov.netAmount || 0);
+        const montoNeto = Math.abs(mov.netAmount || monto);
 
         const transaccion = new Transacciones({
           descripcion,
@@ -678,19 +795,7 @@ export class BankSyncService {
             tipo: 'MERCADOPAGO_MOVIMIENTO',
             conexionId: bankConnection._id,
             transaccionId,
-            metadata: {
-              transactionType: mov.transactionType,
-              description: mov.description,
-              paymentMethod: mov.paymentMethod,
-              paymentMethodType: mov.paymentMethodType,
-              externalReference: mov.externalReference,
-              currency: mov.currency,
-              source: mov.source || 'settlement_report',
-              isTransfer: esTipoTransferenciaMovimiento(mov.transactionType),
-              counterpartyName: contraparte?.name || null,
-              counterpartyLabel: contraparte?.label || null,
-              counterpartyRole: contraparte?.role || null
-            }
+            metadata: metadataPatch
           }
         });
 

@@ -2,6 +2,24 @@
  * Utilidades compartidas para integración wallet Mercado Pago (Argentina).
  */
 
+export const MP_TRANSACTION_TYPE_LABELS = {
+  SETTLEMENT: 'Pago aprobado',
+  REFUND: 'Devolución',
+  CHARGEBACK: 'Contracargo',
+  DISPUTE: 'Reclamo',
+  WITHDRAWAL: 'Transferencia bancaria',
+  WITHDRAWAL_CANCEL: 'Transferencia cancelada',
+  PAYOUT: 'Retiro de efectivo',
+  TRANSFER: 'Transferencia',
+  MONEY_TRANSFER: 'Transferencia',
+  BANK_TRANSFER: 'Transferencia bancaria',
+  CASHBACK: 'Cashback',
+  SETTLEMENT_SHIPPING: 'Envío aprobado',
+  REFUND_SHIPPING: 'Devolución de envío',
+  CHARGEBACK_SHIPPING: 'Contracargo de envío',
+  DISPUTE_SHIPPING: 'Reclamo de envío'
+};
+
 export function calcularComisiones(pago) {
   const comisiones = {
     mercadopago: 0,
@@ -59,6 +77,26 @@ export function determinarTipoMovimiento(amount) {
  * - EGRESO (vos pagás): negocio / comercio / descriptor
  * - INGRESO (te pagan): nombre del pagador
  */
+export function limpiarNombreContraparte(name) {
+  if (!name) return null;
+  const cleaned = String(name).trim();
+  if (!cleaned) return null;
+  const generic = new Set([
+    ...Object.values(MP_TRANSACTION_TYPE_LABELS),
+    ...Object.keys(MP_TRANSACTION_TYPE_LABELS),
+    'MercadoPago',
+    'Mercado Pago',
+    'Pago',
+    'Movimiento',
+    'account_money',
+    'credit_card',
+    'debit_card',
+    'bank_transfer'
+  ].map((v) => String(v).toLowerCase()));
+  if (generic.has(cleaned.toLowerCase())) return null;
+  return cleaned;
+}
+
 export function extraerContrapartePago(pago, userId) {
   const mpUserId = Number(userId);
   const collectorId = Number(pago?.collector_id);
@@ -66,9 +104,21 @@ export function extraerContrapartePago(pago, userId) {
   const userIsPayer = payerId === mpUserId && collectorId !== mpUserId;
   const userIsCollector = collectorId === mpUserId && payerId !== mpUserId;
 
-  const itemTitle = pago?.additional_info?.items?.[0]?.title;
+  const businessName = (
+    pago?.point_of_interaction?.business_info?.name ||
+    pago?.point_of_interaction?.business_info?.unit ||
+    pago?.merchant?.name ||
+    ''
+  ).trim();
+  const itemTitle = (pago?.additional_info?.items?.[0]?.title || '').trim();
   const description = (pago?.description || '').trim();
   const statement = (pago?.statement_descriptor || '').trim();
+  const counterpartyFromExtra = (
+    pago?.additional_info?.tracking_id ||
+    pago?.metadata?.counterparty_name ||
+    pago?.metadata?.destination_name ||
+    ''
+  ).toString().trim();
   const payer = pago?.payer || {};
   const payerName = [payer.first_name, payer.last_name].filter(Boolean).join(' ').trim()
     || payer.nickname
@@ -78,7 +128,9 @@ export function extraerContrapartePago(pago, userId) {
   const isTransfer = String(pago?.operation_type || '').toLowerCase() === 'money_transfer';
 
   if (userIsPayer) {
-    const name = description || itemTitle || statement || null;
+    const name = limpiarNombreContraparte(
+      businessName || description || itemTitle || statement || counterpartyFromExtra || null
+    );
     return {
       role: 'destino',
       label: isTransfer ? 'Transferiste a' : 'Pagaste a',
@@ -89,16 +141,21 @@ export function extraerContrapartePago(pago, userId) {
   }
 
   if (userIsCollector) {
+    const name = limpiarNombreContraparte(
+      payerName || description || itemTitle || businessName || null
+    );
     return {
       role: 'origen',
       label: isTransfer ? 'Recibiste de' : 'Recibiste de',
-      name: payerName || description || itemTitle || null,
+      name,
       id: payerId || null,
       email: payer.email || null
     };
   }
 
-  const fallback = description || itemTitle || statement || payerName || null;
+  const fallback = limpiarNombreContraparte(
+    businessName || description || itemTitle || statement || payerName || counterpartyFromExtra || null
+  );
   return {
     role: 'contraparte',
     label: 'Contraparte',
@@ -204,35 +261,24 @@ export function extraerContraparteMovimiento(row) {
   }
   if (!name && externalRef) name = externalRef;
   if (!name && metaCbu) name = `Cuenta ${metaCbu}`;
+  name = limpiarNombreContraparte(name);
+
+  const net = Number(row.netAmount ?? row.SETTLEMENT_NET_AMOUNT ?? 0);
+  const isIngreso = net >= 0;
+  let label = 'Contraparte';
+  if (name) {
+    if (isTransfer) label = isIngreso ? 'Recibiste de' : 'Transferiste a';
+    else label = isIngreso ? 'Recibiste de' : 'Pagaste a';
+  }
 
   return {
-    role: isTransfer ? (Number(row.netAmount ?? row.SETTLEMENT_NET_AMOUNT ?? 0) >= 0 ? 'origen' : 'destino') : 'contraparte',
-    label: isTransfer
-      ? (Number(row.netAmount ?? row.SETTLEMENT_NET_AMOUNT ?? 0) >= 0 ? 'Recibiste de' : 'Transferiste a')
-      : 'Contraparte',
+    role: isIngreso ? 'origen' : 'destino',
+    label,
     name: name || null,
     id: null,
     email: null
   };
 }
-
-export const MP_TRANSACTION_TYPE_LABELS = {
-  SETTLEMENT: 'Pago aprobado',
-  REFUND: 'Devolución',
-  CHARGEBACK: 'Contracargo',
-  DISPUTE: 'Reclamo',
-  WITHDRAWAL: 'Transferencia bancaria',
-  WITHDRAWAL_CANCEL: 'Transferencia cancelada',
-  PAYOUT: 'Retiro de efectivo',
-  TRANSFER: 'Transferencia',
-  MONEY_TRANSFER: 'Transferencia',
-  BANK_TRANSFER: 'Transferencia bancaria',
-  CASHBACK: 'Cashback',
-  SETTLEMENT_SHIPPING: 'Envío aprobado',
-  REFUND_SHIPPING: 'Devolución de envío',
-  CHARGEBACK_SHIPPING: 'Contracargo de envío',
-  DISPUTE_SHIPPING: 'Reclamo de envío'
-};
 
 /**
  * Normaliza un movimiento de /account/movements o /mercadopago_account/movements
@@ -328,23 +374,28 @@ export function formatearDescripcionMovimiento(row) {
     row.TRANSACTION_TYPE || row.transaction_type || row.transactionType || row.type || 'Movimiento';
   const tipoLabel = mapearTipoTransaccionMp(tipoRaw);
   const metodo = row.PAYMENT_METHOD || row.payment_method || row.paymentMethod || '';
-  const description = row.DESCRIPTION || row.description || '';
+  const description = limpiarNombreContraparte(row.DESCRIPTION || row.description || '');
   const contraparte = extraerContraparteMovimiento(row);
 
   if (contraparte?.name) {
     return `MercadoPago - ${contraparte.name}`;
   }
 
-  let descripcion = `MercadoPago - ${tipoLabel}`;
-  if (description && description !== tipoRaw && description !== tipoLabel) {
-    descripcion += ` - ${description}`;
-  } else if (metodo) {
-    descripcion += ` (${metodo})`;
+  if (description) {
+    return `MercadoPago - ${description}`;
   }
-  if (row.EXTERNAL_REFERENCE || row.external_reference) {
-    descripcion += ` (Ref: ${row.EXTERNAL_REFERENCE || row.external_reference})`;
+
+  if (metodo) {
+    return `MercadoPago - ${metodo}`;
   }
-  return descripcion;
+
+  // Evitar persistir "MercadoPago - Pago aprobado" como si fuera el comercio
+  if (esTipoTransferenciaMovimiento(tipoRaw)) {
+    return `MercadoPago - ${tipoLabel}`;
+  }
+
+  const ref = row.EXTERNAL_REFERENCE || row.external_reference;
+  return ref ? `MercadoPago - Ref: ${ref}` : 'MercadoPago - Movimiento';
 }
 
 export function mapearEstadoPago(status) {
