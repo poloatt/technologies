@@ -4,9 +4,13 @@ import {
   FabNuevaTransaccion,
   TransaccionTable,
   TransaccionForm,
+  TransaccionesFlujoVisual,
   BranchFinanzasSectionNav,
   cuentaDetailPath,
   useFinanzasBranch,
+  DEFAULT_PERIOD_PRESET,
+  getPeriodRange,
+  toLocalDateKey,
 } from '../finanzas';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
@@ -27,6 +31,8 @@ export function Transacciones() {
   const [searchParams] = useSearchParams();
   const cuentaFilterId = searchParams.get('cuenta');
   const { branchId } = useFinanzasBranch();
+  const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
 
   // Usar nuestro hook personalizado para cargar datos
   const { 
@@ -56,12 +62,22 @@ export function Transacciones() {
   const transacciones = transaccionesData?.docs || [];
 
   const transaccionesFiltradas = useMemo(() => {
-    if (!cuentaFilterId) return transacciones;
     return transacciones.filter((t) => {
+      if (cuentaFilterId) {
+        const cuentaId = t.cuenta?._id || t.cuenta?.id || t.cuenta;
+        if (String(cuentaId) !== String(cuentaFilterId)) return false;
+      }
+      const key = toLocalDateKey(t.fecha);
+      return key >= periodRange.fechaInicio && key <= periodRange.fechaFin;
+    });
+  }, [transacciones, cuentaFilterId, periodRange]);
+
+  const hayMovimientosDeBase = cuentaFilterId
+    ? transacciones.some((t) => {
       const cuentaId = t.cuenta?._id || t.cuenta?.id || t.cuenta;
       return String(cuentaId) === String(cuentaFilterId);
-    });
-  }, [transacciones, cuentaFilterId]);
+    })
+    : transacciones.length > 0;
 
   const cuentaFiltrada = useMemo(() => {
     if (!cuentaFilterId) return null;
@@ -109,8 +125,7 @@ export function Transacciones() {
       const newCuenta = response.data;
       console.log('Cuenta creada:', newCuenta);
       
-      // Refrescar los datos después de crear la cuenta
-      refetchTransacciones();
+      window.dispatchEvent(new Event('transaccionesRefreshed'));
       
       enqueueSnackbar('Cuenta creada exitosamente', { variant: 'success' });
       return newCuenta;
@@ -124,7 +139,7 @@ export function Transacciones() {
       );
       throw error;
     }
-  }, [enqueueSnackbar, refetchTransacciones]);
+  }, [enqueueSnackbar]);
 
   const handleEdit = useCallback(async (transaccion) => {
     try {
@@ -199,7 +214,7 @@ export function Transacciones() {
       setIsFormOpen(false);
       setEditingTransaccion(null);
       setFormKey(prev => prev + 1);
-      refetchTransacciones();
+      window.dispatchEvent(new Event('transaccionesRefreshed'));
     } catch (error) {
       console.error('Error completo:', error);
       console.error('Detalles del error:', error.response?.data);
@@ -217,18 +232,18 @@ export function Transacciones() {
       const mensajeError = error.response?.data?.message || error.message || 'Error al guardar la transacción';
       enqueueSnackbar(mensajeError, { variant: 'error' });
     }
-  }, [enqueueSnackbar, refetchTransacciones, editingTransaccion, cuentas]);
+  }, [enqueueSnackbar, editingTransaccion, cuentas]);
 
   const handleDelete = useCallback(async (id) => {
     try {
       await clienteAxios.delete(`/api/transacciones/${id}`);
       enqueueSnackbar('Transacción eliminada exitosamente', { variant: 'success' });
-      refetchTransacciones();
+      window.dispatchEvent(new Event('transaccionesRefreshed'));
     } catch (error) {
       console.error('Error al eliminar transacción:', error);
       enqueueSnackbar('Error al eliminar la transacción', { variant: 'error' });
     }
-  }, [enqueueSnackbar, refetchTransacciones]);
+  }, [enqueueSnackbar]);
 
   const handleOpenForm = useCallback(() => {
     setEditingTransaccion(null);
@@ -308,6 +323,13 @@ export function Transacciones() {
       )}
       <FabNuevaTransaccion onClick={handleOpenForm} />
 
+      <TransaccionesFlujoVisual
+        density="page"
+        cuentaId={cuentaFilterId}
+        preset={preset}
+        onPresetChange={setPreset}
+      />
+
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
           <EmptyState
@@ -319,11 +341,19 @@ export function Transacciones() {
       ) : transaccionesFiltradas.length === 0 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
           <EmptyState
-            title={cuentaFilterId ? 'Sin movimientos en esta cuenta' : 'No hay transacciones'}
+            title={
+              cuentaFilterId && !hayMovimientosDeBase
+                ? 'Sin movimientos en esta cuenta'
+                : hayMovimientosDeBase
+                  ? 'Sin movimientos en este período'
+                  : 'No hay transacciones'
+            }
             description={
-              cuentaFilterId
+              cuentaFilterId && !hayMovimientosDeBase
                 ? 'Probá sincronizar Mercado Pago o importar el CSV desde Cuentas.'
-                : 'Comienza creando tu primera transacción.'
+                : hayMovimientosDeBase
+                  ? 'Probá otro período o cargá un movimiento de estas fechas.'
+                  : 'Comienza creando tu primera transacción.'
             }
             buttonText={cuentaFilterId ? 'Ir a Cuentas' : 'Nueva Transacción'}
             onButtonClick={

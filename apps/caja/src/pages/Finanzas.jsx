@@ -85,6 +85,7 @@ export default function Finanzas() {
     await clienteAxios.post('/api/transacciones', data);
     enqueueSnackbar('Transacción creada exitosamente', { variant: 'success' });
     setOpenTransaccion(false);
+    window.dispatchEvent(new Event('transaccionesRefreshed'));
   }, [enqueueSnackbar]);
 
   useEffect(() => {

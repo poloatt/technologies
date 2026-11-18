@@ -34,16 +34,18 @@ export default function HubSectionCard({
         headerSx={headerSx}
       />
 
-      <Box
-        className="hub-section-body"
-        sx={{ ...hubSectionBodySx, ...bodySx }}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
-          {children}
+      {children != null && children !== false ? (
+        <Box
+          className="hub-section-body"
+          sx={{ ...hubSectionBodySx, ...bodySx }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%' }}>
+            {children}
+          </Box>
         </Box>
-      </Box>
+      ) : null}
     </Card>
   );
 }

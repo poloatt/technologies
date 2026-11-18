@@ -1,12 +1,26 @@
 import { useMemo } from 'react';
 import { useAPI } from '@shared/hooks/useAPI';
-import { getCurrentMonthRange } from './transaccionesPeriodUtils';
+import {
+  DEFAULT_PERIOD_PRESET,
+  getPeriodLabel,
+  getPeriodRange,
+} from './transaccionesPeriodUtils';
 
-export function useTransaccionesPeriodStats(overrides = {}) {
-  const params = useMemo(
-    () => ({ ...getCurrentMonthRange(), ...overrides }),
-    [overrides],
-  );
+/**
+ * Totales y serie del período. `preset` y `cuentaId` son primitivos: un objeto
+ * inline en el caller invalidaba el memo en cada render.
+ * Los totales de la moneda activa no mezclan divisas; `ingresos`/`egresos` de
+ * la respuesta cruda siguen siendo la suma histórica para consumidores viejos.
+ */
+export function useTransaccionesPeriodStats({
+  preset = DEFAULT_PERIOD_PRESET,
+  cuentaId,
+} = {}) {
+  const params = useMemo(() => {
+    const range = getPeriodRange(preset);
+    if (cuentaId) return { ...range, cuenta: cuentaId };
+    return range;
+  }, [preset, cuentaId]);
 
   const { data, loading, error, refetch } = useAPI('/api/transacciones/stats', {
     params,
@@ -14,22 +28,36 @@ export function useTransaccionesPeriodStats(overrides = {}) {
     cacheDuration: 60000,
   });
 
+  const requestedCuenta = params.cuenta || null;
+  const rangeMatches = !!data
+    && data.fechaInicio === params.fechaInicio
+    && data.fechaFin === params.fechaFin
+    && (data.cuenta || null) === requestedCuenta;
+
   const stats = useMemo(() => {
-    if (!data) {
+    if (!rangeMatches) {
       return {
-        ingresos: 0,
-        egresos: 0,
-        balance: 0,
         porMoneda: [],
+        fechaInicio: params.fechaInicio,
+        fechaFin: params.fechaFin,
       };
     }
+    const porMoneda = [...(data.porMoneda ?? [])].sort(
+      (a, b) => (b.ingresos + b.egresos) - (a.ingresos + a.egresos),
+    );
     return {
-      ingresos: data.ingresos ?? data.ingresosMensuales ?? 0,
-      egresos: data.egresos ?? data.egresosMensuales ?? 0,
-      balance: data.balance ?? data.balanceTotal ?? 0,
-      porMoneda: data.porMoneda ?? [],
+      porMoneda,
+      fechaInicio: data.fechaInicio,
+      fechaFin: data.fechaFin,
     };
-  }, [data]);
+  }, [data, rangeMatches, params.fechaInicio, params.fechaFin]);
 
-  return { stats, loading, error, refetch, periodLabel: 'Este mes' };
+  return {
+    stats,
+    loading: !rangeMatches && (loading || !error),
+    error: rangeMatches ? null : error,
+    refetch,
+    periodLabel: getPeriodLabel(preset),
+    preset,
+  };
 }

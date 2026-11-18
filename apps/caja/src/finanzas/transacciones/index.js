@@ -3,5 +3,13 @@ export { default as FabNuevaTransaccion } from './FabNuevaTransaccion';
 export { default as TransaccionForm } from './TransaccionForm';
 export { default as TransaccionTable } from './TransaccionTable';
 export { default as TransaccionesHubSummary } from './TransaccionesHubSummary';
+export { default as TransaccionesFlujoVisual } from './TransaccionesFlujoVisual';
 export { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
-export { getCurrentMonthRange, formatMonto } from './transaccionesPeriodUtils';
+export {
+  DEFAULT_PERIOD_PRESET,
+  PERIOD_PRESETS,
+  getCurrentMonthRange,
+  getPeriodRange,
+  toLocalDateKey,
+  formatMonto,
+} from './transaccionesPeriodUtils';

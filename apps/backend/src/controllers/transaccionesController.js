@@ -3,6 +3,43 @@ import { Transacciones, Cuentas } from '../models/index.js';
 import mongoose from 'mongoose';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
 
+const STATS_TZ = 'America/Argentina/Buenos_Aires';
+
+/** YYYY-MM-DD de un instante en el calendario de Argentina. */
+function formatArDateKey(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: STATS_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * Interpreta un YYYY-MM-DD como día calendario en Argentina.
+ * `new Date('YYYY-MM-DD')` es medianoche UTC y corre el rango 3 horas.
+ */
+function parseArDay(value, endOfDay = false) {
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const time = endOfDay ? '23:59:59.999' : '00:00:00.000';
+  return new Date(`${match[1]}-${match[2]}-${match[3]}T${time}-03:00`);
+}
+
+function arMonthBounds(now = new Date()) {
+  const key = formatArDateKey(now);
+  const [year, month] = key.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const mm = String(month).padStart(2, '0');
+  return {
+    inicio: parseArDay(`${year}-${mm}-01`),
+    fin: parseArDay(`${year}-${mm}-${String(lastDay).padStart(2, '0')}`, true),
+  };
+}
+
 class TransaccionesController extends BaseController {
   constructor() {
     super(Transacciones, {
@@ -18,53 +55,92 @@ class TransaccionesController extends BaseController {
     this.getResumen = this.getResumen.bind(this);
   }
 
-  // GET /api/transacciones/stats?fechaInicio&fechaFin&estado
+  // GET /api/transacciones/stats?fechaInicio&fechaFin&estado&cuenta
   async getStats(req, res) {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Usuario no autenticado' });
       }
 
-      const { fechaInicio, fechaFin, estado = 'PAGADO' } = req.query;
-      const now = new Date();
-      const defaultInicio = new Date(now.getFullYear(), now.getMonth(), 1);
-      const defaultFin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-
-      const inicio = fechaInicio ? new Date(fechaInicio) : defaultInicio;
-      const fin = fechaFin ? new Date(fechaFin) : defaultFin;
-      if (fechaFin && !fechaFin.includes('T')) {
-        fin.setHours(23, 59, 59, 999);
+      const { fechaInicio, fechaFin, estado = 'PAGADO', cuenta } = req.query;
+      const defaults = arMonthBounds();
+      const inicio = fechaInicio ? parseArDay(fechaInicio) : defaults.inicio;
+      const fin = fechaFin ? parseArDay(fechaFin, true) : defaults.fin;
+      if (!inicio || !fin || Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+        return res.status(400).json({ error: 'Rango de fechas inválido' });
       }
 
       const query = {
         usuario: new mongoose.Types.ObjectId(req.user.id),
         fecha: { $gte: inicio, $lte: fin },
       };
+      if (cuenta) {
+        if (!mongoose.Types.ObjectId.isValid(cuenta)) {
+          return res.status(400).json({ error: 'ID de cuenta inválido' });
+        }
+        query.cuenta = new mongoose.Types.ObjectId(cuenta);
+      }
       const estadoFilter = buildEstadoFilter(estado);
       if (estadoFilter) query.estado = estadoFilter;
 
-      const resultados = await this.Model.aggregate([
-        { $match: query },
-        {
-          $group: {
-            _id: { tipo: '$tipo', moneda: '$moneda' },
-            total: { $sum: { $ifNull: ['$monto', 0] } },
+      const [resultados, dias] = await Promise.all([
+        this.Model.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: { tipo: '$tipo', moneda: '$moneda' },
+              total: { $sum: { $ifNull: ['$monto', 0] } },
+            },
           },
-        },
-        {
-          $lookup: {
-            from: 'monedas',
-            localField: '_id.moneda',
-            foreignField: '_id',
-            as: 'monedaDoc',
+          {
+            $lookup: {
+              from: 'monedas',
+              localField: '_id.moneda',
+              foreignField: '_id',
+              as: 'monedaDoc',
+            },
           },
-        },
-        { $unwind: { path: '$monedaDoc', preserveNullAndEmptyArrays: true } },
+          { $unwind: { path: '$monedaDoc', preserveNullAndEmptyArrays: true } },
+        ]),
+        this.Model.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: {
+                tipo: '$tipo',
+                moneda: '$moneda',
+                fecha: {
+                  $dateToString: {
+                    format: '%Y-%m-%d',
+                    date: '$fecha',
+                    timezone: STATS_TZ,
+                  },
+                },
+              },
+              total: { $sum: { $ifNull: ['$monto', 0] } },
+            },
+          },
+        ]),
       ]);
 
       let ingresos = 0;
       let egresos = 0;
       const porMonedaMap = new Map();
+
+      const ensureMoneda = (monedaId, monedaDoc) => {
+        if (!porMonedaMap.has(monedaId)) {
+          porMonedaMap.set(monedaId, {
+            monedaId,
+            codigo: monedaDoc?.codigo || '—',
+            simbolo: monedaDoc?.simbolo || '$',
+            color: monedaDoc?.color || '#4CAF50',
+            ingresos: 0,
+            egresos: 0,
+            dias: new Map(),
+          });
+        }
+        return porMonedaMap.get(monedaId);
+      };
 
       for (const row of resultados) {
         const monto = row.total || 0;
@@ -74,34 +150,57 @@ class TransaccionesController extends BaseController {
         if (tipo === 'INGRESO') ingresos += monto;
         else if (tipo === 'EGRESO') egresos += monto;
 
-        if (!porMonedaMap.has(monedaId)) {
-          porMonedaMap.set(monedaId, {
-            monedaId,
-            codigo: row.monedaDoc?.codigo || '—',
-            simbolo: row.monedaDoc?.simbolo || '$',
-            color: row.monedaDoc?.color || '#4CAF50',
-            ingresos: 0,
-            egresos: 0,
-          });
-        }
-        const entry = porMonedaMap.get(monedaId);
+        const entry = ensureMoneda(monedaId, row.monedaDoc);
         if (tipo === 'INGRESO') entry.ingresos += monto;
         else if (tipo === 'EGRESO') entry.egresos += monto;
       }
 
-      const porMoneda = [...porMonedaMap.values()].map((m) => ({
-        ...m,
-        balance: m.ingresos - m.egresos,
-      }));
+      for (const row of dias) {
+        const monto = row.total || 0;
+        const tipo = row._id?.tipo;
+        const fecha = row._id?.fecha;
+        if (!fecha) continue;
+        const monedaId = row._id?.moneda?.toString?.() || row._id?.moneda || 'sin-moneda';
+        const entry = ensureMoneda(monedaId);
+        if (!entry.dias.has(fecha)) {
+          entry.dias.set(fecha, { fecha, ingresos: 0, egresos: 0 });
+        }
+        const day = entry.dias.get(fecha);
+        if (tipo === 'INGRESO') day.ingresos += monto;
+        else if (tipo === 'EGRESO') day.egresos += monto;
+      }
+
+      const porMoneda = [...porMonedaMap.values()]
+        .map((m) => {
+          const porDia = [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+          return {
+            monedaId: m.monedaId,
+            codigo: m.codigo,
+            simbolo: m.simbolo,
+            color: m.color,
+            ingresos: m.ingresos,
+            egresos: m.egresos,
+            balance: m.ingresos - m.egresos,
+            porDia,
+          };
+        })
+        .sort((a, b) => (b.ingresos + b.egresos) - (a.ingresos + a.egresos));
+
+      const porDia = porMoneda.flatMap((m) => m.porDia.map((day) => ({
+        monedaId: m.monedaId,
+        ...day,
+      })));
 
       res.json({
         ingresos,
         egresos,
         balance: ingresos - egresos,
-        fechaInicio: inicio.toISOString().split('T')[0],
-        fechaFin: fin.toISOString().split('T')[0],
+        fechaInicio: formatArDateKey(inicio),
+        fechaFin: formatArDateKey(fin),
         estado,
+        cuenta: cuenta || null,
         porMoneda,
+        porDia,
         // Compatibilidad con consumidores antiguos
         ingresosMensuales: ingresos,
         egresosMensuales: egresos,
