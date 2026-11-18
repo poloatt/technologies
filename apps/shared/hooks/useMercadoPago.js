@@ -63,23 +63,30 @@ export const useMercadoPago = () => {
       setConnectionStatus('connected');
 
       const sync = result?.sync;
-      const detalles = sync?.detalles;
-      const syncParcial = sync?.syncParcial;
-      const movimientos = detalles?.totalMovimientos ?? 0;
-      const csvRows = detalles?.totalCsvRows ?? movimientos;
-
-      if (syncParcial || movimientos < 5) {
+      if (sync?.started) {
         enqueueSnackbar(
-          syncParcial
-            ? 'Conexión OK. Sync parcial: importá CSV manual si faltan movimientos.'
-            : `Conexión OK. ${movimientos} movimientos importados (${csvRows} en reporte).`,
-          { variant: syncParcial ? 'warning' : 'info', autoHideDuration: 8000 }
+          'Cuenta MercadoPago conectada. Sincronización en segundo plano…',
+          { variant: 'success', autoHideDuration: 6000 }
         );
       } else {
-        enqueueSnackbar(
-          `¡Conexión MercadoPago exitosa! ${movimientos} movimientos sincronizados.`,
-          { variant: 'success' }
-        );
+        const detalles = sync?.detalles;
+        const syncParcial = sync?.syncParcial;
+        const movimientos = detalles?.totalMovimientos ?? 0;
+        const csvRows = detalles?.totalCsvRows ?? movimientos;
+
+        if (syncParcial || movimientos < 5) {
+          enqueueSnackbar(
+            syncParcial
+              ? 'Conexión OK. Sync parcial: importá CSV manual si faltan movimientos.'
+              : `Conexión OK. ${movimientos} movimientos importados (${csvRows} en reporte).`,
+            { variant: syncParcial ? 'warning' : 'info', autoHideDuration: 8000 }
+          );
+        } else {
+          enqueueSnackbar(
+            `¡Conexión MercadoPago exitosa! ${movimientos} movimientos sincronizados.`,
+            { variant: 'success' }
+          );
+        }
       }
       return result;
     } catch (error) {

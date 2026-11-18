@@ -283,7 +283,11 @@ const sessionConfig = {
     secure: config.env === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 horas
-    sameSite: 'lax'
+    sameSite: 'lax',
+    // Subdominios attadia.com (caja ↔ api) comparten cookie de sesión OAuth/PKCE
+    ...(config.env === 'production' && config.authCookieDomain
+      ? { domain: config.authCookieDomain }
+      : {})
   }
 };
 

@@ -117,7 +117,6 @@ class MercadoPagoService {
       // Guardar el state en localStorage para validarlo en el callback
       if (state) {
         localStorage.setItem('mercadopago_state', state);
-        // Establecer timestamp para expiración (5 minutos)
         localStorage.setItem('mercadopago_state_timestamp', Date.now().toString());
       }
       
@@ -298,10 +297,10 @@ class MercadoPagoService {
       return false;
     }
     
-    // Verificar que no haya expirado (5 minutos)
+    // Expiración amplia: reconocimiento facial / login MP puede demorar
     const now = Date.now();
     const savedTime = parseInt(timestamp, 10);
-    const expirationTime = 5 * 60 * 1000; // 5 minutos
+    const expirationTime = 20 * 60 * 1000; // 20 minutos
     
     if (now - savedTime > expirationTime) {
       this.clearState();
@@ -333,7 +332,7 @@ class MercadoPagoService {
     
     const now = Date.now();
     const savedTime = parseInt(timestamp, 10);
-    const expirationTime = 5 * 60 * 1000; // 5 minutos
+    const expirationTime = 20 * 60 * 1000; // 20 minutos
     
     if (now - savedTime > expirationTime) {
       this.clearState();

@@ -660,27 +660,36 @@ class BankConnectionController extends BaseController {
         conexionId: conexion._id
       });
 
-      // Sincronizar transacciones automáticamente después de conectar
-      let syncResult = null;
-      try {
-        console.log('🔄 Iniciando sincronización automática post-OAuth...');
-        syncResult = await this.bankSyncService.sincronizarConexion(conexion);
-        console.log('✅ Sincronización inicial completada:', {
-          nuevas: syncResult?.transaccionesNuevas || 0,
-          actualizadas: syncResult?.transaccionesActualizadas || 0
-        });
-      } catch (syncError) {
-        console.error('⚠️ Error en sincronización inicial:', syncError.message);
-        console.error('Stack:', syncError.stack);
-        // No fallar la conexión por esto, se puede sincronizar manualmente después
-      }
-
-      // Limpiar estado OAuth / PKCE de la sesión
+      // Limpiar OAuth/PKCE antes de responder (el sync no debe bloquear el callback)
       if (req.session) {
         delete req.session.mercadopagoState;
         delete req.session.mercadopagoRedirectUri;
         delete req.session.mercadopagoCodeVerifier;
+        await new Promise((resolve) => {
+          req.session.save(() => resolve());
+        });
       }
+
+      // Sync en background: settlement puede tardar >2 min y hacía fallar el OAuth en el browser
+      const conexionId = conexion._id;
+      setImmediate(() => {
+        this.bankSyncService
+          .sincronizarConexion(conexion)
+          .then((syncResult) => {
+            console.log('✅ Sync post-OAuth completada:', {
+              conexionId: String(conexionId),
+              nuevas: syncResult?.transaccionesNuevas || 0,
+              actualizadas: syncResult?.transaccionesActualizadas || 0,
+              syncParcial: syncResult?.syncParcial
+            });
+          })
+          .catch((syncError) => {
+            console.error('⚠️ Sync post-OAuth falló (conexión ya guardada):', {
+              conexionId: String(conexionId),
+              error: syncError.message
+            });
+          });
+      });
 
       res.json({
         message: 'Conexión con MercadoPago establecida exitosamente',
@@ -691,14 +700,11 @@ class BankConnectionController extends BaseController {
           estado: conexion.estado,
           mercadopago: conexion.mercadopago
         },
-        sync: syncResult
-          ? {
-              syncParcial: syncResult.syncParcial,
-              transaccionesNuevas: syncResult.transaccionesNuevas,
-              transaccionesActualizadas: syncResult.transaccionesActualizadas,
-              detalles: syncResult.detalles
-            }
-          : null,
+        sync: {
+          started: true,
+          syncParcial: null,
+          message: 'Sincronización iniciada en segundo plano'
+        },
         cuenta: {
           id: cuenta._id,
           nombre: cuenta.nombre,
