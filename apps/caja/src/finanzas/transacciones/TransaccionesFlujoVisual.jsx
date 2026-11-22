@@ -34,7 +34,8 @@ function flowPhrase(moneda, showValues) {
   return 'Entradas y salidas empataron';
 }
 
-function PeriodChip({ item, selected, dense, marked, onChange }) {
+/** Segmento tipográfico: misma familia visual que títulos de sección hub, sin chips. */
+function PeriodSeg({ item, selected, marked, onChange }) {
   return (
     <Box
       component="button"
@@ -43,22 +44,27 @@ function PeriodChip({ item, selected, dense, marked, onChange }) {
       aria-pressed={selected}
       title={item.hint}
       sx={{
+        appearance: 'none',
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 0.5,
-        border: '1px solid',
-        borderColor: selected ? 'primary.main' : 'divider',
-        bgcolor: selected ? 'action.selected' : 'transparent',
-        color: selected ? 'primary.main' : 'text.secondary',
-        borderRadius: 1.5,
-        px: dense ? 0.875 : 1.125,
-        py: dense ? 0.375 : 0.5,
+        gap: 0.375,
+        m: 0,
+        p: 0,
+        border: 0,
+        bgcolor: 'transparent',
         cursor: 'pointer',
         font: 'inherit',
-        fontSize: dense ? '0.6875rem' : '0.75rem',
-        fontWeight: 600,
-        lineHeight: 1.2,
-        letterSpacing: '0.03em',
+        fontSize: '0.6875rem',
+        fontWeight: selected ? 700 : 600,
+        lineHeight: 1.15,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: selected ? 'text.primary' : 'text.secondary',
+        borderBottom: '1.5px solid',
+        borderColor: selected ? 'text.primary' : 'transparent',
+        pb: '1px',
+        transition: 'color 120ms ease, border-color 120ms ease',
+        '&:hover': { color: 'text.primary' },
       }}
     >
       {item.label}
@@ -66,10 +72,11 @@ function PeriodChip({ item, selected, dense, marked, onChange }) {
         <Box
           aria-hidden
           sx={{
-            width: 5,
-            height: 5,
+            width: 4,
+            height: 4,
             borderRadius: '50%',
-            bgcolor: selected ? 'primary.main' : 'text.secondary',
+            bgcolor: selected ? 'text.primary' : 'text.disabled',
+            flex: '0 0 auto',
           }}
         />
       )}
@@ -80,30 +87,47 @@ function PeriodChip({ item, selected, dense, marked, onChange }) {
 function PeriodControl({ preset, onChange, dense = false }) {
   const currentQuarter = `q${getCurrentQuarter()}`;
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.5 : 0.75 }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }} role="group" aria-label="Año">
-        {YEAR_PRESETS.map((item) => (
-          <PeriodChip
-            key={item.id}
-            item={item}
-            selected={item.id === preset}
-            dense={dense}
-            onChange={onChange}
-          />
-        ))}
-      </Box>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }} role="group" aria-label="Trimestres">
-        {QUARTER_PRESETS.map((item) => (
-          <PeriodChip
-            key={item.id}
-            item={item}
-            selected={item.id === preset}
-            dense={dense}
-            marked={item.id === currentQuarter}
-            onChange={onChange}
-          />
-        ))}
-      </Box>
+    <Box
+      role="group"
+      aria-label="Período"
+      sx={{
+        display: 'flex',
+        flexWrap: 'nowrap',
+        alignItems: 'center',
+        gap: dense ? 0.75 : 1,
+        minWidth: 0,
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' },
+      }}
+    >
+      {YEAR_PRESETS.map((item) => (
+        <PeriodSeg
+          key={item.id}
+          item={item}
+          selected={item.id === preset}
+          onChange={onChange}
+        />
+      ))}
+      <Box
+        aria-hidden
+        sx={{
+          width: '1px',
+          height: 12,
+          bgcolor: 'divider',
+          flex: '0 0 auto',
+          mx: dense ? 0.125 : 0.25,
+        }}
+      />
+      {QUARTER_PRESETS.map((item) => (
+        <PeriodSeg
+          key={item.id}
+          item={item}
+          selected={item.id === preset}
+          marked={item.id === currentQuarter}
+          onChange={onChange}
+        />
+      ))}
     </Box>
   );
 }

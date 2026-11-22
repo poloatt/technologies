@@ -1,14 +1,16 @@
-/** Cortes de gestión. El id viaja al hook; el label es el de la UI. */
+/** Cortes de gestión. El id viaja al hook; el label es el de la UI.
+ * YTD/YTG y Q1–Q4 usan el año calendario local (1 ene–31 dic), no rolling 365 días.
+ */
 export const YEAR_PRESETS = [
-  { id: 'ytd', label: 'YTD', hint: 'Año a la fecha' },
-  { id: 'ytg', label: 'YTG', hint: 'Resto del año' },
+  { id: 'ytd', label: 'YTD', hint: '1 ene → hoy (año calendario)' },
+  { id: 'ytg', label: 'YTG', hint: 'Mañana → 31 dic (año calendario)' },
 ];
 
 export const QUARTER_PRESETS = [
-  { id: 'q1', label: 'Q1', hint: 'Primer trimestre' },
-  { id: 'q2', label: 'Q2', hint: 'Segundo trimestre' },
-  { id: 'q3', label: 'Q3', hint: 'Tercer trimestre' },
-  { id: 'q4', label: 'Q4', hint: 'Cuarto trimestre' },
+  { id: 'q1', label: 'Q1', hint: 'Ene–mar (año calendario)' },
+  { id: 'q2', label: 'Q2', hint: 'Abr–jun (año calendario)' },
+  { id: 'q3', label: 'Q3', hint: 'Jul–sep (año calendario)' },
+  { id: 'q4', label: 'Q4', hint: 'Oct–dic (año calendario)' },
 ];
 
 export const PERIOD_PRESETS = [...YEAR_PRESETS, ...QUARTER_PRESETS];
