@@ -379,8 +379,9 @@ function textoClasificacionMp({ description, transactionType, operationType, pay
     meta.type,
     meta.description,
     meta.event_type,
-    meta.reason,
-    typeof meta === 'object' ? JSON.stringify(meta) : ''
+    meta.reason
+    // No JSON.stringify(meta): paymentMethodType=bank_transfer en ventas SETTLEMENT
+    // contaminaba la heurística de CVU→CBU.
   ]
     .filter(Boolean)
     .join(' ')
@@ -429,34 +430,31 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 2) Reservas: interno (no contar dos veces si después transfieren)
-  if (RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
+  // 2) Reservas / parking interno (NO deben entrar a stats de flujo).
+  // partition_transfer + digital_accounts = disponible ↔ reserva dentro de MP.
+  // No exigir !TRANSFER_RE: la descripción suele decir "· Transferencia".
+  const looksReserveInternal =
+    operationType === 'partition_transfer' ||
+    RESERVE_INTERNAL_CODE_RE.test(blob) ||
+    RESERVE_RELEASE_RE.test(blob) ||
+    RESERVE_LOCK_RE.test(blob);
+
+  if (looksReserveInternal) {
+    let release = false;
+    if (RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
+      release = true;
+    } else if (RESERVE_LOCK_RE.test(blob) && !RESERVE_RELEASE_RE.test(blob)) {
+      release = false;
+    } else {
+      // Códigos crudos / partition_transfer: signo neto
+      release = netAmount > 0;
+    }
     return {
-      movementKind: MP_MOVEMENT_KINDS.RESERVE_RELEASE,
-      statsExclude: true,
-      label: MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE,
-      isTransfer: false,
-      isInternal: true
-    };
-  }
-  if (RESERVE_LOCK_RE.test(blob) && !TRANSFER_RE.test(blob)) {
-    return {
-      movementKind: MP_MOVEMENT_KINDS.RESERVE_LOCK,
-      statsExclude: true,
-      label: MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
-      isTransfer: false,
-      isInternal: true
-    };
-  }
-  // Códigos crudos MP (digital_accounts, wallet…): dirección por signo neto
-  if (RESERVE_INTERNAL_CODE_RE.test(blob) && !TRANSFER_RE.test(blob)) {
-    const isRelease = netAmount > 0;
-    return {
-      movementKind: isRelease
+      movementKind: release
         ? MP_MOVEMENT_KINDS.RESERVE_RELEASE
         : MP_MOVEMENT_KINDS.RESERVE_LOCK,
       statsExclude: true,
-      label: isRelease
+      label: release
         ? MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE
         : MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
       isTransfer: false,
@@ -464,7 +462,25 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 3) Transferencias reales / retiros
+  // 3) Comercio SETTLEMENT antes de heurística bank_transfer:
+  // en AR el CSV trae PAYMENT_METHOD_TYPE=bank_transfer en ventas QR/DEBIN cobradas,
+  // y NO son salidas CVU→CBU (esas son PAYOUTS/WITHDRAWAL).
+  if (
+    transactionType === 'SETTLEMENT' ||
+    transactionType === 'SETTLEMENT_SHIPPING' ||
+    operationType === 'regular_payment' ||
+    operationType === 'pos_payment'
+  ) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.PAYMENT,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.PAYMENT,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // 4) Transferencias reales / retiros
   // P2P = CVU→CVU / usuario MP. Bancaria = CVU→CBU (WITHDRAWAL / bank_transfer).
   if (transactionType === 'WITHDRAWAL_CANCEL') {
     return {
@@ -557,7 +573,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 4) Comercio / disputas
+  // 5) Comercio / disputas
   if (transactionType === 'REFUND' || transactionType === 'REFUND_SHIPPING') {
     return {
       movementKind: MP_MOVEMENT_KINDS.REFUND,
@@ -583,20 +599,6 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       label: MP_MOVEMENT_KIND_LABELS.INTERNAL,
       isTransfer: false,
       isInternal: true
-    };
-  }
-  if (
-    transactionType === 'SETTLEMENT' ||
-    transactionType === 'SETTLEMENT_SHIPPING' ||
-    operationType === 'regular_payment' ||
-    operationType === 'pos_payment'
-  ) {
-    return {
-      movementKind: MP_MOVEMENT_KINDS.PAYMENT,
-      statsExclude: false,
-      label: MP_MOVEMENT_KIND_LABELS.PAYMENT,
-      isTransfer: false,
-      isInternal: false
     };
   }
 

@@ -191,8 +191,12 @@ transaccionSchema.statics.getBalance = async function(cuentaId, options = {}) {
 
   const match = {
     cuenta: new mongoose.Types.ObjectId(cuentaId),
-    // Alineado con getStats: reservas/movimientos internos no distorsionan el balance de flujo
+    // Alineado con getStats: reservas/parking interno no distorsionan el flujo
     'origen.metadata.statsExclude': { $ne: true },
+    'origen.metadata.isInternal': { $ne: true },
+    'origen.metadata.movementKind': {
+      $nin: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'INTERNAL'],
+    },
   };
   const estadoFilter = buildEstadoFilter(estado);
   if (estadoFilter) match.estado = estadoFilter;

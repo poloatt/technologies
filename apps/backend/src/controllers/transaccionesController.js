@@ -98,8 +98,12 @@ class TransaccionesController extends BaseController {
       const query = {
         usuario: new mongoose.Types.ObjectId(req.user.id),
         fecha: { $gte: inicio, $lte: fin },
-        // No contar extracciones de reserva / movimientos internos MP dos veces
+        // No contar reservas / parking interno MP (digital_accounts, partition_transfer)
         'origen.metadata.statsExclude': { $ne: true },
+        'origen.metadata.isInternal': { $ne: true },
+        'origen.metadata.movementKind': {
+          $nin: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'INTERNAL'],
+        },
       };
       if (cuenta) {
         if (!mongoose.Types.ObjectId.isValid(cuenta)) {
