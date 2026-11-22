@@ -48,9 +48,9 @@ export function MercadoPagoCallbackPage() {
         await processCallback(code, state);
         setStatus('success');
         
-        // Redirigir después de un breve delay para mostrar el mensaje de éxito
+        // Volver a movimientos (no abrir Cuentas)
         setTimeout(() => {
-          navigate('/finanzas/cuentas');
+          navigate('/finanzas/transacciones');
         }, 2000);
       } catch (error) {
         console.error('Error al conectar con MercadoPago:', error);
@@ -77,7 +77,7 @@ export function MercadoPagoCallbackPage() {
               Tu cuenta de MercadoPago ha sido conectada correctamente
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Redirigiendo a cuentas...
+              Redirigiendo a transacciones...
             </Typography>
           </Box>
         );
@@ -94,11 +94,11 @@ export function MercadoPagoCallbackPage() {
               </Typography>
             </Alert>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Redirigiendo a cuentas en 5 segundos...
+              Redirigiendo a transacciones en 5 segundos...
             </Typography>
             <Typography variant="body2" color="text.secondary">
               <a 
-                href="/finanzas/cuentas" 
+                href="/finanzas/transacciones" 
                 style={{ color: 'inherit', textDecoration: 'underline' }}
               >
                 Hacer clic aquí para ir ahora
@@ -116,7 +116,7 @@ export function MercadoPagoCallbackPage() {
   useEffect(() => {
     if (status === 'error') {
       const timer = setTimeout(() => {
-        navigate('/finanzas/cuentas');
+        navigate('/finanzas/transacciones');
       }, 5000);
       
       return () => clearTimeout(timer);

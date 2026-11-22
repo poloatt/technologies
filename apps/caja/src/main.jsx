@@ -27,6 +27,8 @@ const AppConfig = {
 
 // Inyectar configuración global
 window.APP_CONFIG = AppConfig
+// Señal para el watchdog de index.html (PWA / cache stale post-deploy)
+window.__CAJA_BOOTED__ = true
 
 // Definir mapa de rutas para Caja
 const cajaRoutesMap = {

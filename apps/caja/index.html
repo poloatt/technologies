@@ -46,11 +46,64 @@
         e.preventDefault();
       });
 
+      // Tras un deploy, HTML/SW cacheados pueden apuntar a /assets/*.js que ya no existen
+      // (PWA móvil queda en loading infinito). Recuperar una vez por sesión.
+      (function() {
+        var DEPLOY_RECOVERY_KEY = 'caja-deploy-recovery';
+
+        function recoverFromStaleDeploy() {
+          if (sessionStorage.getItem(DEPLOY_RECOVERY_KEY)) return;
+          sessionStorage.setItem(DEPLOY_RECOVERY_KEY, '1');
+
+          var cleanup = Promise.resolve();
+          if ('serviceWorker' in navigator) {
+            cleanup = navigator.serviceWorker.getRegistrations().then(function(regs) {
+              return Promise.all(regs.map(function(r) { return r.unregister(); }));
+            });
+          }
+          cleanup.then(function() {
+            if (window.caches && window.caches.keys) {
+              return caches.keys().then(function(keys) {
+                return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+              });
+            }
+          }).then(function() {
+            window.location.reload();
+          });
+        }
+
+        window.addEventListener('error', function(event) {
+          var target = event.target;
+          var src = target && (target.src || target.href);
+          if (src && /\/assets\/[^?]+\.(js|css)(\?|$)/i.test(src)) {
+            recoverFromStaleDeploy();
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason && (event.reason.message || String(event.reason));
+          if (!reason || !/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Loading chunk|Failed to fetch/i.test(reason)) {
+            return;
+          }
+          event.preventDefault();
+          recoverFromStaleDeploy();
+        });
+
+        // Watchdog: si React no llegó a montar, el bundle no cargó (cache stale)
+        window.addEventListener('load', function() {
+          setTimeout(function() {
+            if (!window.__CAJA_BOOTED__) {
+              recoverFromStaleDeploy();
+            }
+          }, 10000);
+        });
+      })();
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           var isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
           if (!isLocalhost) {
-            navigator.serviceWorker.register('/sw.js')
+            navigator.serviceWorker.register('/sw.js?v=4')
               .then(function(registration) {
                 console.log('SW registered: ', registration);
                 if (registration.update) {
@@ -78,7 +131,7 @@
   </head>
   <body>
     <div id="root">
-      <div class="app-loading-screen" aria-hidden="true">
+      <div class="app-loading-screen" data-boot-shell="1" aria-hidden="true">
         <div class="google-loader">
           <span class="google-loader__dot google-loader__dot--blue"></span>
           <span class="google-loader__dot google-loader__dot--red"></span>
