@@ -47,13 +47,17 @@
       });
 
       // Tras un deploy, HTML/SW cacheados pueden apuntar a /assets/*.js que ya no existen
-      // (PWA móvil queda en loading infinito). Recuperar una vez por sesión.
+      // (PWA móvil queda en loading infinito). Recuperar por versión de build.
       (function() {
-        var DEPLOY_RECOVERY_KEY = 'caja-deploy-recovery';
+        var SW_BUILD = 'v5';
+        var DEPLOY_RECOVERY_KEY = 'caja-deploy-recovery-' + SW_BUILD;
+        var recovering = false;
 
-        function recoverFromStaleDeploy() {
-          if (sessionStorage.getItem(DEPLOY_RECOVERY_KEY)) return;
-          sessionStorage.setItem(DEPLOY_RECOVERY_KEY, '1');
+        function hardResetPwa() {
+          if (recovering) return;
+          recovering = true;
+          try { localStorage.setItem(DEPLOY_RECOVERY_KEY, '1'); } catch (e) {}
+          try { sessionStorage.setItem(DEPLOY_RECOVERY_KEY, '1'); } catch (e) {}
 
           var cleanup = Promise.resolve();
           if ('serviceWorker' in navigator) {
@@ -68,9 +72,28 @@
               });
             }
           }).then(function() {
-            window.location.reload();
+            var url = new URL(window.location.href);
+            url.searchParams.set('_pwa', SW_BUILD);
+            url.searchParams.delete('resetpwa');
+            window.location.replace(url.toString());
           });
         }
+
+        function recoverFromStaleDeploy() {
+          try {
+            if (localStorage.getItem(DEPLOY_RECOVERY_KEY) === '1') return;
+          } catch (e) {}
+          hardResetPwa();
+        }
+
+        // Reset manual: /?resetpwa=1
+        try {
+          if (/[?&]resetpwa=1(?:&|$)/.test(window.location.search)) {
+            try { localStorage.removeItem(DEPLOY_RECOVERY_KEY); } catch (e) {}
+            hardResetPwa();
+            return;
+          }
+        } catch (e) {}
 
         window.addEventListener('error', function(event) {
           var target = event.target;
@@ -95,15 +118,19 @@
             if (!window.__CAJA_BOOTED__) {
               recoverFromStaleDeploy();
             }
-          }, 10000);
+          }, 8000);
         });
+
+        window.__CAJA_HARD_RESET_PWA__ = hardResetPwa;
+        window.__CAJA_SW_BUILD__ = SW_BUILD;
       })();
 
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           var isLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
           if (!isLocalhost) {
-            navigator.serviceWorker.register('/sw.js?v=4')
+            var refreshing = false;
+            navigator.serviceWorker.register('/sw.js?v=5')
               .then(function(registration) {
                 console.log('SW registered: ', registration);
                 if (registration.update) {
@@ -115,6 +142,9 @@
               });
 
             navigator.serviceWorker.addEventListener('controllerchange', function() {
+              // Evitar loop de reloads en PWA iOS/Android
+              if (refreshing) return;
+              refreshing = true;
               window.location.reload();
             });
           } else {

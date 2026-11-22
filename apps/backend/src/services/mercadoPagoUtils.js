@@ -9,7 +9,8 @@ export const MP_TRANSACTION_TYPE_LABELS = {
   DISPUTE: 'Reclamo',
   WITHDRAWAL: 'Transferencia bancaria',
   WITHDRAWAL_CANCEL: 'Transferencia cancelada',
-  PAYOUT: 'Retiro de efectivo',
+  PAYOUT: 'Transferencia bancaria',
+  PAYOUTS: 'Transferencia bancaria',
   TRANSFER: 'Transferencia',
   MONEY_TRANSFER: 'Transferencia',
   BANK_TRANSFER: 'Transferencia bancaria',
@@ -304,6 +305,7 @@ export function esTipoTransferenciaMovimiento(type) {
     key === 'WITHDRAWAL' ||
     key === 'WITHDRAWAL_CANCEL' ||
     key === 'PAYOUT' ||
+    key === 'PAYOUTS' || // settlement AR usa plural con include_withdraw
     key === 'TRANSFER' ||
     key === 'MONEY_TRANSFER' ||
     key === 'BANK_TRANSFER' ||
@@ -515,26 +517,27 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       isInternal: false
     };
   }
-  if (transactionType === 'PAYOUT') {
-    // En AR el settlement marca PAYOUT tanto a retiro ATM como a transferencia CVU/CBU
-    const payoutLooksLikeTransfer =
-      TRANSFER_RE.test(blob) ||
-      /cvu|cbu|alias|account_money|bank_transfer|transfer/i.test(
+  if (transactionType === 'PAYOUT' || transactionType === 'PAYOUTS') {
+    // Docs: PAYOUT = efectivo. En AR con include_withdraw el CSV trae PAYOUTS
+    // (plural) para salidas de dinero (CVU→CBU y similares) con DESCRIPTION vacía.
+    // Sin metadatos no se distingue ATM vs CBU → tratar como transferencia externa.
+    const looksCashAtm =
+      /atm|efectivo|cash|extracci[oó]n|retiro\s*en\s*efectivo/i.test(
         `${paymentMethod} ${blob}`
       );
-    if (payoutLooksLikeTransfer) {
+    if (looksCashAtm) {
       return {
-        movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
+        movementKind: MP_MOVEMENT_KINDS.CASH_WITHDRAWAL,
         statsExclude: false,
-        label: MP_MOVEMENT_KIND_LABELS.EXTERNAL_TRANSFER,
+        label: MP_MOVEMENT_KIND_LABELS.CASH_WITHDRAWAL,
         isTransfer: true,
         isInternal: false
       };
     }
     return {
-      movementKind: MP_MOVEMENT_KINDS.CASH_WITHDRAWAL,
+      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
       statsExclude: false,
-      label: MP_MOVEMENT_KIND_LABELS.CASH_WITHDRAWAL,
+      label: MP_MOVEMENT_KIND_LABELS.EXTERNAL_TRANSFER,
       isTransfer: true,
       isInternal: false
     };

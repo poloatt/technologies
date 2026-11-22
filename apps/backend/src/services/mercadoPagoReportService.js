@@ -114,42 +114,75 @@ export class MercadoPagoReportService {
     this.userId = userId;
   }
 
-  getSettlementConfigBody() {
-    // Columnas oficiales del glosario Account Money. include_withdraw es crítico
-    // para traer transferencias bancarias (WITHDRAWAL / WITHDRAWAL_CANCEL / PAYOUT).
+  getSettlementConfigBody(existing = null) {
+    // include_withdraw es crítico para CVU→CBU (WITHDRAWAL).
+    // MP exige frequency en PUT; hay que preservar el de la config existente.
+    const baseColumns = [
+      { key: 'TRANSACTION_DATE' },
+      { key: 'SOURCE_ID' },
+      { key: 'EXTERNAL_REFERENCE' },
+      { key: 'TRANSACTION_TYPE' },
+      { key: 'DESCRIPTION' },
+      { key: 'TRANSACTION_AMOUNT' },
+      { key: 'TRANSACTION_CURRENCY' },
+      { key: 'FEE_AMOUNT' },
+      { key: 'SETTLEMENT_NET_AMOUNT' },
+      { key: 'SETTLEMENT_DATE' },
+      { key: 'REAL_AMOUNT' },
+      { key: 'PAYMENT_METHOD' },
+      { key: 'PAYMENT_METHOD_TYPE' },
+      { key: 'METADATA' },
+      { key: 'USER_ID' }
+    ];
+    const existingCols = Array.isArray(existing?.columns) ? existing.columns : null;
+    const hasDescription = (existingCols || []).some(
+      (c) => String(c.key || c).toUpperCase() === 'DESCRIPTION'
+    );
+    const columns = existingCols?.length
+      ? hasDescription
+        ? existingCols
+        : [...existingCols, { key: 'DESCRIPTION' }]
+      : baseColumns;
+
     return {
-      file_name_prefix: `attadia-settlement-${this.userId}`,
-      show_fee_prevision: false,
-      show_chargeback_cancel: true,
+      file_name_prefix:
+        existing?.file_name_prefix || `attadia-settlement-${this.userId || 'mp'}`,
+      show_fee_prevision: existing?.show_fee_prevision ?? false,
+      show_chargeback_cancel: existing?.show_chargeback_cancel ?? true,
       include_withdraw: true,
-      coupon_detailed: true,
-      shipping_detail: true,
-      refund_detailed: true,
-      header_language: 'es',
-      separator: ';',
-      columns: [
-        { key: 'TRANSACTION_DATE' },
-        { key: 'SOURCE_ID' },
-        { key: 'EXTERNAL_REFERENCE' },
-        { key: 'TRANSACTION_TYPE' },
-        // DESCRIPTION ayuda a detectar reservas / rendimientos / transferencias P2P
-        { key: 'DESCRIPTION' },
-        { key: 'TRANSACTION_AMOUNT' },
-        { key: 'TRANSACTION_CURRENCY' },
-        { key: 'FEE_AMOUNT' },
-        { key: 'SETTLEMENT_NET_AMOUNT' },
-        { key: 'SETTLEMENT_DATE' },
-        { key: 'REAL_AMOUNT' },
-        { key: 'PAYMENT_METHOD' },
-        { key: 'PAYMENT_METHOD_TYPE' },
-        { key: 'METADATA' },
-        { key: 'USER_ID' }
-      ]
+      // Incluir retiros al borde del rango de fechas
+      include_withdrawal_at_end: true,
+      coupon_detailed: existing?.coupon_detailed ?? true,
+      shipping_detail: existing?.shipping_detail ?? true,
+      refund_detailed: existing?.refund_detailed ?? true,
+      header_language: existing?.header_language || 'es',
+      separator: existing?.separator || ';',
+      display_timezone: existing?.display_timezone || 'GMT-03',
+      frequency: existing?.frequency || {
+        hour: 0,
+        type: 'daily',
+        value: 0,
+        format: 'CSV'
+      },
+      columns
     };
   }
 
-  async updateReportConfig() {
-    const body = this.getSettlementConfigBody();
+  async getReportConfig() {
+    const response = await fetch(`${MP_BASE}/v1/account/settlement_report/config`, {
+      headers: mpAuthHeaders(this.accessToken)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn('[MP Report] GET config:', response.status, errorText.slice(0, 200));
+      return null;
+    }
+    return response.json();
+  }
+
+  async updateReportConfig(existing = null) {
+    const current = existing || (await this.getReportConfig());
+    const body = this.getSettlementConfigBody(current);
     const response = await fetch(`${MP_BASE}/v1/account/settlement_report/config`, {
       method: 'PUT',
       headers: mpAuthHeaders(this.accessToken),
@@ -157,8 +190,9 @@ export class MercadoPagoReportService {
     });
 
     if (response.status === 200 || response.status === 201) {
-      console.log('[MP Report] Config actualizada con include_withdraw=true');
-      return response.json();
+      const updated = await response.json();
+      console.log('[MP Report] Config actualizada include_withdraw=', updated?.include_withdraw);
+      return updated;
     }
 
     const errorText = await response.text();
@@ -167,8 +201,17 @@ export class MercadoPagoReportService {
   }
 
   async configureReport() {
-    const body = this.getSettlementConfigBody();
+    const existing = await this.getReportConfig();
+    if (existing) {
+      if (existing.include_withdraw === true) {
+        console.log('[MP Report] Config OK (include_withdraw=true)');
+        return existing;
+      }
+      console.log('[MP Report] Config sin retiros — forzando include_withdraw=true...');
+      return this.updateReportConfig(existing);
+    }
 
+    const body = this.getSettlementConfigBody();
     const response = await fetch(`${MP_BASE}/v1/account/settlement_report/config`, {
       method: 'POST',
       headers: mpAuthHeaders(this.accessToken),
@@ -181,7 +224,6 @@ export class MercadoPagoReportService {
 
     const errorText = await response.text();
     if (response.status === 409 || errorText.toLowerCase().includes('already')) {
-      // Config previa pudo haberse creado sin include_withdraw; forzar PUT.
       console.log('[MP Report] Config ya existe — actualizando para incluir transferencias/retiros...');
       return this.updateReportConfig();
     }
@@ -357,8 +399,18 @@ export class MercadoPagoReportService {
     }
   }
 
+  settlementHasBankTransfers(rows = []) {
+    return (rows || []).some((row) => {
+      const t = String(row.transactionType || row.TRANSACTION_TYPE || '').toUpperCase();
+      return t === 'WITHDRAWAL' || t === 'WITHDRAWAL_CANCEL' || t === 'PAYOUT' || t === 'PAYOUTS';
+    });
+  }
+
   async fetchSettlementMovements(beginDate, endDate, options = {}) {
     const pollOptions = options.pollOptions || {};
+
+    // Siempre asegurar include_withdraw antes de crear/reusar
+    await this.configureReport();
 
     if (options.pending) {
       const pendingResult = await this.tryCompletePendingReport(options.pending, pollOptions);
@@ -387,22 +439,17 @@ export class MercadoPagoReportService {
       }
     }
 
-    // 1) Reutilizar reportes ya generados (evita 429 por cupo)
+    // Preferir reporte NUEVO: con include_withdraw los CSV viejos omiten la mayoría
+    // de PAYOUTS/WITHDRAWAL. Solo reutilizar ante cupo 429.
     let reusedFallback = null;
     try {
-      const reports = await this.listReports();
-      const strict = findStrictReportMatch(reports, beginDate, endDate);
-      if (strict) {
-        const reused = await this.reuseExistingReports(beginDate, endDate);
-        if (reused?.rows) return reused;
-      }
       reusedFallback = await this.reuseExistingReports(beginDate, endDate);
     } catch (error) {
       console.warn('[MP Report] Reuso previo falló:', error.message);
     }
 
     try {
-      await this.requestReport(beginDate, endDate);
+      await this.createReport(beginDate, endDate);
     } catch (error) {
       if (error instanceof SettlementReportQuotaError || isQuotaExceededError(error)) {
         console.warn('[MP Report] Cupo de reportes agotado (429). Reutilizando existentes...');
@@ -412,7 +459,8 @@ export class MercadoPagoReportService {
           return {
             ...reused,
             partial: true,
-            quotaExceeded: true
+            quotaExceeded: true,
+            missingWithdrawals: !this.settlementHasBankTransfers(reused.rows)
           };
         }
         // Sin CSV reutilizable: seguir con payments/account movements

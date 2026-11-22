@@ -385,8 +385,10 @@ export class BankSyncService {
 
         if (report.quotaExceeded) {
           movimientos = report.rows || [];
-          const quotaMsg =
-            movimientos.length > 0
+          const missingW = report.missingWithdrawals === true;
+          const quotaMsg = missingW
+            ? 'Cupo de reportes MP agotado: los CSV reutilizados se generaron sin retiros (include_withdraw). Reintentá mañana o importá CSV Account Money con retiros desde MP.'
+            : movimientos.length > 0
               ? `Cupo de reportes MP agotado: se reutilizaron ${movimientos.length} movimientos ya generados. Podés importar CSV o reintentar más tarde.`
               : 'Cupo de reportes MP agotado (máximo de reportes). Importá el CSV desde Mercado Pago o reintentá más tarde.';
           bankConnection.mercadopago = {
@@ -399,9 +401,10 @@ export class BankSyncService {
           errores.push({
             tipo: 'settlement_report',
             error: quotaMsg,
-            quotaExceeded: true
+            quotaExceeded: true,
+            missingWithdrawals: missingW
           });
-          console.warn(`⚠️ Settlement cupo 429; reutilizados: ${movimientos.length}`);
+          console.warn(`⚠️ Settlement cupo 429; reutilizados: ${movimientos.length}; missingWithdrawals=${missingW}`);
         } else if (report.pending) {
           settlementPending = true;
           movimientos = report.rows || [];
@@ -565,10 +568,14 @@ export class BankSyncService {
           (m) =>
             m.transactionType === 'BANK_TRANSFER' ||
             m.transactionType === 'WITHDRAWAL' ||
+            m.transactionType === 'PAYOUT' ||
+            m.transactionType === 'PAYOUTS' ||
             Boolean(m.raw?.METADATA?.bank_account || m.raw?.bank_account)
         ).length,
         movimientos.filter((m) =>
-          ['WITHDRAWAL', 'BANK_TRANSFER'].includes(String(m.transactionType || '').toUpperCase())
+          ['WITHDRAWAL', 'BANK_TRANSFER', 'PAYOUT', 'PAYOUTS'].includes(
+            String(m.transactionType || '').toUpperCase()
+          )
         ).length
       );
       const transferenciasSettlement = movimientos.filter((m) =>

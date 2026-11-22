@@ -449,6 +449,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!isInitialized.current) {
       isInitialized.current = true;
+
+      // Evitar loading infinito en PWA/móvil (cold start / SW viejo / red lenta)
+      const hardLoadingTimeout = setTimeout(() => {
+        setLoading((prev) => {
+          if (prev) {
+            console.warn('Auth: hard timeout — liberando loading');
+            return false;
+          }
+          return prev;
+        });
+        isChecking.current = false;
+      }, (isPWA || isMobile) ? 12000 : 20000);
       
       // En móviles/PWAs, dar un pequeño delay para asegurar que localStorage esté disponible
       const initDelay = (isPWA || isMobile) ? 300 : 0;
@@ -473,10 +485,13 @@ export function AuthProvider({ children }) {
               // Configurar token en axios
               clienteAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
               
-              // Timeout estándar (no aumentamos porque no soluciona el problema de fondo)
+              // En PWA/móvil: menos reintentos para no quedar en spinner eterno
               const { data } = await retryWhileBackendWakes(
                 () => clienteAxios.get(`${currentConfig.authPrefix}/check`, { timeout: 8000 }),
-                { maxAttempts: 8, baseDelayMs: 1500 },
+                {
+                  maxAttempts: (isPWA || isMobile) ? 3 : 8,
+                  baseDelayMs: (isPWA || isMobile) ? 1000 : 1500,
+                },
               );
               
               if (data.authenticated && data.user) {
@@ -530,6 +545,7 @@ export function AuthProvider({ children }) {
             } finally {
               isChecking.current = false;
               lastCheckStart.current = null;
+              clearTimeout(hardLoadingTimeout);
             }
           };
           
@@ -555,6 +571,7 @@ export function AuthProvider({ children }) {
             } finally {
               isChecking.current = false;
               setLoading(false);
+              clearTimeout(hardLoadingTimeout);
             }
           };
           silentSsoInit();

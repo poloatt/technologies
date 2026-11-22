@@ -234,46 +234,59 @@ export class MercadoPagoActivitiesService {
   }
 
   async createWithdrawStatement(beginDate, endDate) {
-    const body = {
-      filters: {
-        creation_date: {
-          range: {
-            gte: beginDate,
-            lte: endDate
+    // Docs oficiales: solo filters (sin file_format). Si falla, settlement WITHDRAWAL es el fallback.
+    const bodies = [
+      {
+        filters: {
+          creation_date: {
+            range: { gte: beginDate, lte: endDate }
           }
         }
       },
-      file_format: 'csv'
-    };
-
-    const res = await fetch(
-      `${MP_BASE}/v1/reporting/operations/${REPORT_WITHDRAW}/statements`,
       {
-        method: 'POST',
-        headers: mpAuthHeaders(this.accessToken),
-        body: JSON.stringify(body)
+        filters: {
+          creation_date: {
+            range: { gte: beginDate, lte: endDate }
+          }
+        },
+        file_format: 'csv'
       }
-    );
-    const text = await res.text();
-    let data = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { raw: text };
+    ];
+
+    let lastError = null;
+    for (const body of bodies) {
+      const res = await fetch(
+        `${MP_BASE}/v1/reporting/operations/${REPORT_WITHDRAW}/statements`,
+        {
+          method: 'POST',
+          headers: mpAuthHeaders(this.accessToken),
+          body: JSON.stringify(body)
+        }
+      );
+      const text = await res.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { raw: text };
+      }
+
+      if (res.ok) {
+        const recordId = data.record_id || data.uid || data.id;
+        if (!recordId) {
+          throw new Error(`activities_withdraw sin record_id: ${text}`);
+        }
+        return { recordId, data };
+      }
+
+      lastError = new Error(`activities_withdraw create: ${res.status} - ${text}`);
+      lastError.status = res.status;
+      lastError.data = data;
+      // Si no es formato, no tiene sentido reintentar el otro body
+      if (!String(text).includes('UNSUPPORTED_OUTPUT_FORMAT')) break;
     }
 
-    if (!res.ok) {
-      const err = new Error(`activities_withdraw create: ${res.status} - ${text}`);
-      err.status = res.status;
-      err.data = data;
-      throw err;
-    }
-
-    const recordId = data.record_id || data.uid || data.id;
-    if (!recordId) {
-      throw new Error(`activities_withdraw sin record_id: ${text}`);
-    }
-    return { recordId, data };
+    throw lastError || new Error('activities_withdraw create falló');
   }
 
   async getStatement(uid) {
