@@ -498,15 +498,23 @@ export class BankSyncService {
       } catch (error) {
         console.warn('⚠️ activities_withdraw no disponible:', error.message);
         errores.push({ tipo: 'activities_withdraw', error: error.message });
-        // Sin este reporte no entran CVU→CBU; marcar parcial para no ocultar el hueco
-        bankConnection.mercadopago = {
-          ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
-          syncParcial: true,
-          ultimoErrorSettlement:
-            bankConnection.mercadopago?.ultimoErrorSettlement ||
-            `activities_withdraw falló: ${error.message}`
-        };
-        await bankConnection.save();
+        // Settlement con include_withdraw ya trae PAYOUTS/WITHDRAWAL (CVU→CBU).
+        // No ensuciar ultimoError ni forzar parcial solo por activities_withdraw.
+        const settlementHasBankOut = (movimientos || []).some((m) =>
+          ['WITHDRAWAL', 'WITHDRAWAL_CANCEL', 'PAYOUT', 'PAYOUTS', 'BANK_TRANSFER'].includes(
+            String(m.transactionType || '').toUpperCase()
+          )
+        );
+        if (!settlementHasBankOut) {
+          bankConnection.mercadopago = {
+            ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+            syncParcial: true,
+            ultimoErrorSettlement:
+              bankConnection.mercadopago?.ultimoErrorSettlement ||
+              `Sin salidas bancarias en settlement y activities_withdraw falló: ${error.message}`
+          };
+          await bankConnection.save();
+        }
       }
 
       let movimientosMerged = this.mergeMovimientosMp(
@@ -618,40 +626,70 @@ export class BankSyncService {
         console.warn('⚠️ No se pudo calcular gap de reconciliación:', error.message);
       }
 
+      const settlementBankOuts = (movimientos || []).filter((m) =>
+        ['WITHDRAWAL', 'WITHDRAWAL_CANCEL', 'PAYOUT', 'PAYOUTS', 'BANK_TRANSFER'].includes(
+          String(m.transactionType || '').toUpperCase()
+        )
+      ).length;
+      const settlementHasBankOut = settlementBankOuts > 0;
+
       const coberturaP2P =
-        transferenciasP2P > 0 ||
-        transferenciasBancarias > 0 ||
-        transferenciasActivities > 0 ||
-        (movementKinds.P2P_TRANSFER || 0) > 0 ||
-        (movementKinds.EXTERNAL_TRANSFER || 0) > 0
-          ? 'OK'
-          : 'VACIA';
-      const coberturaBancarias = transferenciasBancarias > 0 || (movementKinds.EXTERNAL_TRANSFER || 0) > 0
+        transferenciasP2P > 0 || (movementKinds.P2P_TRANSFER || 0) > 0 ? 'OK' : 'VACIA';
+      // Salidas CVU→CBU = PAYOUTS/WITHDRAWAL en settlement (no confundir con Debin ingreso)
+      const coberturaBancarias = settlementHasBankOut || transferenciasActivities > 0
         ? 'OK'
-        : 'VACIA';
+        : transferenciasBancarias > 0
+          ? 'SOLO_ENTRADA'
+          : 'VACIA';
       const diagnosticoNota =
-        coberturaP2P === 'VACIA'
+        coberturaP2P === 'VACIA' && coberturaBancarias === 'VACIA'
           ? 'No se detectaron transferencias P2P ni bancarias (CVU→CBU).'
           : coberturaBancarias === 'VACIA'
-            ? 'Hay P2P (CVU→CVU) pero no transferencias a banco (CVU→CBU / activities_withdraw).'
-            : 'Transferencias P2P y/o bancarias detectadas en esta sync.';
+            ? 'Hay P2P (CVU→CVU) pero no salidas a banco (CVU→CBU / PAYOUTS).'
+            : coberturaBancarias === 'SOLO_ENTRADA'
+              ? 'Hay Debin/ingresos bancarios, pero aún no salidas CVU→CBU (PAYOUTS) en settlement.'
+              : 'Transferencias P2P y/o bancarias (incl. salidas) detectadas en esta sync.';
 
       const p2pGapHint =
-        (coberturaP2P === 'VACIA' || coberturaBancarias === 'VACIA') &&
+        (coberturaP2P === 'VACIA' || coberturaBancarias === 'VACIA' || coberturaBancarias === 'SOLO_ENTRADA') &&
         gapSaldo != null &&
         Math.abs(gapSaldo) >= 1
           ? ` Posible hueco de ledger ≈ ${gapSaldo} (saldo MP ${balance.available} vs flujo ${saldoLedger}).`
           : '';
 
+      const syncParcial =
+        settlementPending ||
+        errores.some((e) => e.tipo === 'settlement_report') ||
+        (coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 50) ||
+        (coberturaBancarias === 'VACIA' && !settlementHasBankOut);
+
+      let ultimoError = bankConnection.mercadopago?.ultimoErrorSettlement;
+      if (settlementHasBankOut || coberturaBancarias === 'OK') {
+        if (ultimoError && /activities_withdraw/i.test(String(ultimoError))) {
+          ultimoError = undefined;
+        }
+      }
+      if (
+        coberturaP2P === 'VACIA' &&
+        gapSaldo != null &&
+        Math.abs(gapSaldo) >= 50
+      ) {
+        ultimoError =
+          `Cobertura incompleta: no hay transferencias P2P y el saldo MP difiere del ledger (${gapSaldo}).`;
+      }
+
       bankConnection.mercadopago = {
         ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+        syncParcial,
+        ultimoErrorSettlement: syncParcial ? ultimoError : undefined,
         diagnostico: {
           actualizadoEn: new Date(),
           transferenciasP2P,
           transferenciasBancarias,
-          transferenciasSettlement,
+          transferenciasSettlement: Math.max(transferenciasSettlement, settlementBankOuts),
           transferenciasAccount,
           transferenciasActivities,
+          settlementBankOuts,
           movementKinds,
           saldoMp: balance.available || 0,
           saldoLedger,
@@ -661,22 +699,6 @@ export class BankSyncService {
           nota: diagnosticoNota + p2pGapHint
         }
       };
-
-      const syncParcial =
-        settlementPending ||
-        errores.some((e) => e.tipo === 'settlement_report') ||
-        Boolean(bankConnection.mercadopago?.syncParcial) ||
-        (coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 50);
-      if (
-        coberturaP2P === 'VACIA' &&
-        gapSaldo != null &&
-        Math.abs(gapSaldo) >= 50 &&
-        !bankConnection.mercadopago.ultimoErrorSettlement
-      ) {
-        bankConnection.mercadopago.ultimoErrorSettlement =
-          `Cobertura incompleta: no hay transferencias P2P y el saldo MP difiere del ledger (${gapSaldo}).`;
-        bankConnection.mercadopago.syncParcial = true;
-      }
       await bankConnection.save();
 
       const syncEstado = syncParcial ? 'PARCIAL' : 'EXITOSA';

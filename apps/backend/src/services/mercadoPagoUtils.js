@@ -189,9 +189,12 @@ export function esTransferenciaBancariaPago(pago) {
   const methodType = String(
     pago.payment_type_id || pago.payment_method?.type || ''
   ).toLowerCase();
+  // debin_transfer = banco→MP (ingreso CBU); bank_transfer/cbu = vínculo bancario
   if (
     methodId === 'bank_transfer' ||
     methodId === 'cbu' ||
+    methodId === 'debin_transfer' ||
+    methodId.includes('debin') ||
     methodType === 'bank_transfer'
   ) {
     return true;
@@ -489,6 +492,8 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     transactionType === 'WITHDRAWAL' ||
     paymentMethodLower === 'bank_transfer' ||
     paymentMethodLower === 'cbu' ||
+    paymentMethodLower === 'debin_transfer' ||
+    paymentMethodLower.includes('debin') ||
     BANK_TRANSFER_RE.test(`${paymentMethodLower} ${blob}`);
 
   if (looksBank) {
