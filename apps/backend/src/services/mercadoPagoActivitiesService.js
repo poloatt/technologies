@@ -56,18 +56,21 @@ export function normalizeActivitiesWithdrawRow(row) {
   const bankAccount = String(row.BANK_ACCOUNT || row.bank_account || '').trim();
   const status = String(row.STATUS || row.status || '').toLowerCase();
 
+  // bank_account presente = CVU→CBU bancario; sin banco + contraparte = P2P CVU→CVU
   let transactionType = 'WITHDRAWAL';
-  if (opType.includes('transfer') || opType.includes('money_transfer') || opType.includes('p2p')) {
+  if (bankAccount) {
+    transactionType = 'BANK_TRANSFER';
+  } else if (opType.includes('transfer') || opType.includes('money_transfer') || opType.includes('p2p')) {
     transactionType = 'MONEY_TRANSFER';
   } else if (opType.includes('payout') || opType.includes('cash')) {
     transactionType = 'PAYOUT';
-  } else if (!bankAccount && counterpart) {
+  } else if (counterpart) {
     transactionType = 'MONEY_TRANSFER';
   }
 
   const description =
     counterpart ||
-    bankAccount ||
+    (bankAccount ? `Transferencia a CBU ${bankAccount}` : '') ||
     String(row.OPERATION_TYPE || row.operation_type || 'Transferencia').trim();
 
   const raw = {
@@ -84,6 +87,7 @@ export function normalizeActivitiesWithdrawRow(row) {
     METADATA: {
       counterpart_name: counterpart || null,
       bank_account: bankAccount || null,
+      cbu: bankAccount || null,
       provider_id: row.PROVIDER_ID || row.provider_id || null,
       operation_type: row.OPERATION_TYPE || row.operation_type || null,
       status
@@ -116,7 +120,38 @@ export class MercadoPagoActivitiesService {
     this.userId = userId;
   }
 
+  getWithdrawStructureColumns() {
+    // bank_account / provider_id son clave para CVU→CBU (transferencia a banco)
+    return [
+      { key: 'date_created' },
+      { key: 'operation_id' },
+      { key: 'status' },
+      { key: 'operation_type' },
+      { key: 'transaction_amount' },
+      { key: 'net_received_amount' },
+      { key: 'counterpart_name' },
+      { key: 'bank_account' },
+      { key: 'provider_id' }
+    ];
+  }
+
+  withdrawConfigHasBankAccount(existing) {
+    const cols = existing?.structure?.columns || existing?.columns || [];
+    return cols.some((c) => String(c.key || c).toLowerCase() === 'bank_account');
+  }
+
   async ensureWithdrawConfig() {
+    const columns = this.getWithdrawStructureColumns();
+    const structureBase = {
+      name: `attadia-withdraw-${this.userId}`,
+      columns,
+      file_format: {
+        separator: ';',
+        prefix: `attadia-withdraw-${this.userId}`
+      },
+      display_timezone: 'GMT-03'
+    };
+
     const getRes = await fetch(
       `${MP_BASE}/v1/reporting/operations/${REPORT_WITHDRAW}/config`,
       { headers: mpAuthHeaders(this.accessToken) }
@@ -126,31 +161,44 @@ export class MercadoPagoActivitiesService {
       const existing = await getRes.json();
       const structureId = existing?.structure?.id || existing?.id;
       if (structureId) {
-        console.log('[MP Activities] Config withdraw existente:', structureId);
+        if (!this.withdrawConfigHasBankAccount(existing)) {
+          console.log(
+            '[MP Activities] Config withdraw sin bank_account — actualizando para CBU bancarios...'
+          );
+          const putRes = await fetch(
+            `${MP_BASE}/v1/reporting/operations/${REPORT_WITHDRAW}/config/${encodeURIComponent(structureId)}`,
+            {
+              method: 'PUT',
+              headers: mpAuthHeaders(this.accessToken),
+              body: JSON.stringify({
+                structure: { ...structureBase, id: structureId },
+                notifiers: existing.notifiers || [{ type: 'internal_sftp', data: {} }]
+              })
+            }
+          );
+          if (putRes.ok) {
+            console.log('[MP Activities] Config withdraw actualizada con bank_account');
+            try {
+              return await putRes.json();
+            } catch {
+              return existing;
+            }
+          }
+          const putText = await putRes.text();
+          console.warn(
+            '[MP Activities] No se pudo actualizar config withdraw:',
+            putRes.status,
+            putText.slice(0, 300)
+          );
+        } else {
+          console.log('[MP Activities] Config withdraw existente:', structureId);
+        }
         return existing;
       }
     }
 
     const body = {
-      structure: {
-        name: `attadia-withdraw-${this.userId}`,
-        columns: [
-          { key: 'date_created' },
-          { key: 'operation_id' },
-          { key: 'status' },
-          { key: 'operation_type' },
-          { key: 'transaction_amount' },
-          { key: 'net_received_amount' },
-          { key: 'counterpart_name' },
-          { key: 'bank_account' },
-          { key: 'provider_id' }
-        ],
-        file_format: {
-          separator: ';',
-          prefix: `attadia-withdraw-${this.userId}`
-        },
-        display_timezone: 'GMT-03'
-      },
+      structure: structureBase,
       notifiers: [webhookNotifier()]
     };
 

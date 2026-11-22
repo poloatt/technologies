@@ -1,5 +1,10 @@
 import fetch from 'node-fetch';
-import { deduplicarPagos, esTransferenciaPago, mpAuthHeaders } from '../mercadoPagoUtils.js';
+import {
+  deduplicarPagos,
+  esTransferenciaBancariaPago,
+  esTransferenciaPago,
+  mpAuthHeaders
+} from '../mercadoPagoUtils.js';
 
 export class MercadoPagoAdapter {
   constructor({ accessToken, refreshToken, userId }) {
@@ -237,11 +242,13 @@ export class MercadoPagoAdapter {
             payment.payment_type_id || mov.paymentMethodType || '',
           externalReference:
             payment.external_reference || mov.externalReference || '',
-          transactionType: esTransferenciaPago(payment)
-            ? (String(payment.operation_type || '').toLowerCase() === 'account_fund'
-              ? 'ACCOUNT_FUND'
-              : 'MONEY_TRANSFER')
-            : mov.transactionType,
+          transactionType: esTransferenciaBancariaPago(payment)
+            ? 'BANK_TRANSFER'
+            : esTransferenciaPago(payment)
+              ? (String(payment.operation_type || '').toLowerCase() === 'account_fund'
+                ? 'ACCOUNT_FUND'
+                : 'MONEY_TRANSFER')
+              : mov.transactionType,
           raw: {
             ...(mov.raw || {}),
             DESCRIPTION:
@@ -331,6 +338,24 @@ export class MercadoPagoAdapter {
         label: 'cvu+payer=me',
         since,
         filter: { paymentMethodId: 'cvu', payerId: 'me' }
+      },
+      // CVU propio → CBU bancario (no aparecen como money_transfer P2P)
+      { label: 'operation=withdrawal', since, filter: { operationType: 'withdrawal' } },
+      {
+        label: 'withdrawal+payer=me',
+        since,
+        filter: { operationType: 'withdrawal', payerId: 'me' }
+      },
+      { label: 'payment_type=bank_transfer', since, filter: { paymentTypeId: 'bank_transfer' } },
+      {
+        label: 'payment_method=bank_transfer',
+        since,
+        filter: { paymentMethodId: 'bank_transfer' }
+      },
+      {
+        label: 'bank_transfer+payer=me',
+        since,
+        filter: { paymentTypeId: 'bank_transfer', payerId: 'me' }
       }
     ];
 
@@ -358,13 +383,16 @@ export class MercadoPagoAdapter {
 
     const deduped = deduplicarPagos(all);
     const transferLike = deduped.filter((p) => esTransferenciaPago(p));
-    console.log(`Pagos obtenidos (collector/payer/P2P/cvu): ${deduped.length}`, {
+    const bankLike = deduped.filter((p) => esTransferenciaBancariaPago(p));
+    console.log(`Pagos obtenidos (collector/payer/P2P/cvu/CBU): ${deduped.length}`, {
       userId: mpUserId,
       since,
       transferLike: transferLike.length,
+      bankTransfers: bankLike.length,
       operationTypes: [...new Set(deduped.map((p) => p.operation_type).filter(Boolean))],
       paymentMethodIds: [...new Set(deduped.map((p) => p.payment_method_id).filter(Boolean))],
-      sampleTransferIds: transferLike.slice(0, 5).map((p) => p.id)
+      sampleTransferIds: transferLike.slice(0, 5).map((p) => p.id),
+      sampleBankIds: bankLike.slice(0, 5).map((p) => p.id)
     });
     return deduped;
   }

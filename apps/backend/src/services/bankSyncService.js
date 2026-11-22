@@ -15,6 +15,7 @@ import {
   normalizeAccountMovement,
   esTipoTransferenciaMovimiento,
   esTransferenciaPago,
+  esTransferenciaBancariaPago,
   limpiarNombreContraparte,
   clasificarMovimientoEconomicoMp
 } from './mercadoPagoUtils.js';
@@ -544,9 +545,21 @@ export class BankSyncService {
       }
 
       const transferenciasP2P = Math.max(
-        pagos.filter((p) => esTransferenciaPago(p)).length,
-        activitiesWithdraw.filter((m) =>
-          esTipoTransferenciaMovimiento(m.transactionType)
+        pagos.filter(
+          (p) => esTransferenciaPago(p) && !esTransferenciaBancariaPago(p)
+        ).length,
+        activitiesWithdraw.filter((m) => m.transactionType === 'MONEY_TRANSFER').length
+      );
+      const transferenciasBancarias = Math.max(
+        pagos.filter((p) => esTransferenciaBancariaPago(p)).length,
+        activitiesWithdraw.filter(
+          (m) =>
+            m.transactionType === 'BANK_TRANSFER' ||
+            m.transactionType === 'WITHDRAWAL' ||
+            Boolean(m.raw?.METADATA?.bank_account || m.raw?.bank_account)
+        ).length,
+        movimientos.filter((m) =>
+          ['WITHDRAWAL', 'BANK_TRANSFER'].includes(String(m.transactionType || '').toUpperCase())
         ).length
       );
       const transferenciasSettlement = movimientos.filter((m) =>
@@ -591,18 +604,26 @@ export class BankSyncService {
 
       const coberturaP2P =
         transferenciasP2P > 0 ||
+        transferenciasBancarias > 0 ||
         transferenciasActivities > 0 ||
         (movementKinds.P2P_TRANSFER || 0) > 0 ||
         (movementKinds.EXTERNAL_TRANSFER || 0) > 0
           ? 'OK'
           : 'VACIA';
+      const coberturaBancarias = transferenciasBancarias > 0 || (movementKinds.EXTERNAL_TRANSFER || 0) > 0
+        ? 'OK'
+        : 'VACIA';
       const diagnosticoNota =
         coberturaP2P === 'VACIA'
-          ? 'No se detectaron transferencias/retiros (payments transfer-like ni activities_withdraw).'
-          : 'Transferencias/retiros detectados en esta sync (payments y/o activities_withdraw).';
+          ? 'No se detectaron transferencias P2P ni bancarias (CVU→CBU).'
+          : coberturaBancarias === 'VACIA'
+            ? 'Hay P2P (CVU→CVU) pero no transferencias a banco (CVU→CBU / activities_withdraw).'
+            : 'Transferencias P2P y/o bancarias detectadas en esta sync.';
 
       const p2pGapHint =
-        coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 1
+        (coberturaP2P === 'VACIA' || coberturaBancarias === 'VACIA') &&
+        gapSaldo != null &&
+        Math.abs(gapSaldo) >= 1
           ? ` Posible hueco de ledger ≈ ${gapSaldo} (saldo MP ${balance.available} vs flujo ${saldoLedger}).`
           : '';
 
@@ -611,6 +632,7 @@ export class BankSyncService {
         diagnostico: {
           actualizadoEn: new Date(),
           transferenciasP2P,
+          transferenciasBancarias,
           transferenciasSettlement,
           transferenciasAccount,
           transferenciasActivities,
@@ -619,6 +641,7 @@ export class BankSyncService {
           saldoLedger,
           gapSaldo,
           coberturaP2P,
+          coberturaBancarias,
           nota: diagnosticoNota + p2pGapHint
         }
       };
@@ -662,11 +685,13 @@ export class BankSyncService {
           totalSettlementRows: movimientos.length,
           totalAccountMovements: accountMovements.length,
           transferenciasP2P,
+          transferenciasBancarias,
           transferenciasSettlement,
           transferenciasAccount,
           transferenciasActivities,
           movementKinds,
           coberturaP2P,
+          coberturaBancarias,
           reconciliacion: {
             saldoMp: balance.available || 0,
             saldoLedger,
@@ -705,23 +730,64 @@ export class BankSyncService {
       // Enriquecer con contraparte / descripción / tipo transferencia del secondary
       const existing = byId.get(key);
       const enriched = { ...existing };
-      if (!existing.description && row.description) {
+      const existingDesc = String(existing.description || '').trim();
+      const genericDesc =
+        !existingDesc ||
+        /^(settlement|withdrawal|payout|pago aprobado|transferencia)$/i.test(existingDesc);
+      if ((genericDesc || !existing.description) && row.description) {
         enriched.description = row.description;
+      }
+      if (!existing.counterpartName && row.counterpartName) {
+        enriched.counterpartName = row.counterpartName;
+      }
+      // activities_withdraw trae bank_account (CVU→CBU); no perderlo aunque settlement ya diga WITHDRAWAL
+      if (row.source === 'activities_withdraw') {
+        const bankAccount =
+          row.raw?.METADATA?.bank_account ||
+          row.raw?.BANK_ACCOUNT ||
+          row.raw?.bank_account ||
+          null;
+        if (
+          !existing.transactionType ||
+          existing.transactionType === 'SETTLEMENT' ||
+          (bankAccount && existing.transactionType !== 'BANK_TRANSFER')
+        ) {
+          enriched.transactionType = row.transactionType || (bankAccount ? 'BANK_TRANSFER' : existing.transactionType);
+        }
+        enriched.source = row.source;
+        enriched.raw = {
+          ...(existing.raw || {}),
+          ...(row.raw || {}),
+          DESCRIPTION: enriched.description || existing.raw?.DESCRIPTION,
+          TRANSACTION_TYPE: enriched.transactionType,
+          METADATA: {
+            ...(existing.raw?.METADATA || {}),
+            ...(row.raw?.METADATA || {}),
+            bank_account: bankAccount || existing.raw?.METADATA?.bank_account || null,
+            cbu: bankAccount || existing.raw?.METADATA?.cbu || null,
+            counterpart_name:
+              row.counterpartName ||
+              existing.counterpartName ||
+              existing.raw?.METADATA?.counterpart_name ||
+              null
+          },
+          PAYMENT_METHOD: bankAccount
+            ? 'bank_transfer'
+            : (existing.raw?.PAYMENT_METHOD || row.raw?.PAYMENT_METHOD),
+          PAYMENT_METHOD_TYPE: bankAccount
+            ? 'bank_transfer'
+            : (existing.raw?.PAYMENT_METHOD_TYPE || row.raw?.PAYMENT_METHOD_TYPE)
+        };
+        if (bankAccount) {
+          enriched.paymentMethod = 'bank_transfer';
+          enriched.paymentMethodType = 'bank_transfer';
+        }
+      } else if (row.description && genericDesc) {
         enriched.raw = {
           ...(existing.raw || {}),
           DESCRIPTION: row.description,
           ...(row.raw || {})
         };
-      }
-      if (!existing.counterpartName && row.counterpartName) {
-        enriched.counterpartName = row.counterpartName;
-      }
-      if (
-        row.source === 'activities_withdraw' &&
-        (!existing.transactionType || existing.transactionType === 'SETTLEMENT')
-      ) {
-        enriched.transactionType = row.transactionType;
-        enriched.source = row.source;
       }
       byId.set(key, enriched);
     }

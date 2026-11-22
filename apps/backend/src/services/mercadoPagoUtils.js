@@ -168,13 +168,57 @@ export function extraerContrapartePago(pago, userId) {
 // Heurística textual (también usada en clasificación económica más abajo)
 const TRANSFER_RE =
   /transferencia|transferiste|enviaste\s+dinero|envio\s+de\s+dinero|env[ií]o\s+de\s+dinero|p2p|cvu|cbu|alias|money_transfer|account_fund/i;
+const BANK_TRANSFER_RE =
+  /bank_transfer|transferencia\s+bancaria|retiro\s+a\s+banco|cbu(?!\s*\/\s*cvu)|cuenta\s+bancaria|hacia\s+cbu|a\s+cbu|withdrawal(?!\s*_?\s*cancel)/i;
 
 /**
- * Detecta transferencias P2P / CVU / fondeo de cuenta.
- * MP no usa un único código: money_transfer, account_fund, payment_method cvu, etc.
+ * CVU propio → CBU/banco (no P2P entre usuarios MP).
+ */
+export function esTransferenciaBancariaPago(pago) {
+  if (!pago || typeof pago !== 'object') return false;
+  const op = String(pago.operation_type || '').toLowerCase();
+  if (op === 'withdrawal' || op === 'money_withdrawal' || op === 'bank_transfer') return true;
+
+  const methodId = String(pago.payment_method_id || '').toLowerCase();
+  const methodType = String(
+    pago.payment_type_id || pago.payment_method?.type || ''
+  ).toLowerCase();
+  if (
+    methodId === 'bank_transfer' ||
+    methodId === 'cbu' ||
+    methodType === 'bank_transfer'
+  ) {
+    return true;
+  }
+
+  const meta = pago.metadata && typeof pago.metadata === 'object' ? pago.metadata : {};
+  if (meta.bank_account || meta.cbu || meta.bank_id || meta.destination_cbu) return true;
+
+  const blob = [
+    pago.description,
+    pago.statement_descriptor,
+    methodId,
+    methodType,
+    meta.concept,
+    meta.detail,
+    meta.type,
+    meta.bank_account
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return BANK_TRANSFER_RE.test(blob);
+}
+
+/**
+ * Detecta cualquier salida/entrada de fondos tipo transferencia:
+ * P2P (CVU→CVU / usuario MP) o bancaria (CVU→CBU).
  */
 export function esTransferenciaPago(pago) {
   if (!pago || typeof pago !== 'object') return false;
+  if (esTransferenciaBancariaPago(pago)) return true;
+
   const op = String(pago.operation_type || '').toLowerCase();
   if (op === 'money_transfer' || op === 'account_fund') return true;
 
@@ -182,7 +226,7 @@ export function esTransferenciaPago(pago) {
   const methodType = String(
     pago.payment_type_id || pago.payment_method?.type || ''
   ).toLowerCase();
-  if (methodId === 'cvu' || methodId === 'cbu') return true;
+  if (methodId === 'cvu') return true;
 
   const blob = [
     pago.description,
@@ -204,7 +248,7 @@ export function esTransferenciaPago(pago) {
   // (si no, suele ser pago con saldo a un comercio)
   if (
     (methodType === 'account_money' || methodId === 'account_money') &&
-    (op.includes('transfer') || op === 'account_fund' || /transfer|cvu|cbu|enviaste|p2p/i.test(blob))
+    (op.includes('transfer') || op === 'account_fund' || /transfer|cvu|enviaste|p2p/i.test(blob))
   ) {
     return true;
   }
@@ -393,7 +437,45 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
   }
 
   // 3) Transferencias reales / retiros
-  // Códigos: money_transfer (P2P), account_fund (ingreso), PAYOUT (a veces CVU, no solo ATM)
+  // P2P = CVU→CVU / usuario MP. Bancaria = CVU→CBU (WITHDRAWAL / bank_transfer).
+  if (transactionType === 'WITHDRAWAL_CANCEL') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
+      statsExclude: true, // cancela un retiro: no distorsionar flujo neto como gasto nuevo
+      label: 'Transferencia cancelada',
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+
+  const paymentMethodLower = String(paymentMethod || '').toLowerCase();
+  const metaBank =
+    metadata?.bank_account ||
+    metadata?.cbu ||
+    metadata?.destination_cbu ||
+    metadata?.bank_id ||
+    null;
+  const looksBank =
+    Boolean(metaBank) ||
+    operationType === 'withdrawal' ||
+    operationType === 'money_withdrawal' ||
+    operationType === 'bank_transfer' ||
+    transactionType === 'BANK_TRANSFER' ||
+    transactionType === 'WITHDRAWAL' ||
+    paymentMethodLower === 'bank_transfer' ||
+    paymentMethodLower === 'cbu' ||
+    BANK_TRANSFER_RE.test(`${paymentMethodLower} ${blob}`);
+
+  if (looksBank) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.EXTERNAL_TRANSFER,
+      isTransfer: true,
+      isInternal: false
+    };
+  }
+
   if (
     operationType === 'money_transfer' ||
     operationType === 'account_fund' ||
@@ -406,15 +488,6 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       movementKind: MP_MOVEMENT_KINDS.P2P_TRANSFER,
       statsExclude: false,
       label: MP_MOVEMENT_KIND_LABELS.P2P_TRANSFER,
-      isTransfer: true,
-      isInternal: false
-    };
-  }
-  if (transactionType === 'WITHDRAWAL' || transactionType === 'BANK_TRANSFER') {
-    return {
-      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
-      statsExclude: false,
-      label: MP_MOVEMENT_KIND_LABELS.EXTERNAL_TRANSFER,
       isTransfer: true,
       isInternal: false
     };
@@ -439,15 +512,6 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       movementKind: MP_MOVEMENT_KINDS.CASH_WITHDRAWAL,
       statsExclude: false,
       label: MP_MOVEMENT_KIND_LABELS.CASH_WITHDRAWAL,
-      isTransfer: true,
-      isInternal: false
-    };
-  }
-  if (transactionType === 'WITHDRAWAL_CANCEL') {
-    return {
-      movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
-      statsExclude: true, // cancela un retiro: no distorsionar flujo neto como gasto nuevo
-      label: 'Transferencia cancelada',
       isTransfer: true,
       isInternal: false
     };
@@ -553,7 +617,12 @@ export function extraerContraparteMovimiento(row) {
     metadata?.holder_name ||
     metadata?.name ||
     null;
-  const metaCbu = metadata?.cbu || metadata?.cvu || metadata?.account_number || null;
+  const metaCbu =
+    metadata?.cbu ||
+    metadata?.cvu ||
+    metadata?.bank_account ||
+    metadata?.account_number ||
+    null;
 
   // Patrones frecuentes en CSV Account Money AR / movements
   const patterns = [
@@ -625,6 +694,14 @@ export function normalizeAccountMovement(mov) {
     // Dejar SETTLEMENT: clasificarMovimientoEconomicoMp distingue reserva/rendimiento
     transactionType = 'SETTLEMENT';
   } else if (
+    detailLower.includes('cbu') ||
+    detailLower.includes('banco') ||
+    detailLower.includes('bank_transfer') ||
+    typeHint.includes('bank') ||
+    String(mov.payment_method || mov.payment_method_type || '').toLowerCase().includes('bank')
+  ) {
+    transactionType = 'BANK_TRANSFER';
+  } else if (
     detailLower.includes('transfer') ||
     detailLower.includes('retiro') ||
     detailLower.includes('withdraw') ||
@@ -635,6 +712,7 @@ export function normalizeAccountMovement(mov) {
   } else if (mov.operation_type) {
     const op = String(mov.operation_type).toUpperCase();
     if (op === 'MONEY_TRANSFER') transactionType = 'MONEY_TRANSFER';
+    else if (op === 'BANK_TRANSFER') transactionType = 'BANK_TRANSFER';
     else if (op === 'WITHDRAWAL') transactionType = 'WITHDRAWAL';
   }
 

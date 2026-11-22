@@ -19,6 +19,7 @@ import { MercadoPagoReportService } from '../src/services/mercadoPagoReportServi
 import { MercadoPagoActivitiesService } from '../src/services/mercadoPagoActivitiesService.js';
 import {
   clasificarMovimientoEconomicoMp,
+  esTransferenciaBancariaPago,
   esTransferenciaPago,
   mpAuthHeaders
 } from '../src/services/mercadoPagoUtils.js';
@@ -62,8 +63,13 @@ async function main() {
 
   const pagos = await adapter.getAllPayments({ since, limit: 50, maxPages: 6 });
   const transfers = pagos.filter((p) => esTransferenciaPago(p));
+  const bankTransfers = pagos.filter((p) => esTransferenciaBancariaPago(p));
+  const p2pOnly = transfers.filter((p) => !esTransferenciaBancariaPago(p));
   const moneyTransferOp = pagos.filter(
     (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
+  );
+  const withdrawalOp = pagos.filter(
+    (p) => String(p.operation_type || '').toLowerCase() === 'withdrawal'
   );
   const accountFundOp = pagos.filter(
     (p) => String(p.operation_type || '').toLowerCase() === 'account_fund'
@@ -74,29 +80,43 @@ async function main() {
   const cvuMethod = pagos.filter(
     (p) => String(p.payment_method_id || '').toLowerCase() === 'cvu'
   );
+  const bankMethod = pagos.filter((p) => {
+    const id = String(p.payment_method_id || '').toLowerCase();
+    const type = String(p.payment_type_id || p.payment_method?.type || '').toLowerCase();
+    return id === 'bank_transfer' || type === 'bank_transfer' || id === 'cbu';
+  });
 
   console.log('\n--- payments/search ---');
   console.log('Total pagos:', pagos.length);
-  console.log('transferLike (esTransferenciaPago):', transfers.length);
+  console.log('transferLike (todas):', transfers.length);
+  console.log('P2P CVU→CVU:', p2pOnly.length);
+  console.log('Bancarias CVU→CBU:', bankTransfers.length);
   console.log('operation_type=money_transfer:', moneyTransferOp.length);
+  console.log('operation_type=withdrawal:', withdrawalOp.length);
   console.log('operation_type=account_fund:', accountFundOp.length);
   console.log('payment_method_id=cvu:', cvuMethod.length);
+  console.log('payment bank_transfer/cbu:', bankMethod.length);
   console.log('account_money:', accountMoney.length);
   console.log('operation_types:', histogram(pagos, (p) => p.operation_type));
   console.log('payment_method_ids:', histogram(pagos, (p) => p.payment_method_id));
   console.log('payment_type_ids:', histogram(pagos, (p) => p.payment_type_id || p.payment_method?.type));
-  if (transfers[0]) {
-    console.log('Sample transferLike:', {
-      id: transfers[0].id,
-      amount: transfers[0].transaction_amount,
-      status: transfers[0].status,
-      operation_type: transfers[0].operation_type,
-      payment_method_id: transfers[0].payment_method_id,
-      payment_type_id: transfers[0].payment_type_id,
-      payerId: transfers[0].payer?.id,
-      collectorId: transfers[0].collector_id,
-      description: transfers[0].description,
-      date: transfers[0].date_created
+  if (p2pOnly[0]) {
+    console.log('Sample P2P:', {
+      id: p2pOnly[0].id,
+      amount: p2pOnly[0].transaction_amount,
+      operation_type: p2pOnly[0].operation_type,
+      payment_method_id: p2pOnly[0].payment_method_id,
+      description: p2pOnly[0].description
+    });
+  }
+  if (bankTransfers[0]) {
+    console.log('Sample bancaria:', {
+      id: bankTransfers[0].id,
+      amount: bankTransfers[0].transaction_amount,
+      operation_type: bankTransfers[0].operation_type,
+      payment_method_id: bankTransfers[0].payment_method_id,
+      payment_type_id: bankTransfers[0].payment_type_id,
+      description: bankTransfers[0].description
     });
   }
 
@@ -106,6 +126,20 @@ async function main() {
     filter: { operationType: 'money_transfer' }
   });
   console.log('\n--- money_transfer only ---', { total: mtTotal, count: mtOnly.length });
+
+  const { results: wdOnly, total: wdTotal } = await adapter.searchPayments({
+    since,
+    limit: 50,
+    filter: { operationType: 'withdrawal' }
+  });
+  console.log('--- withdrawal only ---', { total: wdTotal, count: wdOnly.length });
+
+  const { results: btOnly, total: btTotal } = await adapter.searchPayments({
+    since,
+    limit: 50,
+    filter: { paymentTypeId: 'bank_transfer' }
+  });
+  console.log('--- bank_transfer only ---', { total: btTotal, count: btOnly.length });
 
   let movements = [];
   try {
@@ -168,16 +202,26 @@ async function main() {
       pollOptions: { maxPollAttempts: 12 }
     });
     activitiesRows = result.rows || [];
+    const bankFromActivities = activitiesRows.filter(
+      (r) =>
+        r.transactionType === 'BANK_TRANSFER' ||
+        r.transactionType === 'WITHDRAWAL' ||
+        Boolean(r.raw?.METADATA?.bank_account)
+    );
+    const p2pFromActivities = activitiesRows.filter((r) => r.transactionType === 'MONEY_TRANSFER');
     console.log({
       total: result.total,
       pending: result.pending,
       empty: result.empty,
+      bancarias: bankFromActivities.length,
+      p2p: p2pFromActivities.length,
       sample: activitiesRows[0]
         ? {
             id: activitiesRows[0].sourceId,
             type: activitiesRows[0].transactionType,
             amount: activitiesRows[0].netAmount,
             counterpart: activitiesRows[0].counterpartName,
+            bank_account: activitiesRows[0].raw?.METADATA?.bank_account || null,
             description: activitiesRows[0].description
           }
         : null
@@ -186,18 +230,35 @@ async function main() {
     console.warn('activities_withdraw FAIL:', e.message);
   }
 
-  console.log('\n=== VEREDICTO P2P ===');
-  if (activitiesRows.length > 0) {
-    console.log('✅ activities_withdraw SÍ trae retiros/transferencias → sync unificado puede importarlos.');
-  } else if (transfers.length > 0 || mtOnly.length > 0) {
-    console.log('✅ payments/search SÍ expone money_transfer → Caja puede ingestar P2P.');
+  const settlementBank = settlementRows.filter((r) =>
+    ['WITHDRAWAL', 'BANK_TRANSFER'].includes(String(r.transactionType || '').toUpperCase())
+  );
+
+  console.log('\n=== VEREDICTO ===');
+  if (bankTransfers.length > 0 || wdOnly.length > 0 || btOnly.length > 0) {
+    console.log('✅ payments/search ve transferencias bancarias (CVU→CBU).');
+  } else if (
+    activitiesRows.some(
+      (r) => r.raw?.METADATA?.bank_account || r.transactionType === 'BANK_TRANSFER'
+    )
+  ) {
+    console.log('✅ activities_withdraw trae CVU→CBU (bank_account) → sync unificado puede importarlos.');
+  } else if (settlementBank.length > 0) {
+    console.log('⚠️ Bancarias solo en settlement WITHDRAWAL; payments no las tipa como bank_transfer.');
+  } else {
+    console.log('❌ No se vieron transferencias a CBU bancario en payments/activities/settlement.');
+  }
+
+  if (p2pOnly.length > 0 || mtOnly.length > 0) {
+    console.log('✅ P2P CVU→CVU visible en payments.');
+  } else if (activitiesRows.some((r) => r.transactionType === 'MONEY_TRANSFER')) {
+    console.log('✅ P2P visible en activities_withdraw.');
   } else if (p2pFromSettlement.length > 0) {
-    console.log('⚠️ money_transfer vacío, pero settlement/heurística ve transferencias.');
+    console.log('⚠️ P2P solo por heurística de settlement.');
   } else if (movements.length > 0) {
     console.log('⚠️ Solo account/movements tiene datos.');
   } else {
-    console.log('❌ Ninguna fuente devolvió transferencias (payments / settlement / activities_withdraw).');
-    console.log('   Revisar permisos del token OAuth o que el reporte activities_withdraw esté habilitado para la app.');
+    console.log('❌ P2P no detectado en esta corrida.');
   }
 }
 
