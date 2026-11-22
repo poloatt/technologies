@@ -53,17 +53,35 @@ function isReportReady(report) {
   return Boolean(reportFileName(report)) && (!status || status === 'processed' || status === 'ready');
 }
 
-function findStrictReportMatch(reports, beginDate, endDate) {
-  return reports.find((r) => {
-    if (!isReportReady(r)) return false;
-    const beginOk =
-      r.begin_date?.startsWith(beginDate.slice(0, 10)) ||
-      dateWithinTolerance(r.begin_date, beginDate);
-    const endOk =
-      r.end_date?.startsWith(endDate.slice(0, 10)) ||
-      dateWithinTolerance(r.end_date, endDate);
-    return beginOk && endOk;
-  });
+function reportMatchesRange(report, beginDate, endDate) {
+  const beginOk =
+    report.begin_date?.startsWith(beginDate.slice(0, 10)) ||
+    dateWithinTolerance(report.begin_date, beginDate);
+  const endOk =
+    report.end_date?.startsWith(endDate.slice(0, 10)) ||
+    dateWithinTolerance(report.end_date, endDate);
+  return beginOk && endOk;
+}
+
+function reportGeneratedAt(report) {
+  return new Date(report?.generation_date || report?.last_modified || 0).getTime() || 0;
+}
+
+/** Preferir el reporte más reciente del rango (include_withdraw cambia el contenido). */
+function findStrictReportMatch(reports, beginDate, endDate, { afterMs = 0, reportId = null } = {}) {
+  const list = reports || [];
+
+  if (reportId != null) {
+    const byId = list.find((r) => isReportReady(r) && String(r.id) === String(reportId));
+    if (byId) return byId;
+  }
+
+  const candidates = list
+    .filter((r) => isReportReady(r) && reportMatchesRange(r, beginDate, endDate))
+    .filter((r) => (afterMs > 0 ? reportGeneratedAt(r) >= afterMs - 5000 : true))
+    .sort((a, b) => reportGeneratedAt(b) - reportGeneratedAt(a));
+
+  return candidates[0] || null;
 }
 
 /** Reportes procesados que se solapan con el rango pedido (para reutilizar ante cupo 429). */
@@ -293,7 +311,12 @@ export class MercadoPagoReportService {
   }
 
   async waitForReportFile(beginDate, endDate, options = {}) {
-    const { pollIntervalMs, maxPollAttempts } = { ...getSettlementPollConfig(), ...options };
+    const {
+      pollIntervalMs,
+      maxPollAttempts,
+      reportId = null,
+      createdAfterMs = 0
+    } = { ...getSettlementPollConfig(), ...options };
 
     for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
       if (attempt > 0) {
@@ -301,10 +324,21 @@ export class MercadoPagoReportService {
       }
 
       const reports = await this.listReports();
-      const match = findStrictReportMatch(reports, beginDate, endDate);
+      const match = findStrictReportMatch(reports, beginDate, endDate, {
+        afterMs: createdAfterMs,
+        reportId
+      });
       const fileName = reportFileName(match);
 
       if (fileName) {
+        if (attempt > 0 || reportId || createdAfterMs) {
+          console.log('[MP Report] Reporte listo', {
+            fileName,
+            id: match?.id,
+            generation: match?.generation_date,
+            typesHint: 'download next'
+          });
+        }
         return fileName;
       }
     }
@@ -448,8 +482,16 @@ export class MercadoPagoReportService {
       console.warn('[MP Report] Reuso previo falló:', error.message);
     }
 
+    let createdMeta = null;
+    const createdAfterMs = Date.now();
     try {
-      await this.createReport(beginDate, endDate);
+      createdMeta = await this.createReport(beginDate, endDate);
+      console.log('[MP Report] Reporte solicitado', {
+        beginDate,
+        endDate,
+        id: createdMeta?.data?.id,
+        status: createdMeta?.data?.status
+      });
     } catch (error) {
       if (error instanceof SettlementReportQuotaError || isQuotaExceededError(error)) {
         console.warn('[MP Report] Cupo de reportes agotado (429). Reutilizando existentes...');
@@ -477,7 +519,21 @@ export class MercadoPagoReportService {
     }
 
     try {
-      const result = await this.completeReport(beginDate, endDate, pollOptions);
+      const result = await this.completeReport(beginDate, endDate, {
+        ...pollOptions,
+        reportId: createdMeta?.data?.id || null,
+        createdAfterMs
+      });
+      const withdrawals = (result.rows || []).filter((r) =>
+        ['WITHDRAWAL', 'WITHDRAWAL_CANCEL', 'PAYOUT', 'PAYOUTS'].includes(
+          String(r.transactionType || '').toUpperCase()
+        )
+      ).length;
+      console.log('[MP Report] CSV nuevo', {
+        fileName: result.fileName,
+        rows: result.rows?.length,
+        withdrawals
+      });
       return result;
     } catch (error) {
       if (error instanceof SettlementReportTimeoutError) {
