@@ -495,6 +495,15 @@ export class BankSyncService {
       } catch (error) {
         console.warn('⚠️ activities_withdraw no disponible:', error.message);
         errores.push({ tipo: 'activities_withdraw', error: error.message });
+        // Sin este reporte no entran CVU→CBU; marcar parcial para no ocultar el hueco
+        bankConnection.mercadopago = {
+          ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+          syncParcial: true,
+          ultimoErrorSettlement:
+            bankConnection.mercadopago?.ultimoErrorSettlement ||
+            `activities_withdraw falló: ${error.message}`
+        };
+        await bankConnection.save();
       }
 
       let movimientosMerged = this.mergeMovimientosMp(
