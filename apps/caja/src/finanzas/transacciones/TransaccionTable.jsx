@@ -96,6 +96,7 @@ const TransaccionTable = ({
   const [expandedRow, setExpandedRow] = useState(null);
   const { isMobile, theme } = useResponsive();
   const isAccountDetail = variant === 'accountDetail';
+  const ledgerRows = variant === 'ledger';
 
   const handleRowClick = (id) => {
     setExpandedRow(expandedRow === id ? null : id);
@@ -226,7 +227,7 @@ const TransaccionTable = ({
           {transacciones.map((transaccion) => {
             const rowId = transaccion.id || transaccion._id;
             const expanded = expandedRow === rowId;
-            const internal = isMpInternalAccountMovement(transaccion);
+            const internal = ledgerRows ? false : isMpInternalAccountMovement(transaccion);
             const meta = getOrigenMetadata(transaccion.origen);
             const title = internal
               ? formatMpInternalReserveTitle(transaccion)

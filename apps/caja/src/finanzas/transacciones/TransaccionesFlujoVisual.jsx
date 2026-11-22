@@ -86,7 +86,7 @@ function PeriodSeg({ item, selected, marked, onChange }) {
 }
 
 /** YTD · YTG | Q1–Q4 en una sola línea, estética de cabecera de sección. */
-function PeriodControl({ preset, onChange }) {
+export function PeriodControl({ preset, onChange }) {
   const currentQuarter = `q${getCurrentQuarter()}`;
   const items = [...YEAR_PRESETS, { divider: true }, ...QUARTER_PRESETS];
   return (

@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { isPathActive } from '@shared/navigation/appNavResolver';
 import { CajaHubSectionCard } from '../../hub';
+import InversionesResumen from '../inversiones/InversionesResumen';
 
 const INVERSIONES_PATH = '/finanzas/inversiones';
 
@@ -15,6 +16,8 @@ export default function InversionesHubSection() {
       iconKey="inversiones"
       path={INVERSIONES_PATH}
       isActive={isActive}
-    />
+    >
+      <InversionesResumen density="compact" />
+    </CajaHubSectionCard>
   );
 }

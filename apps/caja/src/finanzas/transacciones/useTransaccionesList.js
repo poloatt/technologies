@@ -16,7 +16,7 @@ function pageHasMore(data) {
   return page < totalPages;
 }
 
-function listParams({ fechaInicio, fechaFin, cuentaId, page, limit }) {
+function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger }) {
   const params = {
     page,
     limit,
@@ -25,6 +25,7 @@ function listParams({ fechaInicio, fechaFin, cuentaId, page, limit }) {
   if (fechaInicio) params.fechaInicio = fechaInicio;
   if (fechaFin) params.fechaFin = fechaFin;
   if (cuentaId) params.cuenta = cuentaId;
+  if (ledger) params.ledger = ledger;
   return params;
 }
 
@@ -33,7 +34,7 @@ function listParams({ fechaInicio, fechaFin, cuentaId, page, limit }) {
  * `hasAny` distingue "no hay movimientos" de "no hay en este corte"
  * con una sonda de 1 documento, solo cuando la página del período viene vacía.
  */
-export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId } = {}) {
+export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger } = {}) {
   const [docs, setDocs] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -54,12 +55,13 @@ export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId } = {}) {
         fechaInicio,
         fechaFin,
         cuentaId,
+        ledger,
         page,
         limit: TRANSACCIONES_PAGE_SIZE,
       }),
       signal,
     }).then((response) => response.data)
-  ), [fechaInicio, fechaFin, cuentaId]);
+  ), [fechaInicio, fechaFin, cuentaId, ledger]);
 
   const reload = useCallback(async () => {
     abortRef.current?.abort();
@@ -90,7 +92,7 @@ export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId } = {}) {
 
       if (nextDocs.length === 0) {
         const probe = await clienteAxios.get('/api/transacciones', {
-          params: listParams({ cuentaId, page: 1, limit: 1 }),
+          params: listParams({ cuentaId, ledger, page: 1, limit: 1 }),
           signal: controller.signal,
         });
         if (generation.current !== gen) return;

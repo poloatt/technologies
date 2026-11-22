@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { createSchema, commonFields } from './BaseSchema.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
+import { buildLedgerMatch } from '../services/mercadoPagoUtils.js';
 
 const transaccionSchema = createSchema({
   descripcion: {
@@ -191,12 +192,8 @@ transaccionSchema.statics.getBalance = async function(cuentaId, options = {}) {
 
   const match = {
     cuenta: new mongoose.Types.ObjectId(cuentaId),
-    // Alineado con getStats: reservas/parking interno no distorsionan el flujo
-    'origen.metadata.statsExclude': { $ne: true },
-    'origen.metadata.isInternal': { $ne: true },
-    'origen.metadata.movementKind': {
-      $nin: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'INTERNAL'],
-    },
+    // Libro flujo: reservas, inversiones y rendimientos no distorsionan el disponible
+    ...buildLedgerMatch('flujo'),
   };
   const estadoFilter = buildEstadoFilter(estado);
   if (estadoFilter) match.estado = estadoFilter;

@@ -15,12 +15,14 @@ import {
 export function useTransaccionesPeriodStats({
   preset = DEFAULT_PERIOD_PRESET,
   cuentaId,
+  ledger,
 } = {}) {
   const params = useMemo(() => {
     const range = getPeriodRange(preset);
-    if (cuentaId) return { ...range, cuenta: cuentaId };
-    return range;
-  }, [preset, cuentaId]);
+    const next = ledger ? { ...range, ledger } : range;
+    if (cuentaId) return { ...next, cuenta: cuentaId };
+    return next;
+  }, [preset, cuentaId, ledger]);
 
   const { data, loading, error, refetch } = useAPI('/api/transacciones/stats', {
     params,
@@ -29,10 +31,12 @@ export function useTransaccionesPeriodStats({
   });
 
   const requestedCuenta = params.cuenta || null;
+  const requestedLedger = params.ledger || 'flujo';
   const rangeMatches = !!data
     && data.fechaInicio === params.fechaInicio
     && data.fechaFin === params.fechaFin
-    && (data.cuenta || null) === requestedCuenta;
+    && (data.cuenta || null) === requestedCuenta
+    && (data.ledger || 'flujo') === requestedLedger;
 
   const stats = useMemo(() => {
     if (!rangeMatches) {

@@ -26,7 +26,7 @@ export const FINANZAS_SECTION_META = {
     accent: '#FF9800',
   },
   inversiones: {
-    description: 'Portafolios y rendimiento de inversiones',
+    description: 'Reservas, inversiones y rendimientos de Mercado Pago',
     accent: '#9C27B0',
   },
   deudores: {

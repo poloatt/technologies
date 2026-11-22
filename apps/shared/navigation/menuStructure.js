@@ -41,7 +41,7 @@ export const modulos = [
           // Setups contextuales (popup desde Transacciones); siguen en hub + ruta dedicada.
           { id: 'cuentas', title: 'Cuentas', path: '/finanzas/cuentas', icon: 'accountBalance', canAdd: true },
           { id: 'monedas', title: 'Monedas', path: '/finanzas/monedas', icon: 'currency', canAdd: true },
-          { id: 'inversiones', title: 'Inversiones', path: '/finanzas/inversiones', icon: 'inversiones', isUnderConstruction: true },
+          { id: 'inversiones', title: 'Inversiones', path: '/finanzas/inversiones', icon: 'inversiones' },
           { id: 'deudores', title: 'Deudores', path: '/finanzas/deudores', icon: 'personSearch', isUnderConstruction: true },
         ],
       },

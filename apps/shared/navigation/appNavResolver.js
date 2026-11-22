@@ -80,7 +80,7 @@ export function getCajaBranchPages(branchId) {
 
 /**
  * Fuera del chrome de Finanzas (footer = ramas; pages viven en hub + popups).
- * - Inversiones / Deudores: hub «Próximamente».
+ * - Inversiones: hub, como Transacciones. Deudores sigue en «Próximamente».
  * - Recurrentes: subpágina de Transacciones.
  * - Monedas / Cuentas: setup contextual desde Transacciones.
  * - Transacciones: destino principal vía hub (no tab de chrome).

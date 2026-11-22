@@ -1,10 +1,57 @@
-import React, { useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
 import { FinanzasSectionNav } from '../finanzas';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
+import InversionesResumen from '../finanzas/inversiones/InversionesResumen';
+import TransaccionTable from '../finanzas/transacciones/TransaccionTable';
+import { useTransaccionesList } from '../finanzas/transacciones/useTransaccionesList';
+import {
+  DEFAULT_PERIOD_PRESET,
+  getPeriodRange,
+} from '../finanzas/transacciones/transaccionesPeriodUtils';
+import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
+
+function getScrollParent(node) {
+  let current = node?.parentElement;
+  while (current && current !== document.body) {
+    const { overflowY } = window.getComputedStyle(current);
+    if (overflowY === 'auto' || overflowY === 'scroll') return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function ListSkeleton() {
+  return (
+    <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {Array.from({ length: 6 }, (_, index) => (
+        <Skeleton key={index} variant="rounded" height={64} />
+      ))}
+    </Box>
+  );
+}
 
 export default function Inversiones() {
+  const { showValues } = useValuesVisibility();
+  const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
+  const sentinelRef = useRef(null);
+
+  const {
+    transacciones,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    hasAny,
+    loadMore,
+    refetch,
+  } = useTransaccionesList({
+    fechaInicio: periodRange.fechaInicio,
+    fechaFin: periodRange.fechaFin,
+    ledger: 'inversiones',
+  });
+
   useEffect(() => {
     const handleHeaderAdd = (e) => {
       if (e.detail?.type === 'inversiones') {
@@ -15,25 +62,66 @@ export default function Inversiones() {
     return () => window.removeEventListener('headerAddButtonClicked', handleHeaderAdd);
   }, []);
 
-  return (
-    <Box sx={cajaPageLayoutSx}>
-      <FinanzasSectionNav variant="strip" />
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore();
+    }, { root: getScrollParent(node), rootMargin: '240px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, transacciones.length]);
 
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '50vh',
-          gap: 2,
-        }}
-      >
-        <TrendingUpIcon sx={{ fontSize: 64, color: 'primary.main' }} />
-        <Typography variant="body2" color="text.secondary" textAlign="center">
-          Próximamente podrás gestionar tu portafolio aquí. Usa las tarjetas de arriba para volver a otras secciones.
-        </Typography>
-      </Box>
+  const emptyTitle = hasAny
+    ? 'Sin movimientos de inversión en este período'
+    : 'Todavía no hay reservas ni inversiones';
+  const emptyDescription = hasAny
+    ? 'Probá otro período. Los cobros y transferencias siguen en Transacciones.'
+    : 'Cuando sincronices Mercado Pago, reservas, aportes, rescates y rendimientos van a aparecer acá.';
+
+  return (
+    <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
+      <FinanzasSectionNav variant="strip" />
+      <InversionesResumen preset={preset} onPresetChange={setPreset} />
+
+      {loading ? (
+        <ListSkeleton />
+      ) : error && transacciones.length === 0 ? (
+        <Box sx={{ py: 4, textAlign: 'center' }}>
+          <Typography variant="subtitle1">No se pudieron cargar las inversiones</Typography>
+          <Typography
+            component="button"
+            variant="body2"
+            onClick={refetch}
+            sx={{ mt: 1, border: 0, bgcolor: 'transparent', color: 'primary.main', cursor: 'pointer' }}
+          >
+            Reintentar
+          </Typography>
+        </Box>
+      ) : transacciones.length === 0 ? (
+        <Box sx={{ py: 4, px: 2, textAlign: 'center' }}>
+          <Typography variant="subtitle1">{emptyTitle}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 420, mx: 'auto' }}>
+            {emptyDescription}
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ mt: 2 }}>
+          <TransaccionTable
+            transacciones={transacciones}
+            variant="ledger"
+            showValues={showValues}
+          />
+          {(hasMore || loadingMore) && (
+            <Box
+              ref={sentinelRef}
+              sx={{ display: 'flex', justifyContent: 'center', py: 2, minHeight: 40 }}
+            >
+              {loadingMore && <CircularProgress size={22} />}
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }

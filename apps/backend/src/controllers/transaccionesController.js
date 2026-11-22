@@ -2,6 +2,11 @@ import { BaseController } from './BaseController.js';
 import { Transacciones, Cuentas } from '../models/index.js';
 import mongoose from 'mongoose';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
+import {
+  acumularBucketInversiones,
+  buildLedgerMatch,
+  buildListLedgerMatch,
+} from '../services/mercadoPagoUtils.js';
 
 const STATS_TZ = 'America/Argentina/Buenos_Aires';
 
@@ -87,7 +92,8 @@ class TransaccionesController extends BaseController {
         return res.status(401).json({ error: 'Usuario no autenticado' });
       }
 
-      const { fechaInicio, fechaFin, estado = 'PAGADO', cuenta } = req.query;
+      const { fechaInicio, fechaFin, estado = 'PAGADO', cuenta, ledger: ledgerRaw } = req.query;
+      const ledger = ledgerRaw === 'inversiones' ? 'inversiones' : 'flujo';
       const defaults = arMonthBounds();
       const inicio = fechaInicio ? parseArDay(fechaInicio) : defaults.inicio;
       const fin = fechaFin ? parseArDay(fechaFin, true) : defaults.fin;
@@ -98,12 +104,7 @@ class TransaccionesController extends BaseController {
       const query = {
         usuario: new mongoose.Types.ObjectId(req.user.id),
         fecha: { $gte: inicio, $lte: fin },
-        // No contar reservas / parking interno MP (digital_accounts, partition_transfer)
-        'origen.metadata.statsExclude': { $ne: true },
-        'origen.metadata.isInternal': { $ne: true },
-        'origen.metadata.movementKind': {
-          $nin: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'INTERNAL'],
-        },
+        ...buildLedgerMatch(ledger),
       };
       if (cuenta) {
         if (!mongoose.Types.ObjectId.isValid(cuenta)) {
@@ -114,7 +115,23 @@ class TransaccionesController extends BaseController {
       const estadoFilter = buildEstadoFilter(estado);
       if (estadoFilter) query.estado = estadoFilter;
 
-      const [resultados, dias] = await Promise.all([
+      const kindPromise = ledger === 'inversiones'
+        ? this.Model.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: {
+                kind: '$origen.metadata.movementKind',
+                tipo: '$tipo',
+                moneda: '$moneda',
+              },
+              total: { $sum: { $ifNull: ['$monto', 0] } },
+            },
+          },
+        ])
+        : Promise.resolve([]);
+
+      const [resultados, dias, kinds] = await Promise.all([
         this.Model.aggregate([
           { $match: query },
           {
@@ -152,6 +169,7 @@ class TransaccionesController extends BaseController {
             },
           },
         ]),
+        kindPromise,
       ]);
 
       let ingresos = 0;
@@ -167,6 +185,9 @@ class TransaccionesController extends BaseController {
             color: monedaDoc?.color || '#4CAF50',
             ingresos: 0,
             egresos: 0,
+            enviado: 0,
+            rescatado: 0,
+            rendimientos: 0,
             dias: new Map(),
           });
         }
@@ -201,9 +222,28 @@ class TransaccionesController extends BaseController {
         else if (tipo === 'EGRESO') day.egresos += monto;
       }
 
+      let enviado = 0;
+      let rescatado = 0;
+      let rendimientos = 0;
+      for (const row of kinds) {
+        const monto = row.total || 0;
+        const tipo = row._id?.tipo;
+        const kind = row._id?.kind;
+        const monedaId = row._id?.moneda?.toString?.() || row._id?.moneda || 'sin-moneda';
+        const entry = ensureMoneda(monedaId);
+        const bucket = acumularBucketInversiones(kind, tipo, monto);
+        entry.enviado += bucket.enviado || 0;
+        entry.rescatado += bucket.rescatado || 0;
+        entry.rendimientos += bucket.rendimientos || 0;
+        enviado += bucket.enviado || 0;
+        rescatado += bucket.rescatado || 0;
+        rendimientos += bucket.rendimientos || 0;
+      }
+
       const porMoneda = [...porMonedaMap.values()]
         .map((m) => {
           const porDia = [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+          const neto = m.rescatado + m.rendimientos - m.enviado;
           return {
             monedaId: m.monedaId,
             codigo: m.codigo,
@@ -211,7 +251,11 @@ class TransaccionesController extends BaseController {
             color: m.color,
             ingresos: m.ingresos,
             egresos: m.egresos,
-            balance: m.ingresos - m.egresos,
+            balance: ledger === 'inversiones' ? neto : m.ingresos - m.egresos,
+            enviado: m.enviado,
+            rescatado: m.rescatado,
+            rendimientos: m.rendimientos,
+            neto,
             porDia,
           };
         })
@@ -222,10 +266,16 @@ class TransaccionesController extends BaseController {
         ...day,
       })));
 
+      const netoInversiones = rescatado + rendimientos - enviado;
       res.json({
         ingresos,
         egresos,
-        balance: ingresos - egresos,
+        balance: ledger === 'inversiones' ? netoInversiones : ingresos - egresos,
+        enviado,
+        rescatado,
+        rendimientos,
+        neto: netoInversiones,
+        ledger,
         fechaInicio: formatArDateKey(inicio),
         fechaFin: formatArDateKey(fin),
         estado,
@@ -265,10 +315,15 @@ class TransaccionesController extends BaseController {
         tipo,
         categoria,
         fechaInicio,
-        fechaFin
+        fechaFin,
+        ledger: ledgerRaw,
       } = req.query;
 
-      const query = { cuenta: req.params.cuentaId };
+      const ledger = ledgerRaw === 'inversiones' ? 'inversiones' : 'flujo';
+      const query = {
+        cuenta: req.params.cuentaId,
+        ...buildListLedgerMatch(ledger),
+      };
 
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
@@ -369,7 +424,8 @@ class TransaccionesController extends BaseController {
       const { fechaInicio, fechaFin } = req.query;
       const query = { 
         usuario: req.user.id,
-        estado: 'COMPLETADA'
+        estado: 'COMPLETADA',
+        ...buildLedgerMatch('flujo'),
       };
 
       if (fechaInicio || fechaFin) {
@@ -428,9 +484,14 @@ class TransaccionesController extends BaseController {
         fechaInicio,
         fechaFin,
         cuenta,
+        ledger: ledgerRaw,
       } = req.query;
 
-      const query = { usuario: req.user.id };
+      const ledger = ledgerRaw === 'inversiones' ? 'inversiones' : 'flujo';
+      const query = {
+        usuario: req.user.id,
+        ...buildListLedgerMatch(ledger),
+      };
 
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;

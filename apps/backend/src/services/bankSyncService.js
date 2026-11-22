@@ -17,7 +17,8 @@ import {
   esTransferenciaPago,
   esTransferenciaBancariaPago,
   limpiarNombreContraparte,
-  clasificarMovimientoEconomicoMp
+  clasificarMovimientoEconomicoMp,
+  isInversionesMovementKind
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
@@ -886,13 +887,14 @@ export class BankSyncService {
         if (transaccionExistente) {
           const prevName = transaccionExistente.origen?.metadata?.counterpartyName;
           const prevKind = transaccionExistente.origen?.metadata?.movementKind;
+          const ledgerLabel = economic.isInternal || isInversionesMovementKind(economic.movementKind);
           const shouldUpdate =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             !prevKind ||
             prevKind !== economic.movementKind;
           if (shouldUpdate) {
-            if (contraparte?.name || economic.isInternal || economic.isTransfer) {
-              transaccionExistente.descripcion = economic.isInternal
+            if (contraparte?.name || ledgerLabel || economic.isTransfer) {
+              transaccionExistente.descripcion = ledgerLabel
                 ? `MercadoPago - ${economic.label}`
                 : descripcion;
             }
@@ -908,7 +910,7 @@ export class BankSyncService {
           continue;
         }
 
-        const descripcionFinal = economic.isInternal
+        const descripcionFinal = economic.isInternal || isInversionesMovementKind(economic.movementKind)
           ? `MercadoPago - ${economic.label}`
           : descripcion;
 
@@ -1032,7 +1034,7 @@ export class BankSyncService {
         let descripcion = mov.payment && userId != null && !economic.isInternal
           ? formatearDescripcionPago(mov.payment, userId)
           : formatearDescripcionMovimiento(rowSource);
-        if (economic.isInternal) {
+        if (economic.isInternal || isInversionesMovementKind(economic.movementKind)) {
           descripcion = `MercadoPago - ${economic.label}`;
         } else if (economic.isTransfer && !contraparte?.name) {
           descripcion = `MercadoPago - ${economic.label}`;

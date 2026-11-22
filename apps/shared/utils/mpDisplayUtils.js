@@ -26,7 +26,11 @@ export const MP_MOVEMENT_KIND_LABELS = {
   // Copy corto: son moves internos, no plata que entra/sale
   RESERVE_RELEASE: 'Desde reserva',
   RESERVE_LOCK: 'A reserva',
+  INVESTMENT_IN: 'A inversión',
+  INVESTMENT_OUT: 'Desde inversión',
+  INVESTMENT_YIELD: 'Rendimiento',
   YIELD: 'Rendimiento',
+  CASHBACK: 'Cashback',
   REFUND: 'Devolución',
   CHARGEBACK: 'Contracargo',
   FEE: 'Comisión',
@@ -38,6 +42,14 @@ const INTERNAL_MOVEMENT_KINDS = new Set([
   'RESERVE_LOCK',
   'RESERVE_RELEASE',
   'INTERNAL',
+]);
+
+const LEDGER_VISIBLE_KINDS = new Set([
+  'INVESTMENT_IN',
+  'INVESTMENT_OUT',
+  'INVESTMENT_YIELD',
+  'YIELD',
+  'CASHBACK',
 ]);
 
 // Códigos crudos de parking/reserva en Account Money AR (aparecen como “contraparte”)
@@ -66,6 +78,9 @@ export function looksLikeMpInternalReserveText(...parts) {
 export function isMpInternalAccountMovement(origenOrTx) {
   const origen = origenOrTx?.origen ? origenOrTx.origen : origenOrTx;
   const meta = getOrigenMetadata(origen);
+  if (LEDGER_VISIBLE_KINDS.has(meta.movementKind) || String(meta.movementKind || '').startsWith('INVESTMENT')) {
+    return false;
+  }
   if (INTERNAL_MOVEMENT_KINDS.has(meta.movementKind)) return true;
   if (String(meta.movementKind || '').startsWith('RESERVE')) return true;
   if (meta.isInternal === true && meta.statsExclude === true) return true;
@@ -84,8 +99,9 @@ export function isMpInternalAccountMovement(origenOrTx) {
 /** Título corto para fila interna según dirección del movimiento. */
 export function formatMpInternalReserveTitle(transaccion) {
   const meta = getOrigenMetadata(transaccion?.origen);
-  if (meta.movementKind === 'RESERVE_LOCK') return MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK;
-  if (meta.movementKind === 'RESERVE_RELEASE') return MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE;
+  if (meta.movementKind && MP_MOVEMENT_KIND_LABELS[meta.movementKind]) {
+    return MP_MOVEMENT_KIND_LABELS[meta.movementKind];
+  }
   if (meta.movementKind === 'INTERNAL') return MP_MOVEMENT_KIND_LABELS.INTERNAL;
   // Sin kind: inferir por signo
   if (transaccion?.tipo === 'EGRESO') return MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK;

@@ -329,7 +329,11 @@ export const MP_MOVEMENT_KINDS = {
   CASH_WITHDRAWAL: 'CASH_WITHDRAWAL',
   RESERVE_RELEASE: 'RESERVE_RELEASE',
   RESERVE_LOCK: 'RESERVE_LOCK',
+  INVESTMENT_IN: 'INVESTMENT_IN',
+  INVESTMENT_OUT: 'INVESTMENT_OUT',
+  INVESTMENT_YIELD: 'INVESTMENT_YIELD',
   YIELD: 'YIELD',
+  CASHBACK: 'CASHBACK',
   REFUND: 'REFUND',
   CHARGEBACK: 'CHARGEBACK',
   FEE: 'FEE',
@@ -344,7 +348,11 @@ export const MP_MOVEMENT_KIND_LABELS = {
   CASH_WITHDRAWAL: 'Retiro de efectivo',
   RESERVE_RELEASE: 'Desde reserva',
   RESERVE_LOCK: 'A reserva',
+  INVESTMENT_IN: 'A inversión',
+  INVESTMENT_OUT: 'Desde inversión',
+  INVESTMENT_YIELD: 'Rendimiento',
   YIELD: 'Rendimiento',
+  CASHBACK: 'Cashback',
   REFUND: 'Devolución',
   CHARGEBACK: 'Contracargo',
   FEE: 'Comisión',
@@ -355,11 +363,16 @@ export const MP_MOVEMENT_KIND_LABELS = {
 // Evitar match amplio de "reserva" suelto (falsos positivos sobre pagos/descripciones)
 // digital_accounts / wallet: códigos crudos de parking/reserva en Account Money AR
 const RESERVE_RELEASE_RE =
-  /extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|disponible\s+desde\s+reserva|investment.?unlock|reserve_for_.*_cancel|asset_management_withdrawal|salida\s+de\s+reserva/i;
+  /extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|disponible\s+desde\s+reserva|reserve_for_.*_cancel|salida\s+de\s+reserva/i;
 const RESERVE_LOCK_RE =
-  /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|envio\s+a\s+reserva|env[ií]o\s+a\s+reserva|lock.?reserve|parking|investment.?lock|reserve_for_(?!.*_cancel)/i;
+  /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|envio\s+a\s+reserva|env[ií]o\s+a\s+reserva|lock.?reserve|parking|reserve_for_(?!.*_cancel)/i;
 const RESERVE_INTERNAL_CODE_RE =
-  /\b(digital_accounts(?:_cards)?|asset_management(?:_deposit)?|money_park)\b/i;
+  /\b(digital_accounts(?:_cards)?|money_park)\b/i;
+const INVESTMENT_OUT_RE =
+  /asset_management_withdrawal|investment.?unlock|rescate\s+de\s+inversi|retir(?:ar|o)\s+(?:de\s+)?inversi/i;
+const INVESTMENT_IN_RE =
+  /asset_management_deposit|investment.?lock|suscripci[oó]n\s+de\s+inversi|enviar\s+a\s+inversi|aporte\s+a\s+inversi/i;
+const INVESTMENT_CODE_RE = /\basset_management\b/i;
 const YIELD_RE =
   /rendimiento|rendimientos|inter[eé]s|intereses|asset_management_gain|asset_management_loss|yield|ganancia\s+de\s+inversi/i;
 const INTERNAL_RE =
@@ -379,9 +392,12 @@ function textoClasificacionMp({ description, transactionType, operationType, pay
     meta.type,
     meta.description,
     meta.event_type,
-    meta.reason
+    meta.reason,
+    meta.counterpartyName,
+    meta.businessName,
+    meta.itemTitle
     // No JSON.stringify(meta): paymentMethodType=bank_transfer en ventas SETTLEMENT
-    // contaminaba la heurística de CVU→CBU.
+    // contaminaba la heurística de CVU→CBU. La contraparte sí: ahí aparece digital_accounts.
   ]
     .filter(Boolean)
     .join(' ')
@@ -419,18 +435,58 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     raw: input.raw
   });
 
-  // 1) Rendimientos / intereses (sí cuentan como ingreso/egreso financiero)
-  if (YIELD_RE.test(blob) || transactionType === 'CASHBACK') {
+  // 1) Rendimientos de reserva/inversión: libro inversiones, no flujo operativo.
+  if (YIELD_RE.test(blob)) {
     return {
-      movementKind: MP_MOVEMENT_KINDS.YIELD,
-      statsExclude: false,
-      label: MP_MOVEMENT_KIND_LABELS.YIELD,
+      movementKind: MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.INVESTMENT_YIELD,
       isTransfer: false,
       isInternal: false
     };
   }
 
-  // 2) Reservas / parking interno (NO deben entrar a stats de flujo).
+  // Cashback promocional es plata que entra al disponible. No es rendimiento.
+  if (transactionType === 'CASHBACK') {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.CASHBACK,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.CASHBACK,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // 2) Inversiones (FCI / asset management) antes que el regex de reserva:
+  // asset_management_* no es el parking de Reserva.
+  const looksInvestment =
+    operationType === 'investment' ||
+    INVESTMENT_OUT_RE.test(blob) ||
+    INVESTMENT_IN_RE.test(blob) ||
+    INVESTMENT_CODE_RE.test(blob);
+
+  if (looksInvestment) {
+    let outgoing = false;
+    if (INVESTMENT_OUT_RE.test(blob) && !INVESTMENT_IN_RE.test(blob)) {
+      outgoing = true;
+    } else if (INVESTMENT_IN_RE.test(blob) && !INVESTMENT_OUT_RE.test(blob)) {
+      outgoing = false;
+    } else {
+      outgoing = netAmount > 0;
+    }
+    const kind = outgoing
+      ? MP_MOVEMENT_KINDS.INVESTMENT_OUT
+      : MP_MOVEMENT_KINDS.INVESTMENT_IN;
+    return {
+      movementKind: kind,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS[kind],
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // 3) Reservas / parking interno (NO deben entrar a stats de flujo).
   // partition_transfer + digital_accounts = disponible ↔ reserva dentro de MP.
   // No exigir !TRANSFER_RE: la descripción suele decir "· Transferencia".
   const looksReserveInternal =
@@ -462,7 +518,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 3) Comercio SETTLEMENT antes de heurística bank_transfer:
+  // 4) Comercio SETTLEMENT antes de heurística bank_transfer:
   // en AR el CSV trae PAYMENT_METHOD_TYPE=bank_transfer en ventas QR/DEBIN cobradas,
   // y NO son salidas CVU→CBU (esas son PAYOUTS/WITHDRAWAL).
   if (
@@ -480,7 +536,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 4) Transferencias reales / retiros
+  // 5) Transferencias reales / retiros
   // P2P = CVU→CVU / usuario MP. Bancaria = CVU→CBU (WITHDRAWAL / bank_transfer).
   if (transactionType === 'WITHDRAWAL_CANCEL') {
     return {
@@ -573,7 +629,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 5) Comercio / disputas
+  // 6) Comercio / disputas
   if (transactionType === 'REFUND' || transactionType === 'REFUND_SHIPPING') {
     return {
       movementKind: MP_MOVEMENT_KINDS.REFUND,
@@ -622,9 +678,79 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
   };
 }
 
+/** Libro inversiones: reservas, aportes/rescates y rendimientos. YIELD es el kind viejo. */
+export const MP_INVERSIONES_KINDS = Object.freeze([
+  MP_MOVEMENT_KINDS.RESERVE_LOCK,
+  MP_MOVEMENT_KINDS.RESERVE_RELEASE,
+  MP_MOVEMENT_KINDS.INVESTMENT_IN,
+  MP_MOVEMENT_KINDS.INVESTMENT_OUT,
+  MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
+  MP_MOVEMENT_KINDS.YIELD
+]);
+
+export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
+  ...MP_INVERSIONES_KINDS,
+  MP_MOVEMENT_KINDS.INTERNAL
+]);
+
+const ENVIADO_KINDS = new Set([
+  MP_MOVEMENT_KINDS.RESERVE_LOCK,
+  MP_MOVEMENT_KINDS.INVESTMENT_IN
+]);
+const RESCATADO_KINDS = new Set([
+  MP_MOVEMENT_KINDS.RESERVE_RELEASE,
+  MP_MOVEMENT_KINDS.INVESTMENT_OUT
+]);
+const RENDIMIENTO_KINDS = new Set([
+  MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
+  MP_MOVEMENT_KINDS.YIELD
+]);
+
+export function isInversionesMovementKind(kind) {
+  return MP_INVERSIONES_KINDS.includes(kind);
+}
+
+/**
+ * Filtro de libro.
+ * flujo: stats de caja (sin reservas, inversiones, rendimientos ni ajustes).
+ * inversiones: solo ese libro.
+ */
+export function buildLedgerMatch(ledger = 'flujo') {
+  if (ledger === 'inversiones') {
+    return {
+      'origen.metadata.movementKind': { $in: [...MP_INVERSIONES_KINDS] }
+    };
+  }
+  return {
+    'origen.metadata.statsExclude': { $ne: true },
+    'origen.metadata.isInternal': { $ne: true },
+    'origen.metadata.movementKind': { $nin: [...MP_FLUJO_EXCLUDED_KINDS] }
+  };
+}
+
+/**
+ * Listados. El flujo oculta el libro inversiones y sigue mostrando ajustes internos.
+ */
+export function buildListLedgerMatch(ledger = 'flujo') {
+  if (ledger === 'inversiones') return buildLedgerMatch('inversiones');
+  return {
+    'origen.metadata.movementKind': { $nin: [...MP_INVERSIONES_KINDS] }
+  };
+}
+
+/** Suma montos de un grupo de kinds. Rendimiento resta los egresos (pérdidas). */
+export function acumularBucketInversiones(kind, tipo, monto) {
+  const amount = Number(monto) || 0;
+  if (ENVIADO_KINDS.has(kind)) return { enviado: amount };
+  if (RESCATADO_KINDS.has(kind)) return { rescatado: amount };
+  if (RENDIMIENTO_KINDS.has(kind)) {
+    return { rendimientos: tipo === 'EGRESO' ? -amount : amount };
+  }
+  return {};
+}
+
 export function buildStatsExcludeMatch() {
-  // Excluye movimientos internos (reservas, ajustes) del cálculo de ingresos/gastos
-  return { 'origen.metadata.statsExclude': { $ne: true } };
+  return buildLedgerMatch('flujo');
 }
 
 export function extraerContraparteMovimiento(row) {
@@ -805,18 +931,15 @@ export function formatearDescripcionMovimiento(row) {
   const contraparte = extraerContraparteMovimiento(row);
   const economic = clasificarMovimientoEconomicoMp(row);
 
-  if (contraparte?.name) {
-    return `MercadoPago - ${contraparte.name}`;
+  if (isInversionesMovementKind(economic.movementKind) || economic.isInternal) {
+    return `MercadoPago - ${economic.label}`;
+  }
+  if (economic.movementKind === MP_MOVEMENT_KINDS.CASHBACK) {
+    return 'MercadoPago - Cashback';
   }
 
-  if (economic.movementKind === MP_MOVEMENT_KINDS.RESERVE_RELEASE) {
-    return 'MercadoPago - Desde reserva';
-  }
-  if (economic.movementKind === MP_MOVEMENT_KINDS.RESERVE_LOCK) {
-    return 'MercadoPago - A reserva';
-  }
-  if (economic.movementKind === MP_MOVEMENT_KINDS.YIELD) {
-    return description ? `MercadoPago - Rendimiento · ${description}` : 'MercadoPago - Rendimiento';
+  if (contraparte?.name) {
+    return `MercadoPago - ${contraparte.name}`;
   }
   if (economic.isTransfer) {
     return description
