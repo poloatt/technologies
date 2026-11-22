@@ -34,7 +34,7 @@ function flowPhrase(moneda, showValues) {
   return 'Entradas y salidas empataron';
 }
 
-/** Segmento tipográfico: misma familia visual que títulos de sección hub, sin chips. */
+/** Misma tipografía que labels/títulos de sección hub (hubLabelSx / hubPeriodSx). */
 function PeriodSeg({ item, selected, marked, onChange }) {
   return (
     <Box
@@ -44,26 +44,27 @@ function PeriodSeg({ item, selected, marked, onChange }) {
       aria-pressed={selected}
       title={item.hint}
       sx={{
+        ...hubLabelSx,
         appearance: 'none',
         display: 'inline-flex',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 0.375,
         m: 0,
-        p: 0,
+        px: 0.25,
+        py: 0,
+        minHeight: 28,
+        height: 28,
         border: 0,
+        borderRadius: 0,
         bgcolor: 'transparent',
         cursor: 'pointer',
         font: 'inherit',
-        fontSize: '0.6875rem',
         fontWeight: selected ? 700 : 600,
-        lineHeight: 1.15,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
         color: selected ? 'text.primary' : 'text.secondary',
-        borderBottom: '1.5px solid',
-        borderColor: selected ? 'text.primary' : 'transparent',
-        pb: '1px',
-        transition: 'color 120ms ease, border-color 120ms ease',
+        flex: '0 0 auto',
+        whiteSpace: 'nowrap',
+        transition: 'color 120ms ease',
         '&:hover': { color: 'text.primary' },
       }}
     >
@@ -84,50 +85,52 @@ function PeriodSeg({ item, selected, marked, onChange }) {
   );
 }
 
-function PeriodControl({ preset, onChange, dense = false }) {
+/** YTD · YTG | Q1–Q4 en una sola línea, estética de cabecera de sección. */
+function PeriodControl({ preset, onChange }) {
   const currentQuarter = `q${getCurrentQuarter()}`;
+  const items = [...YEAR_PRESETS, { divider: true }, ...QUARTER_PRESETS];
   return (
     <Box
       role="group"
       aria-label="Período"
       sx={{
         display: 'flex',
+        flexDirection: 'row',
         flexWrap: 'nowrap',
         alignItems: 'center',
-        gap: dense ? 0.75 : 1,
+        gap: 0.75,
         minWidth: 0,
+        width: '100%',
+        height: 28,
         overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
         '&::-webkit-scrollbar': { display: 'none' },
       }}
     >
-      {YEAR_PRESETS.map((item) => (
-        <PeriodSeg
-          key={item.id}
-          item={item}
-          selected={item.id === preset}
-          onChange={onChange}
-        />
-      ))}
-      <Box
-        aria-hidden
-        sx={{
-          width: '1px',
-          height: 12,
-          bgcolor: 'divider',
-          flex: '0 0 auto',
-          mx: dense ? 0.125 : 0.25,
-        }}
-      />
-      {QUARTER_PRESETS.map((item) => (
-        <PeriodSeg
-          key={item.id}
-          item={item}
-          selected={item.id === preset}
-          marked={item.id === currentQuarter}
-          onChange={onChange}
-        />
-      ))}
+      {items.map((item) =>
+        item.divider ? (
+          <Box
+            key="period-divider"
+            aria-hidden
+            sx={{
+              width: '1px',
+              alignSelf: 'stretch',
+              my: 0.75,
+              bgcolor: 'divider',
+              flex: '0 0 auto',
+            }}
+          />
+        ) : (
+          <PeriodSeg
+            key={item.id}
+            item={item}
+            selected={item.id === preset}
+            marked={item.id === currentQuarter}
+            onChange={onChange}
+          />
+        )
+      )}
     </Box>
   );
 }
@@ -377,11 +380,26 @@ export default function TransaccionesFlujoVisual({
       aria-label={`Flujo de ${periodLabel}`}
       sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.5 : 0.75, mb: dense ? 1 : 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-          <PeriodControl preset={activePreset} onChange={changePreset} dense={dense} />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 1,
+            minHeight: 28,
+            width: '100%',
+          }}
+        >
+          <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+            <PeriodControl preset={activePreset} onChange={changePreset} />
+          </Box>
           {dense && extras > 0 && (
-            <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0, flex: '0 0 auto' }}>
+            <Typography
+              variant="caption"
+              sx={{ ...hubPeriodSx, mb: 0, flex: '0 0 auto', whiteSpace: 'nowrap' }}
+            >
               {activa.codigo} +{extras}
             </Typography>
           )}
