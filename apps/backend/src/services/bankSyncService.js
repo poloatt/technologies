@@ -383,7 +383,26 @@ export class BankSyncService {
 
         totalCsvRows = report.total || report.rows?.length || 0;
 
-        if (report.pending) {
+        if (report.quotaExceeded) {
+          movimientos = report.rows || [];
+          const quotaMsg =
+            movimientos.length > 0
+              ? `Cupo de reportes MP agotado: se reutilizaron ${movimientos.length} movimientos ya generados. Podés importar CSV o reintentar más tarde.`
+              : 'Cupo de reportes MP agotado (máximo de reportes). Importá el CSV desde Mercado Pago o reintentá más tarde.';
+          bankConnection.mercadopago = {
+            ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+            syncParcial: true,
+            reportePendiente: undefined,
+            ultimoErrorSettlement: quotaMsg
+          };
+          await bankConnection.save();
+          errores.push({
+            tipo: 'settlement_report',
+            error: quotaMsg,
+            quotaExceeded: true
+          });
+          console.warn(`⚠️ Settlement cupo 429; reutilizados: ${movimientos.length}`);
+        } else if (report.pending) {
           settlementPending = true;
           movimientos = report.rows || [];
           bankConnection.mercadopago = {
@@ -408,8 +427,10 @@ export class BankSyncService {
           movimientos = report.rows || [];
           bankConnection.mercadopago = {
             ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
-            syncParcial: false,
-            ultimoErrorSettlement: undefined,
+            syncParcial: Boolean(report.partial),
+            ultimoErrorSettlement: report.partial
+              ? 'Settlement parcial: se reutilizaron reportes existentes.'
+              : undefined,
             reportePendiente: undefined
           };
           await bankConnection.save();
@@ -486,10 +507,95 @@ export class BankSyncService {
         console.error('Error actualizando balances:', error);
       }
 
+      const transferenciasP2P = pagos.filter(
+        (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
+      ).length;
+      const transferenciasSettlement = movimientos.filter((m) =>
+        esTipoTransferenciaMovimiento(m.transactionType)
+      ).length;
+      const transferenciasAccount = accountMovements.filter((m) =>
+        esTipoTransferenciaMovimiento(m.transactionType)
+      ).length;
+      const movementKinds = movimientosMerged.reduce((acc, m) => {
+        const kind = clasificarMovimientoEconomicoMp({
+          transactionType: m.transactionType,
+          description: m.description,
+          netAmount: m.netAmount,
+          raw: m.raw,
+          paymentMethod: m.paymentMethod,
+          operationType: m.payment?.operation_type
+        }).movementKind;
+        acc[kind] = (acc[kind] || 0) + 1;
+        return acc;
+      }, {});
+      for (const pago of pagos) {
+        const kind = clasificarMovimientoEconomicoMp({
+          operationType: pago.operation_type,
+          description: pago.description,
+          paymentMethod: pago.payment_method?.type
+        }).movementKind;
+        movementKinds[kind] = (movementKinds[kind] || 0) + 1;
+      }
+
+      // Reconciliación: saldo MP vs sumatoria de txs no internas (detecta P2P faltantes)
+      let saldoLedger = null;
+      let gapSaldo = null;
+      try {
+        const ledger = await Transacciones.getBalance(bankConnection.cuenta, { estado: 'PAGADO' });
+        saldoLedger = Number(ledger?.balance) || 0;
+        const saldoMp = Number(balance.available) || 0;
+        gapSaldo = Math.round((saldoMp - saldoLedger) * 100) / 100;
+      } catch (error) {
+        console.warn('⚠️ No se pudo calcular gap de reconciliación:', error.message);
+      }
+
+      const coberturaP2P =
+        transferenciasP2P > 0 || (movementKinds.P2P_TRANSFER || 0) > 0
+          ? 'OK'
+          : 'VACIA';
+      const diagnosticoNota =
+        coberturaP2P === 'VACIA'
+          ? 'No se detectaron transferencias P2P (enviar dinero). Si el usuario las hizo en la app MP, la API OAuth no las está exponiendo.'
+          : 'Transferencias P2P detectadas en esta sync.';
+
+      const p2pGapHint =
+        coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 1
+          ? ` Posible hueco de ledger ≈ ${gapSaldo} (saldo MP ${balance.available} vs flujo ${saldoLedger}).`
+          : '';
+
+      bankConnection.mercadopago = {
+        ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+        diagnostico: {
+          actualizadoEn: new Date(),
+          transferenciasP2P,
+          transferenciasSettlement,
+          transferenciasAccount,
+          movementKinds,
+          saldoMp: balance.available || 0,
+          saldoLedger,
+          gapSaldo,
+          coberturaP2P,
+          nota: diagnosticoNota + p2pGapHint
+        }
+      };
+
       const syncParcial =
         settlementPending ||
         errores.some((e) => e.tipo === 'settlement_report') ||
-        Boolean(bankConnection.mercadopago?.syncParcial);
+        Boolean(bankConnection.mercadopago?.syncParcial) ||
+        (coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 50);
+      if (
+        coberturaP2P === 'VACIA' &&
+        gapSaldo != null &&
+        Math.abs(gapSaldo) >= 50 &&
+        !bankConnection.mercadopago.ultimoErrorSettlement
+      ) {
+        bankConnection.mercadopago.ultimoErrorSettlement =
+          `Cobertura incompleta: no hay transferencias P2P y el saldo MP difiere del ledger (${gapSaldo}).`;
+        bankConnection.mercadopago.syncParcial = true;
+      }
+      await bankConnection.save();
+
       const syncEstado = syncParcial ? 'PARCIAL' : 'EXITOSA';
 
       await bankConnection.actualizarSincronizacion(
@@ -511,34 +617,24 @@ export class BankSyncService {
           totalMovimientos: movimientosMerged.length,
           totalSettlementRows: movimientos.length,
           totalAccountMovements: accountMovements.length,
-          transferenciasP2P: pagos.filter(
-            (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
-          ).length,
-          transferenciasSettlement: movimientos.filter((m) =>
-            esTipoTransferenciaMovimiento(m.transactionType)
-          ).length,
-          transferenciasAccount: accountMovements.filter((m) =>
-            esTipoTransferenciaMovimiento(m.transactionType)
-          ).length,
-          movementKinds: movimientosMerged.reduce((acc, m) => {
-            const kind = clasificarMovimientoEconomicoMp({
-              transactionType: m.transactionType,
-              description: m.description,
-              netAmount: m.netAmount,
-              raw: m.raw,
-              paymentMethod: m.paymentMethod,
-              operationType: m.payment?.operation_type
-            }).movementKind;
-            acc[kind] = (acc[kind] || 0) + 1;
-            return acc;
-          }, {}),
+          transferenciasP2P,
+          transferenciasSettlement,
+          transferenciasAccount,
+          movementKinds,
+          coberturaP2P,
+          reconciliacion: {
+            saldoMp: balance.available || 0,
+            saldoLedger,
+            gapSaldo
+          },
           totalCsvRows,
           movimientosImportados: movResult.nuevas,
           movimientosOmitidos: movResult.omitidas,
           rangoDias: syncDays,
           balance,
           errores,
-          reportePendiente: bankConnection.mercadopago?.reportePendiente || null
+          reportePendiente: bankConnection.mercadopago?.reportePendiente || null,
+          diagnostico: bankConnection.mercadopago?.diagnostico || null
         }
       };
     } catch (error) {

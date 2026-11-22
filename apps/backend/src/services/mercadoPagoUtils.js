@@ -252,10 +252,11 @@ export const MP_MOVEMENT_KIND_LABELS = {
   UNKNOWN: 'Movimiento'
 };
 
+// Evitar match amplio de "reserva" suelto (falsos positivos sobre pagos/descripciones)
 const RESERVE_RELEASE_RE =
-  /reserva|reservas|extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|desbloquear|disponible\s+desde\s+reserva|investment.?unlock|reserve_for_.*_cancel|asset_management_withdrawal/i;
+  /extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|disponible\s+desde\s+reserva|investment.?unlock|reserve_for_.*_cancel|asset_management_withdrawal|salida\s+de\s+reserva/i;
 const RESERVE_LOCK_RE =
-  /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|lock.?reserve|parking|invertir|investment.?lock|reserve_for_/i;
+  /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|envio\s+a\s+reserva|env[ií]o\s+a\s+reserva|lock.?reserve|parking|investment.?lock|reserve_for_(?!.*_cancel)/i;
 const YIELD_RE =
   /rendimiento|rendimientos|inter[eé]s|intereses|asset_management_gain|asset_management_loss|yield|ganancia\s+de\s+inversi/i;
 const TRANSFER_RE =

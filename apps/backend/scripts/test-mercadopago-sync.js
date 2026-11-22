@@ -225,8 +225,10 @@ async function main() {
   console.log('- settlement_report/list debe ser accesible con token OAuth read');
   console.log('- Con --full: poll debe encontrar file_name y CSV parseable');
   console.log('- Si settlement falla: usar import CSV manual (no email parsing)');
+  console.log('- P2P: money_transfer count > 0 tras un envío real, o ver test-mercadopago-p2p.js');
 
   console.log('\n💡 Sync en Attadia: OAuth → sincronizar → si movimientos=0, importar CSV desde panel MP.');
+  console.log('💡 P2P: MERCADOPAGO_ACCESS_TOKEN=... node apps/backend/scripts/test-mercadopago-p2p.js --reuse-settlement');
 
   process.exit(failures > 0 ? 1 : 0);
 }

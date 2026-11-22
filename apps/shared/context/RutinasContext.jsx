@@ -487,54 +487,36 @@ export const RutinasProvider = ({ children }) => {
 
     const rutinaBefore = rutinas.find((r) => r._id === rutinaId)
       || (rutina?._id === rutinaId ? rutina : null);
-    
+
     try {
-      // Actualizar en el servidor
       const response = await rutinasService.markComplete(rutinaId, section, data);
 
-      // Importante: el backend puede actualizar MÁS cosas que el checkmark (ej. contadores de progreso en config).
-      // Si solo parcheamos `{ [itemId]: boolean }`, la lógica de visibilidad (cadencia) puede quedar desincronizada
-      // hasta el próximo fetch. Por eso, integramos `response` en rutina + lista y recalculamos historial.
-      if (response && typeof response === 'object') {
-        setRutinas(prevList => {
-          if (!Array.isArray(prevList)) return prevList;
-          const updated = prevList.map((r) => (
-            r && r._id === rutinaId ? mergeRutinaServerResponse(r, response) : r
-          ));
-          const { rutinasWithHist } = attachHistorial(updated);
-          syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
-          return rutinasWithHist;
-        });
-      } else {
-        // Fallback: al menos reflejar el cambio de checkmarks localmente
-        patchRutinaSection(rutinaId, section, data);
-      }
-      
-      // Actualizar completitud localmente
-      const index = rutinas.findIndex(r => r._id === rutinaId);
-      if (index !== -1) {
-        const rutinaActual = rutinas[index];
-        const porcentaje = calculateCompletionPercentage(rutinaActual);
-        const completitudDecimal = porcentaje / 100;
-        
-        setRutinas(prev => {
-          const nuevasRutinas = [...prev];
-          nuevasRutinas[index] = {
-            ...nuevasRutinas[index],
-            completitud: completitudDecimal
+      // Un solo setRutinas: merge de respuesta (o fallback del check) + completitud.
+      // Evita el segundo pass que reorganizaba buckets/icons tras el mark.
+      setRutinas((prevList) => {
+        if (!Array.isArray(prevList)) return prevList;
+        const updated = prevList.map((r) => {
+          if (!r || r._id !== rutinaId) return r;
+          const merged = response && typeof response === 'object'
+            ? mergeRutinaServerResponse(r, response)
+            : {
+              ...r,
+              [section]: {
+                ...((r[section] && typeof r[section] === 'object') ? r[section] : {}),
+                ...data,
+              },
+            };
+          const porcentaje = calculateCompletionPercentage(merged);
+          return {
+            ...merged,
+            completitud: Number.isFinite(porcentaje) ? porcentaje / 100 : merged.completitud,
           };
-          const { rutinasWithHist } = attachHistorial(nuevasRutinas);
-          return rutinasWithHist;
         });
-        
-        if (rutina && rutina._id === rutinaId) {
-          setRutina(prev => ({
-            ...prev,
-            completitud: completitudDecimal
-          }));
-        }
-      }
-      
+        const { rutinasWithHist } = attachHistorial(updated);
+        syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
+        return rutinasWithHist;
+      });
+
       if (undoScope && SCOPES_WITH_SECTION_UNDO.has(undoScope)) {
         Object.entries(data).forEach(([itemId, newValue]) => {
           const previousValue = rutinaBefore?.[section]?.[itemId];
@@ -554,7 +536,7 @@ export const RutinasProvider = ({ children }) => {
       enqueueSnackbar('Error al marcar ítem', { variant: 'error' });
       throw error;
     }
-  }, [rutinas, rutina, enqueueSnackbar, patchRutinaSection, undoScope, undoRecorder]);
+  }, [rutinas, rutina, enqueueSnackbar, undoScope, undoRecorder]);
 
   const deferHabitItem = useCallback(async (rutinaId, section, itemId, action, options = {}) => {
     if (!rutinaId || !section || !itemId || !action) return null;

@@ -93,6 +93,23 @@ const bankConnectionSchema = createSchema({
       beginDate: String,
       endDate: String,
       solicitadoEn: Date
+    },
+    // Diagnóstico de cobertura (P2P / reconciliación)
+    diagnostico: {
+      actualizadoEn: Date,
+      transferenciasP2P: Number,
+      transferenciasSettlement: Number,
+      transferenciasAccount: Number,
+      movementKinds: { type: Map, of: Number },
+      saldoMp: Number,
+      saldoLedger: Number,
+      gapSaldo: Number,
+      coberturaP2P: {
+        type: String,
+        enum: ['OK', 'VACIA', 'DESCONOCIDA'],
+        default: 'DESCONOCIDA'
+      },
+      nota: String
     }
   },
   // Historial de sincronizaciones

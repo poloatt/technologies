@@ -21,7 +21,11 @@ export default function MercadoPagoPartialSyncBanner({ onImportCsv, conexionId: 
         }
       });
       const docs = data?.docs || [];
-      const parciales = docs.filter((c) => c.mercadopago?.syncParcial);
+      const parciales = docs.filter(
+        (c) =>
+          c.mercadopago?.syncParcial ||
+          c.mercadopago?.diagnostico?.coberturaP2P === 'VACIA'
+      );
       setConexionesParciales(parciales);
     } catch (err) {
       console.warn('No se pudo cargar estado sync MP:', err.message);
@@ -58,9 +62,14 @@ export default function MercadoPagoPartialSyncBanner({ onImportCsv, conexionId: 
   }
 
   const conexion = conexionesParciales.find((c) => c._id === conexionId) || conexionesParciales[0];
+  const diag = conexion?.mercadopago?.diagnostico;
   const errorMsg =
     conexion?.mercadopago?.ultimoErrorSettlement ||
+    diag?.nota ||
     'Los movimientos de wallet no se sincronizaron por completo.';
+  const p2pVacia = diag?.coberturaP2P === 'VACIA';
+  const gap = Number(diag?.gapSaldo);
+  const showGap = Number.isFinite(gap) && Math.abs(gap) >= 1;
 
   return (
     <Alert
@@ -87,8 +96,24 @@ export default function MercadoPagoPartialSyncBanner({ onImportCsv, conexionId: 
         </Box>
       }
     >
-      <AlertTitle>Sincronización Mercado Pago parcial</AlertTitle>
+      <AlertTitle>
+        {p2pVacia
+          ? 'Transferencias entre usuarios MP no detectadas'
+          : 'Sincronización Mercado Pago parcial'}
+      </AlertTitle>
       {errorMsg}
+      {p2pVacia && (
+        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+          Los envíos a amigos o locales por transferencia pueden no aparecer en Transacciones ni en
+          ingresos/gastos. El saldo de la cuenta puede verse correcto igual.
+        </Box>
+      )}
+      {showGap && (
+        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+          Diferencia saldo MP vs flujo registrado: {gap > 0 ? '+' : ''}
+          {gap.toLocaleString('es-AR')}.
+        </Box>
+      )}
       {conexion?.mercadopago?.reportePendiente && (
         <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
           Hay un reporte en generación; la próxima sync puede completarlo automáticamente.

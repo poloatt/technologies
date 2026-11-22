@@ -10,7 +10,9 @@ import useRutinaBucketLocalData from './useRutinaBucketLocalData';
 export default function useRutinaCadenceBucketController({ rutina, readOnly = false }) {
   const { habits, customSections } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
-  const { markItemComplete, patchRutinaSection } = useRutinas();
+  // Solo markItemComplete: el optimismo vive en localDataBySection.
+  // Pasar también patchRutinaSection duplicaba writes (local + context) y reorganizaba 2–3 veces por click.
+  const { markItemComplete } = useRutinas();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
   const resolvedHabitChains = prefsReady ? habitChains : [];
 
@@ -43,7 +45,6 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
     rutina,
     habitsPreferences: habitPrefs,
     markItemComplete,
-    patchRutinaSection,
     readOnly,
     getSectionOverrides: (section) => localDataBySection[section] || {},
     onOptimisticValue: (section, itemId, newValue) => {
@@ -58,12 +59,8 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
         [section]: { ...(prev[section] || {}), [itemId]: previousValue },
       }));
     },
-    onServerValue: (section, itemId, serverValue) => {
-      setLocalDataBySection((prev) => ({
-        ...prev,
-        [section]: { ...(prev[section] || {}), [itemId]: serverValue },
-      }));
-    },
+    // onServerValue omitido a propósito: useRutinaBucketLocalData ya sincroniza
+    // desde `rutina` tras markItemComplete (evita un segundo rewrite de localData).
   });
 
   const handleItemClick = useCallback((section, itemId, event, horario = null) => {
