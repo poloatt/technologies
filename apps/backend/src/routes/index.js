@@ -53,6 +53,16 @@ router.use('/transacciones', transaccionesRoutes);
 router.use('/transaccionesrecurrentes', transaccionRecurrenteRoutes);
 router.use('/bankconnections', bankConnectionRoutes);
 
+// Webhook MP reports (activities_withdraw notifier) — ack only; sync hace poll
+router.post('/webhooks/mercadopago-activities', (req, res) => {
+  console.log('[MP Activities webhook]', {
+    report_id: req.body?.report_id,
+    statement_id: req.body?.statement_id,
+    status: req.body?.status
+  });
+  res.status(200).json({ received: true });
+});
+
 // Rutas de gestión de objetivos (contenedores de tareas) y tareas
 router.use('/objetivos', objetivosRoutes);
 router.use('/tareas', tareasRoutes);

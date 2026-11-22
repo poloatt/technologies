@@ -19,6 +19,7 @@ import {
   clasificarMovimientoEconomicoMp
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
+import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
 
 export class BankSyncService {
@@ -361,10 +362,8 @@ export class BankSyncService {
           limit: 50,
           maxPages: 40
         });
-        const p2pCount = pagos.filter(
-          (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
-        ).length;
-        console.log(`✅ Pagos obtenidos: ${pagos.length} (money_transfer P2P: ${p2pCount})`);
+        const p2pCount = pagos.filter((p) => esTransferenciaPago(p)).length;
+        console.log(`✅ Pagos obtenidos: ${pagos.length} (transferencias detectadas: ${p2pCount})`);
       } catch (error) {
         console.error('❌ Error obteniendo pagos:', error.message);
         errores.push({ tipo: 'pagos', error: error.message });
@@ -447,8 +446,8 @@ export class BankSyncService {
         errores.push({ tipo: 'settlement_report', error: error.message });
       }
 
-      // Transferencias/retiros: settlement WITHDRAWAL + account/movements.
-      // payments/search no cubre retiros a CBU/CVU; movements cubre huecos del CSV.
+      // Transferencias/retiros unificados:
+      // 1) settlement WITHDRAWAL  2) account/movements  3) activities_withdraw (API oficial retiros+transferencias)
       let accountMovements = [];
       try {
         const rawMovements = await mpAdapter.getAccountMovements({
@@ -463,7 +462,44 @@ export class BankSyncService {
         errores.push({ tipo: 'account_movements', error: error.message });
       }
 
-      let movimientosMerged = this.mergeMovimientosMp(movimientos, accountMovements);
+      let activitiesWithdraw = [];
+      try {
+        const activitiesService = new MercadoPagoActivitiesService({
+          accessToken: userAccessToken,
+          userId: mpUserId
+        });
+        const withdrawReport = await activitiesService.fetchWithdrawMovements(
+          fechaDesde.toISOString(),
+          new Date().toISOString(),
+          { pollOptions: { maxPollAttempts: 16 } }
+        );
+        if (withdrawReport.pending) {
+          errores.push({
+            tipo: 'activities_withdraw',
+            error: 'Reporte de retiros/transferencias en generación; se completa en próxima sync',
+            pending: true
+          });
+          bankConnection.mercadopago = {
+            ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+            syncParcial: true,
+            ultimoErrorSettlement:
+              bankConnection.mercadopago?.ultimoErrorSettlement ||
+              'Reporte activities_withdraw (transferencias) en generación.'
+          };
+          await bankConnection.save();
+        } else {
+          activitiesWithdraw = withdrawReport.rows || [];
+          console.log(`✅ Activities withdraw (transferencias): ${activitiesWithdraw.length}`);
+        }
+      } catch (error) {
+        console.warn('⚠️ activities_withdraw no disponible:', error.message);
+        errores.push({ tipo: 'activities_withdraw', error: error.message });
+      }
+
+      let movimientosMerged = this.mergeMovimientosMp(
+        this.mergeMovimientosMp(movimientos, accountMovements),
+        activitiesWithdraw
+      );
       try {
         movimientosMerged = await mpAdapter.enrichMovementsWithPayments(movimientosMerged, {
           concurrency: 5
@@ -507,15 +543,19 @@ export class BankSyncService {
         console.error('Error actualizando balances:', error);
       }
 
-      const transferenciasP2P = pagos.filter(
-        (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
-      ).length;
+      const transferenciasP2P = Math.max(
+        pagos.filter((p) => esTransferenciaPago(p)).length,
+        activitiesWithdraw.filter((m) =>
+          esTipoTransferenciaMovimiento(m.transactionType)
+        ).length
+      );
       const transferenciasSettlement = movimientos.filter((m) =>
         esTipoTransferenciaMovimiento(m.transactionType)
       ).length;
       const transferenciasAccount = accountMovements.filter((m) =>
         esTipoTransferenciaMovimiento(m.transactionType)
       ).length;
+      const transferenciasActivities = activitiesWithdraw.length;
       const movementKinds = movimientosMerged.reduce((acc, m) => {
         const kind = clasificarMovimientoEconomicoMp({
           transactionType: m.transactionType,
@@ -550,13 +590,16 @@ export class BankSyncService {
       }
 
       const coberturaP2P =
-        transferenciasP2P > 0 || (movementKinds.P2P_TRANSFER || 0) > 0
+        transferenciasP2P > 0 ||
+        transferenciasActivities > 0 ||
+        (movementKinds.P2P_TRANSFER || 0) > 0 ||
+        (movementKinds.EXTERNAL_TRANSFER || 0) > 0
           ? 'OK'
           : 'VACIA';
       const diagnosticoNota =
         coberturaP2P === 'VACIA'
-          ? 'No se detectaron transferencias P2P (enviar dinero). Si el usuario las hizo en la app MP, la API OAuth no las está exponiendo.'
-          : 'Transferencias P2P detectadas en esta sync.';
+          ? 'No se detectaron transferencias/retiros (payments transfer-like ni activities_withdraw).'
+          : 'Transferencias/retiros detectados en esta sync (payments y/o activities_withdraw).';
 
       const p2pGapHint =
         coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 1
@@ -570,6 +613,7 @@ export class BankSyncService {
           transferenciasP2P,
           transferenciasSettlement,
           transferenciasAccount,
+          transferenciasActivities,
           movementKinds,
           saldoMp: balance.available || 0,
           saldoLedger,
@@ -620,6 +664,7 @@ export class BankSyncService {
           transferenciasP2P,
           transferenciasSettlement,
           transferenciasAccount,
+          transferenciasActivities,
           movementKinds,
           coberturaP2P,
           reconciliacion: {
@@ -644,28 +689,41 @@ export class BankSyncService {
     }
   }
 
-  mergeMovimientosMp(settlementRows = [], accountRows = []) {
+  mergeMovimientosMp(primaryRows = [], secondaryRows = []) {
     const byId = new Map();
-    for (const row of settlementRows) {
+    for (const row of primaryRows) {
       const key = String(row.sourceId || row.id || '');
       if (key) byId.set(key, row);
     }
-    for (const row of accountRows) {
+    for (const row of secondaryRows) {
       const key = String(row.sourceId || row.id || '');
       if (!key) continue;
       if (!byId.has(key)) {
         byId.set(key, row);
         continue;
       }
-      // Preferir settlement; enriquecer descripción/contraparte si el movement la trae
+      // Enriquecer con contraparte / descripción / tipo transferencia del secondary
       const existing = byId.get(key);
+      const enriched = { ...existing };
       if (!existing.description && row.description) {
-        byId.set(key, {
-          ...existing,
-          description: row.description,
-          raw: { ...(existing.raw || {}), DESCRIPTION: row.description, ...(row.raw || {}) }
-        });
+        enriched.description = row.description;
+        enriched.raw = {
+          ...(existing.raw || {}),
+          DESCRIPTION: row.description,
+          ...(row.raw || {})
+        };
       }
+      if (!existing.counterpartName && row.counterpartName) {
+        enriched.counterpartName = row.counterpartName;
+      }
+      if (
+        row.source === 'activities_withdraw' &&
+        (!existing.transactionType || existing.transactionType === 'SETTLEMENT')
+      ) {
+        enriched.transactionType = row.transactionType;
+        enriched.source = row.source;
+      }
+      byId.set(key, enriched);
     }
     return Array.from(byId.values());
   }
@@ -794,6 +852,17 @@ export class BankSyncService {
       if (limpiarNombreContraparte(fromPayment?.name)) {
         return fromPayment;
       }
+    }
+
+    if (limpiarNombreContraparte(mov?.counterpartName)) {
+      const isIn = Number(mov.netAmount) >= 0;
+      return {
+        role: isIn ? 'origen' : 'destino',
+        label: isIn ? 'Recibiste de' : 'Transferiste a',
+        name: mov.counterpartName,
+        id: null,
+        email: null
+      };
     }
 
     const rowSource = {

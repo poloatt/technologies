@@ -125,7 +125,7 @@ export function extraerContrapartePago(pago, userId) {
     || payer.email
     || null;
 
-  const isTransfer = String(pago?.operation_type || '').toLowerCase() === 'money_transfer';
+  const isTransfer = esTransferenciaPago(pago);
 
   if (userIsPayer) {
     const name = limpiarNombreContraparte(
@@ -146,7 +146,7 @@ export function extraerContrapartePago(pago, userId) {
     );
     return {
       role: 'origen',
-      label: isTransfer ? 'Recibiste de' : 'Recibiste de',
+      label: 'Recibiste de',
       name,
       id: payerId || null,
       email: payer.email || null
@@ -165,13 +165,56 @@ export function extraerContrapartePago(pago, userId) {
   };
 }
 
+// Heurística textual (también usada en clasificación económica más abajo)
+const TRANSFER_RE =
+  /transferencia|transferiste|enviaste\s+dinero|envio\s+de\s+dinero|env[ií]o\s+de\s+dinero|p2p|cvu|cbu|alias|money_transfer|account_fund/i;
+
+/**
+ * Detecta transferencias P2P / CVU / fondeo de cuenta.
+ * MP no usa un único código: money_transfer, account_fund, payment_method cvu, etc.
+ */
 export function esTransferenciaPago(pago) {
-  return String(pago?.operation_type || '').toLowerCase() === 'money_transfer';
+  if (!pago || typeof pago !== 'object') return false;
+  const op = String(pago.operation_type || '').toLowerCase();
+  if (op === 'money_transfer' || op === 'account_fund') return true;
+
+  const methodId = String(pago.payment_method_id || '').toLowerCase();
+  const methodType = String(
+    pago.payment_type_id || pago.payment_method?.type || ''
+  ).toLowerCase();
+  if (methodId === 'cvu' || methodId === 'cbu') return true;
+
+  const blob = [
+    pago.description,
+    pago.statement_descriptor,
+    pago.external_reference,
+    methodId,
+    methodType,
+    pago.metadata?.concept,
+    pago.metadata?.detail,
+    pago.metadata?.type
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (TRANSFER_RE.test(blob)) return true;
+
+  // account_money solo cuenta como transferencia si el texto/op lo sugiere
+  // (si no, suele ser pago con saldo a un comercio)
+  if (
+    (methodType === 'account_money' || methodId === 'account_money') &&
+    (op.includes('transfer') || op === 'account_fund' || /transfer|cvu|cbu|enviaste|p2p/i.test(blob))
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function formatearDescripcionPago(pago, userId = null) {
   const contraparte = userId != null ? extraerContrapartePago(pago, userId) : null;
-  const isTransfer = String(pago?.operation_type || '').toLowerCase() === 'money_transfer';
+  const isTransfer = esTransferenciaPago(pago);
   const metodo = isTransfer
     ? 'Transferencia'
     : (pago.payment_method?.type || pago.payment_method_id || 'Pago');
@@ -214,7 +257,10 @@ export function esTipoTransferenciaMovimiento(type) {
     key === 'PAYOUT' ||
     key === 'TRANSFER' ||
     key === 'MONEY_TRANSFER' ||
-    key === 'BANK_TRANSFER'
+    key === 'BANK_TRANSFER' ||
+    key === 'ACCOUNT_FUND' ||
+    key === 'CVU' ||
+    key === 'P2P'
   );
 }
 
@@ -259,8 +305,6 @@ const RESERVE_LOCK_RE =
   /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|envio\s+a\s+reserva|env[ií]o\s+a\s+reserva|lock.?reserve|parking|investment.?lock|reserve_for_(?!.*_cancel)/i;
 const YIELD_RE =
   /rendimiento|rendimientos|inter[eé]s|intereses|asset_management_gain|asset_management_loss|yield|ganancia\s+de\s+inversi/i;
-const TRANSFER_RE =
-  /transferencia|transferiste|enviaste\s+dinero|envio\s+de\s+dinero|env[ií]o\s+de\s+dinero|p2p|cvu|cbu|alias|money_transfer/i;
 const INTERNAL_RE =
   /movimiento\s+interno|ajuste|balance\s+adjustment|pre_payout|pos_payout|available_balance|initial_available/i;
 
@@ -349,7 +393,15 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
   }
 
   // 3) Transferencias reales / retiros
-  if (operationType === 'money_transfer' || transactionType === 'MONEY_TRANSFER' || transactionType === 'TRANSFER') {
+  // Códigos: money_transfer (P2P), account_fund (ingreso), PAYOUT (a veces CVU, no solo ATM)
+  if (
+    operationType === 'money_transfer' ||
+    operationType === 'account_fund' ||
+    transactionType === 'MONEY_TRANSFER' ||
+    transactionType === 'ACCOUNT_FUND' ||
+    transactionType === 'TRANSFER' ||
+    transactionType === 'P2P'
+  ) {
     return {
       movementKind: MP_MOVEMENT_KINDS.P2P_TRANSFER,
       statsExclude: false,
@@ -368,6 +420,21 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
   if (transactionType === 'PAYOUT') {
+    // En AR el settlement marca PAYOUT tanto a retiro ATM como a transferencia CVU/CBU
+    const payoutLooksLikeTransfer =
+      TRANSFER_RE.test(blob) ||
+      /cvu|cbu|alias|account_money|bank_transfer|transfer/i.test(
+        `${paymentMethod} ${blob}`
+      );
+    if (payoutLooksLikeTransfer) {
+      return {
+        movementKind: MP_MOVEMENT_KINDS.EXTERNAL_TRANSFER,
+        statsExclude: false,
+        label: MP_MOVEMENT_KIND_LABELS.EXTERNAL_TRANSFER,
+        isTransfer: true,
+        isInternal: false
+      };
+    }
     return {
       movementKind: MP_MOVEMENT_KINDS.CASH_WITHDRAWAL,
       statsExclude: false,

@@ -16,8 +16,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { MercadoPagoAdapter } from '../src/services/adapters/mercadoPagoAdapter.js';
 import { MercadoPagoReportService } from '../src/services/mercadoPagoReportService.js';
+import { MercadoPagoActivitiesService } from '../src/services/mercadoPagoActivitiesService.js';
 import {
   clasificarMovimientoEconomicoMp,
+  esTransferenciaPago,
   mpAuthHeaders
 } from '../src/services/mercadoPagoUtils.js';
 
@@ -59,22 +61,38 @@ async function main() {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const pagos = await adapter.getAllPayments({ since, limit: 50, maxPages: 6 });
-  const transfers = pagos.filter((p) => String(p.operation_type || '').toLowerCase() === 'money_transfer');
+  const transfers = pagos.filter((p) => esTransferenciaPago(p));
+  const moneyTransferOp = pagos.filter(
+    (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
+  );
+  const accountFundOp = pagos.filter(
+    (p) => String(p.operation_type || '').toLowerCase() === 'account_fund'
+  );
   const accountMoney = pagos.filter(
     (p) => String(p.payment_type_id || p.payment_method?.type || '').toLowerCase() === 'account_money'
+  );
+  const cvuMethod = pagos.filter(
+    (p) => String(p.payment_method_id || '').toLowerCase() === 'cvu'
   );
 
   console.log('\n--- payments/search ---');
   console.log('Total pagos:', pagos.length);
-  console.log('money_transfer:', transfers.length);
+  console.log('transferLike (esTransferenciaPago):', transfers.length);
+  console.log('operation_type=money_transfer:', moneyTransferOp.length);
+  console.log('operation_type=account_fund:', accountFundOp.length);
+  console.log('payment_method_id=cvu:', cvuMethod.length);
   console.log('account_money:', accountMoney.length);
   console.log('operation_types:', histogram(pagos, (p) => p.operation_type));
+  console.log('payment_method_ids:', histogram(pagos, (p) => p.payment_method_id));
   console.log('payment_type_ids:', histogram(pagos, (p) => p.payment_type_id || p.payment_method?.type));
   if (transfers[0]) {
-    console.log('Sample money_transfer:', {
+    console.log('Sample transferLike:', {
       id: transfers[0].id,
       amount: transfers[0].transaction_amount,
       status: transfers[0].status,
+      operation_type: transfers[0].operation_type,
+      payment_method_id: transfers[0].payment_method_id,
+      payment_type_id: transfers[0].payment_type_id,
       payerId: transfers[0].payer?.id,
       collectorId: transfers[0].collector_id,
       description: transfers[0].description,
@@ -142,19 +160,44 @@ async function main() {
   });
   console.log('Settlement filas tipadas transferencia:', p2pFromSettlement.length);
 
+  console.log('\n--- activities_withdraw (API oficial retiros+transferencias) ---');
+  let activitiesRows = [];
+  try {
+    const activities = new MercadoPagoActivitiesService({ accessToken: ACCESS_TOKEN, userId });
+    const result = await activities.fetchWithdrawMovements(since, new Date().toISOString(), {
+      pollOptions: { maxPollAttempts: 12 }
+    });
+    activitiesRows = result.rows || [];
+    console.log({
+      total: result.total,
+      pending: result.pending,
+      empty: result.empty,
+      sample: activitiesRows[0]
+        ? {
+            id: activitiesRows[0].sourceId,
+            type: activitiesRows[0].transactionType,
+            amount: activitiesRows[0].netAmount,
+            counterpart: activitiesRows[0].counterpartName,
+            description: activitiesRows[0].description
+          }
+        : null
+    });
+  } catch (e) {
+    console.warn('activities_withdraw FAIL:', e.message);
+  }
+
   console.log('\n=== VEREDICTO P2P ===');
-  if (transfers.length > 0 || mtOnly.length > 0) {
+  if (activitiesRows.length > 0) {
+    console.log('✅ activities_withdraw SÍ trae retiros/transferencias → sync unificado puede importarlos.');
+  } else if (transfers.length > 0 || mtOnly.length > 0) {
     console.log('✅ payments/search SÍ expone money_transfer → Caja puede ingestar P2P.');
-    console.log('   Siguiente: sync producción y verificar metadata.movementKind=P2P_TRANSFER.');
   } else if (p2pFromSettlement.length > 0) {
     console.log('⚠️ money_transfer vacío, pero settlement/heurística ve transferencias.');
-    console.log('   Siguiente: mapear DESCRIPTION/TRANSACTION_TYPE de esas filas en el clasificador.');
   } else if (movements.length > 0) {
-    console.log('⚠️ Solo account/movements tiene datos. Revisar sample detail para heurísticas.');
+    console.log('⚠️ Solo account/movements tiene datos.');
   } else {
-    console.log('❌ Ninguna fuente devolvió P2P/enviar dinero.');
-    console.log('   Conclusión probable: limitación de API OAuth personal (no hay ledger P2P público).');
-    console.log('   Mitigación: reconciliación saldo MP vs ledger + CSV + SFA futuro.');
+    console.log('❌ Ninguna fuente devolvió transferencias (payments / settlement / activities_withdraw).');
+    console.log('   Revisar permisos del token OAuth o que el reporte activities_withdraw esté habilitado para la app.');
   }
 }
 

@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { deduplicarPagos, mpAuthHeaders } from '../mercadoPagoUtils.js';
+import { deduplicarPagos, esTransferenciaPago, mpAuthHeaders } from '../mercadoPagoUtils.js';
 
 export class MercadoPagoAdapter {
   constructor({ accessToken, refreshToken, userId }) {
@@ -104,10 +104,10 @@ export class MercadoPagoAdapter {
         params.append('end_date', endDate);
       }
 
-      if (filter?.collectorId) {
+      if (filter?.collectorId != null && filter.collectorId !== '') {
         params.append('collector.id', String(filter.collectorId));
       }
-      if (filter?.payerId) {
+      if (filter?.payerId != null && filter.payerId !== '') {
         params.append('payer.id', String(filter.payerId));
       }
       if (filter?.operationType) {
@@ -115,6 +115,10 @@ export class MercadoPagoAdapter {
       }
       if (filter?.paymentTypeId) {
         params.append('payment_type_id', String(filter.paymentTypeId));
+      }
+      // AR: transferencias CVU a veces van como payment_method_id=cvu / account_money
+      if (filter?.paymentMethodId) {
+        params.append('payment_method_id', String(filter.paymentMethodId));
       }
       if (filter?.status) {
         params.append('status', String(filter.status));
@@ -233,10 +237,11 @@ export class MercadoPagoAdapter {
             payment.payment_type_id || mov.paymentMethodType || '',
           externalReference:
             payment.external_reference || mov.externalReference || '',
-          transactionType:
-            String(payment.operation_type || '').toLowerCase() === 'money_transfer'
-              ? 'MONEY_TRANSFER'
-              : mov.transactionType,
+          transactionType: esTransferenciaPago(payment)
+            ? (String(payment.operation_type || '').toLowerCase() === 'account_fund'
+              ? 'ACCOUNT_FUND'
+              : 'MONEY_TRANSFER')
+            : mov.transactionType,
           raw: {
             ...(mov.raw || {}),
             DESCRIPTION:
@@ -262,31 +267,25 @@ export class MercadoPagoAdapter {
   }
 
   /**
-   * Pagos + transferencias P2P (operation_type=money_transfer).
-   * Las transferencias in-app a otros usuarios MP no salen en WITHDRAWAL del settlement;
-   * hay que pedirlas explícitamente como payments.
+   * Pagos + transferencias.
+   * Códigos oficiales / observados:
+   * - operation_type: money_transfer (wire entre usuarios), account_fund (ingreso a cuenta)
+   * - payment_type_id / payment_method_id: account_money, cvu (AR)
+   * - collector.id / payer.id: id numérico o alias "me" (token OAuth)
+   * Settlement TRANSACTION_TYPE PAYOUT a veces incluye transferencias (no solo efectivo).
    */
   async getAllPayments({ since, limit = 50, maxPages = 20 }) {
     const mpUserId = this.userId;
     const pageSize = Math.min(limit, 50);
 
     const searches = [
-      {
-        label: 'collector',
-        since,
-        filter: { collectorId: mpUserId }
-      },
-      {
-        label: 'payer',
-        since,
-        filter: { payerId: mpUserId }
-      },
-      // P2P in-app: el token OAuth delimita la cuenta
-      {
-        label: 'money_transfer',
-        since,
-        filter: { operationType: 'money_transfer' }
-      },
+      { label: 'collector', since, filter: { collectorId: mpUserId } },
+      { label: 'payer', since, filter: { payerId: mpUserId } },
+      // Alias "me" usado en clientes/docs legacy con token de usuario
+      { label: 'collector=me', since, filter: { collectorId: 'me' } },
+      { label: 'payer=me', since, filter: { payerId: 'me' } },
+      // P2P documentado
+      { label: 'money_transfer', since, filter: { operationType: 'money_transfer' } },
       {
         label: 'money_transfer+payer',
         since,
@@ -297,22 +296,41 @@ export class MercadoPagoAdapter {
         since,
         filter: { operationType: 'money_transfer', collectorId: mpUserId }
       },
-      // Fallback relativo (MP acepta NOW-NDAYS) por si el ISO timezone filtra de más
+      {
+        label: 'money_transfer+payer=me',
+        since,
+        filter: { operationType: 'money_transfer', payerId: 'me' }
+      },
       {
         label: 'money_transfer/NOW-90DAYS',
         since: 'NOW-90DAYS',
         filter: { operationType: 'money_transfer' }
       },
-      // Enviar dinero suele ir con account_money
+      // Ingresos a cuenta (contraparte de envíos recibidos)
+      { label: 'account_fund', since, filter: { operationType: 'account_fund' } },
+      {
+        label: 'account_fund+collector=me',
+        since,
+        filter: { operationType: 'account_fund', collectorId: 'me' }
+      },
+      // Dinero en cuenta / CVU (AR)
       {
         label: 'account_money+payer',
         since,
         filter: { paymentTypeId: 'account_money', payerId: mpUserId }
       },
       {
-        label: 'account_money (token scope)',
+        label: 'account_money+payer=me',
         since,
-        filter: { paymentTypeId: 'account_money' }
+        filter: { paymentTypeId: 'account_money', payerId: 'me' }
+      },
+      { label: 'account_money', since, filter: { paymentTypeId: 'account_money' } },
+      { label: 'payment_method=account_money', since, filter: { paymentMethodId: 'account_money' } },
+      { label: 'payment_method=cvu', since, filter: { paymentMethodId: 'cvu' } },
+      {
+        label: 'cvu+payer=me',
+        since,
+        filter: { paymentMethodId: 'cvu', payerId: 'me' }
       }
     ];
 
@@ -339,20 +357,14 @@ export class MercadoPagoAdapter {
     }
 
     const deduped = deduplicarPagos(all);
-    const transfers = deduped.filter(
-      (p) => String(p.operation_type || '').toLowerCase() === 'money_transfer'
-    );
-    const accountMoney = deduped.filter(
-      (p) =>
-        String(p.payment_type_id || p.payment_method?.type || '').toLowerCase() === 'account_money'
-    );
-    console.log(`Pagos obtenidos (collector/payer/P2P): ${deduped.length}`, {
+    const transferLike = deduped.filter((p) => esTransferenciaPago(p));
+    console.log(`Pagos obtenidos (collector/payer/P2P/cvu): ${deduped.length}`, {
       userId: mpUserId,
       since,
-      moneyTransfers: transfers.length,
-      accountMoney: accountMoney.length,
+      transferLike: transferLike.length,
       operationTypes: [...new Set(deduped.map((p) => p.operation_type).filter(Boolean))],
-      sampleTransferIds: transfers.slice(0, 5).map((p) => p.id)
+      paymentMethodIds: [...new Set(deduped.map((p) => p.payment_method_id).filter(Boolean))],
+      sampleTransferIds: transferLike.slice(0, 5).map((p) => p.id)
     });
     return deduped;
   }

@@ -104,8 +104,9 @@ export default function MercadoPagoPartialSyncBanner({ onImportCsv, conexionId: 
       {errorMsg}
       {p2pVacia && (
         <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
-          Los envíos a amigos o locales por transferencia pueden no aparecer en Transacciones ni en
-          ingresos/gastos. El saldo de la cuenta puede verse correcto igual.
+          La sync unificada busca transferencias en payments y en el reporte oficial de retiros
+          (activities_withdraw). Si sigue vacío tras re-sync, el token o la app MP aún no expone esos
+          movimientos.
         </Box>
       )}
       {showGap && (
