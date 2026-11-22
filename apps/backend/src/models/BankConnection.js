@@ -102,6 +102,7 @@ const bankConnectionSchema = createSchema({
       transferenciasSettlement: Number,
       transferenciasAccount: Number,
       transferenciasActivities: Number,
+      settlementBankOuts: Number,
       movementKinds: { type: Map, of: Number },
       saldoMp: Number,
       saldoLedger: Number,
@@ -113,7 +114,8 @@ const bankConnectionSchema = createSchema({
       },
       coberturaBancarias: {
         type: String,
-        enum: ['OK', 'VACIA', 'DESCONOCIDA'],
+        // SOLO_ENTRADA = Debin/ingresos bancarios sin salidas CVU→CBU (PAYOUTS)
+        enum: ['OK', 'VACIA', 'SOLO_ENTRADA', 'DESCONOCIDA'],
         default: 'DESCONOCIDA'
       },
       nota: String
