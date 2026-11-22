@@ -23,6 +23,8 @@ import {
   getOrigenMetadata,
   hasNetoDistinct,
   isMercadoPagoOrigen,
+  isMpInternalAccountMovement,
+  formatMpInternalReserveTitle,
   mapearTipoTransaccionMpDisplay,
 } from '@shared/utils/mpDisplayUtils';
 import { getEstadoColor, getStatusIconComponent } from '@shared/components/common/StatusSystem';
@@ -41,6 +43,7 @@ import {
   SouthWestRounded,
   NorthEastRounded,
   AccountBalanceWalletOutlined,
+  SwapHorizRounded,
 } from '@mui/icons-material';
 
 function DetailRow({ label, value, icon = null }) {
@@ -98,11 +101,12 @@ const TransaccionTable = ({
     setExpandedRow(expandedRow === id ? null : id);
   };
 
-  const getMontoColor = (transaccion) => (
-    transaccion.tipo === 'INGRESO'
+  const getMontoColor = (transaccion, { internal = false } = {}) => {
+    if (internal) return 'text.disabled';
+    return transaccion.tipo === 'INGRESO'
       ? (transaccion.cuenta?.moneda?.color || 'success.main')
-      : 'error.main'
-  );
+      : 'error.main';
+  };
 
   const formatMonto = (monto, compact = true) => {
     if (!showValues) return '****';
@@ -141,10 +145,18 @@ const TransaccionTable = ({
     return React.cloneElement(iconElement, { sx: { fontSize: 16, color } });
   };
 
-  const getRowIcon = (transaccion) => {
-    const mp = isMercadoPagoOrigen(transaccion.origen);
+  const getRowIcon = (transaccion, { internal = false } = {}) => {
     const common = { sx: { fontSize: 18 } };
 
+    if (internal) {
+      return (
+        <SwapHorizRounded
+          sx={{ ...common.sx, color: 'text.disabled', fontSize: 14 }}
+        />
+      );
+    }
+
+    const mp = isMercadoPagoOrigen(transaccion.origen);
     if (mp) {
       return (
         <AccountBalanceWalletOutlined
@@ -214,25 +226,29 @@ const TransaccionTable = ({
           {transacciones.map((transaccion) => {
             const rowId = transaccion.id || transaccion._id;
             const expanded = expandedRow === rowId;
-            const title = formatMpTransactionTitle(
-              transaccion.descripcion,
-              transaccion.origen
-            );
-            const counterparty = getCounterparty(transaccion);
+            const internal = isMpInternalAccountMovement(transaccion);
+            const meta = getOrigenMetadata(transaccion.origen);
+            const title = internal
+              ? formatMpInternalReserveTitle(transaccion)
+              : formatMpTransactionTitle(
+                transaccion.descripcion,
+                transaccion.origen
+              );
+            const counterparty = internal ? null : getCounterparty(transaccion);
             const metaLine = buildTransactionListMeta(transaccion, {
               includeDate: true,
             });
             const mpOrigen = isMercadoPagoOrigen(transaccion.origen);
-            const meta = getOrigenMetadata(transaccion.origen);
             const comisionesTotal = getComisionesTotal(transaccion);
-            const showNeto = hasNetoDistinct(transaccion);
+            const showNeto = !internal && hasNetoDistinct(transaccion);
             const methodLabel = formatPaymentMethodLabel(
               meta.paymentMethod,
               meta.paymentMethodId
             );
             const typeLabel = mapearTipoTransaccionMpDisplay(meta.transactionType);
-            const origenLabel =
-              transaccion.origen?.tipo === 'MERCADOPAGO_MOVIMIENTO'
+            const origenLabel = internal
+              ? 'Movimiento interno (disponible ↔ reserva)'
+              : transaccion.origen?.tipo === 'MERCADOPAGO_MOVIMIENTO'
                 ? 'Movimiento de wallet'
                 : transaccion.origen?.tipo === 'MERCADOPAGO_PAGO'
                   ? 'Pago Mercado Pago'
@@ -246,10 +262,92 @@ const TransaccionTable = ({
                     cursor: 'pointer',
                     transition: 'background-color 0.15s ease',
                     bgcolor: expanded ? 'action.hover' : 'transparent',
-                    '&:hover': { bgcolor: 'action.hover' },
+                    opacity: internal ? 0.72 : 1,
+                    '&:hover': { bgcolor: 'action.hover', opacity: internal ? 0.9 : 1 },
                   }}
                 >
-                  <TableCell sx={{ width: '100%' }}>
+                  <TableCell
+                    sx={{
+                      width: '100%',
+                      py: internal ? 0.25 : undefined,
+                    }}
+                  >
+                    {internal ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.75,
+                          minHeight: 20,
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: 0.5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            bgcolor: 'transparent',
+                          }}
+                        >
+                          {getRowIcon(transaccion, { internal: true })}
+                        </Box>
+                        <Box
+                          sx={{
+                            minWidth: 0,
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            gap: 0.65,
+                            flexWrap: 'nowrap',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              fontWeight: 450,
+                              fontSize: '0.75rem',
+                              color: 'text.secondary',
+                              lineHeight: 1.15,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {title}
+                          </Typography>
+                          {metaLine && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'text.disabled',
+                                fontSize: '0.6875rem',
+                                lineHeight: 1.15,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {metaLine}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Typography
+                          sx={{
+                            fontWeight: 500,
+                            fontSize: '0.75rem',
+                            color: 'text.disabled',
+                            fontVariantNumeric: 'tabular-nums',
+                            lineHeight: 1.15,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {simbolo(transaccion)} {formatMonto(transaccion.monto)}
+                        </Typography>
+                      </Box>
+                    ) : (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
                       <Box
                         sx={{
@@ -388,6 +486,7 @@ const TransaccionTable = ({
                         </Box>
                       </Box>
                     </Box>
+                    )}
                   </TableCell>
                 </TableRow>
 
@@ -404,20 +503,34 @@ const TransaccionTable = ({
                           borderRadius: 1.5,
                           border: '1px solid',
                           borderColor: 'divider',
-                          bgcolor: 'background.paper',
+                          bgcolor: internal ? 'action.hover' : 'background.paper',
                         }}
                       >
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                          {internal && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'text.secondary',
+                                lineHeight: 1.35,
+                                mb: 0.25,
+                              }}
+                            >
+                              Movimiento interno entre disponible y reserva. No es dinero que entra ni sale de la cuenta.
+                            </Typography>
+                          )}
                           <DetailRow label="Fecha" value={formatFechaFull(transaccion.fecha)} />
-                          <DetailRow
-                            label="Estado"
-                            value={
-                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                                {getEstadoIcon(transaccion.estado)}
-                                {formatEstado(transaccion.estado)}
-                              </Box>
-                            }
-                          />
+                          {!internal && (
+                            <DetailRow
+                              label="Estado"
+                              value={
+                                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                  {getEstadoIcon(transaccion.estado)}
+                                  {formatEstado(transaccion.estado)}
+                                </Box>
+                              }
+                            />
+                          )}
                           {transaccion.cuenta?.nombre && (
                             <DetailRow
                               label="Cuenta"
@@ -425,10 +538,10 @@ const TransaccionTable = ({
                               value={transaccion.cuenta.nombre}
                             />
                           )}
-                          {transaccion.categoria && (
+                          {!internal && transaccion.categoria && (
                             <DetailRow label="Categoría" value={transaccion.categoria} />
                           )}
-                          {counterparty?.name && (
+                          {!internal && counterparty?.name && (
                             <DetailRow
                               label={counterparty.label || 'Contraparte'}
                               value={
@@ -439,16 +552,16 @@ const TransaccionTable = ({
                             />
                           )}
                           {origenLabel && <DetailRow label="Origen" value={origenLabel} />}
-                          {typeLabel && <DetailRow label="Tipo MP" value={typeLabel} />}
-                          {methodLabel && <DetailRow label="Método" value={methodLabel} />}
-                          {meta.description && meta.description !== counterparty?.name && (
+                          {!internal && typeLabel && <DetailRow label="Tipo MP" value={typeLabel} />}
+                          {!internal && methodLabel && <DetailRow label="Método" value={methodLabel} />}
+                          {!internal && meta.description && meta.description !== counterparty?.name && (
                             <DetailRow label="Detalle MP" value={meta.description} />
                           )}
-                          {meta.installments > 1 && (
+                          {!internal && meta.installments > 1 && (
                             <DetailRow label="Cuotas" value={`${meta.installments}`} />
                           )}
 
-                          {(showNeto || comisionesTotal > 0) && (
+                          {!internal && (showNeto || comisionesTotal > 0) && (
                             <>
                               <Divider sx={{ my: 0.5 }} />
                               <DetailRow

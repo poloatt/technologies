@@ -22,15 +22,75 @@ export const MP_MOVEMENT_KIND_LABELS = {
   P2P_TRANSFER: 'Transferencia a usuario',
   EXTERNAL_TRANSFER: 'Transferencia bancaria',
   CASH_WITHDRAWAL: 'Retiro de efectivo',
-  RESERVE_RELEASE: 'Extracción de reserva',
-  RESERVE_LOCK: 'Envío a reserva',
+  // Copy corto: son moves internos, no plata que entra/sale
+  RESERVE_RELEASE: 'Desde reserva',
+  RESERVE_LOCK: 'A reserva',
   YIELD: 'Rendimiento',
   REFUND: 'Devolución',
   CHARGEBACK: 'Contracargo',
   FEE: 'Comisión',
-  INTERNAL: 'Movimiento interno',
+  INTERNAL: 'Ajuste interno',
   UNKNOWN: 'Movimiento',
 };
+
+const INTERNAL_MOVEMENT_KINDS = new Set([
+  'RESERVE_LOCK',
+  'RESERVE_RELEASE',
+  'INTERNAL',
+]);
+
+// Códigos crudos de parking/reserva en Account Money AR (aparecen como “contraparte”)
+// Ojo: no usar "wallet" suelto — suele ser pago real con dinero en cuenta.
+const MP_INTERNAL_CODE_RE =
+  /\b(digital_accounts(?:_cards)?|reserve_for_|asset_management(?:_withdrawal|_deposit)?|parking|money_park|unpark)\b/i;
+
+/**
+ * Detecta textos/códigos de movimientos internos MP (disponible ↔ reserva).
+ */
+export function looksLikeMpInternalReserveText(...parts) {
+  const blob = parts.filter(Boolean).join(' ').trim();
+  if (!blob) return false;
+  if (MP_INTERNAL_CODE_RE.test(blob)) return true;
+  if (/desde\s+reserva|a\s+reserva|env[ií]o\s+a\s+reserva|extracci[oó]n\s+de\s+reserva/i.test(blob)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Movimientos dentro de la misma cuenta (disponible ↔ reserva).
+ * No deben verse como ingreso/egreso de dinero.
+ * Acepta origen solo, o la transacción completa (para txs ya sync sin movementKind).
+ */
+export function isMpInternalAccountMovement(origenOrTx) {
+  const origen = origenOrTx?.origen ? origenOrTx.origen : origenOrTx;
+  const meta = getOrigenMetadata(origen);
+  if (INTERNAL_MOVEMENT_KINDS.has(meta.movementKind)) return true;
+  if (String(meta.movementKind || '').startsWith('RESERVE')) return true;
+  if (meta.isInternal === true && meta.statsExclude === true) return true;
+
+  // Txs ya sincronizadas: MP guarda códigos crudos (digital_accounts, wallet…)
+  return looksLikeMpInternalReserveText(
+    meta.counterpartyName,
+    meta.businessName,
+    meta.itemTitle,
+    meta.description,
+    meta.statementDescriptor,
+    origenOrTx?.descripcion
+  );
+}
+
+/** Título corto para fila interna según dirección del movimiento. */
+export function formatMpInternalReserveTitle(transaccion) {
+  const meta = getOrigenMetadata(transaccion?.origen);
+  if (meta.movementKind === 'RESERVE_LOCK') return MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK;
+  if (meta.movementKind === 'RESERVE_RELEASE') return MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE;
+  if (meta.movementKind === 'INTERNAL') return MP_MOVEMENT_KIND_LABELS.INTERNAL;
+  // Sin kind: inferir por signo
+  if (transaccion?.tipo === 'EGRESO') return MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK;
+  if (transaccion?.tipo === 'INGRESO') return MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE;
+  return 'Ajuste interno';
+}
 
 const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO', 'MERCADOPAGO'];
 
@@ -82,6 +142,7 @@ function isGenericCounterpartyName(name) {
   if (!name) return true;
   const cleaned = String(name).trim();
   if (!cleaned) return true;
+  if (looksLikeMpInternalReserveText(cleaned)) return true;
   const generic = new Set([
     ...Object.values(MP_TRANSACTION_TYPE_LABELS),
     ...Object.keys(MP_TRANSACTION_TYPE_LABELS),
@@ -96,6 +157,8 @@ function isGenericCounterpartyName(name) {
     'bank_transfer',
     'ticket',
     'atm',
+    'digital_accounts',
+    'digital_accounts_cards',
   ].map((v) => String(v).toLowerCase()));
   return generic.has(cleaned.toLowerCase());
 }
@@ -192,6 +255,7 @@ export function buildTransactionListMeta(transaccion, { includeDate = true } = {
   const parts = [];
   const origen = transaccion?.origen;
   const meta = getOrigenMetadata(origen);
+  const internal = isMpInternalAccountMovement(origen);
 
   if (includeDate && transaccion?.fecha) {
     const date = new Date(transaccion.fecha);
@@ -202,9 +266,15 @@ export function buildTransactionListMeta(transaccion, { includeDate = true } = {
     }
   }
 
+  // Reserva / ajuste: una sola pista, sin “Ingreso/Egreso/Wallet”
+  if (internal) {
+    parts.push('Dentro de la cuenta');
+    return parts.filter(Boolean).join(' · ');
+  }
+
   if (isMercadoPagoOrigen(origen)) {
     if (origen.tipo === 'MERCADOPAGO_MOVIMIENTO') {
-      parts.push(meta.isInternal || meta.statsExclude ? 'Interno' : 'Wallet');
+      parts.push('Wallet');
       const kindLabel = MP_MOVEMENT_KIND_LABELS[meta.movementKind];
       if (kindLabel) parts.push(kindLabel);
       else {

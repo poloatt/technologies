@@ -91,9 +91,14 @@ export function limpiarNombreContraparte(name) {
     'account_money',
     'credit_card',
     'debit_card',
-    'bank_transfer'
+    'bank_transfer',
+    'digital_accounts',
+    'digital_accounts_cards'
   ].map((v) => String(v).toLowerCase()));
   if (generic.has(cleaned.toLowerCase())) return null;
+  if (/\b(digital_accounts(?:_cards)?|asset_management|money_park)\b/i.test(cleaned)) {
+    return null;
+  }
   return cleaned;
 }
 
@@ -332,8 +337,8 @@ export const MP_MOVEMENT_KIND_LABELS = {
   P2P_TRANSFER: 'Transferencia a usuario',
   EXTERNAL_TRANSFER: 'Transferencia bancaria',
   CASH_WITHDRAWAL: 'Retiro de efectivo',
-  RESERVE_RELEASE: 'Extracción de reserva',
-  RESERVE_LOCK: 'Envío a reserva',
+  RESERVE_RELEASE: 'Desde reserva',
+  RESERVE_LOCK: 'A reserva',
   YIELD: 'Rendimiento',
   REFUND: 'Devolución',
   CHARGEBACK: 'Contracargo',
@@ -343,10 +348,13 @@ export const MP_MOVEMENT_KIND_LABELS = {
 };
 
 // Evitar match amplio de "reserva" suelto (falsos positivos sobre pagos/descripciones)
+// digital_accounts / wallet: códigos crudos de parking/reserva en Account Money AR
 const RESERVE_RELEASE_RE =
   /extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|disponible\s+desde\s+reserva|investment.?unlock|reserve_for_.*_cancel|asset_management_withdrawal|salida\s+de\s+reserva/i;
 const RESERVE_LOCK_RE =
   /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|envio\s+a\s+reserva|env[ií]o\s+a\s+reserva|lock.?reserve|parking|investment.?lock|reserve_for_(?!.*_cancel)/i;
+const RESERVE_INTERNAL_CODE_RE =
+  /\b(digital_accounts(?:_cards)?|asset_management(?:_deposit)?|money_park)\b/i;
 const YIELD_RE =
   /rendimiento|rendimientos|inter[eé]s|intereses|asset_management_gain|asset_management_loss|yield|ganancia\s+de\s+inversi/i;
 const INTERNAL_RE =
@@ -431,6 +439,21 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       movementKind: MP_MOVEMENT_KINDS.RESERVE_LOCK,
       statsExclude: true,
       label: MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
+      isTransfer: false,
+      isInternal: true
+    };
+  }
+  // Códigos crudos MP (digital_accounts, wallet…): dirección por signo neto
+  if (RESERVE_INTERNAL_CODE_RE.test(blob) && !TRANSFER_RE.test(blob)) {
+    const isRelease = netAmount > 0;
+    return {
+      movementKind: isRelease
+        ? MP_MOVEMENT_KINDS.RESERVE_RELEASE
+        : MP_MOVEMENT_KINDS.RESERVE_LOCK,
+      statsExclude: true,
+      label: isRelease
+        ? MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE
+        : MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
       isTransfer: false,
       isInternal: true
     };
@@ -777,10 +800,10 @@ export function formatearDescripcionMovimiento(row) {
   }
 
   if (economic.movementKind === MP_MOVEMENT_KINDS.RESERVE_RELEASE) {
-    return 'MercadoPago - Extracción de reserva';
+    return 'MercadoPago - Desde reserva';
   }
   if (economic.movementKind === MP_MOVEMENT_KINDS.RESERVE_LOCK) {
-    return 'MercadoPago - Envío a reserva';
+    return 'MercadoPago - A reserva';
   }
   if (economic.movementKind === MP_MOVEMENT_KINDS.YIELD) {
     return description ? `MercadoPago - Rendimiento · ${description}` : 'MercadoPago - Rendimiento';
