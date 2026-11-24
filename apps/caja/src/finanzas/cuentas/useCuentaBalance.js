@@ -1,7 +1,8 @@
 import { useAPI } from '@shared/hooks/useAPI';
+import { formatDateKey } from '../transacciones/transaccionesPeriodUtils';
 
 export function useCuentaBalance(cuentaId) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatDateKey(new Date());
 
   // Usa el endpoint de agregación en vez de bajar hasta 5000 transacciones
   const { data, loading, error } = useAPI(

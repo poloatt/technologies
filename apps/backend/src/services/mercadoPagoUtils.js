@@ -100,6 +100,21 @@ export function determinarTipoPago(pago, userId) {
   if (branch.includes('am-to-pot')) return 'EGRESO';
   if (branch.includes('pot-to-am')) return 'INGRESO';
 
+  // Venta de dólares: entran pesos. Compra de dólares: salen pesos.
+  // No usa el signo del settlement, que en estos pagos viene siempre positivo.
+  const cambio = datosCambioUsd(pago);
+  if (cambio?.movementKind === MP_MOVEMENT_KINDS.FX_SELL) return 'INGRESO';
+  if (cambio?.movementKind === MP_MOVEMENT_KINDS.FX_BUY) return 'EGRESO';
+
+  // FCI: el pago con dinero en cuenta sale hacia el fondo. El monto de la API
+  // viene positivo y el usuario figura de los dos lados, igual que en la reserva.
+  // El rescate que vuelve entra por el settlement, no por este pago.
+  if (op === 'investment') {
+    const desc = String(pago?.description || '');
+    if (INVESTMENT_OUT_RE.test(desc) && !INVESTMENT_IN_RE.test(desc)) return 'INGRESO';
+    return 'EGRESO';
+  }
+
   const mpUserId = Number(userId);
   const { collectorId, payerId } = idsMercadoPago(pago);
   const userIsCollector = collectorId != null && collectorId === mpUserId;
@@ -436,6 +451,8 @@ export const MP_MOVEMENT_KINDS = {
   RESERVE_LOCK: 'RESERVE_LOCK',
   INVESTMENT_IN: 'INVESTMENT_IN',
   INVESTMENT_OUT: 'INVESTMENT_OUT',
+  FX_SELL: 'FX_SELL',
+  FX_BUY: 'FX_BUY',
   INVESTMENT_YIELD: 'INVESTMENT_YIELD',
   YIELD: 'YIELD',
   CASHBACK: 'CASHBACK',
@@ -455,6 +472,8 @@ export const MP_MOVEMENT_KIND_LABELS = {
   RESERVE_LOCK: 'A reserva',
   INVESTMENT_IN: 'A inversión',
   INVESTMENT_OUT: 'Desde inversión',
+  FX_SELL: 'Venta de dólares',
+  FX_BUY: 'Compra de dólares',
   INVESTMENT_YIELD: 'Rendimiento',
   YIELD: 'Rendimiento',
   CASHBACK: 'Cashback',
@@ -510,6 +529,60 @@ function textoClasificacionMp({ description, transactionType, operationType, pay
 }
 
 /**
+ * Cambio ARS/USD de Mercado Pago. El operation_type sigue siendo investment,
+ * pero la plata de un lado está en dólares. Una suscripción a un fondo
+ * (destino distinto de USD, o Marketplace de inversiones) no entra acá.
+ * @returns {{ movementKind: string, usdAmount: number, exchangeRate: number, exchangeOperation: string|null, payerCurrency: string|null, collectorCurrency: string|null } | null}
+ */
+export function datosCambioUsd(input = {}) {
+  const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
+  const payerCcy = String(
+    input.payerCurrency || input.amounts?.payer?.currency_id || ''
+  ).toUpperCase();
+  const collectorCcy = String(
+    input.collectorCurrency || input.amounts?.collector?.currency_id || ''
+  ).toUpperCase();
+  const destination = String(
+    input.destinationAsset ||
+    input.point_of_interaction?.transaction_data?.destination_asset ||
+    ''
+  ).toUpperCase();
+  const branch = String(
+    input.businessBranch ||
+    input.point_of_interaction?.business_info?.branch ||
+    ''
+  ).toLowerCase();
+  const subType = String(
+    input.subType || input.point_of_interaction?.sub_type || ''
+  ).toUpperCase();
+  if (destination && destination !== 'USD') return null;
+  if (/marketplace|inversiones|\bfci\b/.test(branch)) return null;
+  if (subType === 'SUBSCRIPTION') return null;
+
+  let movementKind = null;
+  if (payerCcy === 'USD' || exchange === 'SELL') movementKind = MP_MOVEMENT_KINDS.FX_SELL;
+  else if (collectorCcy === 'USD' || exchange === 'BUY') movementKind = MP_MOVEMENT_KINDS.FX_BUY;
+  if (!movementKind) return null;
+
+  const payerAmount = Number(input.amounts?.payer?.transaction ?? input.usdAmount ?? 0);
+  const collectorAmount = Number(input.amounts?.collector?.transaction ?? input.usdAmount ?? 0);
+  const usdAmount = movementKind === MP_MOVEMENT_KINDS.FX_SELL
+    ? (payerCcy === 'USD' ? payerAmount : Number(input.usdAmount) || 0)
+    : (collectorCcy === 'USD' ? collectorAmount : Number(input.usdAmount) || 0);
+  const exchangeRate = Number(
+    input.exchangeRate || input.point_of_interaction?.transaction_data?.exchange_rate || 0
+  );
+  return {
+    movementKind,
+    usdAmount,
+    exchangeRate,
+    exchangeOperation: exchange || null,
+    payerCurrency: payerCcy || null,
+    collectorCurrency: collectorCcy || null,
+  };
+}
+
+/**
  * @returns {{ movementKind: string, statsExclude: boolean, label: string, isTransfer: boolean, isInternal: boolean }}
  */
 export function clasificarMovimientoEconomicoMp(input = {}) {
@@ -562,7 +635,19 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 2) Inversiones (FCI / asset management) antes que el regex de reserva:
+  // 2) Dólares antes que el FCI: Mercado Pago también les pone operation_type investment.
+  const cambio = datosCambioUsd(input);
+  if (cambio) {
+    return {
+      movementKind: cambio.movementKind,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS[cambio.movementKind],
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // 3) Inversiones (FCI / asset management) antes que el regex de reserva:
   // asset_management_* no es el parking de Reserva.
   const looksInvestment =
     operationType === 'investment' ||
@@ -571,10 +656,19 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     INVESTMENT_CODE_RE.test(blob);
 
   if (looksInvestment) {
+    const branch = reserveBranchOf(input).toLowerCase();
+    const txType = String(input.transactionType || input.raw?.TRANSACTION_TYPE || '').toUpperCase();
+    const settlementCredit = txType.startsWith('SETTLEMENT') && netAmount > 0;
+    const marketplace = /marketplace|inversiones|\bfci\b/.test(branch);
     let outgoing = false;
     if (INVESTMENT_OUT_RE.test(blob) && !INVESTMENT_IN_RE.test(blob)) {
       outgoing = true;
     } else if (INVESTMENT_IN_RE.test(blob) && !INVESTMENT_OUT_RE.test(blob)) {
+      outgoing = false;
+    } else if (settlementCredit) {
+      outgoing = true;
+    } else if (marketplace || operationType === 'investment') {
+      // Pago al FCI: la plata sale de la cuenta aunque el monto venga positivo.
       outgoing = false;
     } else {
       outgoing = netAmount > 0;
@@ -591,7 +685,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 3) Reservas / parking interno (NO deben entrar a stats de flujo).
+  // 4) Reservas / parking interno (NO deben entrar a stats de flujo).
   // partition_transfer + digital_accounts = disponible ↔ reserva dentro de MP.
   // No exigir !TRANSFER_RE: la descripción suele decir "· Transferencia".
   const looksReserveInternal =
@@ -841,8 +935,15 @@ export const MP_INVERSIONES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.YIELD
 ]);
 
+/** Libro dólares: compra y venta de USD. No entran a inversiones ni al flujo. */
+export const MP_DOLARES_KINDS = Object.freeze([
+  MP_MOVEMENT_KINDS.FX_SELL,
+  MP_MOVEMENT_KINDS.FX_BUY
+]);
+
 export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
   ...MP_INVERSIONES_KINDS,
+  ...MP_DOLARES_KINDS,
   MP_MOVEMENT_KINDS.INTERNAL
 ]);
 
@@ -855,6 +956,10 @@ export function isInversionesMovementKind(kind) {
   return MP_INVERSIONES_KINDS.includes(kind);
 }
 
+export function isDolaresMovementKind(kind) {
+  return MP_DOLARES_KINDS.includes(kind);
+}
+
 /**
  * Filtro de libro.
  * flujo: stats de caja (sin reservas, inversiones, rendimientos ni ajustes).
@@ -864,6 +969,11 @@ export function buildLedgerMatch(ledger = 'flujo') {
   if (ledger === 'inversiones') {
     return {
       'origen.metadata.movementKind': { $in: [...MP_INVERSIONES_KINDS] }
+    };
+  }
+  if (ledger === 'dolares') {
+    return {
+      'origen.metadata.movementKind': { $in: [...MP_DOLARES_KINDS] }
     };
   }
   return {
@@ -878,13 +988,46 @@ export function buildLedgerMatch(ledger = 'flujo') {
  */
 export function buildListLedgerMatch(ledger = 'flujo') {
   if (ledger === 'inversiones') return buildLedgerMatch('inversiones');
+  if (ledger === 'dolares') return buildLedgerMatch('dolares');
   return {
-    'origen.metadata.movementKind': { $nin: [...MP_INVERSIONES_KINDS] }
+    'origen.metadata.movementKind': { $nin: [...MP_INVERSIONES_KINDS, ...MP_DOLARES_KINDS] }
   };
 }
 
+/**
+ * Recorta el libro a los kinds pedidos.
+ * `none` no matchea nada. Vacío o ausente deja el libro completo.
+ * En flujo se ignoran kinds del libro inversiones.
+ */
+export function applyMovementKindFilter(query, ledger, raw) {
+  if (raw == null || raw === '') return;
+  const requested = raw === 'none'
+    ? []
+    : [...new Set(String(raw).split(',').map((item) => item.trim()).filter(Boolean))];
+  const allowed = requested.filter((kind) => {
+    if (ledger === 'inversiones') return MP_INVERSIONES_KINDS.includes(kind);
+    if (ledger === 'dolares') return MP_DOLARES_KINDS.includes(kind);
+    return !MP_FLUJO_EXCLUDED_KINDS.includes(kind);
+  });
+  const field = 'origen.metadata.movementKind';
+  const current = query[field] || {};
+  if (current.$in) {
+    const allow = new Set(allowed);
+    query[field] = { ...current, $in: current.$in.filter((kind) => allow.has(kind)) };
+    return;
+  }
+  query[field] = { ...current, $in: allowed };
+}
+
+const YIELD_INVERSION_RE = /asset_management|inversi|\bfci\b|investment/i;
+
+/** El crédito diario sin texto es de la reserva. Solo pasa a la inversión si el movimiento lo dice. */
+export function ladoRendimiento(texto = '') {
+  return YIELD_INVERSION_RE.test(String(texto || '')) ? 'inversion' : 'reserva';
+}
+
 /** Suma montos de un grupo de kinds. Rendimiento resta los egresos (pérdidas). */
-export function acumularBucketInversiones(kind, tipo, monto) {
+export function acumularBucketInversiones(kind, tipo, monto, yieldSide) {
   const amount = Number(monto) || 0;
   // La reserva se compara consigo misma. Un rescate de inversión no es plata que volvió de la reserva.
   if (kind === MP_MOVEMENT_KINDS.RESERVE_LOCK) return { enviado: amount };
@@ -892,9 +1035,69 @@ export function acumularBucketInversiones(kind, tipo, monto) {
   if (kind === MP_MOVEMENT_KINDS.INVESTMENT_IN) return { ingresado: amount };
   if (kind === MP_MOVEMENT_KINDS.INVESTMENT_OUT) return { rescatadoInversion: amount };
   if (RENDIMIENTO_KINDS.has(kind)) {
-    return { rendimientos: tipo === 'EGRESO' ? -amount : amount };
+    const signed = tipo === 'EGRESO' ? -amount : amount;
+    if (yieldSide === 'inversion') return { rendimientosInversion: signed };
+    return { rendimientosReserva: signed };
   }
   return {};
+}
+
+/** El settlement trae el neto en positivo para los dos lados. La dirección del dólar manda. */
+export function tipoDeCambioUsd(kind) {
+  if (kind === MP_MOVEMENT_KINDS.FX_SELL) return 'INGRESO';
+  if (kind === MP_MOVEMENT_KINDS.FX_BUY) return 'EGRESO';
+  return null;
+}
+
+/**
+ * Un reporte sin el pago adjunto no alcanza para ver el cambio.
+ * Si la fila ya era de dólares, no la devolvemos a inversiones ni al flujo.
+ */
+export function conservarClasificacionUsd(prevMeta = {}, next = {}) {
+  if (!isDolaresMovementKind(prevMeta.movementKind) || isDolaresMovementKind(next.movementKind)) {
+    return next;
+  }
+  const kind = prevMeta.movementKind;
+  return {
+    ...next,
+    movementKind: kind,
+    statsExclude: true,
+    isInternal: false,
+    label: MP_MOVEMENT_KIND_LABELS[kind],
+    usdAmount: next.usdAmount || prevMeta.usdAmount || 0,
+    exchangeRate: next.exchangeRate || prevMeta.exchangeRate || 0,
+    exchangeOperation: next.exchangeOperation || prevMeta.exchangeOperation || null,
+    payerCurrency: next.payerCurrency || prevMeta.payerCurrency || null,
+    collectorCurrency: next.collectorCurrency || prevMeta.collectorCurrency || null,
+  };
+}
+
+/** Pesos y dólares de una compra o venta. `usd` es la cantidad de dólares, no el monto en pesos. */
+export function acumularBucketDolares(kind, monto, usd) {
+  const amount = Number(monto) || 0;
+  const dollars = Number(usd) || 0;
+  if (kind === MP_MOVEMENT_KINDS.FX_SELL) return { usdVendido: dollars, pesosVenta: amount };
+  if (kind === MP_MOVEMENT_KINDS.FX_BUY) return { usdComprado: dollars, pesosCompra: amount };
+  return {};
+}
+
+/** Saldo que quedó: reservado − volvió, más invertido − rescatado, más el rendimiento de cada cuenta. */
+export function resultadoFci({
+  enviado = 0,
+  rescatado = 0,
+  ingresado = 0,
+  rescatadoInversion = 0,
+  rendimientos = 0,
+  rendimientosReserva = null,
+  rendimientosInversion = null,
+} = {}) {
+  const reserva = (Number(enviado) || 0) - (Number(rescatado) || 0);
+  const inversion = (Number(ingresado) || 0) - (Number(rescatadoInversion) || 0);
+  const tienePartes = rendimientosReserva != null || rendimientosInversion != null;
+  const rendimiento = tienePartes
+    ? (Number(rendimientosReserva) || 0) + (Number(rendimientosInversion) || 0)
+    : (Number(rendimientos) || 0);
+  return reserva + inversion + rendimiento;
 }
 
 export function buildStatsExcludeMatch() {
@@ -1138,7 +1341,11 @@ export function formatearDescripcionMovimiento(row) {
   const contraparte = extraerContraparteMovimiento(row);
   const economic = clasificarMovimientoEconomicoMp(row);
 
-  if (isInversionesMovementKind(economic.movementKind) || economic.isInternal) {
+  if (
+    isInversionesMovementKind(economic.movementKind) ||
+    isDolaresMovementKind(economic.movementKind) ||
+    economic.isInternal
+  ) {
     return `MercadoPago - ${economic.label}`;
   }
   if (economic.movementKind === MP_MOVEMENT_KINDS.CASHBACK) {

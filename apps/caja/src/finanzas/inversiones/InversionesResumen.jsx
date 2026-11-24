@@ -4,6 +4,8 @@ import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { hubLabelSx, hubPeriodSx } from '../../hub';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
+import LedgerKindFilter from '../transacciones/LedgerKindFilter';
+import { INVERSION_TYPE_FILTERS, kindsQueryFor } from '../transacciones/ledgerKindFilters';
 import {
   DEFAULT_PERIOD_PRESET,
   formatMonto,
@@ -20,25 +22,37 @@ const EMPTY_MONEDA = {
   rescatado: 0,
   ingresado: 0,
   rescatadoInversion: 0,
-  rendimientos: 0,
+  rendimientosReserva: 0,
+  rendimientosInversion: 0,
   neto: 0,
 };
 
-function netoPhrase(moneda) {
-  const moved = moneda.enviado || moneda.rescatado || moneda.ingresado || moneda.rescatadoInversion || moneda.rendimientos;
-  if (!moved) return 'Sin reservas ni inversiones en este período';
-  if (moneda.neto > 0) return 'Volvió más reserva de la que apartaste';
-  if (moneda.neto < 0) return 'Quedó más en la reserva de lo que volvió';
-  return 'Lo reservado y lo que volvió empataron';
+function pesoEntero(monto) {
+  const n = Number(monto) || 0;
+  const sign = n < 0 ? -1 : 1;
+  return sign * Math.round(Math.abs(n));
 }
 
-function Metric({ label, amount, color }) {
+function conSigno(monto, simbolo, showValues) {
+  if (!showValues) return formatMonto(monto, simbolo, false);
+  const body = formatMonto(Math.abs(monto), simbolo, true);
+  if (monto < 0) return `−${body}`;
+  if (monto > 0) return `+${body}`;
+  return body;
+}
+
+function Metric({ label, amount, color, yieldText }) {
   return (
     <Box sx={{ minWidth: 0, flex: '1 1 0' }}>
       <Typography sx={hubLabelSx}>{label}</Typography>
       <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', lineHeight: 1.25, mt: 0.25, color }}>
         {amount}
       </Typography>
+      {yieldText ? (
+        <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'text.secondary' }}>
+          {yieldText}
+        </Typography>
+      ) : null}
     </Box>
   );
 }
@@ -51,11 +65,17 @@ export default function InversionesResumen({
   density = 'page',
   preset = DEFAULT_PERIOD_PRESET,
   onPresetChange,
+  enabledKinds,
+  onKindsChange,
 }) {
   const dense = density === 'compact';
   const { showValues } = useValuesVisibility();
   const [hubPreset, setHubPreset] = useState(DEFAULT_PERIOD_PRESET);
   const [monedaElegida, setMonedaElegida] = useState(null);
+  const [localKinds, setLocalKinds] = useState(null);
+  const controlledKinds = typeof onKindsChange === 'function';
+  const kindSelection = controlledKinds ? enabledKinds : localKinds;
+  const setKindSelection = controlledKinds ? onKindsChange : setLocalKinds;
   const activePreset = dense ? hubPreset : preset;
   const changePreset = dense ? setHubPreset : onPresetChange;
   const range = getPeriodRange(activePreset);
@@ -63,14 +83,23 @@ export default function InversionesResumen({
   const { stats, loading, error } = useTransaccionesPeriodStats({
     preset: activePreset,
     ledger: 'inversiones',
+    kinds: kindsQueryFor(INVERSION_TYPE_FILTERS, kindSelection),
   });
 
   const monedas = stats.porMoneda;
   const activa = monedas.find((moneda) => moneda.monedaId === monedaElegida) || monedas[0] || EMPTY_MONEDA;
   const simbolo = activa.simbolo || '$';
-  const neto = activa.neto ?? (activa.rescatado || 0) - (activa.enviado || 0);
-  const netoColor = neto < 0 ? 'error.main' : activa.color || '#9C27B0';
-  const hayInversion = (activa.ingresado || 0) !== 0 || (activa.rescatadoInversion || 0) !== 0;
+  const reservado = pesoEntero(activa.enviado || 0);
+  const volvio = pesoEntero(activa.rescatado || 0);
+  const invertido = pesoEntero(activa.ingresado || 0);
+  const rescatadoFci = pesoEntero(activa.rescatadoInversion || 0);
+  const rendimientoReserva = pesoEntero(activa.rendimientosReserva || 0);
+  const rendimientoInversion = pesoEntero(activa.rendimientosInversion || 0);
+  const saldoReserva = reservado - volvio;
+  const saldoInversion = invertido - rescatadoFci;
+  const rendimientos = rendimientoReserva + rendimientoInversion;
+  const resultado = saldoReserva + saldoInversion + rendimientos;
+  const resultadoColor = resultado < 0 ? 'error.main' : (activa.color || 'success.main');
 
   let body;
   if (loading) {
@@ -89,42 +118,53 @@ export default function InversionesResumen({
   } else {
     body = (
       <>
-        <Typography
+        <Box
           sx={{
-            fontWeight: 700,
-            fontSize: dense ? '1rem' : '1.75rem',
-            lineHeight: 1.15,
-            letterSpacing: '-0.02em',
-            color: netoColor,
-            mb: dense ? 1 : 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            mb: dense ? 1 : 1.5,
           }}
         >
-          {formatMonto(neto, simbolo, showValues)}
-        </Typography>
-        {!dense && (
           <Typography
-            variant="body2"
-            sx={{ mt: 0.375, mb: 1.5, color: 'text.secondary', fontSize: '0.8125rem' }}
+            sx={{
+              fontWeight: 700,
+              fontSize: dense ? '1rem' : '1.75rem',
+              lineHeight: 1.15,
+              letterSpacing: '-0.02em',
+              color: resultadoColor,
+            }}
           >
-            {netoPhrase(activa)}
+            {conSigno(resultado, simbolo, showValues)}
           </Typography>
-        )}
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <Metric label="Reservado" amount={formatMonto(activa.enviado || 0, simbolo, showValues)} />
-          <Metric label="Volvió" amount={formatMonto(activa.rescatado || 0, simbolo, showValues)} />
-          <Metric
-            label="Rendimientos"
-            amount={formatMonto(activa.rendimientos || 0, simbolo, showValues)}
-            color={activa.color || 'success.main'}
-          />
+          {dense && (
+            <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0, flexShrink: 0, textAlign: 'right' }}>
+              {span}
+            </Typography>
+          )}
         </Box>
-        {hayInversion && (
-          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-            Inversión
-            {(activa.ingresado || 0) !== 0 ? ` · ingresado ${formatMonto(activa.ingresado, simbolo, showValues)}` : ''}
-            {(activa.rescatadoInversion || 0) !== 0 ? ` · rescatado ${formatMonto(activa.rescatadoInversion, simbolo, showValues)}` : ''}
-          </Typography>
-        )}
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <Metric
+            label="Reservado"
+            amount={conSigno(saldoReserva, simbolo, showValues)}
+            color={saldoReserva < 0 ? 'error.main' : undefined}
+            yieldText={dense ? undefined : `rendimiento ${conSigno(rendimientoReserva, simbolo, showValues)}`}
+          />
+          <Metric
+            label="Invertido"
+            amount={conSigno(saldoInversion, simbolo, showValues)}
+            color={saldoInversion < 0 ? 'error.main' : undefined}
+            yieldText={dense ? undefined : `rendimiento ${conSigno(rendimientoInversion, simbolo, showValues)}`}
+          />
+          {dense && (
+            <Metric
+              label="Rendimientos"
+              amount={conSigno(rendimientos, simbolo, showValues)}
+              color={rendimientos < 0 ? 'error.main' : undefined}
+            />
+          )}
+        </Box>
       </>
     );
   }
@@ -136,11 +176,22 @@ export default function InversionesResumen({
       sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
-        <PeriodControl preset={activePreset} onChange={changePreset} />
-        <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
-          {span}
-          {!dense && monedas.length > 1 ? ` · ${activa.codigo || 'moneda'}` : ''}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%', minHeight: 28 }}>
+          <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+            <PeriodControl preset={activePreset} onChange={changePreset} />
+          </Box>
+          <LedgerKindFilter
+            options={INVERSION_TYPE_FILTERS}
+            enabledIds={kindSelection}
+            onChange={setKindSelection}
+          />
+        </Box>
+        {!dense && (
+          <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
+            {span}
+            {monedas.length > 1 ? ` · ${activa.codigo || 'moneda'}` : ''}
+          </Typography>
+        )}
         {!dense && monedas.length > 1 && (
           <Box sx={{ display: 'flex', gap: 1 }}>
             {monedas.map((moneda) => (

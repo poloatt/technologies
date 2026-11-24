@@ -29,6 +29,10 @@ export const FINANZAS_SECTION_META = {
     description: 'Reservas, inversiones y rendimientos de Mercado Pago',
     accent: '#9C27B0',
   },
+  dolares: {
+    description: 'Compras y ventas de dólares',
+    accent: '#F9A825',
+  },
   deudores: {
     description: 'Préstamos, deudas y cobros pendientes',
     accent: '#F44336',

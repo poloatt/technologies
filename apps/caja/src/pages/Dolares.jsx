@@ -1,0 +1,126 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
+import { FinanzasSectionNav } from '../finanzas';
+import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
+import DolaresResumen from '../finanzas/dolares/DolaresResumen';
+import TransaccionTable from '../finanzas/transacciones/TransaccionTable';
+import { useTransaccionesList } from '../finanzas/transacciones/useTransaccionesList';
+import {
+  DEFAULT_PERIOD_PRESET,
+  getPeriodRange,
+} from '../finanzas/transacciones/transaccionesPeriodUtils';
+import { DOLAR_TYPE_FILTERS, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
+import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
+
+function getScrollParent(node) {
+  let current = node?.parentElement;
+  while (current && current !== document.body) {
+    const { overflowY } = window.getComputedStyle(current);
+    if (overflowY === 'auto' || overflowY === 'scroll') return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function ListSkeleton() {
+  return (
+    <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {Array.from({ length: 6 }, (_, index) => (
+        <Skeleton key={index} variant="rounded" height={64} />
+      ))}
+    </Box>
+  );
+}
+
+export default function Dolares() {
+  const { showValues } = useValuesVisibility();
+  const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const [enabledKinds, setEnabledKinds] = useState(null);
+  const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
+  const sentinelRef = useRef(null);
+
+  const {
+    transacciones,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    hasAny,
+    loadMore,
+    refetch,
+  } = useTransaccionesList({
+    fechaInicio: periodRange.fechaInicio,
+    fechaFin: periodRange.fechaFin,
+    ledger: 'dolares',
+    estado: 'PAGADO',
+    kinds: kindsQueryFor(DOLAR_TYPE_FILTERS, enabledKinds),
+  });
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore();
+    }, { root: getScrollParent(node), rootMargin: '240px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, transacciones.length]);
+
+  const emptyTitle = hasAny
+    ? 'Sin operaciones de dólares en este período'
+    : 'Todavía no hay compras ni ventas de dólares';
+  const emptyDescription = hasAny
+    ? 'Probá otro período. Las reservas y el fondo siguen en Inversiones.'
+    : 'Cuando Mercado Pago registre una compra o venta de dólares, va a aparecer acá.';
+
+  return (
+    <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
+      <FinanzasSectionNav variant="strip" />
+      <DolaresResumen
+        preset={preset}
+        onPresetChange={setPreset}
+        enabledKinds={enabledKinds}
+        onKindsChange={setEnabledKinds}
+      />
+
+      {loading ? (
+        <ListSkeleton />
+      ) : error && transacciones.length === 0 ? (
+        <Box sx={{ py: 4, textAlign: 'center' }}>
+          <Typography variant="subtitle1">No se pudieron cargar los dólares</Typography>
+          <Typography
+            component="button"
+            variant="body2"
+            onClick={refetch}
+            sx={{ mt: 1, border: 0, bgcolor: 'transparent', color: 'primary.main', cursor: 'pointer' }}
+          >
+            Reintentar
+          </Typography>
+        </Box>
+      ) : transacciones.length === 0 ? (
+        <Box sx={{ py: 4, px: 2, textAlign: 'center' }}>
+          <Typography variant="subtitle1">{emptyTitle}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 420, mx: 'auto' }}>
+            {emptyDescription}
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ mt: 2 }}>
+          <TransaccionTable
+            transacciones={transacciones}
+            variant="ledger"
+            showValues={showValues}
+          />
+          {(hasMore || loadingMore) && (
+            <Box
+              ref={sentinelRef}
+              sx={{ display: 'flex', justifyContent: 'center', py: 2, minHeight: 40 }}
+            >
+              {loadingMore && <CircularProgress size={22} />}
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+}

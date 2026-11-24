@@ -87,6 +87,7 @@ export function getCajaBranchPages(branchId) {
  */
 export const FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS = [
   'inversiones',
+  'dolares',
   'deudores',
   'recurrente',
   'monedas',
@@ -199,7 +200,7 @@ export function resolveCajaToolbarRight(currentPath) {
  * Excluye el hub de la rama y destinos que viven solo en hub / subpages.
  */
 export const CAJA_TOOLBAR_CENTER_EXCLUDE_IDS = {
-  finanzas: ['transacciones', 'inversiones', 'deudores', 'recurrente'],
+  finanzas: ['transacciones', 'inversiones', 'dolares', 'deudores', 'recurrente'],
   propiedades: ['propiedades'],
   inventario: ['inventario', 'vehiculos'],
 };

@@ -1,38 +1,18 @@
 import { BaseController } from './BaseController.js';
 import { Transacciones, Cuentas } from '../models/index.js';
 import mongoose from 'mongoose';
+import { arMonthBounds, formatArDateKey, parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
 import {
+  acumularBucketDolares,
   acumularBucketInversiones,
+  applyMovementKindFilter,
   buildLedgerMatch,
   buildListLedgerMatch,
+  resultadoFci,
 } from '../services/mercadoPagoUtils.js';
 
 const STATS_TZ = 'America/Argentina/Buenos_Aires';
-
-/** YYYY-MM-DD de un instante en el calendario de Argentina. */
-function formatArDateKey(date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: STATS_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-}
-
-/**
- * Interpreta un YYYY-MM-DD como día calendario en Argentina.
- * `new Date('YYYY-MM-DD')` es medianoche UTC y corre el rango 3 horas.
- */
-function parseArDay(value, endOfDay = false) {
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  const time = endOfDay ? '23:59:59.999' : '00:00:00.000';
-  return new Date(`${match[1]}-${match[2]}-${match[3]}T${time}-03:00`);
-}
 
 /** Aplica un rango inclusivo de días Argentina. Devuelve un mensaje si el rango es inválido. */
 function applyFechaRange(query, fechaInicio, fechaFin) {
@@ -52,22 +32,16 @@ function applyFechaRange(query, fechaInicio, fechaFin) {
   return null;
 }
 
+function normalizeLedger(raw) {
+  if (raw === 'inversiones' || raw === 'dolares') return raw;
+  return 'flujo';
+}
+
 function applyCuentaFilter(query, cuenta) {
   if (!cuenta) return null;
   if (!mongoose.Types.ObjectId.isValid(cuenta)) return 'ID de cuenta inválido';
   query.cuenta = new mongoose.Types.ObjectId(cuenta);
   return null;
-}
-
-function arMonthBounds(now = new Date()) {
-  const key = formatArDateKey(now);
-  const [year, month] = key.split('-').map(Number);
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const mm = String(month).padStart(2, '0');
-  return {
-    inicio: parseArDay(`${year}-${mm}-01`),
-    fin: parseArDay(`${year}-${mm}-${String(lastDay).padStart(2, '0')}`, true),
-  };
 }
 
 class TransaccionesController extends BaseController {
@@ -92,8 +66,8 @@ class TransaccionesController extends BaseController {
         return res.status(401).json({ error: 'Usuario no autenticado' });
       }
 
-      const { fechaInicio, fechaFin, estado = 'PAGADO', cuenta, ledger: ledgerRaw } = req.query;
-      const ledger = ledgerRaw === 'inversiones' ? 'inversiones' : 'flujo';
+      const { fechaInicio, fechaFin, estado = 'PAGADO', cuenta, ledger: ledgerRaw, kinds: kindsRaw } = req.query;
+      const ledger = normalizeLedger(ledgerRaw);
       const defaults = arMonthBounds();
       const inicio = fechaInicio ? parseArDay(fechaInicio) : defaults.inicio;
       const fin = fechaFin ? parseArDay(fechaFin, true) : defaults.fin;
@@ -114,8 +88,9 @@ class TransaccionesController extends BaseController {
       }
       const estadoFilter = buildEstadoFilter(estado);
       if (estadoFilter) query.estado = estadoFilter;
+      applyMovementKindFilter(query, ledger, kindsRaw);
 
-      const kindPromise = ledger === 'inversiones'
+      const kindPromise = ledger === 'inversiones' || ledger === 'dolares'
         ? this.Model.aggregate([
           { $match: query },
           {
@@ -124,8 +99,45 @@ class TransaccionesController extends BaseController {
                 kind: '$origen.metadata.movementKind',
                 tipo: '$tipo',
                 moneda: '$moneda',
+                yieldSide: {
+                  $cond: [
+                    { $in: ['$origen.metadata.movementKind', ['INVESTMENT_YIELD', 'YIELD']] },
+                    {
+                      $cond: [
+                        {
+                          $regexMatch: {
+                            input: {
+                              $concat: [
+                                { $ifNull: ['$descripcion', ''] },
+                                ' ',
+                                { $ifNull: ['$origen.metadata.description', ''] },
+                                ' ',
+                                { $ifNull: ['$origen.metadata.operationType', ''] },
+                              ],
+                            },
+                            regex: 'asset_management|inversi|\\bfci\\b|investment',
+                            options: 'i',
+                          },
+                        },
+                        'inversion',
+                        'reserva',
+                      ],
+                    },
+                    null,
+                  ],
+                },
               },
               total: { $sum: { $ifNull: ['$monto', 0] } },
+              usd: {
+                $sum: {
+                  $convert: {
+                    input: '$origen.metadata.usdAmount',
+                    to: 'double',
+                    onError: 0,
+                    onNull: 0,
+                  },
+                },
+              },
             },
           },
         ])
@@ -189,7 +201,12 @@ class TransaccionesController extends BaseController {
             rescatado: 0,
             ingresado: 0,
             rescatadoInversion: 0,
-            rendimientos: 0,
+            rendimientosReserva: 0,
+            rendimientosInversion: 0,
+            usdVendido: 0,
+            usdComprado: 0,
+            pesosVenta: 0,
+            pesosCompra: 0,
             dias: new Map(),
           });
         }
@@ -228,30 +245,47 @@ class TransaccionesController extends BaseController {
       let rescatado = 0;
       let ingresado = 0;
       let rescatadoInversion = 0;
-      let rendimientos = 0;
+      let rendimientosReserva = 0;
+      let rendimientosInversion = 0;
+      let usdVendido = 0;
+      let usdComprado = 0;
+      let pesosVenta = 0;
+      let pesosCompra = 0;
       for (const row of kinds) {
         const monto = row.total || 0;
         const tipo = row._id?.tipo;
         const kind = row._id?.kind;
         const monedaId = row._id?.moneda?.toString?.() || row._id?.moneda || 'sin-moneda';
         const entry = ensureMoneda(monedaId);
-        const bucket = acumularBucketInversiones(kind, tipo, monto);
+        const dolares = acumularBucketDolares(kind, monto, row.usd);
+        entry.usdVendido += dolares.usdVendido || 0;
+        entry.usdComprado += dolares.usdComprado || 0;
+        entry.pesosVenta += dolares.pesosVenta || 0;
+        entry.pesosCompra += dolares.pesosCompra || 0;
+        usdVendido += dolares.usdVendido || 0;
+        usdComprado += dolares.usdComprado || 0;
+        pesosVenta += dolares.pesosVenta || 0;
+        pesosCompra += dolares.pesosCompra || 0;
+        const bucket = acumularBucketInversiones(kind, tipo, monto, row._id?.yieldSide);
         entry.enviado += bucket.enviado || 0;
         entry.rescatado += bucket.rescatado || 0;
         entry.ingresado += bucket.ingresado || 0;
         entry.rescatadoInversion += bucket.rescatadoInversion || 0;
-        entry.rendimientos += bucket.rendimientos || 0;
+        entry.rendimientosReserva += bucket.rendimientosReserva || 0;
+        entry.rendimientosInversion += bucket.rendimientosInversion || 0;
         enviado += bucket.enviado || 0;
         rescatado += bucket.rescatado || 0;
         ingresado += bucket.ingresado || 0;
         rescatadoInversion += bucket.rescatadoInversion || 0;
-        rendimientos += bucket.rendimientos || 0;
+        rendimientosReserva += bucket.rendimientosReserva || 0;
+        rendimientosInversion += bucket.rendimientosInversion || 0;
       }
+      const rendimientos = rendimientosReserva + rendimientosInversion;
 
       const porMoneda = [...porMonedaMap.values()]
         .map((m) => {
           const porDia = [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
-          const neto = m.rescatado - m.enviado;
+          const neto = resultadoFci(m);
           return {
             monedaId: m.monedaId,
             codigo: m.codigo,
@@ -264,7 +298,13 @@ class TransaccionesController extends BaseController {
             rescatado: m.rescatado,
             ingresado: m.ingresado,
             rescatadoInversion: m.rescatadoInversion,
-            rendimientos: m.rendimientos,
+            rendimientosReserva: m.rendimientosReserva,
+            rendimientosInversion: m.rendimientosInversion,
+            usdVendido: m.usdVendido,
+            usdComprado: m.usdComprado,
+            pesosVenta: m.pesosVenta,
+            pesosCompra: m.pesosCompra,
+            rendimientos: (m.rendimientosReserva || 0) + (m.rendimientosInversion || 0),
             neto,
             porDia,
           };
@@ -276,7 +316,14 @@ class TransaccionesController extends BaseController {
         ...day,
       })));
 
-      const netoInversiones = rescatado - enviado;
+      const netoInversiones = resultadoFci({
+        enviado,
+        rescatado,
+        ingresado,
+        rescatadoInversion,
+        rendimientosReserva,
+        rendimientosInversion,
+      });
       res.json({
         ingresos,
         egresos,
@@ -286,12 +333,17 @@ class TransaccionesController extends BaseController {
         ingresado,
         rescatadoInversion,
         rendimientos,
+        usdVendido,
+        usdComprado,
+        pesosVenta,
+        pesosCompra,
         neto: netoInversiones,
         ledger,
         fechaInicio: formatArDateKey(inicio),
         fechaFin: formatArDateKey(fin),
         estado,
         cuenta: cuenta || null,
+        kinds: kindsRaw || null,
         porMoneda,
         porDia,
         // Compatibilidad con consumidores antiguos
@@ -329,13 +381,15 @@ class TransaccionesController extends BaseController {
         fechaInicio,
         fechaFin,
         ledger: ledgerRaw,
+        kinds: kindsRaw,
       } = req.query;
 
-      const ledger = ledgerRaw === 'inversiones' ? 'inversiones' : 'flujo';
+      const ledger = normalizeLedger(ledgerRaw);
       const query = {
         cuenta: req.params.cuentaId,
         ...buildListLedgerMatch(ledger),
       };
+      applyMovementKindFilter(query, ledger, kindsRaw);
 
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
@@ -497,13 +551,15 @@ class TransaccionesController extends BaseController {
         fechaFin,
         cuenta,
         ledger: ledgerRaw,
+        kinds: kindsRaw,
       } = req.query;
 
-      const ledger = ledgerRaw === 'inversiones' ? 'inversiones' : 'flujo';
+      const ledger = normalizeLedger(ledgerRaw);
       const query = {
         usuario: req.user.id,
         ...buildListLedgerMatch(ledger),
       };
+      applyMovementKindFilter(query, ledger, kindsRaw);
 
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;

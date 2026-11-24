@@ -30,6 +30,7 @@ const Inventario = React.lazy(() => import('./pages/Inventario'));
 const Deudores = React.lazy(() => import('./pages/Deudores'));
 const Recurrente = React.lazy(() => import('./pages/Recurrente'));
 const Inversiones = React.lazy(() => import('./pages/Inversiones'));
+const Dolares = React.lazy(() => import('./pages/Dolares'));
 const Autos = React.lazy(() => import('./pages/Autos'));
 const MercadoPagoCallbackPage = React.lazy(() =>
   import('@shared/pages/MercadoPagoCallbackPage').then((m) => ({ default: m.MercadoPagoCallbackPage }))
@@ -77,6 +78,7 @@ function App() {
                     <Route path="/finanzas/cuentas" element={<Cuentas />} />
                     <Route path="/finanzas/monedas" element={<Monedas />} />
                     <Route path="/finanzas/inversiones" element={<Inversiones />} />
+                    <Route path="/finanzas/dolares" element={<Dolares />} />
                     <Route path="/finanzas/deudores" element={<Deudores />} />
                     <Route path="/finanzas/recurrente" element={<Recurrente />} />
 

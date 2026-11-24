@@ -33,6 +33,8 @@ import {
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useResponsive } from '@shared/hooks';
 import { formatFinanzasMonto } from '@shared/utils/formatFinanzasMonto';
+import { formatDateKey } from '../finanzas/transacciones/transaccionesPeriodUtils';
+import { saldoReportadoMercadoPago } from '../finanzas/cuentas/cuentaConstants';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 
 /**
@@ -114,7 +116,7 @@ export function Cuentas({ embedded = false } = {}) {
       }
     });
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatDateKey(new Date());
 
     // Pedir el balance de cada cuenta en paralelo via agregación (no bajar transacciones)
     const resultados = await Promise.all(
@@ -136,7 +138,9 @@ export function Cuentas({ embedded = false } = {}) {
     for (const item of resultados) {
       if (!item) continue;
       const { cuenta, cuentaId, balance } = item;
-      balancesTemp[cuentaId] = balance;
+      const reportado = saldoReportadoMercadoPago(cuenta);
+      const saldo = reportado != null ? reportado : balance;
+      balancesTemp[cuentaId] = saldo;
 
       let monedaId = null;
       if (typeof cuenta.moneda === 'object' && cuenta.moneda) {
@@ -146,7 +150,7 @@ export function Cuentas({ embedded = false } = {}) {
       }
 
       if (monedaId && balancesPorMonedaTemp[monedaId] !== undefined) {
-        balancesPorMonedaTemp[monedaId] += balance;
+        balancesPorMonedaTemp[monedaId] += saldo;
       }
     }
 

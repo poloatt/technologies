@@ -1,7 +1,11 @@
 import { normalizeActivitiesWithdrawRow } from '../mercadoPagoActivitiesService.js';
 import {
   MP_MOVEMENT_KINDS,
+  acumularBucketDolares,
+  conservarClasificacionUsd,
+  tipoDeCambioUsd,
   acumularBucketInversiones,
+  applyMovementKindFilter,
   buildLedgerMatch,
   buildListLedgerMatch,
   clasificarMovimientoEconomicoMp,
@@ -11,6 +15,7 @@ import {
   nextHistoryChunk,
   normalizeAccountMovement,
   parseHistorySince,
+  resultadoFci,
 } from '../mercadoPagoUtils.js';
 
 describe('clasificarMovimientoEconomicoMp libros', () => {
@@ -134,6 +139,7 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
   it('clasifica operation_type investment por el signo', () => {
     const out = clasificarMovimientoEconomicoMp({
       operationType: 'investment',
+      transactionType: 'SETTLEMENT',
       netAmount: 500,
     });
     const inn = clasificarMovimientoEconomicoMp({
@@ -143,6 +149,56 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
     expect(out.movementKind).toBe(MP_MOVEMENT_KINDS.INVESTMENT_OUT);
     expect(inn.movementKind).toBe(MP_MOVEMENT_KINDS.INVESTMENT_IN);
     expect(out.statsExclude).toBe(true);
+  });
+
+  it('una venta de dólares no es un rescate de inversión', () => {
+    const venta = clasificarMovimientoEconomicoMp({
+      operationType: 'investment',
+      transactionType: 'SETTLEMENT',
+      netAmount: 891581.9,
+      exchange_operation: 'SELL',
+      amounts: { payer: { currency_id: 'USD', transaction: 587.75 } },
+    });
+    expect(venta.movementKind).toBe(MP_MOVEMENT_KINDS.FX_SELL);
+    expect(venta.statsExclude).toBe(true);
+    expect(determinarTipoPago({
+      operation_type: 'investment',
+      exchange_operation: 'SELL',
+      amounts: { payer: { currency_id: 'USD', transaction: 587.75 } },
+      payer: { id: 1 },
+      collector: { id: 1 },
+    }, 1)).toBe('INGRESO');
+  });
+
+  it('la suscripción a un fondo sigue siendo inversión aunque el cambio diga BUY', () => {
+    const fondo = clasificarMovimientoEconomicoMp({
+      operationType: 'investment',
+      businessBranch: 'Marketplace de inversiones',
+      exchange_operation: 'BUY',
+      point_of_interaction: {
+        sub_type: 'SUBSCRIPTION',
+        transaction_data: { destination_asset: 'FMAH' },
+      },
+      netAmount: 266579,
+    });
+    expect(fondo.movementKind).toBe(MP_MOVEMENT_KINDS.INVESTMENT_IN);
+  });
+
+  it('el pago al marketplace de inversiones sale de la cuenta aunque el monto venga positivo', () => {
+    const suscripcion = clasificarMovimientoEconomicoMp({
+      operationType: 'investment',
+      businessBranch: 'Marketplace de inversiones',
+      paymentMethod: 'account_money',
+      netAmount: 266579,
+    });
+    expect(suscripcion.movementKind).toBe(MP_MOVEMENT_KINDS.INVESTMENT_IN);
+    expect(determinarTipoPago({
+      operation_type: 'investment',
+      payment_method_id: 'account_money',
+      point_of_interaction: { business_info: { branch: 'Marketplace de inversiones' } },
+      payer: { id: 1 },
+      collector: { id: 1 },
+    }, 1)).toBe('EGRESO');
   });
 
   it('no mueve pagos ni transferencias reales', () => {
@@ -177,6 +233,30 @@ describe('buildLedgerMatch', () => {
     );
     expect(listado['origen.metadata.movementKind'].$nin).not.toContain('INTERNAL');
     expect(listado['origen.metadata.statsExclude']).toBeUndefined();
+  });
+
+  it('el libro dólares queda afuera del flujo y de inversiones', () => {
+    const dolares = buildLedgerMatch('dolares');
+    expect(dolares['origen.metadata.movementKind'].$in).toEqual(['FX_SELL', 'FX_BUY']);
+    expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
+      expect.arrayContaining(['FX_SELL', 'FX_BUY'])
+    );
+    expect(buildListLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
+      expect.arrayContaining(['FX_SELL'])
+    );
+    expect(buildLedgerMatch('inversiones')['origen.metadata.movementKind'].$in).not.toContain('FX_SELL');
+    expect(acumularBucketDolares('FX_SELL', 891581.9, 587.75)).toEqual({
+      usdVendido: 587.75,
+      pesosVenta: 891581.9,
+    });
+    expect(tipoDeCambioUsd('FX_SELL')).toBe('INGRESO');
+    expect(tipoDeCambioUsd('FX_BUY')).toBe('EGRESO');
+    const kept = conservarClasificacionUsd(
+      { movementKind: 'FX_SELL', usdAmount: 587.75, exchangeOperation: 'SELL' },
+      { movementKind: 'INVESTMENT_OUT', statsExclude: true }
+    );
+    expect(kept.movementKind).toBe('FX_SELL');
+    expect(kept.usdAmount).toBe(587.75);
   });
 
   it('el libro inversiones incluye reserva, inversión y rendimiento viejo', () => {
@@ -261,13 +341,39 @@ describe('buildLedgerMatch', () => {
     expect(isInversionesMovementKind(lock.movementKind)).toBe(true);
   });
 
+  it('recorta el libro a los kinds marcados', () => {
+    const flujo = buildListLedgerMatch('flujo');
+    applyMovementKindFilter(flujo, 'flujo', 'PAYMENT,RESERVE_LOCK');
+    expect(flujo['origen.metadata.movementKind'].$in).toEqual(['PAYMENT']);
+    expect(flujo['origen.metadata.movementKind'].$nin).toEqual(
+      expect.arrayContaining(['RESERVE_LOCK'])
+    );
+
+    const inversiones = buildLedgerMatch('inversiones');
+    applyMovementKindFilter(inversiones, 'inversiones', 'none');
+    expect(inversiones['origen.metadata.movementKind'].$in).toEqual([]);
+  });
+
   it('compara la reserva consigo misma y deja el rescate de inversión aparte', () => {
     expect(acumularBucketInversiones('RESERVE_LOCK', 'EGRESO', 100)).toEqual({ enviado: 100 });
     expect(acumularBucketInversiones('RESERVE_RELEASE', 'INGRESO', 60)).toEqual({ rescatado: 60 });
     expect(acumularBucketInversiones('INVESTMENT_IN', 'EGRESO', 80)).toEqual({ ingresado: 80 });
     expect(acumularBucketInversiones('INVESTMENT_OUT', 'INGRESO', 40)).toEqual({ rescatadoInversion: 40 });
-    expect(acumularBucketInversiones('INVESTMENT_YIELD', 'INGRESO', 5)).toEqual({ rendimientos: 5 });
-    expect(acumularBucketInversiones('INVESTMENT_YIELD', 'EGRESO', 2)).toEqual({ rendimientos: -2 });
+    expect(acumularBucketInversiones('INVESTMENT_YIELD', 'INGRESO', 5)).toEqual({ rendimientosReserva: 5 });
+    expect(acumularBucketInversiones('INVESTMENT_YIELD', 'EGRESO', 2)).toEqual({ rendimientosReserva: -2 });
+    expect(acumularBucketInversiones('INVESTMENT_YIELD', 'INGRESO', 7, 'inversion')).toEqual({ rendimientosInversion: 7 });
+    expect(resultadoFci({
+      ingresado: 80,
+      rescatadoInversion: 40,
+      rendimientos: 5,
+    })).toBe(80 - 40 + 5);
+    expect(resultadoFci({
+      enviado: 100,
+      rescatado: 60,
+      ingresado: 80,
+      rescatadoInversion: 40,
+      rendimientos: 5,
+    })).toBe((100 - 60) + (80 - 40) + 5);
   });
 });
 

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { createSchema, commonFields } from './BaseSchema.js';
+import { parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
 import { buildLedgerMatch } from '../services/mercadoPagoUtils.js';
 
@@ -185,19 +186,23 @@ transaccionSchema.methods.getLabel = function() {
   return `${tipoSymbol}${this.monto} - ${this.descripcion}`;
 };
 
-// Método para obtener el balance de una cuenta mediante agregación (sin traer
-// todas las transacciones al cliente). Acepta filtros de estado y fecha tope.
+// Saldo de la cuenta: todo movimiento completado que entra o sale del disponible
+// (flujo, reservas, rescates y rendimientos). `ledger: 'flujo'` deja solo la caja.
 transaccionSchema.statics.getBalance = async function(cuentaId, options = {}) {
-  const { estado = 'PAGADO', fechaFin } = options;
+  const { estado = 'PAGADO', fechaFin, ledger = 'disponible' } = options;
 
   const match = {
     cuenta: new mongoose.Types.ObjectId(cuentaId),
-    // Libro flujo: reservas, inversiones y rendimientos no distorsionan el disponible
-    ...buildLedgerMatch('flujo'),
   };
+  if (ledger === 'flujo' || ledger === 'inversiones') {
+    Object.assign(match, buildLedgerMatch(ledger));
+  }
   const estadoFilter = buildEstadoFilter(estado);
   if (estadoFilter) match.estado = estadoFilter;
-  if (fechaFin) match.fecha = { $lte: new Date(fechaFin) };
+  if (fechaFin) {
+    const fin = parseArDay(fechaFin, true);
+    if (fin) match.fecha = { $lte: fin };
+  }
 
   const result = await this.aggregate([
     { $match: match },

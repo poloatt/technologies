@@ -1,6 +1,7 @@
 import { BaseController } from './BaseController.js';
 import mongoose from 'mongoose';
 import { Monedas, COLORES_MONEDA, Transacciones } from '../models/index.js';
+import { parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
 
 class MonedasController extends BaseController {
@@ -254,7 +255,8 @@ class MonedasController extends BaseController {
       // Calcular el balance por agregación (sin traer todas las transacciones)
       const match = { moneda: new mongoose.Types.ObjectId(id) };
       if (fechaFin) {
-        match.fecha = { $lte: new Date(fechaFin) };
+        const fin = parseArDay(fechaFin, true);
+        if (fin) match.fecha = { $lte: fin };
       }
       const estadoFilter = buildEstadoFilter(estado);
       if (estadoFilter) {

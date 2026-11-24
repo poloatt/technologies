@@ -316,6 +316,19 @@ export class MercadoPagoAdapter {
       // Ingresos a cuenta (contraparte de envíos recibidos)
       // Reserva: el usuario es payer y collector. Sin este filtro las salidas
       // pueden quedar fuera del tope de páginas de la búsqueda general.
+      // Dólares y suscripciones del fondo: operation_type investment.
+      // Sin este filtro quedan solo en el settlement y se confunden con un rescate.
+      { label: 'investment', since, filter: { operationType: 'investment' } },
+      {
+        label: 'investment+payer',
+        since,
+        filter: { operationType: 'investment', payerId: mpUserId }
+      },
+      {
+        label: 'investment+payer=me',
+        since,
+        filter: { operationType: 'investment', payerId: 'me' }
+      },
       { label: 'partition_transfer', since, filter: { operationType: 'partition_transfer' } },
       {
         label: 'partition_transfer+payer',

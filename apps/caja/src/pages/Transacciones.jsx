@@ -10,6 +10,7 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
+import { FLUJO_TYPE_FILTERS, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
@@ -77,6 +78,7 @@ export function Transacciones() {
   const cuentaFilterId = searchParams.get('cuenta');
   const { branchId } = useFinanzasBranch();
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const [enabledKinds, setEnabledKinds] = useState(null);
   const [cuentaFiltrada, setCuentaFiltrada] = useState(null);
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
   const sentinelRef = useRef(null);
@@ -94,6 +96,7 @@ export function Transacciones() {
     fechaInicio: periodRange.fechaInicio,
     fechaFin: periodRange.fechaFin,
     cuentaId: cuentaFilterId || undefined,
+    kinds: kindsQueryFor(FLUJO_TYPE_FILTERS, enabledKinds),
   });
 
   useEffect(() => {
@@ -313,6 +316,8 @@ export function Transacciones() {
         cuentaId={cuentaFilterId}
         preset={preset}
         onPresetChange={setPreset}
+        enabledKinds={enabledKinds}
+        onKindsChange={setEnabledKinds}
       />
 
       {transaccionesLoading ? (

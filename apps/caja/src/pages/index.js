@@ -7,6 +7,7 @@ export { default as Finanzas } from './Finanzas.jsx';
 export { default as Inquilinos } from './Inquilinos.jsx';
 export { default as Inventario } from './Inventario.jsx';
 export { default as Inversiones } from './Inversiones.jsx';
+export { default as Dolares } from './Dolares.jsx';
 export { default as Monedas } from './Monedas.jsx';
 export { default as Propiedades } from './Propiedades.jsx';
 export { default as Recurrente } from './Recurrente.jsx';

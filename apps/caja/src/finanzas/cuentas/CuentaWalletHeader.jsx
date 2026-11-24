@@ -8,13 +8,10 @@ import getCuentaTipoIcon from './getCuentaTipoIcon';
 import { getMonedaFromCuenta } from './cuentaConstants';
 import CuentaWalletActions from './CuentaWalletActions';
 
-const BALANCE_DISCREPANCY_THRESHOLD = 0.01;
-
 export default function CuentaWalletHeader({
   cuenta,
   conexion,
   saldoCalculado,
-  saldoCalculadoLoading = false,
   syncing = false,
   importing = false,
   onSync,
@@ -27,19 +24,11 @@ export default function CuentaWalletHeader({
   const { simbolo, color } = getMonedaFromCuenta(cuenta);
   const isMercadoPago = cuenta?.tipo === 'MERCADO_PAGO';
 
-  const saldoMp =
-    cuenta?.mercadopago?.disponibleRetiro ??
-    cuenta?.saldo ??
-    null;
+  const saldoMp = cuenta?.mercadopago?.disponibleRetiro ?? (isMercadoPago ? cuenta?.saldo : null);
+  const saldoMpNumero = saldoMp == null || Number.isNaN(Number(saldoMp)) ? null : Number(saldoMp);
 
-  const heroBalance = isMercadoPago && saldoMp != null ? saldoMp : saldoCalculado;
+  const heroBalance = saldoMpNumero != null ? saldoMpNumero : saldoCalculado;
   const heroColor = heroBalance >= 0 ? color : 'error.main';
-
-  const hayDiscrepancia =
-    isMercadoPago &&
-    saldoMp != null &&
-    !saldoCalculadoLoading &&
-    Math.abs(Number(saldoMp) - Number(saldoCalculado)) > BALANCE_DISCREPANCY_THRESHOLD;
 
   const ultimaSync =
     conexion?.configuracion?.ultimaSincronizacion ||
@@ -108,15 +97,6 @@ export default function CuentaWalletHeader({
                 </Typography>
               )}
             </Box>
-          )}
-
-          {hayDiscrepancia && (
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
-              Saldo MP: {showValues ? formatFinanzasMonto(saldoMp, { simbolo }) : '****'}
-              {' · '}
-              Calculado de movimientos:{' '}
-              {showValues ? formatFinanzasMonto(saldoCalculado, { simbolo }) : '****'}
-            </Typography>
           )}
         </Box>
 

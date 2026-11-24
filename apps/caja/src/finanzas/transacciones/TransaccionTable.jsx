@@ -91,6 +91,12 @@ function DetailRow({ label, value, icon = null }) {
   );
 }
 
+function positionSign(kind, tipo) {
+  if (kind === 'RESERVE_LOCK' || kind === 'INVESTMENT_IN' || kind === 'FX_SELL') return '+';
+  if (kind === 'RESERVE_RELEASE' || kind === 'INVESTMENT_OUT' || kind === 'FX_BUY') return '−';
+  return tipo === 'EGRESO' ? '−' : '+';
+}
+
 const TransaccionTable = ({
   transacciones,
   onEdit,
@@ -235,8 +241,10 @@ const TransaccionTable = ({
             const ledgerMove = ledgerRows || isNeutralLedgerRow(transaccion);
             const yieldRow = isYieldLedgerRow(transaccion);
             const internal = ledgerMove || isMpInternalAccountMovement(transaccion);
-            const amountSign = transaccion.tipo === 'EGRESO' ? '−' : '+';
             const meta = getOrigenMetadata(transaccion.origen);
+            const amountSign = ledgerRows
+              ? positionSign(meta.movementKind, transaccion.tipo)
+              : (transaccion.tipo === 'EGRESO' ? '−' : '+');
             const titled = formatMpTransactionTitle(
               transaccion.descripcion,
               transaccion.origen

@@ -16,13 +16,15 @@ export function useTransaccionesPeriodStats({
   preset = DEFAULT_PERIOD_PRESET,
   cuentaId,
   ledger,
+  kinds,
 } = {}) {
   const params = useMemo(() => {
     const range = getPeriodRange(preset);
-    const next = ledger ? { ...range, ledger } : range;
-    if (cuentaId) return { ...next, cuenta: cuentaId };
+    const next = ledger ? { ...range, ledger } : { ...range };
+    if (cuentaId) next.cuenta = cuentaId;
+    if (kinds) next.kinds = kinds;
     return next;
-  }, [preset, cuentaId, ledger]);
+  }, [preset, cuentaId, ledger, kinds]);
 
   const { data, loading, error, refetch } = useAPI('/api/transacciones/stats', {
     params,
@@ -32,11 +34,13 @@ export function useTransaccionesPeriodStats({
 
   const requestedCuenta = params.cuenta || null;
   const requestedLedger = params.ledger || 'flujo';
+  const requestedKinds = params.kinds || null;
   const rangeMatches = !!data
     && data.fechaInicio === params.fechaInicio
     && data.fechaFin === params.fechaFin
     && (data.cuenta || null) === requestedCuenta
-    && (data.ledger || 'flujo') === requestedLedger;
+    && (data.ledger || 'flujo') === requestedLedger
+    && (data.kinds || null) === requestedKinds;
 
   const stats = useMemo(() => {
     if (!rangeMatches) {

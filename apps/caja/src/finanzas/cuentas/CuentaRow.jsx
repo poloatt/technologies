@@ -6,7 +6,7 @@ import { cuentaDetailPath } from '../finanzasDeepLink';
 import getCuentaTipoIcon from './getCuentaTipoIcon';
 import { getHubSubsectionSx } from '@shared/styles/hubSectionStyles';
 import { getHubListRowSx, hubLabelSx, hubValueSx } from '../../hub';
-import { CUENTA_HUB_ROW, getMonedaFromCuenta } from './cuentaConstants';
+import { CUENTA_HUB_ROW, getMonedaFromCuenta, saldoReportadoMercadoPago } from './cuentaConstants';
 import { useCuentaBalance } from './useCuentaBalance';
 
 function formatBalance(balance, showValues, loading, simbolo) {
@@ -38,6 +38,8 @@ function CuentaRow({ cuenta, selected = false, onSelect, branchId = 'finanzas' }
   const { showValues } = useValuesVisibility();
   const cuentaId = cuenta.id || cuenta._id;
   const { balance, loading } = useCuentaBalance(cuentaId);
+  const saldoMp = saldoReportadoMercadoPago(cuenta);
+  const saldo = saldoMp != null ? saldoMp : balance;
   const { simbolo, color } = getMonedaFromCuenta(cuenta);
 
   const handleClick = (e) => {
@@ -86,12 +88,12 @@ function CuentaRow({ cuenta, selected = false, onSelect, branchId = 'finanzas' }
         sx={{
           ...hubValueSx,
           mt: 0,
-          color: balance >= 0 ? color : 'error.main',
-          opacity: loading ? 0.5 : 1,
+          color: saldo >= 0 ? color : 'error.main',
+          opacity: loading && saldoMp == null ? 0.5 : 1,
           flexShrink: 0,
         }}
       >
-        {formatBalance(balance, showValues, loading, simbolo)}
+        {formatBalance(saldo, showValues, loading && saldoMp == null, simbolo)}
         {loading && (
           <CircularProgress size={8} thickness={4} sx={{ ml: 0.5, verticalAlign: 'middle' }} />
         )}

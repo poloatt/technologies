@@ -9,6 +9,7 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
+import { INVERSION_TYPE_FILTERS, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 
 function getScrollParent(node) {
@@ -34,6 +35,7 @@ function ListSkeleton() {
 export default function Inversiones() {
   const { showValues } = useValuesVisibility();
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const [enabledKinds, setEnabledKinds] = useState(null);
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
   const sentinelRef = useRef(null);
 
@@ -50,6 +52,8 @@ export default function Inversiones() {
     fechaInicio: periodRange.fechaInicio,
     fechaFin: periodRange.fechaFin,
     ledger: 'inversiones',
+    estado: 'PAGADO',
+    kinds: kindsQueryFor(INVERSION_TYPE_FILTERS, enabledKinds),
   });
 
   useEffect(() => {
@@ -82,7 +86,12 @@ export default function Inversiones() {
   return (
     <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
       <FinanzasSectionNav variant="strip" />
-      <InversionesResumen preset={preset} onPresetChange={setPreset} />
+      <InversionesResumen
+        preset={preset}
+        onPresetChange={setPreset}
+        enabledKinds={enabledKinds}
+        onKindsChange={setEnabledKinds}
+      />
 
       {loading ? (
         <ListSkeleton />

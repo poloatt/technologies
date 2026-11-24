@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAPI } from '@shared/hooks/useAPI';
+import { formatDateKey } from '../transacciones/transaccionesPeriodUtils';
 
 export function useMonedaBalance(monedaId) {
   const [balance, setBalance] = useState(0);
@@ -8,7 +9,7 @@ export function useMonedaBalance(monedaId) {
     monedaId ? `/api/monedas/${monedaId}/balance` : null,
     {
       params: {
-        fechaFin: new Date().toISOString().split('T')[0],
+        fechaFin: formatDateKey(new Date()),
         estado: 'PAGADO',
       },
       dependencies: [monedaId],

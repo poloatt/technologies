@@ -87,10 +87,19 @@ export function ledgerCompactLabel(transaccion) {
   const kind = ledgerMovementKind(transaccion);
   const date = ledgerDateLabel(transaccion);
   const dated = (label) => (date ? `${label} · ${date}` : label);
-  if (kind === 'RESERVE_LOCK') return dated('Reserva out');
-  if (kind === 'RESERVE_RELEASE') return dated('Reserva in');
-  if (kind === 'INVESTMENT_IN') return dated('Ingresado');
+  // "in" es plata que el usuario manda a la reserva (sale del disponible, signo −).
+  // "out" es plata que saca de la reserva (vuelve al disponible, signo +).
+  if (kind === 'RESERVE_LOCK') return dated('Reserva in');
+  if (kind === 'RESERVE_RELEASE') return dated('Reserva out');
+  if (kind === 'INVESTMENT_IN') return dated('Invertido');
   if (kind === 'INVESTMENT_OUT') return dated('Rescatado');
+  if (kind === 'FX_SELL' || kind === 'FX_BUY') {
+    const usd = Number(getOrigenMetadata(transaccion?.origen).usdAmount);
+    const cantidad = Number.isFinite(usd) && usd > 0
+      ? ` U$D ${usd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '';
+    return dated(`${kind === 'FX_SELL' ? 'Vendiste' : 'Compraste'}${cantidad}`);
+  }
   if (YIELD_LEDGER_KINDS.has(kind)) return dated(`Rendimiento · ${yieldSourceLabel(transaccion)}`);
   return null;
 }
@@ -105,8 +114,11 @@ export function neutralLedgerCaption(transaccion) {
   if (YIELD_LEDGER_KINDS.has(kind)) {
     return 'Rendimiento generado por la reserva, una inversión o el dinero en cuenta.';
   }
-  if (kind === 'INVESTMENT_IN' || kind === 'INVESTMENT_OUT') {
-    return 'Aporte o rescate manual. No es un rendimiento.';
+  if (kind === 'INVESTMENT_IN') {
+    return 'Salió de la cuenta hacia el FCI. No es un rendimiento.';
+  }
+  if (kind === 'INVESTMENT_OUT') {
+    return 'Volvió del FCI a la cuenta. No es un rendimiento.';
   }
   return 'Movimiento manual entre disponible y reserva. No es un rendimiento.';
 }
@@ -114,7 +126,8 @@ export function neutralLedgerCaption(transaccion) {
 export function neutralLedgerOrigin(transaccion) {
   const kind = String(getOrigenMetadata(transaccion?.origen).movementKind || '');
   if (YIELD_LEDGER_KINDS.has(kind)) return 'Rendimiento';
-  if (kind === 'INVESTMENT_IN' || kind === 'INVESTMENT_OUT') return 'Aporte o rescate';
+  if (kind === 'INVESTMENT_IN') return 'Hacia el FCI';
+  if (kind === 'INVESTMENT_OUT') return 'Rescate';
   return 'Disponible ↔ reserva';
 }
 

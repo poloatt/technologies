@@ -10,6 +10,13 @@ export const CUENTA_HUB_ROW = {
   mb: 0.375,
 };
 
+export function saldoReportadoMercadoPago(cuenta) {
+  if (cuenta?.tipo !== 'MERCADO_PAGO') return null;
+  const valor = cuenta?.mercadopago?.disponibleRetiro ?? cuenta?.saldo;
+  if (valor == null || Number.isNaN(Number(valor))) return null;
+  return Number(valor);
+}
+
 export function getMonedaFromCuenta(cuenta) {
   if (!cuenta?.moneda) return { simbolo: '$', color: '#2196F3' };
   if (typeof cuenta.moneda === 'object') {

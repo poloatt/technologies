@@ -21,11 +21,53 @@ import {
   esTransferenciaBancariaPago,
   limpiarNombreContraparte,
   clasificarMovimientoEconomicoMp,
-  isInversionesMovementKind
+  conservarClasificacionUsd,
+  datosCambioUsd,
+  isDolaresMovementKind,
+  isInversionesMovementKind,
+  tipoDeCambioUsd
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
+
+function camposCambioUsd(pago) {
+  const fx = datosCambioUsd(pago || {});
+  if (!fx) return {};
+  return {
+    exchangeOperation: fx.exchangeOperation,
+    usdAmount: fx.usdAmount,
+    exchangeRate: fx.exchangeRate,
+    payerCurrency: fx.payerCurrency,
+    collectorCurrency: fx.collectorCurrency,
+  };
+}
+
+function libroConEtiqueta(kind) {
+  return isInversionesMovementKind(kind) || isDolaresMovementKind(kind);
+}
+
+const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO'];
+
+function idsMp(...values) {
+  return [...new Set(values.flat().map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+/** El pago y el settlement del mismo cambio comparten id o la referencia externa. */
+async function findTransaccionMp(cuenta, ids) {
+  const keys = idsMp(ids);
+  if (!keys.length) return null;
+  const numeric = keys.filter((key) => /^\d+$/.test(key)).map((key) => Number(key));
+  return Transacciones.findOne({
+    cuenta,
+    'origen.tipo': { $in: MP_ORIGEN_TIPOS },
+    $or: [
+      { 'origen.transaccionId': { $in: keys } },
+      { 'origen.metadata.externalReference': { $in: keys } },
+      { 'origen.metadata.paymentId': { $in: [...keys, ...numeric] } },
+    ],
+  });
+}
 
 export class BankSyncService {
   constructor() {
@@ -680,7 +722,11 @@ export class BankSyncService {
           netAmount: m.netAmount,
           raw: m.raw,
           paymentMethod: m.paymentMethod,
-          operationType: m.payment?.operation_type
+          operationType: m.payment?.operation_type,
+          exchange_operation: m.payment?.exchange_operation,
+          amounts: m.payment?.amounts,
+          point_of_interaction: m.payment?.point_of_interaction,
+          businessBranch: m.payment?.point_of_interaction?.business_info?.branch,
         }).movementKind;
         acc[kind] = (acc[kind] || 0) + 1;
         return acc;
@@ -689,7 +735,11 @@ export class BankSyncService {
         const kind = clasificarMovimientoEconomicoMp({
           operationType: pago.operation_type,
           description: pago.description,
-          paymentMethod: pago.payment_method?.type
+          paymentMethod: pago.payment_method?.type,
+          exchange_operation: pago.exchange_operation,
+          amounts: pago.amounts,
+          point_of_interaction: pago.point_of_interaction,
+          businessBranch: pago.point_of_interaction?.business_info?.branch,
         }).movementKind;
         movementKinds[kind] = (movementKinds[kind] || 0) + 1;
       }
@@ -698,7 +748,7 @@ export class BankSyncService {
       let saldoLedger = null;
       let gapSaldo = null;
       try {
-        const ledger = await Transacciones.getBalance(bankConnection.cuenta, { estado: 'PAGADO' });
+        const ledger = await Transacciones.getBalance(bankConnection.cuenta, { estado: 'PAGADO', ledger: 'flujo' });
         saldoLedger = Number(ledger?.balance) || 0;
         const saldoMp = Number(balance.available) || 0;
         gapSaldo = Math.round((saldoMp - saldoLedger) * 100) / 100;
@@ -933,7 +983,6 @@ export class BankSyncService {
   async procesarPagosMercadoPago(pagos, bankConnection, cuenta, userId) {
     let nuevas = 0;
     let actualizadas = 0;
-    const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO'];
 
     for (const pago of pagos) {
       try {
@@ -950,6 +999,9 @@ export class BankSyncService {
           description: pago.description,
           paymentMethod: pago.payment_method?.type || pago.payment_method_id,
           businessBranch,
+          exchange_operation: pago.exchange_operation,
+          amounts: pago.amounts,
+          point_of_interaction: pago.point_of_interaction,
           metadata: { ...(pago.metadata || {}), businessBranch },
           netAmount: tipoPago === 'INGRESO'
             ? Math.abs(pago.transaction_amount || 0)
@@ -963,6 +1015,8 @@ export class BankSyncService {
           paymentMethod: pago.payment_method?.type,
           paymentMethodId: pago.payment_method_id,
           operationType: pago.operation_type || null,
+          externalReference: pago.external_reference || null,
+          ...camposCambioUsd(pago),
           isTransfer: isTransfer || economic.isTransfer,
           movementKind: economic.movementKind,
           statsExclude: economic.statsExclude,
@@ -979,11 +1033,12 @@ export class BankSyncService {
           businessBranch
         };
 
-        const transaccionExistente = await Transacciones.findOne({
-          cuenta: bankConnection.cuenta,
-          'origen.transaccionId': pago.id.toString(),
-          'origen.tipo': { $in: MP_ORIGEN_TIPOS }
-        });
+        const transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
+          pago.id,
+          pago.external_reference,
+        ]);
+        const fxTipo = tipoDeCambioUsd(economic.movementKind);
+        if (fxTipo) tipoPago = fxTipo;
 
         if (transaccionExistente) {
           const prevMeta =
@@ -1024,13 +1079,41 @@ export class BankSyncService {
             });
             tipoPago = transaccionExistente.tipo;
           }
+          const keptUsd = conservarClasificacionUsd(prevMeta, {
+            ...economic,
+            usdAmount: paymentMeta.usdAmount,
+            exchangeRate: paymentMeta.exchangeRate,
+            exchangeOperation: paymentMeta.exchangeOperation,
+            payerCurrency: paymentMeta.payerCurrency,
+            collectorCurrency: paymentMeta.collectorCurrency,
+          });
+          if (keptUsd.movementKind !== economic.movementKind) {
+            economic.movementKind = keptUsd.movementKind;
+            economic.statsExclude = true;
+            economic.isInternal = false;
+            economic.label = keptUsd.label;
+            Object.assign(paymentMeta, {
+              movementKind: keptUsd.movementKind,
+              statsExclude: true,
+              isInternal: false,
+              usdAmount: keptUsd.usdAmount,
+              exchangeRate: keptUsd.exchangeRate,
+              exchangeOperation: keptUsd.exchangeOperation,
+              payerCurrency: keptUsd.payerCurrency,
+              collectorCurrency: keptUsd.collectorCurrency,
+            });
+          }
+          const keptTipo = tipoDeCambioUsd(economic.movementKind);
+          if (keptTipo) tipoPago = keptTipo;
           const prevKind = prevMeta.movementKind;
-          const ledgerLabel = economic.isInternal || isInversionesMovementKind(economic.movementKind);
+          const ledgerLabel = economic.isInternal || libroConEtiqueta(economic.movementKind);
           const shouldUpdate =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             !prevKind ||
             prevKind !== economic.movementKind ||
-            transaccionExistente.tipo !== tipoPago;
+            transaccionExistente.tipo !== tipoPago ||
+            (Number(paymentMeta.usdAmount) > 0 &&
+              Number(prevMeta.usdAmount) !== Number(paymentMeta.usdAmount));
           if (shouldUpdate) {
             if (transaccionExistente.tipo !== tipoPago) {
               transaccionExistente.tipo = tipoPago;
@@ -1052,7 +1135,7 @@ export class BankSyncService {
           continue;
         }
 
-        const descripcionFinal = economic.isInternal || isInversionesMovementKind(economic.movementKind)
+        const descripcionFinal = economic.isInternal || libroConEtiqueta(economic.movementKind)
           ? `MercadoPago - ${economic.label}`
           : descripcion;
 
@@ -1139,7 +1222,6 @@ export class BankSyncService {
     let nuevas = 0;
     let actualizadas = 0;
     let omitidas = 0;
-    const MP_ORIGEN_TIPOS = ['MERCADOPAGO_PAGO', 'MERCADOPAGO_MOVIMIENTO'];
 
     for (const mov of movimientos) {
       try {
@@ -1166,6 +1248,9 @@ export class BankSyncService {
           ...rowSource,
           transactionType: mov.transactionType,
           operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE,
+          exchange_operation: mov.payment?.exchange_operation,
+          amounts: mov.payment?.amounts,
+          point_of_interaction: mov.payment?.point_of_interaction,
           description: mov.description || mov.payment?.description || mov.raw?.DESCRIPTION,
           paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id,
           paymentMethodType: mov.paymentMethodType || mov.payment?.payment_type_id || mov.raw?.PAYMENT_METHOD_TYPE,
@@ -1181,12 +1266,14 @@ export class BankSyncService {
           economic.isTransfer ||
           esTipoTransferenciaMovimiento(mov.transactionType) ||
           esTransferenciaPago(mov.payment || {});
-        const tipoMovimiento = determinarTipoMovimientoMp(mov, userId);
+        let tipoMovimiento = determinarTipoMovimientoMp(mov, userId);
+        const fxTipo = tipoDeCambioUsd(economic.movementKind);
+        if (fxTipo) tipoMovimiento = fxTipo;
 
         let descripcion = mov.payment && userId != null && !economic.isInternal
           ? formatearDescripcionPago(mov.payment, userId)
           : formatearDescripcionMovimiento(rowSource);
-        if (economic.isInternal || isInversionesMovementKind(economic.movementKind)) {
+        if (economic.isInternal || libroConEtiqueta(economic.movementKind)) {
           descripcion = `MercadoPago - ${economic.label}`;
         } else if (economic.isTransfer && !contraparte?.name) {
           descripcion = `MercadoPago - ${economic.label}`;
@@ -1199,6 +1286,7 @@ export class BankSyncService {
           paymentMethodType: mov.paymentMethodType || mov.payment?.payment_type_id || null,
           paymentMethodId: mov.payment?.payment_method_id || null,
           operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE || null,
+          ...camposCambioUsd(mov.payment),
           externalReference: mov.externalReference || mov.payment?.external_reference || null,
           currency: mov.currency,
           source: mov.payment ? 'settlement_enriched' : (mov.source || 'settlement_report'),
@@ -1217,11 +1305,12 @@ export class BankSyncService {
           businessBranch
         };
 
-        const transaccionExistente = await Transacciones.findOne({
-          cuenta: bankConnection.cuenta,
-          'origen.transaccionId': transaccionId,
-          'origen.tipo': { $in: MP_ORIGEN_TIPOS }
-        });
+        const transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
+          transaccionId,
+          mov.payment?.id,
+          mov.externalReference,
+          mov.payment?.external_reference,
+        ]);
 
         if (transaccionExistente) {
           const prevMeta =
@@ -1250,6 +1339,19 @@ export class BankSyncService {
             metadataPatch.statsExclude = true;
             metadataPatch.isInternal = false;
             descripcion = 'MercadoPago - Rendimiento';
+          }
+          const keptUsd = conservarClasificacionUsd(prevMeta, metadataPatch);
+          if (keptUsd.movementKind !== metadataPatch.movementKind) {
+            metadataPatch.movementKind = keptUsd.movementKind;
+            metadataPatch.statsExclude = true;
+            metadataPatch.isInternal = false;
+            metadataPatch.usdAmount = keptUsd.usdAmount;
+            metadataPatch.exchangeRate = keptUsd.exchangeRate;
+            metadataPatch.exchangeOperation = keptUsd.exchangeOperation;
+            metadataPatch.payerCurrency = keptUsd.payerCurrency;
+            metadataPatch.collectorCurrency = keptUsd.collectorCurrency;
+            descripcion = `MercadoPago - ${keptUsd.label}`;
+            tipoMovimiento = tipoDeCambioUsd(keptUsd.movementKind) || tipoMovimiento;
           }
           const nextTipo = keepReserve ? transaccionExistente.tipo : tipoMovimiento;
           const shouldEnrich =

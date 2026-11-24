@@ -13,6 +13,8 @@ import {
   getPeriodRange,
 } from './transaccionesPeriodUtils';
 import { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
+import LedgerKindFilter from './LedgerKindFilter';
+import { FLUJO_TYPE_FILTERS, kindsQueryFor } from './ledgerKindFilters';
 
 const EMPTY_MONEDA = {
   monedaId: null,
@@ -98,6 +100,7 @@ export function PeriodControl({ preset, onChange }) {
         flexDirection: 'row',
         flexWrap: 'nowrap',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 0.75,
         minWidth: 0,
         width: '100%',
@@ -286,12 +289,18 @@ export default function TransaccionesFlujoVisual({
   cuentaId,
   preset = DEFAULT_PERIOD_PRESET,
   onPresetChange,
+  enabledKinds,
+  onKindsChange,
 }) {
   const dense = density === 'compact';
   const theme = useTheme();
   const { showValues } = useValuesVisibility();
   const [monedaElegida, setMonedaElegida] = useState(null);
   const [hubPreset, setHubPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const [localKinds, setLocalKinds] = useState(null);
+  const controlledKinds = typeof onKindsChange === 'function';
+  const kindSelection = controlledKinds ? enabledKinds : localKinds;
+  const setKindSelection = controlledKinds ? onKindsChange : setLocalKinds;
   const activePreset = dense ? hubPreset : preset;
   const changePreset = dense ? setHubPreset : onPresetChange;
   const span = formatPeriodSpan(
@@ -301,6 +310,7 @@ export default function TransaccionesFlujoVisual({
   const { stats, loading, error, periodLabel, refetch } = useTransaccionesPeriodStats({
     preset: activePreset,
     cuentaId: dense ? undefined : cuentaId || undefined,
+    kinds: kindsQueryFor(FLUJO_TYPE_FILTERS, kindSelection),
   });
 
   useEffect(() => {
@@ -331,18 +341,32 @@ export default function TransaccionesFlujoVisual({
   } else {
     body = (
       <>
-        <Typography
+        <Box
           sx={{
-            fontWeight: 700,
-            fontSize: dense ? '1rem' : '1.75rem',
-            lineHeight: 1.15,
-            letterSpacing: '-0.02em',
-            color: balanceColor,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
             mb: dense ? 1 : 0,
           }}
         >
-          {formatMonto(activa.balance, simbolo, showValues)}
-        </Typography>
+          <Typography
+            sx={{
+              fontWeight: 700,
+              fontSize: dense ? '1rem' : '1.75rem',
+              lineHeight: 1.15,
+              letterSpacing: '-0.02em',
+              color: balanceColor,
+            }}
+          >
+            {formatMonto(activa.balance, simbolo, showValues)}
+          </Typography>
+          {dense && (
+            <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0, flexShrink: 0, textAlign: 'right' }}>
+              {span}
+            </Typography>
+          )}
+        </Box>
         {!dense && (
           <Typography
             variant="body2"
@@ -403,10 +427,17 @@ export default function TransaccionesFlujoVisual({
               {activa.codigo} +{extras}
             </Typography>
           )}
+          <LedgerKindFilter
+            options={FLUJO_TYPE_FILTERS}
+            enabledIds={kindSelection}
+            onChange={setKindSelection}
+          />
         </Box>
-        <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
-          {span}
-        </Typography>
+        {!dense && (
+          <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
+            {span}
+          </Typography>
+        )}
         {!dense && !loading && !error && (
           <MonedaControl monedas={monedas} activaId={activa.monedaId} onChange={setMonedaElegida} />
         )}

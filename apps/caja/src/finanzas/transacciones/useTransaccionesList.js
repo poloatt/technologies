@@ -16,7 +16,7 @@ function pageHasMore(data) {
   return page < totalPages;
 }
 
-function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger }) {
+function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger, kinds, estado }) {
   const params = {
     page,
     limit,
@@ -26,6 +26,8 @@ function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger }) {
   if (fechaFin) params.fechaFin = fechaFin;
   if (cuentaId) params.cuenta = cuentaId;
   if (ledger) params.ledger = ledger;
+  if (kinds) params.kinds = kinds;
+  if (estado) params.estado = estado;
   return params;
 }
 
@@ -34,7 +36,7 @@ function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger }) {
  * `hasAny` distingue "no hay movimientos" de "no hay en este corte"
  * con una sonda de 1 documento, solo cuando la página del período viene vacía.
  */
-export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger } = {}) {
+export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger, kinds, estado } = {}) {
   const [docs, setDocs] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -56,12 +58,14 @@ export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger }
         fechaFin,
         cuentaId,
         ledger,
+        kinds,
+        estado,
         page,
         limit: TRANSACCIONES_PAGE_SIZE,
       }),
       signal,
     }).then((response) => response.data)
-  ), [fechaInicio, fechaFin, cuentaId, ledger]);
+  ), [fechaInicio, fechaFin, cuentaId, ledger, kinds, estado]);
 
   const reload = useCallback(async () => {
     abortRef.current?.abort();
@@ -92,7 +96,7 @@ export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger }
 
       if (nextDocs.length === 0) {
         const probe = await clienteAxios.get('/api/transacciones', {
-          params: listParams({ cuentaId, ledger, page: 1, limit: 1 }),
+          params: listParams({ cuentaId, ledger, estado, page: 1, limit: 1 }),
           signal: controller.signal,
         });
         if (generation.current !== gen) return;
