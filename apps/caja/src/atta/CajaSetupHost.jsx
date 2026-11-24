@@ -72,6 +72,7 @@ export default function CajaSetupHost({ openSetupId, onCloseSetup }) {
         onClose={onCloseSetup}
         title={openSetup?.title || ''}
         subtitle={openSetup?.subtitle}
+        fullPagePath={openSetup?.path || null}
         headerActions={setupHeaderActions}
       >
         {openSetupId ? renderCajaToolbarSetup(openSetupId) : null}

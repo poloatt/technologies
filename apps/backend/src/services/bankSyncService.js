@@ -944,7 +944,7 @@ export class BankSyncService {
         const descripcion = formatearDescripcionPago(pago, userId);
         const isTransfer = esTransferenciaPago(pago);
         const businessBranch = pago.point_of_interaction?.business_info?.branch || null;
-        const tipoPago = determinarTipoPago(pago, userId);
+        let tipoPago = determinarTipoPago(pago, userId);
         const economic = clasificarMovimientoEconomicoMp({
           operationType: pago.operation_type,
           description: pago.description,
@@ -986,8 +986,45 @@ export class BankSyncService {
         });
 
         if (transaccionExistente) {
-          const prevName = transaccionExistente.origen?.metadata?.counterpartyName;
-          const prevKind = transaccionExistente.origen?.metadata?.movementKind;
+          const prevMeta =
+            transaccionExistente.origen?.metadata?.toObject?.() ||
+            transaccionExistente.origen?.metadata ||
+            {};
+          const prevName = prevMeta.counterpartyName;
+          const incomingBranch = businessBranch;
+          const partition = String(pago.operation_type || '').toLowerCase() === 'partition_transfer';
+          const keepDirection =
+            !incomingBranch &&
+            ((prevMeta.businessBranch && isInversionesMovementKind(prevMeta.movementKind)) ||
+              (partition &&
+                (transaccionExistente.tipo === 'EGRESO' ||
+                  prevMeta.movementKind === 'RESERVE_LOCK')));
+          if (keepDirection) {
+            const branch =
+              prevMeta.businessBranch ||
+              (transaccionExistente.tipo === 'EGRESO'
+                ? 'AM-to-POT - Partition Transfer'
+                : 'POT-to-AM-Partition Transfer');
+            const kept = clasificarMovimientoEconomicoMp({
+              operationType: pago.operation_type,
+              description: pago.description,
+              paymentMethod: pago.payment_method?.type || pago.payment_method_id,
+              businessBranch: branch,
+              metadata: { ...(pago.metadata || {}), businessBranch: branch },
+              netAmount: transaccionExistente.tipo === 'EGRESO'
+                ? -Math.abs(pago.transaction_amount || 0)
+                : Math.abs(pago.transaction_amount || 0)
+            });
+            Object.assign(economic, kept);
+            Object.assign(paymentMeta, {
+              movementKind: kept.movementKind,
+              statsExclude: kept.statsExclude,
+              isInternal: kept.isInternal,
+              businessBranch: branch
+            });
+            tipoPago = transaccionExistente.tipo;
+          }
+          const prevKind = prevMeta.movementKind;
           const ledgerLabel = economic.isInternal || isInversionesMovementKind(economic.movementKind);
           const shouldUpdate =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
@@ -1196,11 +1233,23 @@ export class BankSyncService {
             !businessBranch &&
             prevMeta.businessBranch &&
             isInversionesMovementKind(prevMeta.movementKind);
+          const prevYield =
+            prevMeta.movementKind === 'INVESTMENT_YIELD' || prevMeta.movementKind === 'YIELD';
+          const sinComercio =
+            !limpiarNombreContraparte(metadataPatch.counterpartyName) &&
+            !String(metadataPatch.itemTitle || '').trim() &&
+            !String(metadataPatch.statementDescriptor || '').trim();
+          const keepYield = prevYield && sinComercio && economic.movementKind === 'PAYMENT';
           if (keepReserve) {
             metadataPatch.businessBranch = prevMeta.businessBranch;
             metadataPatch.movementKind = prevMeta.movementKind;
             metadataPatch.statsExclude = prevMeta.statsExclude;
             metadataPatch.isInternal = prevMeta.isInternal;
+          } else if (keepYield) {
+            metadataPatch.movementKind = 'INVESTMENT_YIELD';
+            metadataPatch.statsExclude = true;
+            metadataPatch.isInternal = false;
+            descripcion = 'MercadoPago - Rendimiento';
           }
           const nextTipo = keepReserve ? transaccionExistente.tipo : tipoMovimiento;
           const shouldEnrich =

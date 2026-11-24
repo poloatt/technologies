@@ -618,19 +618,22 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
   // no trae el nombre del comercio; no es un pase a reserva.
 
   if (looksReserveInternal) {
+    const branch = reserveBranchOf({
+      businessBranch: input.businessBranch || metadata?.businessBranch,
+      metadata,
+      point_of_interaction: input.payment?.point_of_interaction || input.point_of_interaction
+    }).toLowerCase();
+    // La etiqueta que escribimos nosotros ("Desde reserva") no es evidencia.
+    const etiquetaPropia = /mercado\s*pago\s*-\s*(desde reserva|a reserva)\b/i.test(description);
     let release = false;
-    if (RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
+    if (branch.includes('am-to-pot')) release = false;
+    else if (branch.includes('pot-to-am')) release = true;
+    else if (!etiquetaPropia && RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
       release = true;
-    } else if (RESERVE_LOCK_RE.test(blob) && !RESERVE_RELEASE_RE.test(blob)) {
+    } else if (!etiquetaPropia && RESERVE_LOCK_RE.test(blob) && !RESERVE_RELEASE_RE.test(blob)) {
       release = false;
     } else {
-      const branch = reserveBranchOf({
-        businessBranch: input.businessBranch || metadata?.businessBranch,
-        metadata
-      }).toLowerCase();
-      if (branch.includes('am-to-pot')) release = false;
-      else if (branch.includes('pot-to-am')) release = true;
-      else release = netAmount > 0;
+      release = netAmount > 0;
     }
     return {
       movementKind: release
@@ -843,14 +846,6 @@ export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.INTERNAL
 ]);
 
-const ENVIADO_KINDS = new Set([
-  MP_MOVEMENT_KINDS.RESERVE_LOCK,
-  MP_MOVEMENT_KINDS.INVESTMENT_IN
-]);
-const RESCATADO_KINDS = new Set([
-  MP_MOVEMENT_KINDS.RESERVE_RELEASE,
-  MP_MOVEMENT_KINDS.INVESTMENT_OUT
-]);
 const RENDIMIENTO_KINDS = new Set([
   MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
   MP_MOVEMENT_KINDS.YIELD
@@ -891,8 +886,11 @@ export function buildListLedgerMatch(ledger = 'flujo') {
 /** Suma montos de un grupo de kinds. Rendimiento resta los egresos (pérdidas). */
 export function acumularBucketInversiones(kind, tipo, monto) {
   const amount = Number(monto) || 0;
-  if (ENVIADO_KINDS.has(kind)) return { enviado: amount };
-  if (RESCATADO_KINDS.has(kind)) return { rescatado: amount };
+  // La reserva se compara consigo misma. Un rescate de inversión no es plata que volvió de la reserva.
+  if (kind === MP_MOVEMENT_KINDS.RESERVE_LOCK) return { enviado: amount };
+  if (kind === MP_MOVEMENT_KINDS.RESERVE_RELEASE) return { rescatado: amount };
+  if (kind === MP_MOVEMENT_KINDS.INVESTMENT_IN) return { ingresado: amount };
+  if (kind === MP_MOVEMENT_KINDS.INVESTMENT_OUT) return { rescatadoInversion: amount };
   if (RENDIMIENTO_KINDS.has(kind)) {
     return { rendimientos: tipo === 'EGRESO' ? -amount : amount };
   }

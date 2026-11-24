@@ -187,6 +187,8 @@ class TransaccionesController extends BaseController {
             egresos: 0,
             enviado: 0,
             rescatado: 0,
+            ingresado: 0,
+            rescatadoInversion: 0,
             rendimientos: 0,
             dias: new Map(),
           });
@@ -224,6 +226,8 @@ class TransaccionesController extends BaseController {
 
       let enviado = 0;
       let rescatado = 0;
+      let ingresado = 0;
+      let rescatadoInversion = 0;
       let rendimientos = 0;
       for (const row of kinds) {
         const monto = row.total || 0;
@@ -234,16 +238,20 @@ class TransaccionesController extends BaseController {
         const bucket = acumularBucketInversiones(kind, tipo, monto);
         entry.enviado += bucket.enviado || 0;
         entry.rescatado += bucket.rescatado || 0;
+        entry.ingresado += bucket.ingresado || 0;
+        entry.rescatadoInversion += bucket.rescatadoInversion || 0;
         entry.rendimientos += bucket.rendimientos || 0;
         enviado += bucket.enviado || 0;
         rescatado += bucket.rescatado || 0;
+        ingresado += bucket.ingresado || 0;
+        rescatadoInversion += bucket.rescatadoInversion || 0;
         rendimientos += bucket.rendimientos || 0;
       }
 
       const porMoneda = [...porMonedaMap.values()]
         .map((m) => {
           const porDia = [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
-          const neto = m.rescatado + m.rendimientos - m.enviado;
+          const neto = m.rescatado - m.enviado;
           return {
             monedaId: m.monedaId,
             codigo: m.codigo,
@@ -254,6 +262,8 @@ class TransaccionesController extends BaseController {
             balance: ledger === 'inversiones' ? neto : m.ingresos - m.egresos,
             enviado: m.enviado,
             rescatado: m.rescatado,
+            ingresado: m.ingresado,
+            rescatadoInversion: m.rescatadoInversion,
             rendimientos: m.rendimientos,
             neto,
             porDia,
@@ -266,13 +276,15 @@ class TransaccionesController extends BaseController {
         ...day,
       })));
 
-      const netoInversiones = rescatado + rendimientos - enviado;
+      const netoInversiones = rescatado - enviado;
       res.json({
         ingresos,
         egresos,
         balance: ledger === 'inversiones' ? netoInversiones : ingresos - egresos,
         enviado,
         rescatado,
+        ingresado,
+        rescatadoInversion,
         rendimientos,
         neto: netoInversiones,
         ledger,

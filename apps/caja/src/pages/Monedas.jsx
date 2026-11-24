@@ -364,12 +364,7 @@ export function Monedas({ embedded = false } = {}) {
     <Box sx={embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx}>
       {!embedded && <FinanzasSectionNav variant="strip" />}
       {embedded ? (
-        <>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25, lineHeight: 1.45 }}>
-            Las monedas definen saldos y movimientos. Usá + del header para agregar.
-          </Typography>
-          {listBody}
-        </>
+        listBody
       ) : (
         <CommonDetails
           action={

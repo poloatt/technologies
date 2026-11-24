@@ -24,6 +24,7 @@ export { default as HabitCrudActions } from './HabitCrudActions.jsx';
 export { HabitCounterBadge } from './HabitCounterBadge.jsx';
 export { PwaInstallBanner, DesktopAppsSection } from '../pwa/index.js';
 export { ToolbarAddButton, TOOLBAR_ICON_BUTTON_SX } from './ToolbarAddButton.jsx';
+export { default as EmergentWindow } from './EmergentWindow.jsx';
 export * from './snackbarUtils.jsx';
 export * from './StatusSystem.js';
 export * from './CommonFormStyles.jsx';

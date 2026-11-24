@@ -18,16 +18,18 @@ const EMPTY_MONEDA = {
   color: '#9C27B0',
   enviado: 0,
   rescatado: 0,
+  ingresado: 0,
+  rescatadoInversion: 0,
   rendimientos: 0,
   neto: 0,
 };
 
 function netoPhrase(moneda) {
-  const moved = moneda.enviado || moneda.rescatado || moneda.rendimientos;
+  const moved = moneda.enviado || moneda.rescatado || moneda.ingresado || moneda.rescatadoInversion || moneda.rendimientos;
   if (!moved) return 'Sin reservas ni inversiones en este período';
-  if (moneda.neto > 0) return 'Volvió más de lo que enviaste';
-  if (moneda.neto < 0) return 'Enviaste más de lo que rescataste';
-  return 'Envíos y rescates empataron';
+  if (moneda.neto > 0) return 'Volvió más reserva de la que apartaste';
+  if (moneda.neto < 0) return 'Quedó más en la reserva de lo que volvió';
+  return 'Lo reservado y lo que volvió empataron';
 }
 
 function Metric({ label, amount, color }) {
@@ -66,8 +68,9 @@ export default function InversionesResumen({
   const monedas = stats.porMoneda;
   const activa = monedas.find((moneda) => moneda.monedaId === monedaElegida) || monedas[0] || EMPTY_MONEDA;
   const simbolo = activa.simbolo || '$';
-  const neto = activa.neto ?? (activa.rescatado || 0) + (activa.rendimientos || 0) - (activa.enviado || 0);
+  const neto = activa.neto ?? (activa.rescatado || 0) - (activa.enviado || 0);
   const netoColor = neto < 0 ? 'error.main' : activa.color || '#9C27B0';
+  const hayInversion = (activa.ingresado || 0) !== 0 || (activa.rescatadoInversion || 0) !== 0;
 
   let body;
   if (loading) {
@@ -107,14 +110,21 @@ export default function InversionesResumen({
           </Typography>
         )}
         <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <Metric label="Enviado" amount={formatMonto(activa.enviado || 0, simbolo, showValues)} />
-          <Metric label="Rescatado" amount={formatMonto(activa.rescatado || 0, simbolo, showValues)} />
+          <Metric label="Reservado" amount={formatMonto(activa.enviado || 0, simbolo, showValues)} />
+          <Metric label="Volvió" amount={formatMonto(activa.rescatado || 0, simbolo, showValues)} />
           <Metric
             label="Rendimientos"
             amount={formatMonto(activa.rendimientos || 0, simbolo, showValues)}
             color={activa.color || 'success.main'}
           />
         </Box>
+        {hayInversion && (
+          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+            Inversión
+            {(activa.ingresado || 0) !== 0 ? ` · ingresado ${formatMonto(activa.ingresado, simbolo, showValues)}` : ''}
+            {(activa.rescatadoInversion || 0) !== 0 ? ` · rescatado ${formatMonto(activa.rescatadoInversion, simbolo, showValues)}` : ''}
+          </Typography>
+        )}
       </>
     );
   }

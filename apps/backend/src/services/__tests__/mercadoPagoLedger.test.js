@@ -51,6 +51,22 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
     })).toBe('EGRESO');
   });
 
+  it('no convierte una salida a reserva en rescate por la etiqueta que escribimos', () => {
+    const row = clasificarMovimientoEconomicoMp({
+      operationType: 'partition_transfer',
+      description: 'MercadoPago - Desde reserva',
+      businessBranch: 'AM-to-POT - Partition Transfer',
+      netAmount: -125517,
+    });
+    const sinBranch = clasificarMovimientoEconomicoMp({
+      operationType: 'partition_transfer',
+      description: 'MercadoPago - Desde reserva',
+      netAmount: -125517,
+    });
+    expect(row.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
+    expect(sinBranch.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
+  });
+
   it('manda partition_transfer a reserva y fuera del flujo', () => {
     const out = clasificarMovimientoEconomicoMp({
       operationType: 'partition_transfer',
@@ -245,9 +261,11 @@ describe('buildLedgerMatch', () => {
     expect(isInversionesMovementKind(lock.movementKind)).toBe(true);
   });
 
-  it('acumula enviado, rescatado y rendimiento neto', () => {
+  it('compara la reserva consigo misma y deja el rescate de inversión aparte', () => {
     expect(acumularBucketInversiones('RESERVE_LOCK', 'EGRESO', 100)).toEqual({ enviado: 100 });
-    expect(acumularBucketInversiones('INVESTMENT_OUT', 'INGRESO', 40)).toEqual({ rescatado: 40 });
+    expect(acumularBucketInversiones('RESERVE_RELEASE', 'INGRESO', 60)).toEqual({ rescatado: 60 });
+    expect(acumularBucketInversiones('INVESTMENT_IN', 'EGRESO', 80)).toEqual({ ingresado: 80 });
+    expect(acumularBucketInversiones('INVESTMENT_OUT', 'INGRESO', 40)).toEqual({ rescatadoInversion: 40 });
     expect(acumularBucketInversiones('INVESTMENT_YIELD', 'INGRESO', 5)).toEqual({ rendimientos: 5 });
     expect(acumularBucketInversiones('INVESTMENT_YIELD', 'EGRESO', 2)).toEqual({ rendimientos: -2 });
   });

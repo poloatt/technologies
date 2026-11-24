@@ -22,7 +22,6 @@ import { EmptyState } from '@shared/components/common';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { useAPI } from '@shared/hooks/useAPI';
 import {
-  MercadoPagoSyncDialog,
   BankConnectionForm,
   BranchFinanzasSectionNav,
   MercadoPagoPartialSyncBanner,
@@ -31,7 +30,6 @@ import {
   cuentaDetailPath,
   useFinanzasBranch,
 } from '../finanzas';
-import SetupContentHeader from '../finanzas/SetupContentHeader';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useResponsive } from '@shared/hooks';
 import { formatFinanzasMonto } from '@shared/utils/formatFinanzasMonto';
@@ -51,7 +49,6 @@ export function Cuentas({ embedded = false } = {}) {
   const [balancesPorMoneda, setBalancesPorMoneda] = useState({});
   const [deletingId, setDeletingId] = useState(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isBankConnectionFormOpen, setIsBankConnectionFormOpen] = useState(false);
   const [isProcessingPago, setIsProcessingPago] = useState(false);
   const location = useLocation();
@@ -843,25 +840,7 @@ export function Cuentas({ embedded = false } = {}) {
         isEditing={!!editingCuenta}
       />
 
-      {embedded ? (
-        <Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25, lineHeight: 1.45 }}>
-            Tocá una fila para editarla. Usá + o sync del header para crear o conectar.
-          </Typography>
-          {cuentasList}
-        </Box>
-      ) : (
-        <Box sx={{ mt: 2 }}>
-          <SetupContentHeader
-            hint="Creá cuentas manualmente o sincronizá Mercado Pago. Abrí una fila para ver movimientos."
-            primaryLabel="Nueva cuenta"
-            onPrimary={openCreate}
-            secondaryLabel="Conectar MP"
-            onSecondary={() => setIsSyncModalOpen(true)}
-          />
-          {cuentasList}
-        </Box>
-      )}
+      {cuentasList}
 
       {/* Diálogo de confirmación para eliminar */}
       <Dialog
@@ -884,11 +863,6 @@ export function Cuentas({ embedded = false } = {}) {
         </DialogActions>
       </Dialog>
 
-      <MercadoPagoSyncDialog
-        open={isSyncModalOpen}
-        onClose={() => setIsSyncModalOpen(false)}
-        onSuccess={() => refetchCuentas()}
-      />
     </Box>
   );
 }
