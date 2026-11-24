@@ -49,7 +49,7 @@ export default function CuentaTransaccionesPanel({
     }
   );
 
-  const { data: conexionesData } = useAPI(
+  const { data: conexionesData, refetch: refetchConexiones } = useAPI(
     isMercadoPago && cuentaId ? '/api/bankconnections' : null,
     {
       params: {
@@ -126,6 +126,10 @@ export default function CuentaTransaccionesPanel({
         importing={importing}
         onSync={handleSync}
         onImportCsv={handleImportCsv}
+        onHistorialSynced={async () => {
+          await Promise.all([refetch(), refetchConexiones()]);
+          onRefresh?.();
+        }}
         onClose={handleClose}
         branchId={branchId}
       />

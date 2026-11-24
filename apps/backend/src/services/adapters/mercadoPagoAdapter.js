@@ -90,7 +90,7 @@ export class MercadoPagoAdapter {
     });
   }
 
-  async searchPayments({ since, limit = 50, offset = 0, filter = null }) {
+  async searchPayments({ since, until, limit = 50, offset = 0, filter = null }) {
     return this.withRetry(async () => {
       const params = new URLSearchParams();
       // Docs MP: sort + criteria por separado (no "date_created.desc")
@@ -104,8 +104,12 @@ export class MercadoPagoAdapter {
       if (since) {
         params.append('range', 'date_created');
         params.append('begin_date', since);
-        // MP acepta ISO o relativos (NOW / NOW-90DAYS)
-        const endDate = String(since).startsWith('NOW') ? 'NOW' : new Date().toISOString();
+        // MP acepta ISO o relativos (NOW / NOW-90DAYS). until acota un mes de historial.
+        const endDate = until
+          ? until
+          : String(since).startsWith('NOW')
+            ? 'NOW'
+            : new Date().toISOString();
         params.append('end_date', endDate);
       }
 
@@ -148,7 +152,7 @@ export class MercadoPagoAdapter {
     });
   }
 
-  async fetchAllPaymentsForFilter({ since, pageSize = 50, maxPages = 20, filter, label = '' }) {
+  async fetchAllPaymentsForFilter({ since, until, pageSize = 50, maxPages = 20, filter, label = '' }) {
     const all = [];
     let offset = 0;
     let total = Infinity;
@@ -157,6 +161,7 @@ export class MercadoPagoAdapter {
     for (let page = 0; page < maxPages && offset < total; page++) {
       const { results, total: pagingTotal } = await this.searchPayments({
         since,
+        until,
         limit: size,
         offset,
         filter
@@ -281,7 +286,7 @@ export class MercadoPagoAdapter {
    * - collector.id / payer.id: id numérico o alias "me" (token OAuth)
    * Settlement TRANSACTION_TYPE PAYOUT a veces incluye transferencias (no solo efectivo).
    */
-  async getAllPayments({ since, limit = 50, maxPages = 20 }) {
+  async getAllPayments({ since, until, limit = 50, maxPages = 20 }) {
     const mpUserId = this.userId;
     const pageSize = Math.min(limit, 50);
 
@@ -308,12 +313,15 @@ export class MercadoPagoAdapter {
         since,
         filter: { operationType: 'money_transfer', payerId: 'me' }
       },
-      {
-        label: 'money_transfer/NOW-90DAYS',
-        since: 'NOW-90DAYS',
-        filter: { operationType: 'money_transfer' }
-      },
       // Ingresos a cuenta (contraparte de envíos recibidos)
+      // Reserva: el usuario es payer y collector. Sin este filtro las salidas
+      // pueden quedar fuera del tope de páginas de la búsqueda general.
+      { label: 'partition_transfer', since, filter: { operationType: 'partition_transfer' } },
+      {
+        label: 'partition_transfer+payer',
+        since,
+        filter: { operationType: 'partition_transfer', payerId: mpUserId }
+      },
       { label: 'account_fund', since, filter: { operationType: 'account_fund' } },
       {
         label: 'account_fund+collector=me',
@@ -363,6 +371,7 @@ export class MercadoPagoAdapter {
       searches.map((s) =>
         this.fetchAllPaymentsForFilter({
           since: s.since,
+          until,
           pageSize,
           maxPages,
           filter: s.filter,
@@ -421,9 +430,10 @@ export class MercadoPagoAdapter {
    * Movimientos de dinero en cuenta (incluye transferencias / retiros que no
    * siempre aparecen en payments/search). Prueba endpoints actuales y legacy.
    */
-  async getAccountMovements({ since, limit = 100, maxPages = 10 }) {
+  async getAccountMovements({ since, until, limit = 100, maxPages = 10 }) {
     const pageSize = Math.min(limit, 100);
     const userId = this.userId;
+    const untilIso = until || new Date().toISOString();
     const candidates = [
       {
         name: 'v1/account/movements/search',
@@ -431,7 +441,7 @@ export class MercadoPagoAdapter {
           const params = new URLSearchParams();
           if (since) {
             params.append('date_created_from', since);
-            params.append('date_created_to', new Date().toISOString());
+            params.append('date_created_to', untilIso);
           }
           params.append('limit', String(pageSize));
           params.append('offset', String(offset));
@@ -445,7 +455,7 @@ export class MercadoPagoAdapter {
           if (since) {
             params.append('range', 'date_created');
             params.append('begin_date', since);
-            params.append('end_date', new Date().toISOString());
+            params.append('end_date', untilIso);
           }
           params.append('limit', String(pageSize));
           params.append('offset', String(offset));
@@ -460,7 +470,7 @@ export class MercadoPagoAdapter {
               if (since) {
                 params.append('range', 'date_created');
                 params.append('begin_date', since);
-                params.append('end_date', new Date().toISOString());
+                params.append('end_date', untilIso);
               }
               params.append('limit', String(pageSize));
               params.append('offset', String(offset));

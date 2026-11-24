@@ -5,13 +5,16 @@ import crypto from 'crypto';
 import {
   calcularComisiones,
   determinarTipoPago,
-  determinarTipoMovimiento,
+  determinarTipoMovimientoMp,
   formatearDescripcionPago,
   formatearDescripcionMovimiento,
   extraerContrapartePago,
   extraerContraparteMovimiento,
   mapearEstadoPago,
   getMpSyncDays,
+  dailySyncSince,
+  nextHistoryChunk,
+  parseHistorySince,
   normalizeAccountMovement,
   esTipoTransferenciaMovimiento,
   esTransferenciaPago,
@@ -310,7 +313,7 @@ export class BankSyncService {
   }
 
   // Sincronizar transacciones usando MercadoPago (wallet personal AR)
-  async sincronizarConMercadoPago(bankConnection) {
+  async sincronizarConMercadoPago(bankConnection, options = {}) {
     try {
       console.log(`Sincronizando con MercadoPago para conexión: ${bankConnection.nombre}`);
 
@@ -352,7 +355,73 @@ export class BankSyncService {
       });
 
       const syncDays = getMpSyncDays();
-      const fechaDesde = new Date(Date.now() - syncDays * 24 * 60 * 60 * 1000);
+      const historialMode = options.mode === 'historial';
+      let historyChunk = null;
+      let fechaDesde = dailySyncSince();
+      let fechaHasta = new Date();
+
+      if (historialMode) {
+        const objetivo = options.since || bankConnection.mercadopago?.historial?.objetivo;
+        const parsed = parseHistorySince(objetivo);
+        if (!parsed) {
+          return { exito: false, error: 'Indicá desde cuándo traer el historial' };
+        }
+        historyChunk = nextHistoryChunk({
+          targetSince: parsed.toISOString(),
+          coveredUntil: bankConnection.mercadopago?.historial?.cubiertoHasta || null,
+        });
+        if (!historyChunk) {
+          const stored = bankConnection.mercadopago?.historial || {};
+          const historial = {
+            objetivo: parsed.toISOString(),
+            cubiertoHasta: stored.cubiertoHasta || null,
+            ultimoMes: stored.ultimoMes || null,
+            mesLabel: stored.mesLabel || null,
+            pendiente: false,
+            cuotaAgotada: false,
+            quedaHistorial: false,
+            completo: true,
+            actualizadoEn: new Date(),
+          };
+          bankConnection.mercadopago = {
+            ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+            historial,
+          };
+          await bankConnection.save();
+          return {
+            exito: true,
+            historialCompleto: true,
+            transaccionesNuevas: 0,
+            transaccionesActualizadas: 0,
+            historial,
+          };
+        }
+        fechaDesde = new Date(historyChunk.beginDate);
+        fechaHasta = new Date(historyChunk.endDate);
+      }
+
+      const rememberHistory = ({ pendiente = false, cuotaAgotada = false } = {}) => {
+        if (!historialMode || !historyChunk) return null;
+        const prev = bankConnection.mercadopago?.historial?.cubiertoHasta || null;
+        const historial = {
+          objetivo: historyChunk.objetivo,
+          cubiertoHasta: pendiente ? prev : historyChunk.beginDate,
+          ultimoMes: {
+            beginDate: historyChunk.beginDate,
+            endDate: historyChunk.endDate,
+          },
+          mesLabel: historyChunk.mesLabel,
+          pendiente,
+          cuotaAgotada,
+          quedaHistorial: pendiente ? true : historyChunk.quedaHistorial,
+          completo: !pendiente && !historyChunk.quedaHistorial,
+          actualizadoEn: new Date(),
+        };
+        const current = bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {};
+        bankConnection.mercadopago = { ...current, historial };
+        return historial;
+      };
+
       let pagos = [];
       let movimientos = [];
       let totalCsvRows = 0;
@@ -361,6 +430,7 @@ export class BankSyncService {
       try {
         pagos = await mpAdapter.getAllPayments({
           since: fechaDesde.toISOString(),
+          until: fechaHasta.toISOString(),
           limit: 50,
           maxPages: 40
         });
@@ -378,13 +448,14 @@ export class BankSyncService {
           userId
         });
         const beginDate = fechaDesde.toISOString();
-        const endDate = new Date().toISOString();
+        const endDate = fechaHasta.toISOString();
         const pending = bankConnection.mercadopago?.reportePendiente;
         const report = await reportService.fetchAllSettlementMovements(beginDate, endDate, { pending });
 
         totalCsvRows = report.total || report.rows?.length || 0;
 
         if (report.quotaExceeded) {
+          rememberHistory({ pendiente: true, cuotaAgotada: true });
           movimientos = report.rows || [];
           const missingW = report.missingWithdrawals === true;
           const quotaMsg = missingW
@@ -408,6 +479,7 @@ export class BankSyncService {
           console.warn(`⚠️ Settlement cupo 429; reutilizados: ${movimientos.length}; missingWithdrawals=${missingW}`);
         } else if (report.pending) {
           settlementPending = true;
+          rememberHistory({ pendiente: true, cuotaAgotada: false });
           movimientos = report.rows || [];
           bankConnection.mercadopago = {
             ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
@@ -442,6 +514,7 @@ export class BankSyncService {
         }
       } catch (error) {
         console.warn('⚠️ Reporte settlement no disponible:', error.message);
+        rememberHistory({ pendiente: true, cuotaAgotada: false });
         bankConnection.mercadopago = {
           ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
           syncParcial: true,
@@ -457,6 +530,7 @@ export class BankSyncService {
       try {
         const rawMovements = await mpAdapter.getAccountMovements({
           since: fechaDesde.toISOString(),
+          until: fechaHasta.toISOString(),
           limit: 100,
           maxPages: 20
         });
@@ -468,6 +542,10 @@ export class BankSyncService {
       }
 
       let activitiesWithdraw = [];
+      const settlementBlocked = errores.some((e) => e.tipo === 'settlement_report');
+      if (historialMode && settlementBlocked) {
+        console.warn('[MP] Historial: no se piden más reportes; el mes queda pendiente.');
+      } else {
       try {
         const activitiesService = new MercadoPagoActivitiesService({
           accessToken: userAccessToken,
@@ -475,7 +553,7 @@ export class BankSyncService {
         });
         const withdrawReport = await activitiesService.fetchWithdrawMovements(
           fechaDesde.toISOString(),
-          new Date().toISOString(),
+          fechaHasta.toISOString(),
           { pollOptions: { maxPollAttempts: 16 } }
         );
         if (withdrawReport.pending) {
@@ -516,6 +594,7 @@ export class BankSyncService {
           };
           await bankConnection.save();
         }
+      }
       }
 
       let movimientosMerged = this.mergeMovimientosMp(
@@ -679,6 +758,15 @@ export class BankSyncService {
           `Cobertura incompleta: no hay transferencias P2P y el saldo MP difiere del ledger (${gapSaldo}).`;
       }
 
+      const blockCursor =
+        historialMode &&
+        (settlementPending ||
+          errores.some((e) => e.tipo === 'settlement_report' || e.tipo === 'pagos' || e.quotaExceeded));
+      const historialGuardado = rememberHistory({
+        pendiente: blockCursor,
+        cuotaAgotada: errores.some((e) => e.quotaExceeded),
+      });
+
       bankConnection.mercadopago = {
         ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
         syncParcial,
@@ -717,6 +805,7 @@ export class BankSyncService {
         settlementPending,
         transaccionesNuevas,
         transaccionesActualizadas,
+        historial: historialGuardado,
         detalles: {
           usuario: userInfo.nickname || userInfo.email,
           totalPagos: pagos.length,
@@ -779,17 +868,25 @@ export class BankSyncService {
       if (!existing.counterpartName && row.counterpartName) {
         enriched.counterpartName = row.counterpartName;
       }
-      // activities_withdraw trae bank_account (CVU→CBU); no perderlo aunque settlement ya diga WITHDRAWAL
+      // activities_withdraw trae bank_account (CVU→CBU); no perderlo aunque settlement ya diga WITHDRAWAL.
+      // Un crédito ya firmado (CBU → CVU, neto positivo) no se reetiqueta como retiro.
       if (row.source === 'activities_withdraw') {
         const bankAccount =
           row.raw?.METADATA?.bank_account ||
           row.raw?.BANK_ACCOUNT ||
           row.raw?.bank_account ||
           null;
+        const existingType = String(existing.transactionType || '').toUpperCase();
+        const existingIsCredit =
+          Number(existing.netAmount) > 0 &&
+          !['WITHDRAWAL', 'PAYOUT', 'PAYOUTS'].includes(existingType);
         if (
-          !existing.transactionType ||
-          existing.transactionType === 'SETTLEMENT' ||
-          (bankAccount && existing.transactionType !== 'BANK_TRANSFER')
+          !existingIsCredit &&
+          (
+            !existing.transactionType ||
+            existing.transactionType === 'SETTLEMENT' ||
+            (bankAccount && existing.transactionType !== 'BANK_TRANSFER')
+          )
         ) {
           enriched.transactionType = row.transactionType || (bankAccount ? 'BANK_TRANSFER' : existing.transactionType);
         }
@@ -846,12 +943,15 @@ export class BankSyncService {
         const contraparte = extraerContrapartePago(pago, userId);
         const descripcion = formatearDescripcionPago(pago, userId);
         const isTransfer = esTransferenciaPago(pago);
+        const businessBranch = pago.point_of_interaction?.business_info?.branch || null;
+        const tipoPago = determinarTipoPago(pago, userId);
         const economic = clasificarMovimientoEconomicoMp({
           operationType: pago.operation_type,
           description: pago.description,
           paymentMethod: pago.payment_method?.type || pago.payment_method_id,
-          metadata: pago.metadata,
-          netAmount: determinarTipoPago(pago, userId) === 'INGRESO'
+          businessBranch,
+          metadata: { ...(pago.metadata || {}), businessBranch },
+          netAmount: tipoPago === 'INGRESO'
             ? Math.abs(pago.transaction_amount || 0)
             : -Math.abs(pago.transaction_amount || 0)
         });
@@ -875,7 +975,8 @@ export class BankSyncService {
           counterpartyLabel: contraparte?.label || null,
           counterpartyRole: contraparte?.role || null,
           counterpartyId: contraparte?.id || null,
-          counterpartyEmail: contraparte?.email || null
+          counterpartyEmail: contraparte?.email || null,
+          businessBranch
         };
 
         const transaccionExistente = await Transacciones.findOne({
@@ -891,8 +992,12 @@ export class BankSyncService {
           const shouldUpdate =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             !prevKind ||
-            prevKind !== economic.movementKind;
+            prevKind !== economic.movementKind ||
+            transaccionExistente.tipo !== tipoPago;
           if (shouldUpdate) {
+            if (transaccionExistente.tipo !== tipoPago) {
+              transaccionExistente.tipo = tipoPago;
+            }
             if (contraparte?.name || ledgerLabel || economic.isTransfer) {
               transaccionExistente.descripcion = ledgerLabel
                 ? `MercadoPago - ${economic.label}`
@@ -923,7 +1028,7 @@ export class BankSyncService {
             ? this.categorizarTransaccion(descripcionFinal)
             : 'Otro',
           estado: mapearEstadoPago(pago.status),
-          tipo: determinarTipoPago(pago, userId),
+          tipo: tipoPago,
           usuario: bankConnection.usuario,
           cuenta: bankConnection.cuenta,
           moneda: cuenta.moneda,
@@ -1016,20 +1121,30 @@ export class BankSyncService {
           operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE || null,
           metadata: mov.raw?.METADATA || mov.payment?.metadata || null
         };
+        const businessBranch =
+          mov.payment?.point_of_interaction?.business_info?.branch ||
+          mov.businessBranch ||
+          null;
         const economic = clasificarMovimientoEconomicoMp({
           ...rowSource,
           transactionType: mov.transactionType,
           operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE,
           description: mov.description || mov.payment?.description || mov.raw?.DESCRIPTION,
           paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id,
+          paymentMethodType: mov.paymentMethodType || mov.payment?.payment_type_id || mov.raw?.PAYMENT_METHOD_TYPE,
+          businessBranch,
           netAmount: mov.netAmount,
-          metadata: mov.raw?.METADATA || mov.payment?.metadata,
+          metadata: {
+            ...(mov.raw?.METADATA || mov.payment?.metadata || {}),
+            businessBranch
+          },
           raw: mov.raw
         });
         const isTransfer =
           economic.isTransfer ||
           esTipoTransferenciaMovimiento(mov.transactionType) ||
           esTransferenciaPago(mov.payment || {});
+        const tipoMovimiento = determinarTipoMovimientoMp(mov, userId);
 
         let descripcion = mov.payment && userId != null && !economic.isInternal
           ? formatearDescripcionPago(mov.payment, userId)
@@ -1061,7 +1176,8 @@ export class BankSyncService {
           counterpartyLabel: contraparte?.label || null,
           counterpartyRole: contraparte?.role || null,
           counterpartyId: contraparte?.id || null,
-          counterpartyEmail: contraparte?.email || null
+          counterpartyEmail: contraparte?.email || null,
+          businessBranch
         };
 
         const transaccionExistente = await Transacciones.findOne({
@@ -1076,13 +1192,28 @@ export class BankSyncService {
             transaccionExistente.origen?.metadata ||
             {};
           const prevName = prevMeta.counterpartyName;
+          const keepReserve =
+            !businessBranch &&
+            prevMeta.businessBranch &&
+            isInversionesMovementKind(prevMeta.movementKind);
+          if (keepReserve) {
+            metadataPatch.businessBranch = prevMeta.businessBranch;
+            metadataPatch.movementKind = prevMeta.movementKind;
+            metadataPatch.statsExclude = prevMeta.statsExclude;
+            metadataPatch.isInternal = prevMeta.isInternal;
+          }
+          const nextTipo = keepReserve ? transaccionExistente.tipo : tipoMovimiento;
           const shouldEnrich =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             (isTransfer && !prevMeta.isTransfer) ||
-            prevMeta.movementKind !== economic.movementKind ||
-            Boolean(prevMeta.statsExclude) !== Boolean(economic.statsExclude);
+            prevMeta.movementKind !== metadataPatch.movementKind ||
+            Boolean(prevMeta.statsExclude) !== Boolean(metadataPatch.statsExclude) ||
+            transaccionExistente.tipo !== nextTipo;
 
           if (shouldEnrich) {
+            if (transaccionExistente.tipo !== nextTipo) {
+              transaccionExistente.tipo = nextTipo;
+            }
             transaccionExistente.descripcion = descripcion;
             transaccionExistente.origen.metadata = {
               ...prevMeta,
@@ -1106,7 +1237,7 @@ export class BankSyncService {
           fecha: new Date(mov.date),
           categoria: 'Otro',
           estado: 'COMPLETADA',
-          tipo: determinarTipoMovimiento(mov.netAmount ?? mov.amount),
+          tipo: tipoMovimiento,
           usuario: bankConnection.usuario,
           cuenta: bankConnection.cuenta,
           moneda: cuenta.moneda,
@@ -1235,7 +1366,7 @@ export class BankSyncService {
   }
 
   // Método principal de sincronización
-  async sincronizarConexion(bankConnection) {
+  async sincronizarConexion(bankConnection, options = {}) {
     try {
       switch (bankConnection.tipo) {
         case 'PLAID':
@@ -1245,7 +1376,7 @@ export class BankSyncService {
         case 'API_DIRECTA':
           return await this.sincronizarConAPIDirecta(bankConnection);
         case 'MERCADOPAGO':
-          return await this.sincronizarConMercadoPago(bankConnection);
+          return await this.sincronizarConMercadoPago(bankConnection, options);
         default:
           throw new Error(`Tipo de conexión no soportado: ${bankConnection.tipo}`);
       }

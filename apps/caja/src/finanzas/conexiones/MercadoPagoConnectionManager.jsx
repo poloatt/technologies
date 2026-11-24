@@ -15,8 +15,6 @@ import {
   DialogActions,
   FormControlLabel,
   Checkbox,
-  TextField,
-  MenuItem
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -32,13 +30,13 @@ import { isMercadoPagoEnabled } from '@shared/config/mercadopago';
 import MercadoPagoStatusIndicator from './MercadoPagoStatusIndicator';
 import MercadoPagoDataManager from './MercadoPagoDataManager';
 import { MercadoPagoPartialSyncAlert } from './MercadoPagoPartialSyncBanner';
+import MercadoPagoSyncOptions from './MercadoPagoSyncOptions';
 
 export default function MercadoPagoConnectionManager({ connectionId, onConnectionUpdate }) {
   const {
     loading,
     processing,
     connectionStatus,
-    syncConnection,
     verifyConnection,
     getCompleteData,
     processData,
@@ -47,10 +45,7 @@ export default function MercadoPagoConnectionManager({ connectionId, onConnectio
 
   const [showDataManager, setShowDataManager] = useState(false);
   const [showSyncDialog, setShowSyncDialog] = useState(false);
-  const [syncOptions, setSyncOptions] = useState({
-    force: false,
-    since: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 7 días atrás
-  });
+  const [historial, setHistorial] = useState(null);
   const [showProcessDialog, setShowProcessDialog] = useState(false);
   const [processOptions, setProcessOptions] = useState({
     procesarPagos: true,
@@ -70,34 +65,16 @@ export default function MercadoPagoConnectionManager({ connectionId, onConnectio
     return () => clearInterval(interval);
   }, [getConnectionStatus]);
 
-  const handleSync = async () => {
-    if (!connectionId) {
-      setError('ID de conexión requerido');
-      return;
-    }
-
-    try {
-      setError(null);
-      const result = await syncConnection(connectionId, syncOptions);
-      const parcial = result?.resultado?.syncParcial;
-      setSyncParcial(Boolean(parcial));
-      setSuccess(
-        parcial
-          ? 'Sincronización parcial: revisá movimientos o importá CSV manual'
-          : 'Sincronización completada exitosamente'
-      );
-      setLastSync(new Date().toISOString());
-      setShowSyncDialog(false);
-      if (parcial) {
-        setShowDataManager(true);
-      }
-      
-      if (onConnectionUpdate) {
-        onConnectionUpdate(result);
-      }
-    } catch (err) {
-      setError(err.message);
-    }
+  const handleSynced = (result) => {
+    const parcial = result?.resultado?.syncParcial;
+    const historialResult = result?.resultado?.historial;
+    setSyncParcial(Boolean(parcial));
+    if (historialResult) setHistorial(historialResult);
+    setSuccess(result?.message || 'Sincronización completada');
+    setLastSync(new Date().toISOString());
+    setError(null);
+    if (parcial) setShowDataManager(true);
+    onConnectionUpdate?.(result);
   };
 
   const handleVerify = async () => {
@@ -296,45 +273,19 @@ export default function MercadoPagoConnectionManager({ connectionId, onConnectio
           Opciones de Sincronización
         </DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={syncOptions.force}
-                    onChange={(e) => setSyncOptions(prev => ({ ...prev, force: e.target.checked }))}
-                    sx={{ borderRadius: 0 }}
-                  />
-                }
-                label="Forzar sincronización completa"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Fecha desde"
-                type="date"
-                value={syncOptions.since}
-                onChange={(e) => setSyncOptions(prev => ({ ...prev, since: e.target.value }))}
-                fullWidth
-                InputProps={{ sx: { borderRadius: 0 } }}
-              />
-            </Grid>
-          </Grid>
+          <MercadoPagoSyncOptions
+            connectionId={connectionId}
+            historial={historial}
+            showDailySync
+            onSynced={handleSynced}
+          />
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button 
+          <Button
             onClick={() => setShowSyncDialog(false)}
             sx={{ borderRadius: 0 }}
           >
-            Cancelar
-          </Button>
-          <Button 
-            onClick={handleSync}
-            variant="contained"
-            disabled={loading}
-            sx={{ borderRadius: 0 }}
-          >
-            Sincronizar
+            Cerrar
           </Button>
         </DialogActions>
       </Dialog>

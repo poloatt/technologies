@@ -19,6 +19,7 @@ export default function CuentaWalletHeader({
   importing = false,
   onSync,
   onImportCsv,
+  onHistorialSynced,
   onClose,
   branchId = 'finanzas',
 }) {
@@ -134,6 +135,7 @@ export default function CuentaWalletHeader({
               importing={importing}
               onSync={onSync}
               onImportCsv={onImportCsv}
+              onHistorialSynced={onHistorialSynced}
             />
           )}
         </Box>

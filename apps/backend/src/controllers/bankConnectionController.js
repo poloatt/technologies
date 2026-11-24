@@ -289,16 +289,48 @@ class BankConnectionController extends BaseController {
         });
       }
 
-      const resultado = await this.bankSyncService.sincronizarConexion(conexion);
+      const historialPedido = req.body?.mode === 'historial';
+      const options = historialPedido
+        ? { mode: 'historial', since: req.body?.since }
+        : {};
+      const resultado = await this.bankSyncService.sincronizarConexion(conexion, options);
+
+      if (resultado?.exito === false && resultado?.error) {
+        return res.status(400).json({
+          message: resultado.error,
+          resultado
+        });
+      }
 
       const syncParcial = resultado?.syncParcial || resultado?.detalles?.errores?.some(
         (e) => e.tipo === 'settlement_report'
       );
+      const historial = resultado?.historial;
+
+      let message = syncParcial
+        ? 'Sincronización parcial: pagos OK, movimientos incompletos. Importá CSV manual si hace falta.'
+        : 'Sincronización completada';
+      if (historial) {
+        const objetivoTxt = historial.objetivo
+          ? new Date(historial.objetivo).toLocaleDateString('es-AR', {
+              timeZone: 'America/Argentina/Buenos_Aires',
+            })
+          : 'la fecha pedida';
+        if (resultado.historialCompleto || historial.completo) {
+          message = `El historial ya llega hasta el ${objetivoTxt}.`;
+        } else if (historial.cuotaAgotada) {
+          message = `Cupo de Mercado Pago agotado en ${historial.mesLabel}. Ese mes queda pendiente y no se crearon más reportes.`;
+        } else if (historial.pendiente) {
+          message = `El mes ${historial.mesLabel} quedó pendiente. Reintentá ese tramo antes de seguir hacia atrás.`;
+        } else if (historial.quedaHistorial) {
+          message = `Se importó ${historial.mesLabel}. Queda historial hasta el ${objetivoTxt}.`;
+        } else {
+          message = `Se importó ${historial.mesLabel}. El historial pedido ya está cubierto.`;
+        }
+      }
 
       res.json({
-        message: syncParcial
-          ? 'Sincronización parcial: pagos OK, movimientos incompletos. Importá CSV manual si hace falta.'
-          : 'Sincronización completada',
+        message,
         resultado
       });
 

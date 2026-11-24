@@ -52,25 +52,130 @@ export function calcularComisiones(pago) {
   return comisiones;
 }
 
-export function determinarTipoPago(pago, userId) {
-  const mpUserId = Number(userId);
-  const collectorId = Number(pago.collector_id);
-  const payerId = Number(pago.payer?.id);
+function idsMercadoPago(pago) {
+  const collectorId = Number(pago?.collector_id ?? pago?.collector?.id);
+  const payerId = Number(pago?.payer?.id ?? pago?.payer_id);
+  return {
+    collectorId: Number.isFinite(collectorId) ? collectorId : null,
+    payerId: Number.isFinite(payerId) ? payerId : null
+  };
+}
 
-  if (collectorId === mpUserId && payerId !== mpUserId) {
-    return 'INGRESO';
-  }
-  if (payerId === mpUserId && collectorId !== mpUserId) {
-    return 'EGRESO';
-  }
-  if (collectorId === mpUserId) {
-    return 'INGRESO';
-  }
+function metodoPagoMp(pago) {
+  return String(
+    pago?.payment_method_id || pago?.payment_type_id || pago?.payment_method?.type || ''
+  ).toLowerCase();
+}
+
+export function reserveBranchOf(pago) {
+  return String(
+    pago?.point_of_interaction?.business_info?.branch ||
+    pago?.businessBranch ||
+    pago?.metadata?.businessBranch ||
+    ''
+  );
+}
+
+function esDebinOBanco(method) {
+  const key = String(method || '').toLowerCase();
+  return key === 'bank_transfer' || key === 'debin_transfer' || key === 'cbu' || key.includes('debin');
+}
+
+/**
+ * Dirección del dinero en la cuenta de Mercado Pago.
+ * CBU → CVU (fondeo, DEBIN recibido, account_fund) es ingreso.
+ * CVU → CBU (withdrawal, payout) es egreso.
+ * account_fund entra aunque el usuario figure como payer: es un débito del banco propio.
+ */
+export function determinarTipoPago(pago, userId) {
+  const op = String(pago?.operation_type || '').toLowerCase();
+  const method = metodoPagoMp(pago);
+
+  if (op === 'account_fund') return 'INGRESO';
+  if (op === 'withdrawal' || op === 'money_withdrawal') return 'EGRESO';
+
+  // Reserva: el usuario es payer y collector. La dirección está en el branch.
+  // AM-to-POT sale del disponible hacia la reserva. POT-to-AM vuelve.
+  const branch = reserveBranchOf(pago).toLowerCase();
+  if (branch.includes('am-to-pot')) return 'EGRESO';
+  if (branch.includes('pot-to-am')) return 'INGRESO';
+
+  const mpUserId = Number(userId);
+  const { collectorId, payerId } = idsMercadoPago(pago);
+  const userIsCollector = collectorId != null && collectorId === mpUserId;
+  const userIsPayer = payerId != null && payerId === mpUserId;
+  const debin = method === 'debin_transfer' || method.includes('debin');
+
+  if (userIsCollector && !userIsPayer) return 'INGRESO';
+  // Fondeo DEBIN: el usuario puede ser collector y payer a la vez.
+  if (debin && userIsCollector) return 'INGRESO';
+  if (userIsPayer && !userIsCollector) return 'EGRESO';
+  if (userIsCollector) return 'INGRESO';
+  // DEBIN sin ids: si el usuario no es quien paga, la plata entra al CVU.
+  if (debin && !userIsPayer) return 'INGRESO';
   return 'EGRESO';
 }
 
 export function determinarTipoMovimiento(amount) {
   return Number(amount) >= 0 ? 'INGRESO' : 'EGRESO';
+}
+
+/**
+ * Signo de un movimiento de reporte, activities o account movements.
+ * El settlement manda cuando el neto ya viene firmado y el tipo no es una salida explícita.
+ * PAYOUT/WITHDRAWAL son salidas aunque el CSV traiga el monto en positivo.
+ */
+export function determinarTipoMovimientoMp(mov = {}, userId = null) {
+  const type = String(mov.transactionType || mov.TRANSACTION_TYPE || '').toUpperCase();
+  const op = String(
+    mov.operationType ||
+      mov.payment?.operation_type ||
+      mov.raw?.OPERATION_TYPE ||
+      mov.raw?.METADATA?.operation_type ||
+      ''
+  ).toLowerCase();
+  const method = String(
+    mov.paymentMethod || mov.paymentMethodType || mov.payment?.payment_type_id || mov.payment?.payment_method_id || ''
+  ).toLowerCase();
+  const net = Number(mov.netAmount ?? mov.amount ?? mov.SETTLEMENT_NET_AMOUNT ?? 0);
+
+  if (op === 'account_fund' || type === 'ACCOUNT_FUND') return 'INGRESO';
+  if (type === 'WITHDRAWAL_CANCEL') return 'INGRESO';
+
+  // El reporte trae el neto en positivo para las dos direcciones de la reserva.
+  const branch = reserveBranchOf(mov.payment || mov).toLowerCase();
+  if (branch.includes('am-to-pot')) return 'EGRESO';
+  if (branch.includes('pot-to-am')) return 'INGRESO';
+
+  // Crédito de settlement (cobro o DEBIN acreditado). El neto firmado gana
+  // sobre un operation_type de retiro copiado por el reporte de activities.
+  if ((type === 'SETTLEMENT' || type === 'SETTLEMENT_SHIPPING') && net > 0) {
+    return 'INGRESO';
+  }
+  if ((type === 'SETTLEMENT' || type === 'SETTLEMENT_SHIPPING') && net < 0) {
+    return 'EGRESO';
+  }
+
+  if (
+    type === 'WITHDRAWAL' ||
+    type === 'PAYOUT' ||
+    type === 'PAYOUTS' ||
+    op === 'withdrawal' ||
+    op === 'money_withdrawal'
+  ) {
+    return 'EGRESO';
+  }
+
+  // Transferencia bancaria con neto firmado: positivo entra, negativo sale.
+  if (type === 'BANK_TRANSFER' && net > 0) return 'INGRESO';
+  if (type === 'BANK_TRANSFER' && net < 0) return 'EGRESO';
+  if (esDebinOBanco(method) && net > 0 && op !== 'money_transfer') return 'INGRESO';
+
+  if (mov.payment && userId != null) {
+    return determinarTipoPago(mov.payment, userId);
+  }
+
+  return determinarTipoMovimiento(net);
 }
 
 /**
@@ -363,9 +468,9 @@ export const MP_MOVEMENT_KIND_LABELS = {
 // Evitar match amplio de "reserva" suelto (falsos positivos sobre pagos/descripciones)
 // digital_accounts / wallet: códigos crudos de parking/reserva en Account Money AR
 const RESERVE_RELEASE_RE =
-  /extracci[oó]n\s+de\s+reserva|sacar\s+de\s+reserva|release.?reserve|unpark|disponible\s+desde\s+reserva|reserve_for_.*_cancel|salida\s+de\s+reserva/i;
+  /extracci[oó]n\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|sacar\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|retir(?:ar|aste|o)\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|release.?reserve|unpark|desde\s+(?:(?:la|tu|mi)\s+)?reserva|reserve_for_.*_cancel|salida\s+de\s+(?:(?:la|tu|mi)\s+)?reserva/i;
 const RESERVE_LOCK_RE =
-  /a\s+reserva|enviar\s+a\s+reserva|guardar\s+en\s+reserva|envio\s+a\s+reserva|env[ií]o\s+a\s+reserva|lock.?reserve|parking|reserve_for_(?!.*_cancel)/i;
+  /a\s+(?:(?:la|tu|mi)\s+)?reserva|enviar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|guardar\s+en\s+(?:(?:la|tu|mi)\s+)?reserva|env[ií]o\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|pasar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|mover\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|lock.?reserve|parking|reserve_for_(?!.*_cancel)/i;
 const RESERVE_INTERNAL_CODE_RE =
   /\b(digital_accounts(?:_cards)?|money_park)\b/i;
 const INVESTMENT_OUT_RE =
@@ -495,6 +600,23 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     RESERVE_RELEASE_RE.test(blob) ||
     RESERVE_LOCK_RE.test(blob);
 
+  const methodType = String(
+    input.paymentMethodType ||
+    input.PAYMENT_METHOD_TYPE ||
+    input.raw?.PAYMENT_METHOD_TYPE ||
+    metadata?.paymentMethodType ||
+    metadata?.payment_method_type ||
+    ''
+  ).toLowerCase();
+  const counterpartyReal = limpiarNombreContraparte(
+    metadata?.counterpartyName || metadata?.businessName
+  );
+  const itemTitle = String(metadata?.itemTitle || '').trim();
+  const itemReal = itemTitle && !/^producto sin descripci[oó]n$/i.test(itemTitle);
+  const descriptionReal = String(description || metadata?.description || '').trim();
+  // available_money sin comercio es un pago con dinero en cuenta. El reporte
+  // no trae el nombre del comercio; no es un pase a reserva.
+
   if (looksReserveInternal) {
     let release = false;
     if (RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
@@ -502,8 +624,13 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     } else if (RESERVE_LOCK_RE.test(blob) && !RESERVE_RELEASE_RE.test(blob)) {
       release = false;
     } else {
-      // Códigos crudos / partition_transfer: signo neto
-      release = netAmount > 0;
+      const branch = reserveBranchOf({
+        businessBranch: input.businessBranch || metadata?.businessBranch,
+        metadata
+      }).toLowerCase();
+      if (branch.includes('am-to-pot')) release = false;
+      else if (branch.includes('pot-to-am')) release = true;
+      else release = netAmount > 0;
     }
     return {
       movementKind: release
@@ -515,6 +642,29 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
         : MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
       isTransfer: false,
       isInternal: true
+    };
+  }
+
+  const methodId = String(
+    paymentMethod || metadata?.paymentMethod || metadata?.paymentMethodId || ''
+  ).trim();
+  // Rendimiento diario de reserva, inversión o dinero en cuenta.
+  // El settlement no dice "rendimiento": es un crédito sin medio y sin comercio.
+  if (
+    (transactionType === 'SETTLEMENT' || transactionType === 'SETTLEMENT_SHIPPING') &&
+    !methodType &&
+    !methodId &&
+    !descriptionReal &&
+    !counterpartyReal &&
+    !itemReal &&
+    netAmount > 0
+  ) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.INVESTMENT_YIELD,
+      isTransfer: false,
+      isInternal: false
     };
   }
 
@@ -831,13 +981,16 @@ export function normalizeAccountMovement(mov) {
     mov.amount ?? mov.transaction_amount ?? mov.net_credit_amount ?? mov.net_debit_amount ?? 0
   );
   const typeHint = String(mov.type || mov.movement_type || mov.detail || '').toLowerCase();
-  const isCredit =
-    typeHint.includes('credit') ||
-    typeHint.includes('income') ||
-    typeHint.includes('in') ||
-    Number(mov.amount) > 0 ||
-    Number(mov.net_credit_amount) > 0;
-  const signedNet = isCredit ? Math.abs(amountRaw) : -Math.abs(amountRaw);
+  const explicitDebit = /\b(debit|withdrawal|payout|money_out|outgoing|withdraw)\b/.test(typeHint);
+  const explicitCredit = /\b(credit|incoming|income|account_fund|money_in)\b/.test(typeHint);
+  let signedNet;
+  if (explicitCredit && !explicitDebit) signedNet = Math.abs(amountRaw);
+  else if (explicitDebit && !explicitCredit) signedNet = -Math.abs(amountRaw);
+  else if (Number(mov.net_debit_amount) > 0 && !(Number(mov.net_credit_amount) > 0)) {
+    signedNet = -Math.abs(amountRaw);
+  } else if (Number(mov.amount) < 0) signedNet = -Math.abs(amountRaw);
+  else if (Number(mov.amount) > 0 || Number(mov.net_credit_amount) > 0) signedNet = Math.abs(amountRaw);
+  else signedNet = amountRaw < 0 ? amountRaw : -Math.abs(amountRaw);
 
   const detail = (
     mov.detail ||
@@ -920,6 +1073,62 @@ export function mapearTipoTransaccionMp(type) {
 
 export function getMpSyncDays() {
   return parseInt(process.env.MP_SYNC_DAYS || '90', 10);
+}
+
+const HISTORY_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** YYYY-MM-DD se lee como inicio del día en Argentina. Un ISO se usa tal cual. */
+export function parseHistorySince(value) {
+  if (value == null || value === '') return null;
+  const text = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const date = new Date(`${text}T00:00:00.000-03:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Inicio de la ventana diaria. No retrocede más allá de esos días. */
+export function dailySyncSince(now = new Date(), days = getMpSyncDays()) {
+  const span = Number.isFinite(days) && days > 0 ? days : 90;
+  return new Date(now.getTime() - span * HISTORY_DAY_MS);
+}
+
+function formatHistoryDay(date) {
+  return date.toLocaleDateString('es-AR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  });
+}
+
+/**
+ * Siguiente mes a importar, caminando hacia atrás.
+ * Sin cubiertoHasta, el borde es el inicio de la ventana diaria.
+ * Null cuando el objetivo ya está adentro de lo cubierto.
+ */
+export function nextHistoryChunk({
+  targetSince,
+  coveredUntil = null,
+  now = new Date(),
+  syncDays = getMpSyncDays(),
+} = {}) {
+  const target = parseHistorySince(targetSince);
+  if (!target) return null;
+  const edge = coveredUntil ? parseHistorySince(coveredUntil) : dailySyncSince(now, syncDays);
+  if (!edge || edge.getTime() <= target.getTime()) return null;
+  const begin = new Date(edge);
+  begin.setMonth(begin.getMonth() - 1);
+  if (begin.getTime() < target.getTime()) begin.setTime(target.getTime());
+  return {
+    objetivo: target.toISOString(),
+    beginDate: begin.toISOString(),
+    endDate: edge.toISOString(),
+    quedaHistorial: begin.getTime() > target.getTime(),
+    mesLabel: `${formatHistoryDay(begin)} – ${formatHistoryDay(new Date(edge.getTime() - 1))}`,
+  };
 }
 
 export function formatearDescripcionMovimiento(row) {

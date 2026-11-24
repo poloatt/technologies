@@ -94,6 +94,21 @@ const bankConnectionSchema = createSchema({
       endDate: String,
       solicitadoEn: Date
     },
+    // Cursor del historial pedido a mano. Solo retrocede; la sync diaria no lo toca.
+    historial: {
+      objetivo: String,
+      cubiertoHasta: String,
+      ultimoMes: {
+        beginDate: String,
+        endDate: String
+      },
+      mesLabel: String,
+      pendiente: { type: Boolean, default: false },
+      cuotaAgotada: { type: Boolean, default: false },
+      quedaHistorial: { type: Boolean, default: false },
+      completo: { type: Boolean, default: false },
+      actualizadoEn: Date
+    },
     // Diagnóstico de cobertura (P2P / CBU / reconciliación)
     diagnostico: {
       actualizadoEn: Date,

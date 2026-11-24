@@ -24,6 +24,11 @@ import {
   hasNetoDistinct,
   isMercadoPagoOrigen,
   isMpInternalAccountMovement,
+  isNeutralLedgerRow,
+  isYieldLedgerRow,
+  ledgerCompactLabel,
+  neutralLedgerCaption,
+  neutralLedgerOrigin,
   formatMpInternalReserveTitle,
   mapearTipoTransaccionMpDisplay,
 } from '@shared/utils/mpDisplayUtils';
@@ -227,14 +232,23 @@ const TransaccionTable = ({
           {transacciones.map((transaccion) => {
             const rowId = transaccion.id || transaccion._id;
             const expanded = expandedRow === rowId;
-            const internal = ledgerRows ? false : isMpInternalAccountMovement(transaccion);
+            const ledgerMove = ledgerRows || isNeutralLedgerRow(transaccion);
+            const yieldRow = isYieldLedgerRow(transaccion);
+            const internal = ledgerMove || isMpInternalAccountMovement(transaccion);
+            const amountSign = transaccion.tipo === 'EGRESO' ? '−' : '+';
             const meta = getOrigenMetadata(transaccion.origen);
-            const title = internal
-              ? formatMpInternalReserveTitle(transaccion)
-              : formatMpTransactionTitle(
-                transaccion.descripcion,
-                transaccion.origen
-              );
+            const titled = formatMpTransactionTitle(
+              transaccion.descripcion,
+              transaccion.origen
+            );
+            const compactLabel = ledgerCompactLabel(transaccion);
+            const title = compactLabel
+              ? compactLabel
+              : ledgerMove
+                ? titled
+                : internal
+                  ? formatMpInternalReserveTitle(transaccion)
+                  : titled;
             const counterparty = internal ? null : getCounterparty(transaccion);
             const metaLine = buildTransactionListMeta(transaccion, {
               includeDate: true,
@@ -248,7 +262,7 @@ const TransaccionTable = ({
             );
             const typeLabel = mapearTipoTransaccionMpDisplay(meta.transactionType);
             const origenLabel = internal
-              ? 'Movimiento interno (disponible ↔ reserva)'
+              ? neutralLedgerOrigin(transaccion)
               : transaccion.origen?.tipo === 'MERCADOPAGO_MOVIMIENTO'
                 ? 'Movimiento de wallet'
                 : transaccion.origen?.tipo === 'MERCADOPAGO_PAGO'
@@ -263,8 +277,8 @@ const TransaccionTable = ({
                     cursor: 'pointer',
                     transition: 'background-color 0.15s ease',
                     bgcolor: expanded ? 'action.hover' : 'transparent',
-                    opacity: internal ? 0.72 : 1,
-                    '&:hover': { bgcolor: 'action.hover', opacity: internal ? 0.9 : 1 },
+                    opacity: internal && !yieldRow ? 0.72 : 1,
+                    '&:hover': { bgcolor: 'action.hover', opacity: internal && !yieldRow ? 0.9 : 1 },
                   }}
                 >
                   <TableCell
@@ -318,7 +332,7 @@ const TransaccionTable = ({
                           >
                             {title}
                           </Typography>
-                          {metaLine && (
+                          {!compactLabel && metaLine && (
                             <Typography
                               variant="caption"
                               sx={{
@@ -336,16 +350,16 @@ const TransaccionTable = ({
                         </Box>
                         <Typography
                           sx={{
-                            fontWeight: 500,
+                            fontWeight: yieldRow ? 650 : 500,
                             fontSize: '0.75rem',
-                            color: 'text.disabled',
+                            color: yieldRow ? getMontoColor(transaccion) : 'text.disabled',
                             fontVariantNumeric: 'tabular-nums',
                             lineHeight: 1.15,
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
                           }}
                         >
-                          {simbolo(transaccion)} {formatMonto(transaccion.monto)}
+                          {amountSign}{simbolo(transaccion)} {formatMonto(transaccion.monto)}
                         </Typography>
                       </Box>
                     ) : (
@@ -517,7 +531,7 @@ const TransaccionTable = ({
                                 mb: 0.25,
                               }}
                             >
-                              Movimiento interno entre disponible y reserva. No es dinero que entra ni sale de la cuenta.
+                              {neutralLedgerCaption(transaccion)}
                             </Typography>
                           )}
                           <DetailRow label="Fecha" value={formatFechaFull(transaccion.fecha)} />

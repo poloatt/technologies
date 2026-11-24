@@ -44,6 +44,80 @@ const INTERNAL_MOVEMENT_KINDS = new Set([
   'INTERNAL',
 ]);
 
+const MANUAL_LEDGER_KINDS = new Set([
+  'RESERVE_LOCK',
+  'RESERVE_RELEASE',
+  'INVESTMENT_IN',
+  'INVESTMENT_OUT',
+]);
+
+const YIELD_LEDGER_KINDS = new Set([
+  'INVESTMENT_YIELD',
+  'YIELD',
+]);
+
+function ledgerMovementKind(origenOrTx) {
+  const origen = origenOrTx?.origen ? origenOrTx.origen : origenOrTx;
+  return String(getOrigenMetadata(origen).movementKind || '');
+}
+
+export function isYieldLedgerRow(origenOrTx) {
+  return YIELD_LEDGER_KINDS.has(ledgerMovementKind(origenOrTx));
+}
+
+function ledgerDateLabel(transaccion) {
+  if (!transaccion?.fecha) return '';
+  const date = new Date(transaccion.fecha);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
+}
+
+function yieldSourceLabel(transaccion) {
+  const meta = getOrigenMetadata(transaccion?.origen);
+  const blob = [meta.description, meta.operationType, meta.businessBranch, transaccion?.descripcion]
+    .filter(Boolean)
+    .join(' ');
+  if (/asset_management|inversi[oó]n/i.test(blob)) return 'inversión';
+  if (/\breserva\b|pot-to-am|am-to-pot/i.test(blob)) return 'reserva';
+  return 'dinero en cuenta';
+}
+
+/** Una sola frase para la fila de Inversiones: tipo y fecha, sin repetir el título. */
+export function ledgerCompactLabel(transaccion) {
+  const kind = ledgerMovementKind(transaccion);
+  const date = ledgerDateLabel(transaccion);
+  const dated = (label) => (date ? `${label} · ${date}` : label);
+  if (kind === 'RESERVE_LOCK') return dated('Reserva out');
+  if (kind === 'RESERVE_RELEASE') return dated('Reserva in');
+  if (kind === 'INVESTMENT_IN') return dated('Ingresado');
+  if (kind === 'INVESTMENT_OUT') return dated('Rescatado');
+  if (YIELD_LEDGER_KINDS.has(kind)) return dated(`Rendimiento · ${yieldSourceLabel(transaccion)}`);
+  return null;
+}
+
+export function isNeutralLedgerRow(origenOrTx) {
+  const kind = ledgerMovementKind(origenOrTx);
+  return MANUAL_LEDGER_KINDS.has(kind) || YIELD_LEDGER_KINDS.has(kind);
+}
+
+export function neutralLedgerCaption(transaccion) {
+  const kind = String(getOrigenMetadata(transaccion?.origen).movementKind || '');
+  if (YIELD_LEDGER_KINDS.has(kind)) {
+    return 'Rendimiento generado por la reserva, una inversión o el dinero en cuenta.';
+  }
+  if (kind === 'INVESTMENT_IN' || kind === 'INVESTMENT_OUT') {
+    return 'Aporte o rescate manual. No es un rendimiento.';
+  }
+  return 'Movimiento manual entre disponible y reserva. No es un rendimiento.';
+}
+
+export function neutralLedgerOrigin(transaccion) {
+  const kind = String(getOrigenMetadata(transaccion?.origen).movementKind || '');
+  if (YIELD_LEDGER_KINDS.has(kind)) return 'Rendimiento';
+  if (kind === 'INVESTMENT_IN' || kind === 'INVESTMENT_OUT') return 'Aporte o rescate';
+  return 'Disponible ↔ reserva';
+}
+
 const LEDGER_VISIBLE_KINDS = new Set([
   'INVESTMENT_IN',
   'INVESTMENT_OUT',
@@ -64,7 +138,7 @@ export function looksLikeMpInternalReserveText(...parts) {
   const blob = parts.filter(Boolean).join(' ').trim();
   if (!blob) return false;
   if (MP_INTERNAL_CODE_RE.test(blob)) return true;
-  if (/desde\s+reserva|a\s+reserva|env[ií]o\s+a\s+reserva|extracci[oó]n\s+de\s+reserva/i.test(blob)) {
+  if (/desde\s+(?:(?:la|tu|mi)\s+)?reserva|a\s+(?:(?:la|tu|mi)\s+)?reserva|env[ií]o\s+a\s+reserva|extracci[oó]n\s+de\s+reserva/i.test(blob)) {
     return true;
   }
   return false;
@@ -272,6 +346,7 @@ export function buildTransactionListMeta(transaccion, { includeDate = true } = {
   const parts = [];
   const origen = transaccion?.origen;
   const meta = getOrigenMetadata(origen);
+  const metaKind = String(meta.movementKind || '');
   const internal = isMpInternalAccountMovement(origen);
 
   if (includeDate && transaccion?.fecha) {
@@ -283,9 +358,13 @@ export function buildTransactionListMeta(transaccion, { includeDate = true } = {
     }
   }
 
-  // Reserva / ajuste: una sola pista, sin “Ingreso/Egreso/Wallet”
-  if (internal) {
-    parts.push('Dentro de la cuenta');
+  // Reserva, aporte o rendimiento: una sola pista, sin ingreso/egreso.
+  if (YIELD_LEDGER_KINDS.has(metaKind)) {
+    parts.push('Rendimiento');
+    return parts.filter(Boolean).join(' · ');
+  }
+  if (MANUAL_LEDGER_KINDS.has(metaKind) || internal) {
+    parts.push('Movimiento manual');
     return parts.filter(Boolean).join(' · ');
   }
 

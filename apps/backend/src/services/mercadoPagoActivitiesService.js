@@ -36,6 +36,15 @@ function webhookNotifier() {
   };
 }
 
+function activitiesRowIsInflow(opType, description) {
+  const op = String(opType || '').toLowerCase();
+  if (/withdrawal|payout|money_out|\bdebit\b/.test(op)) return false;
+  if (/account_fund|money_in|incoming|\bcredit\b/.test(op)) return true;
+  return /recibiste|transferencia recibida|ingreso de dinero|desde\s+cbu|debin recibido|fondeo de cuenta/.test(
+    `${op} ${description || ''}`.toLowerCase()
+  );
+}
+
 export function normalizeActivitiesWithdrawRow(row) {
   if (!row || typeof row !== 'object') return null;
 
@@ -47,30 +56,35 @@ export function normalizeActivitiesWithdrawRow(row) {
   const amountRaw = Number(
     row.NET_RECEIVED_AMOUNT ?? row.net_received_amount ?? row.TRANSACTION_AMOUNT ?? row.transaction_amount ?? 0
   );
-  // Retiros/transferencias salientes: monto neto suele ser negativo o lo forzamos egreso
-  const signedNet = amountRaw > 0 ? -Math.abs(amountRaw) : amountRaw || -Math.abs(Number(row.TRANSACTION_AMOUNT || 0));
   const counterpart = String(
     row.COUNTERPART_NAME || row.counterpart_name || row.COUNTERPART_EMAIL || ''
   ).trim();
   const opType = String(row.OPERATION_TYPE || row.operation_type || '').toLowerCase();
   const bankAccount = String(row.BANK_ACCOUNT || row.bank_account || '').trim();
   const status = String(row.STATUS || row.status || '').toLowerCase();
-
-  // bank_account presente = CVU→CBU bancario; sin banco + contraparte = P2P CVU→CVU
-  let transactionType = 'WITHDRAWAL';
-  if (bankAccount) {
+  const inflow = activitiesRowIsInflow(opType, counterpart || row.DESCRIPTION || row.description);
+  const abs = Math.abs(amountRaw) || Math.abs(Number(row.TRANSACTION_AMOUNT || row.transaction_amount || 0));
+  // El reporte es de retiros: salida salvo fondeo / crédito explícito (CBU → CVU).
+  const signedNet = inflow ? abs : (amountRaw < 0 ? amountRaw : -abs);
+  // bank_account presente = CVU↔CBU; sin banco + contraparte = P2P CVU→CVU
+  let transactionType = inflow ? 'ACCOUNT_FUND' : 'WITHDRAWAL';
+  if (!inflow && bankAccount) {
     transactionType = 'BANK_TRANSFER';
-  } else if (opType.includes('transfer') || opType.includes('money_transfer') || opType.includes('p2p')) {
+  } else if (!inflow && (opType.includes('transfer') || opType.includes('money_transfer') || opType.includes('p2p'))) {
     transactionType = 'MONEY_TRANSFER';
-  } else if (opType.includes('payout') || opType.includes('cash')) {
+  } else if (!inflow && (opType.includes('payout') || opType.includes('cash'))) {
     transactionType = 'PAYOUT';
-  } else if (counterpart) {
+  } else if (!inflow && counterpart) {
     transactionType = 'MONEY_TRANSFER';
   }
 
   const description =
     counterpart ||
-    (bankAccount ? `Transferencia a CBU ${bankAccount}` : '') ||
+    (inflow
+      ? 'Transferencia desde CBU'
+      : bankAccount
+        ? `Transferencia a CBU ${bankAccount}`
+        : '') ||
     String(row.OPERATION_TYPE || row.operation_type || 'Transferencia').trim();
 
   const raw = {

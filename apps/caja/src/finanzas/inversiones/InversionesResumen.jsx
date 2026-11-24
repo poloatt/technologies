@@ -30,11 +30,11 @@ function netoPhrase(moneda) {
   return 'Envíos y rescates empataron';
 }
 
-function Metric({ label, amount }) {
+function Metric({ label, amount, color }) {
   return (
     <Box sx={{ minWidth: 0, flex: '1 1 0' }}>
       <Typography sx={hubLabelSx}>{label}</Typography>
-      <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', lineHeight: 1.25, mt: 0.25 }}>
+      <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', lineHeight: 1.25, mt: 0.25, color }}>
         {amount}
       </Typography>
     </Box>
@@ -109,7 +109,11 @@ export default function InversionesResumen({
         <Box sx={{ display: 'flex', gap: 1.5 }}>
           <Metric label="Enviado" amount={formatMonto(activa.enviado || 0, simbolo, showValues)} />
           <Metric label="Rescatado" amount={formatMonto(activa.rescatado || 0, simbolo, showValues)} />
-          <Metric label="Rendimientos" amount={formatMonto(activa.rendimientos || 0, simbolo, showValues)} />
+          <Metric
+            label="Rendimientos"
+            amount={formatMonto(activa.rendimientos || 0, simbolo, showValues)}
+            color={activa.color || 'success.main'}
+          />
         </Box>
       </>
     );

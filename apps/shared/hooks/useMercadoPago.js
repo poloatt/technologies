@@ -107,6 +107,15 @@ export const useMercadoPago = () => {
     setLoading(true);
     try {
       const result = await mercadopagoService.syncConnection(connectionId, options);
+      const historial = result?.resultado?.historial;
+      if (historial) {
+        const warning = historial.cuotaAgotada || historial.pendiente;
+        enqueueSnackbar(result.message || 'Historial actualizado', {
+          variant: warning ? 'warning' : 'success',
+          autoHideDuration: 8000,
+        });
+        return result;
+      }
       const syncParcial = result?.resultado?.syncParcial || result?.syncParcial;
       const movimientos = result?.resultado?.detalles?.totalMovimientos ?? 0;
       if (syncParcial) {
