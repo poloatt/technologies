@@ -506,6 +506,8 @@ export const MP_MOVEMENT_KINDS = {
   CASH_WITHDRAWAL: 'CASH_WITHDRAWAL',
   RESERVE_RELEASE: 'RESERVE_RELEASE',
   RESERVE_LOCK: 'RESERVE_LOCK',
+  // Gasto pagado con un pot de la Reserva: cuenta en Transacciones y baja el Reservado.
+  RESERVE_PAYMENT: 'RESERVE_PAYMENT',
   INVESTMENT_IN: 'INVESTMENT_IN',
   INVESTMENT_OUT: 'INVESTMENT_OUT',
   FX_SELL: 'FX_SELL',
@@ -513,6 +515,7 @@ export const MP_MOVEMENT_KINDS = {
   USD_IN: 'USD_IN',
   USD_OUT: 'USD_OUT',
   USD_PAYMENT: 'USD_PAYMENT',
+  USD_YIELD: 'USD_YIELD',
   CARD_PURCHASE: 'CARD_PURCHASE',
   INVESTMENT_YIELD: 'INVESTMENT_YIELD',
   YIELD: 'YIELD',
@@ -531,6 +534,7 @@ export const MP_MOVEMENT_KIND_LABELS = {
   CASH_WITHDRAWAL: 'Retiro de efectivo',
   RESERVE_RELEASE: 'Desde reserva',
   RESERVE_LOCK: 'A reserva',
+  RESERVE_PAYMENT: 'Pago desde reserva',
   INVESTMENT_IN: 'A inversión',
   INVESTMENT_OUT: 'Desde inversión',
   FX_SELL: 'Venta de dólares',
@@ -538,6 +542,7 @@ export const MP_MOVEMENT_KIND_LABELS = {
   USD_IN: 'Dólares recibidos',
   USD_OUT: 'Dólares enviados',
   USD_PAYMENT: 'Pago en dólares',
+  USD_YIELD: 'Rendimiento en dólares',
   CARD_PURCHASE: 'Compra con tarjeta',
   INVESTMENT_YIELD: 'Rendimiento',
   YIELD: 'Rendimiento',
@@ -955,7 +960,9 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 3b) Pago que sale de un pot de la Reserva: baja el Reservado y no entra a Transacciones.
+  // 3b) Pago que sale de un pot de la Reserva: es un gasto en Transacciones (flujo)
+  // y a la vez baja el Reservado. Mercado Pago no genera una fila de liberación
+  // aparte para este pago; el monto sale del pot en el mismo movimiento.
   // El pot es del pagador: si no sabemos quién paga, el reporte trae el monto sin signo
   // fiable, así que solo usamos el signo como respaldo.
   const pot = datosPotPago(input);
@@ -967,9 +974,9 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     !/REFUND|CHARGEBACK/.test(transactionType)
   ) {
     return {
-      movementKind: MP_MOVEMENT_KINDS.RESERVE_RELEASE,
-      statsExclude: true,
-      label: MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE,
+      movementKind: MP_MOVEMENT_KINDS.RESERVE_PAYMENT,
+      statsExclude: false,
+      label: MP_MOVEMENT_KIND_LABELS.RESERVE_PAYMENT,
       isTransfer: false,
       isInternal: false,
       potId: pot.potId,
@@ -1245,6 +1252,15 @@ export const MP_INVERSIONES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.YIELD
 ]);
 
+/**
+ * Libro inversiones para listados y Reservado. Incluye el pago desde reserva,
+ * que también vive en flujo: por eso no está en MP_INVERSIONES_KINDS (esa lista
+ * es la que el flujo excluye).
+ */
+export const MP_INVERSIONES_LEDGER_KINDS = Object.freeze([
+  ...MP_INVERSIONES_KINDS,
+  MP_MOVEMENT_KINDS.RESERVE_PAYMENT
+]);
 
 /** Libro dólares: movimientos, compraventa y pagos en USD. No entran al flujo. */
 export const MP_DOLARES_KINDS = Object.freeze([
@@ -1252,7 +1268,8 @@ export const MP_DOLARES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.FX_BUY,
   MP_MOVEMENT_KINDS.USD_IN,
   MP_MOVEMENT_KINDS.USD_OUT,
-  MP_MOVEMENT_KINDS.USD_PAYMENT
+  MP_MOVEMENT_KINDS.USD_PAYMENT,
+  MP_MOVEMENT_KINDS.USD_YIELD
 ]);
 
 /** Libro créditos: compras con tarjeta. Los cobros con tarjeta no entran. */
@@ -1292,7 +1309,7 @@ export function isCreditosMovementKind(kind) {
 export function buildLedgerMatch(ledger = 'flujo') {
   if (ledger === 'inversiones') {
     return {
-      'origen.metadata.movementKind': { $in: [...MP_INVERSIONES_KINDS] }
+      'origen.metadata.movementKind': { $in: [...MP_INVERSIONES_LEDGER_KINDS] }
     };
   }
   if (ledger === 'dolares') {
@@ -1337,7 +1354,7 @@ export function applyMovementKindFilter(query, ledger, raw) {
     ? []
     : [...new Set(String(raw).split(',').map((item) => item.trim()).filter(Boolean))];
   const allowed = requested.filter((kind) => {
-    if (ledger === 'inversiones') return MP_INVERSIONES_KINDS.includes(kind);
+    if (ledger === 'inversiones') return MP_INVERSIONES_LEDGER_KINDS.includes(kind);
     if (ledger === 'dolares') return MP_DOLARES_KINDS.includes(kind);
     if (ledger === 'creditos') return MP_CREDITOS_KINDS.includes(kind);
     return !MP_FLUJO_EXCLUDED_KINDS.includes(kind);
@@ -1392,6 +1409,8 @@ export function acumularBucketInversiones(kind, tipo, monto, yieldSide) {
   // La reserva se compara consigo misma. Un rescate de inversión no es plata que volvió de la reserva.
   if (kind === MP_MOVEMENT_KINDS.RESERVE_LOCK) return { enviado: amount };
   if (kind === MP_MOVEMENT_KINDS.RESERVE_RELEASE) return { rescatado: amount };
+  // Pagar con plata del pot también la saca de la reserva.
+  if (kind === MP_MOVEMENT_KINDS.RESERVE_PAYMENT) return { rescatado: amount };
   if (kind === MP_MOVEMENT_KINDS.INVESTMENT_IN) return { ingresado: amount };
   if (kind === MP_MOVEMENT_KINDS.INVESTMENT_OUT) return { rescatadoInversion: amount };
   if (RENDIMIENTO_KINDS.has(kind)) {
@@ -1459,16 +1478,22 @@ export function conservarClasificacionTarjeta(prevMeta = {}, next = {}) {
   };
 }
 
-/** Pesos y dólares de una compra o venta. `usd` es la cantidad de dólares, no el monto en pesos. */
-export function acumularBucketDolares(kind, monto, usd) {
+/**
+ * Pesos y dólares de una compra o venta. `usd` es la cantidad de dólares, no el monto en pesos.
+ * `face` es la cantidad en dólares de un movimiento USD ya resuelta por fila (usdAmount si existe, si no el monto).
+ * `compraventa` marca el lado USD de una venta/compra MEP: ya está contado en FX_SELL/FX_BUY, así que no se suma otra vez.
+ */
+export function acumularBucketDolares(kind, monto, usd, face = null, compraventa = false) {
   const amount = Number(monto) || 0;
   const dollars = Number(usd) || 0;
   if (kind === MP_MOVEMENT_KINDS.FX_SELL) return { usdVendido: dollars, pesosVenta: amount };
   if (kind === MP_MOVEMENT_KINDS.FX_BUY) return { usdComprado: dollars, pesosCompra: amount };
-  const face = dollars || amount;
-  if (kind === MP_MOVEMENT_KINDS.USD_IN) return { usdRecibido: face };
-  if (kind === MP_MOVEMENT_KINDS.USD_OUT) return { usdEnviado: face };
-  if (kind === MP_MOVEMENT_KINDS.USD_PAYMENT) return { usdPagado: face };
+  if (compraventa) return {};
+  const usdFace = face == null ? (dollars || amount) : (Number(face) || 0);
+  if (kind === MP_MOVEMENT_KINDS.USD_IN) return { usdRecibido: usdFace };
+  if (kind === MP_MOVEMENT_KINDS.USD_OUT) return { usdEnviado: usdFace };
+  if (kind === MP_MOVEMENT_KINDS.USD_PAYMENT) return { usdPagado: usdFace };
+  if (kind === MP_MOVEMENT_KINDS.USD_YIELD) return { usdRendimientos: usdFace };
   return {};
 }
 
@@ -1489,6 +1514,98 @@ export function resultadoFci({
     ? (Number(rendimientosReserva) || 0) + (Number(rendimientosInversion) || 0)
     : (Number(rendimientos) || 0);
   return reserva + inversion + rendimiento;
+}
+
+/** Fuentes de texto del rendimiento, en el mismo orden que `YIELD_SIDE_FIELDS`. */
+export const SALDOS_YIELD_INVERSION_SOURCE = YIELD_INVERSION_RE.source;
+export const SALDOS_YIELD_RESERVA_SOURCE = String.raw`reserva|\bpots?\b`;
+const YIELD_RESERVA_RE = new RegExp(SALDOS_YIELD_RESERVA_SOURCE, 'i');
+
+/**
+ * A quién se acredita un rendimiento. El fondo manda si el texto lo dice; "reserva"
+ * va a la reserva; el crédito diario sin texto es dinero en cuenta.
+ * @returns {'inversion' | 'reserva' | 'cuenta'}
+ */
+export function ladoRendimientoSaldo(texto = '') {
+  const value = String(texto || '');
+  if (YIELD_INVERSION_RE.test(value)) return 'inversion';
+  if (YIELD_RESERVA_RE.test(value)) return 'reserva';
+  return 'cuenta';
+}
+
+/**
+ * Saldos acumulados (no del período) de la cuenta Mercado Pago, a partir de filas
+ * agrupadas por { kind, tipo, moneda, compraventa, side, flujo }.
+ *  - dineroEnCuenta: caja + rendimiento acreditado a la cuenta; descuenta lo que fue a
+ *    reserva o fondo y suma lo que volvió. Un pago desde reserva no sale de la cuenta.
+ *  - reservado: enviado − liberado − pagos desde reserva + su rendimiento.
+ *  - invertido: aportes − rescates + rendimiento del fondo.
+ *  - rendimientos: todo lo generado en pesos (cuenta, reserva y fondo); informativo.
+ *  - dolares: en USD, compraventa + movimientos + rendimiento − pagos.
+ * Los pesos se limitan a `monedaPesosId` cuando se conoce; los dólares no.
+ */
+export function calcularSaldosMercadoPago(rows = [], { monedaPesosId = null } = {}) {
+  const p = {
+    flujo: 0,
+    pagoReserva: 0,
+    enviado: 0,
+    liberado: 0,
+    ingresado: 0,
+    rescatadoInversion: 0,
+    rendCuenta: 0,
+    rendReserva: 0,
+    rendInversion: 0,
+    pesosVenta: 0,
+    pesosCompra: 0,
+  };
+  const d = {
+    usdVendido: 0,
+    usdComprado: 0,
+    usdRecibido: 0,
+    usdEnviado: 0,
+    usdPagado: 0,
+    usdRendimientos: 0,
+  };
+
+  for (const row of rows) {
+    const { kind, tipo, moneda, compraventa, side, flujo } = row._id || {};
+    const monto = Number(row.total) || 0;
+    const dolares = acumularBucketDolares(kind, monto, row.usd, row.face, compraventa === true);
+    for (const key of Object.keys(d)) d[key] += dolares[key] || 0;
+
+    const esPesos = !monedaPesosId || String(moneda) === String(monedaPesosId);
+    if (!esPesos) continue;
+
+    p.pesosVenta += dolares.pesosVenta || 0;
+    p.pesosCompra += dolares.pesosCompra || 0;
+
+    if (flujo === true) {
+      if (tipo === 'INGRESO') p.flujo += monto;
+      else if (tipo === 'EGRESO') p.flujo -= monto;
+    }
+    if (kind === MP_MOVEMENT_KINDS.RESERVE_PAYMENT && tipo === 'EGRESO') p.pagoReserva += monto;
+    if (kind === MP_MOVEMENT_KINDS.RESERVE_LOCK) p.enviado += monto;
+    else if (kind === MP_MOVEMENT_KINDS.RESERVE_RELEASE) p.liberado += monto;
+    else if (kind === MP_MOVEMENT_KINDS.INVESTMENT_IN) p.ingresado += monto;
+    else if (kind === MP_MOVEMENT_KINDS.INVESTMENT_OUT) p.rescatadoInversion += monto;
+    else if (RENDIMIENTO_KINDS.has(kind)) {
+      const signed = tipo === 'EGRESO' ? -monto : monto;
+      if (side === 'inversion') p.rendInversion += signed;
+      else if (side === 'reserva') p.rendReserva += signed;
+      else p.rendCuenta += signed;
+    }
+  }
+
+  return {
+    dineroEnCuenta: p.flujo + p.pagoReserva - p.enviado + p.liberado - p.ingresado
+      + p.rescatadoInversion + p.rendCuenta + p.pesosVenta - p.pesosCompra,
+    reservado: p.enviado - p.liberado - p.pagoReserva + p.rendReserva,
+    invertido: p.ingresado - p.rescatadoInversion + p.rendInversion,
+    // Total generado (cuenta + reserva + fondo). Ya está dentro de cada saldo de arriba.
+    rendimientos: p.rendCuenta + p.rendReserva + p.rendInversion,
+    dolares: d.usdComprado + d.usdRecibido + d.usdRendimientos
+      - d.usdVendido - d.usdEnviado - d.usdPagado,
+  };
 }
 
 export function buildStatsExcludeMatch() {

@@ -1,7 +1,9 @@
 import { Box, Skeleton, Typography, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { hubPeriodSx } from '../../hub';
+import { hubEyebrowSx } from '../../hub';
 import HubBalanceDivider from '../hub/HubBalanceDivider';
+import { HubBalanceRow } from '@shared/components/hub';
+import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl, ProportionTrack } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
@@ -23,6 +25,7 @@ export default function CreditosResumen({
   onPresetChange,
 }) {
   const { showValues } = useValuesVisibility();
+  const { nombre: cuentaNombre } = useCuentaMostrada();
   const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
     density,
     preset,
@@ -62,31 +65,18 @@ export default function CreditosResumen({
   } else {
     body = (
       <>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-        }}
-      >
-        <Typography
-          sx={{
-            fontWeight: 700,
-            fontSize: dense ? '1rem' : '1.75rem',
-            lineHeight: 1.15,
-            letterSpacing: '-0.02em',
-            color: resultadoColor,
-          }}
-        >
-          {formatMonto(saldo, simbolo, showValues)}
-        </Typography>
-        {dense && (
-          <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0, flexShrink: 0, textAlign: 'right' }}>
+      <HubBalanceRow
+        cuenta={cuentaNombre}
+        amount={formatMonto(saldo, simbolo, showValues)}
+        color={resultadoColor}
+        dense={dense}
+        below={dense && (showPeriodControl || activePreset === 'ytg') ? (
+          // En el hub el período va junto al selector; acá solo YTG, que no cierra en diciembre.
+          <Typography variant="caption" sx={{ ...hubEyebrowSx, display: 'block', mb: 0, textAlign: 'right' }}>
             {span}
           </Typography>
-        )}
-      </Box>
+        ) : null}
+      />
       {dense && <HubBalanceDivider />}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.75 : 1.25, mt: dense ? 0 : 1.5 }}>
         <ProportionTrack
@@ -124,7 +114,7 @@ export default function CreditosResumen({
           </Box>
         )}
         {!dense && (
-          <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
+          <Typography variant="caption" sx={{ ...hubEyebrowSx, mb: 0 }}>
             {span}
           </Typography>
         )}

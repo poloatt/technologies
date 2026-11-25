@@ -11,6 +11,16 @@ import {
 } from '@shared/styles/hubSectionStyles';
 import { cajaSwitchSx } from './attaPropiedadHubStyles';
 
+// Escala tipográfica de saldos hub: vive en shared para todas las apps.
+export {
+  HUB_EYEBROW_FONT_SIZE,
+  HUB_HERO_AMOUNT,
+  getHubHeroAmountSx,
+  hubEyebrowSx,
+  hubNumericSx,
+  hubSupportAmountSx,
+} from '@shared/styles/hubBalanceTypography';
+
 export {
   HUB_SECTION_CARD_BODY_MIN_HEIGHT as CAJA_HUB_CARD_BODY_MIN_HEIGHT,
   HUB_SECTION_CARD_MIN_HEIGHT as CAJA_HUB_CARD_MIN_HEIGHT,

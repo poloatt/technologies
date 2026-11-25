@@ -1,8 +1,21 @@
 import { useEffect, useId, useState } from 'react';
 import { Box, Collapse, Skeleton, Typography, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { hubLabelSx, hubPeriodSx, hubValueSx } from '../../hub';
+import { hubEyebrowSx, hubLabelSx, hubSupportAmountSx } from '../../hub';
 import HubBalanceDivider from '../hub/HubBalanceDivider';
+import { HubBalanceBreakdown, HubBalanceRow } from '@shared/components/hub';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAPI } from '@shared/hooks/useAPI';
+import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
+import { useSaldosCuenta } from '../cuentas/useSaldosCuenta';
+import {
+  CREDITOS_PATH,
+  DOLARES_PATH,
+  INVERSIONES_PATH,
+  cuentaDetailPath,
+  getCuentasPath,
+  resolveFinanzasBranch,
+} from '../finanzasDeepLink';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import {
   DEFAULT_PERIOD_PRESET,
@@ -13,6 +26,7 @@ import {
   formatMonthPresetLabel,
   formatMonto,
   formatPeriodSpan,
+  formatUsdMonto,
   getCurrentQuarter,
   getPeriodRange,
   isMonthPreset,
@@ -43,7 +57,7 @@ function flowPhrase(moneda, showValues) {
   return 'Entradas y salidas empataron';
 }
 
-/** Misma tipografía que labels/títulos de sección hub (hubLabelSx / hubPeriodSx). */
+/** Misma tipografía que labels/títulos de sección hub (hubLabelSx / hubEyebrowSx). */
 function PeriodSeg({ item, selected, marked, onChange }) {
   return (
     <Box
@@ -69,7 +83,7 @@ function PeriodSeg({ item, selected, marked, onChange }) {
         bgcolor: 'transparent',
         cursor: 'pointer',
         font: 'inherit',
-        fontWeight: selected ? 700 : 600,
+        fontWeight: selected ? 600 : 500,
         color: selected ? 'text.primary' : 'text.secondary',
         flex: '0 0 auto',
         whiteSpace: 'nowrap',
@@ -175,7 +189,7 @@ function MonthStepper({ preset, onChange }) {
   );
 }
 
-/** YTD · YTG | Q1–Q4 | Mensual en una sola línea, estética de cabecera de sección. */
+/** YTD · YTG | Q1–Q4 | M (mensual) en una sola línea, estética de cabecera de sección. */
 export function PeriodControl({ preset, onChange }) {
   const currentQuarter = `q${getCurrentQuarter()}`;
   const monthSelected = isMonthPreset(preset);
@@ -206,7 +220,7 @@ export function PeriodControl({ preset, onChange }) {
           flexWrap: 'nowrap',
           alignItems: 'center',
           justifyContent: 'safe center',
-          gap: 0.75,
+          gap: 0,
           minWidth: 0,
           width: '100%',
           height: 28,
@@ -225,6 +239,7 @@ export function PeriodControl({ preset, onChange }) {
                 width: '1px',
                 alignSelf: 'stretch',
                 my: 0.75,
+                mx: 0.375,
                 bgcolor: 'divider',
                 flex: '0 0 auto',
               }}
@@ -292,10 +307,10 @@ export function ProportionTrack({ label, amount, value, max, color, dense }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1, mb: 0.375 }}>
-        <Typography variant="caption" noWrap sx={hubLabelSx}>
+        <Typography variant="caption" noWrap sx={hubEyebrowSx}>
           {label}
         </Typography>
-        <Typography variant="caption" noWrap sx={{ ...hubValueSx, mt: 0, color }}>
+        <Typography variant="caption" noWrap sx={{ ...hubSupportAmountSx, mt: 0, color }}>
           {amount}
         </Typography>
       </Box>
@@ -382,15 +397,13 @@ function FlujoSkeleton({ dense }) {
   return (
     <Box>
       <Skeleton height={dense ? 22 : 36} width={dense ? 96 : 140} sx={{ mb: 1, borderRadius: 0.5 }} />
-      <Skeleton height={dense ? 22 : 28} sx={{ mb: 0.75, borderRadius: 1 }} />
-      <Skeleton height={dense ? 22 : 28} sx={{ borderRadius: 1 }} />
       {!dense && <Skeleton height={56} sx={{ mt: 1.5, borderRadius: 1 }} />}
     </Box>
   );
 }
 
 /**
- * Flujo del período: balance, barra de proporción y, en la página, spark diario.
+ * Flujo del período: balance de la cuenta Mercado Pago y, en la página, spark diario.
  * `compact` entra en la tarjeta del hub. `page` va arriba del listado.
  */
 export default function TransaccionesFlujoVisual({
@@ -429,15 +442,56 @@ export default function TransaccionesFlujoVisual({
     return () => window.removeEventListener('transaccionesRefreshed', onRefresh);
   }, [refetch]);
 
+  // Hoy solo hay conexión con Mercado Pago: el balance mostrado es el de esa cuenta.
+  const { cuenta: cuentaMostrada, nombre: cuentaNombre } = useCuentaMostrada(cuentaId);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
   const monedas = stats.porMoneda;
   const activa = monedas.find((moneda) => moneda.monedaId === monedaElegida) || monedas[0] || EMPTY_MONEDA;
   const simbolo = activa.simbolo || '$';
   const accent = activa.color || '#4CAF50';
   const expense = theme.palette.error.main;
   const balanceColor = activa.balance < 0 ? expense : accent;
-  const maxBar = Math.max(activa.ingresos, activa.egresos, 0);
   const extras = monedas.length - 1;
   const serie = fillDailySeries(activa.porDia, stats.fechaInicio, stats.fechaFin);
+
+  // Desglose de la fila de cuenta: saldos acumulados, no del período.
+  // Arranca desplegado: los saldos son lo primero que se quiere ver.
+  const [saldosOpen, setSaldosOpen] = useState(true);
+  const saldosId = `saldos-${useId().replace(/:/g, '')}`;
+  const { saldos, loading: saldosLoading, error: saldosError } = useSaldosCuenta({
+    enabled: saldosOpen,
+    cuentaId: dense ? undefined : cuentaId || undefined,
+  });
+  // Positivo: el color que el usuario eligió para esa moneda. Negativo: rojo. Cero: texto normal.
+  const { data: monedasData } = useAPI('/api/monedas', { enableCache: true, cacheDuration: 60000 });
+  const monedasDocs = monedasData?.docs ?? (Array.isArray(monedasData) ? monedasData : []);
+  const pesosColor = monedasDocs.find((m) => saldos?.monedaId && String(m._id || m.id) === saldos.monedaId)?.color || accent;
+  const usdColor = monedasDocs.find((m) => m.codigo === 'USD')?.color || accent;
+  const saldoColor = (valor, positivo) => {
+    if (valor < 0) return expense;
+    return valor > 0 ? positivo : undefined;
+  };
+  const branchId = resolveFinanzasBranch(pathname);
+  const cuentaDestino = cuentaMostrada?.id || cuentaMostrada?._id
+    ? cuentaDetailPath(cuentaMostrada.id || cuentaMostrada._id, branchId)
+    : getCuentasPath(branchId);
+  const saldosItems = saldos ? [
+    // Fila 1: saldos por moneda y deuda. Fila 2: inversiones (3 columnas).
+    { id: 'cuenta', label: 'Saldo en $', valor: saldos.dineroEnCuenta, destino: cuentaDestino },
+    { id: 'dolares', label: 'Saldo en U$D', valor: saldos.dolares, destino: DOLARES_PATH, usd: true },
+    { id: 'credito', label: 'Crédito', valor: saldos.credito, destino: CREDITOS_PATH },
+    { id: 'reservado', label: 'Reservado', valor: saldos.reservado, destino: INVERSIONES_PATH },
+    { id: 'invertido', label: 'Invertido', valor: saldos.invertido, destino: INVERSIONES_PATH },
+    { id: 'rendimientos', label: 'Rendimientos', valor: saldos.rendimientos, destino: INVERSIONES_PATH },
+  ].map((item) => ({
+    id: item.id,
+    label: item.label,
+    amount: item.usd ? formatUsdMonto(item.valor, showValues) : formatMonto(item.valor, simbolo, showValues),
+    color: saldoColor(item.valor, item.usd ? usdColor : pesosColor),
+    onClick: () => navigate(item.destino),
+  })) : [];
 
   let body;
   if (loading) {
@@ -451,32 +505,31 @@ export default function TransaccionesFlujoVisual({
   } else {
     body = (
       <>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 1,
-            mb: 0,
-          }}
-        >
-          <Typography
-            sx={{
-              fontWeight: 700,
-              fontSize: dense ? '1rem' : '1.75rem',
-              lineHeight: 1.15,
-              letterSpacing: '-0.02em',
-              color: balanceColor,
-            }}
-          >
-            {formatMonto(activa.balance, simbolo, showValues)}
-          </Typography>
-          {dense && (
-            <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0, flexShrink: 0, textAlign: 'right' }}>
+        <HubBalanceRow
+          cuenta={cuentaNombre}
+          amount={formatMonto(activa.balance, simbolo, showValues)}
+          color={balanceColor}
+          dense={dense}
+          expanded={saldosOpen}
+          onToggle={() => setSaldosOpen((open) => !open)}
+          controlsId={saldosId}
+          below={dense && showPeriodControl ? (
+            // En el hub Finanzas el período se muestra una sola vez, junto al selector.
+            <Typography
+              variant="caption"
+              sx={{ ...hubEyebrowSx, display: 'block', mb: 0, mt: 0, textAlign: 'right' }}
+            >
               {span}
             </Typography>
-          )}
-        </Box>
+          ) : null}
+        />
+        <HubBalanceBreakdown
+          id={saldosId}
+          open={saldosOpen}
+          items={saldosItems}
+          loading={saldosLoading}
+          error={Boolean(saldosError)}
+        />
         {dense && <HubBalanceDivider />}
         {!dense && (
           <Typography
@@ -486,24 +539,6 @@ export default function TransaccionesFlujoVisual({
             {flowPhrase(activa, showValues)}
           </Typography>
         )}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.75 : 1.25 }}>
-          <ProportionTrack
-            label="Ingresos"
-            amount={`+${formatMonto(activa.ingresos, simbolo, showValues)}`}
-            value={activa.ingresos}
-            max={maxBar}
-            color={accent}
-            dense={dense}
-          />
-          <ProportionTrack
-            label="Gastos"
-            amount={`−${formatMonto(activa.egresos, simbolo, showValues)}`}
-            value={activa.egresos}
-            max={maxBar}
-            color={expense}
-            dense={dense}
-          />
-        </Box>
         {!dense && <FlujoSpark series={serie} positive={accent} negative={expense} />}
       </>
     );
@@ -537,7 +572,7 @@ export default function TransaccionesFlujoVisual({
           {dense && extras > 0 && (
             <Typography
               variant="caption"
-              sx={{ ...hubPeriodSx, mb: 0, flex: '0 0 auto', whiteSpace: 'nowrap' }}
+              sx={{ ...hubEyebrowSx, mb: 0, flex: '0 0 auto', whiteSpace: 'nowrap' }}
             >
               {activa.codigo} +{extras}
             </Typography>
@@ -551,7 +586,7 @@ export default function TransaccionesFlujoVisual({
           )}
         </Box>
         {!dense && (
-          <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
+          <Typography variant="caption" sx={{ ...hubEyebrowSx, mb: 0 }}>
             {span}
           </Typography>
         )}

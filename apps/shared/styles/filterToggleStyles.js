@@ -49,9 +49,11 @@ export const filterToggleAmountSx = {
   m: 0,
   p: 0,
   width: '100%',
-  fontWeight: 700,
+  fontWeight: 600,
   fontSize: '0.875rem',
   lineHeight: 1,
+  letterSpacing: '-0.005em',
+  fontVariantNumeric: 'tabular-nums',
   textAlign: 'center',
 };
 
@@ -67,10 +69,10 @@ export function getFilterToggleFloatingLabelSx(selected) {
     textAlign: 'center',
     m: 0,
     p: 0,
-    fontWeight: 600,
+    fontWeight: 500,
     fontSize: '0.6875rem',
     lineHeight: 1,
-    letterSpacing: '0.04em',
+    letterSpacing: '0.06em',
     textTransform: 'uppercase',
     pointerEvents: 'none',
     userSelect: 'none',
@@ -78,7 +80,7 @@ export function getFilterToggleFloatingLabelSx(selected) {
       theme.palette.text.primary,
       selected
         ? (theme.palette.mode === 'dark' ? 0.92 : 0.78)
-        : (theme.palette.mode === 'dark' ? 0.34 : 0.4),
+        : (theme.palette.mode === 'dark' ? 0.46 : 0.5),
     ),
   };
 }

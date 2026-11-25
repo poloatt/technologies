@@ -17,6 +17,8 @@ import {
   determinarTipoPago,
   isInversionesMovementKind,
   nextHistoryChunk,
+  calcularSaldosMercadoPago,
+  ladoRendimientoSaldo,
   normalizeAccountMovement,
   parseHistorySince,
   resultadoFci,
@@ -43,14 +45,17 @@ describe('pagos que salen de un pot de la Reserva', () => {
     },
   });
 
-  it('un pago cubierto por un pot sale de la Reserva y no de Transacciones', () => {
+  it('un pago cubierto por un pot cuenta como gasto en flujo y baja la Reserva', () => {
     const r = clasificarMovimientoEconomicoMp(pagoDesdePot('OPEX/TAX', 37328.77));
-    expect(r.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
-    expect(r.statsExclude).toBe(true);
+    expect(r.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_PAYMENT);
+    expect(r.statsExclude).toBe(false);
+    expect(r.isInternal).toBe(false);
     expect(r.potName).toBe('OPEX/TAX');
     expect(r.potId).toBe('fdc61236-51c3-4e78-bd4f-f706e705c2c8');
     expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin)
-      .toContain(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+      .not.toContain(MP_MOVEMENT_KINDS.RESERVE_PAYMENT);
+    expect(buildLedgerMatch('inversiones')['origen.metadata.movementKind'].$in)
+      .toContain(MP_MOVEMENT_KINDS.RESERVE_PAYMENT);
     expect(acumularBucketInversiones(r.movementKind, 'EGRESO', 37328.77)).toEqual({ rescatado: 37328.77 });
   });
 
@@ -65,13 +70,14 @@ describe('pagos que salen de un pot de la Reserva', () => {
       netAmount: 37328.77,
       userIsPayer: false,
     });
-    expect(propio.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(propio.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_PAYMENT);
     expect(propio.potName).toBe('OPEX/TAX');
-    expect(ajeno.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(ajeno.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_PAYMENT);
   });
 
   it('un pago parcialmente cubierto por el pot no se toma como salida de reserva', () => {
     const r = clasificarMovimientoEconomicoMp(pagoDesdePot('OPEX/TAX', 37328.77, 10000));
+    expect(r.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_PAYMENT);
     expect(r.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
     expect(r.potName).toBeUndefined();
   });
@@ -376,7 +382,7 @@ describe('buildLedgerMatch', () => {
   it('el libro dólares queda afuera del flujo y de inversiones', () => {
     const dolares = buildLedgerMatch('dolares');
     expect(dolares['origen.metadata.movementKind'].$in).toEqual([
-      'FX_SELL', 'FX_BUY', 'USD_IN', 'USD_OUT', 'USD_PAYMENT',
+      'FX_SELL', 'FX_BUY', 'USD_IN', 'USD_OUT', 'USD_PAYMENT', 'USD_YIELD',
     ]);
     expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
       expect.arrayContaining(['FX_SELL', 'FX_BUY'])
@@ -391,6 +397,12 @@ describe('buildLedgerMatch', () => {
     });
     expect(acumularBucketDolares('USD_IN', 2990, 2990)).toEqual({ usdRecibido: 2990 });
     expect(acumularBucketDolares('USD_PAYMENT', 40, 40)).toEqual({ usdPagado: 40 });
+    expect(acumularBucketDolares('USD_YIELD', 0.02, 0, 0.02)).toEqual({ usdRendimientos: 0.02 });
+    // El lado USD de una venta MEP ya está en FX_SELL: no se suma dos veces.
+    expect(acumularBucketDolares('USD_OUT', 100, 0, 100, true)).toEqual({});
+    expect(acumularBucketDolares('USD_IN', 57.86, 0, 57.86, true)).toEqual({});
+    // El grupo mezclado no pierde filas: la cantidad es la de la fila (face).
+    expect(acumularBucketDolares('USD_OUT', 2946, 0, 2946)).toEqual({ usdEnviado: 2946 });
     const recibido = clasificarMovimientoEconomicoMp({
       operationType: 'account_fund',
       paymentMethod: 'bank_transfer',
@@ -667,6 +679,7 @@ describe('buildLedgerMatch', () => {
   it('compara la reserva consigo misma y deja el rescate de inversión aparte', () => {
     expect(acumularBucketInversiones('RESERVE_LOCK', 'EGRESO', 100)).toEqual({ enviado: 100 });
     expect(acumularBucketInversiones('RESERVE_RELEASE', 'INGRESO', 60)).toEqual({ rescatado: 60 });
+    expect(acumularBucketInversiones('RESERVE_PAYMENT', 'EGRESO', 45)).toEqual({ rescatado: 45 });
     expect(acumularBucketInversiones('INVESTMENT_IN', 'EGRESO', 80)).toEqual({ ingresado: 80 });
     expect(acumularBucketInversiones('INVESTMENT_OUT', 'INGRESO', 40)).toEqual({ rescatadoInversion: 40 });
     expect(acumularBucketInversiones('INVESTMENT_YIELD', 'INGRESO', 5)).toEqual({ rendimientosReserva: 5 });
@@ -834,5 +847,79 @@ describe('nextHistoryChunk', () => {
     expect(chunk.beginDate).toBe(parseHistorySince('2025-01-01').toISOString());
     expect(chunk.endDate).toBe(covered.toISOString());
     expect(chunk.quedaHistorial).toBe(false);
+  });
+});
+
+describe('saldos acumulados de la cuenta Mercado Pago', () => {
+  const ARS = 'ars';
+  const fila = (kind, tipo, total, extra = {}) => ({
+    _id: {
+      kind, tipo, moneda: ARS, compraventa: false, flujo: false, side: 'cuenta', ...extra.id,
+    },
+    total,
+    usd: extra.usd || 0,
+    face: extra.face || 0,
+  });
+
+  it('reparte el rendimiento entre cuenta, reserva e inversión según el texto', () => {
+    expect(ladoRendimientoSaldo('')).toBe('cuenta');
+    expect(ladoRendimientoSaldo('Rendimiento de tu dinero')).toBe('cuenta');
+    expect(ladoRendimientoSaldo('Rendimiento de reserva')).toBe('reserva');
+    expect(ladoRendimientoSaldo('asset_management_gain')).toBe('inversion');
+    expect(ladoRendimientoSaldo('Rendimiento de reserva en fondo de inversión')).toBe('inversion');
+  });
+
+  it('dinero en cuenta: caja más rendimiento propio, sin lo que fue a reserva o fondo', () => {
+    const rows = [
+      fila('PAYMENT', 'INGRESO', 1000, { id: { flujo: true } }),
+      fila('PAYMENT', 'EGRESO', 300, { id: { flujo: true } }),
+      fila('RESERVE_LOCK', 'EGRESO', 200),
+      fila('RESERVE_RELEASE', 'INGRESO', 50),
+      fila('INVESTMENT_IN', 'EGRESO', 100),
+      fila('INVESTMENT_OUT', 'INGRESO', 40),
+      fila('INVESTMENT_YIELD', 'INGRESO', 5, { id: { side: 'cuenta' } }),
+    ];
+    expect(calcularSaldosMercadoPago(rows, { monedaPesosId: ARS }).dineroEnCuenta)
+      .toBe(1000 - 300 - 200 + 50 - 100 + 40 + 5);
+  });
+
+  it('un pago desde reserva baja el reservado y no la cuenta', () => {
+    const rows = [
+      fila('PAYMENT', 'INGRESO', 1000, { id: { flujo: true } }),
+      fila('RESERVE_LOCK', 'EGRESO', 400),
+      fila('RESERVE_PAYMENT', 'EGRESO', 90, { id: { flujo: true } }),
+    ];
+    const saldos = calcularSaldosMercadoPago(rows, { monedaPesosId: ARS });
+    expect(saldos.dineroEnCuenta).toBe(1000 - 90 - 400 + 90);
+    expect(saldos.reservado).toBe(400 - 90);
+  });
+
+  it('reservado e invertido suman su propio rendimiento', () => {
+    const rows = [
+      fila('RESERVE_LOCK', 'EGRESO', 400),
+      fila('RESERVE_RELEASE', 'INGRESO', 100),
+      fila('INVESTMENT_YIELD', 'INGRESO', 12, { id: { side: 'reserva' } }),
+      fila('INVESTMENT_IN', 'EGRESO', 500),
+      fila('INVESTMENT_OUT', 'INGRESO', 200),
+      fila('INVESTMENT_YIELD', 'INGRESO', 30, { id: { side: 'inversion' } }),
+      fila('INVESTMENT_YIELD', 'EGRESO', 4, { id: { side: 'inversion' } }),
+    ];
+    const saldos = calcularSaldosMercadoPago(rows, { monedaPesosId: ARS });
+    expect(saldos.reservado).toBe(400 - 100 + 12);
+    expect(saldos.invertido).toBe(500 - 200 + 30 - 4);
+    expect(saldos.rendimientos).toBe(12 + 30 - 4);
+  });
+
+  it('dólares: compraventa, movimientos y rendimiento, y pesos de la compraventa en la cuenta', () => {
+    const rows = [
+      fila('FX_BUY', 'EGRESO', 130000, { usd: 100 }),
+      fila('FX_SELL', 'INGRESO', 26000, { usd: 20 }),
+      fila('USD_IN', 'INGRESO', 10, { face: 10, id: { moneda: 'usd' } }),
+      fila('USD_PAYMENT', 'EGRESO', 5, { face: 5, id: { moneda: 'usd' } }),
+      fila('USD_YIELD', 'INGRESO', 0.5, { face: 0.5, id: { moneda: 'usd' } }),
+    ];
+    const saldos = calcularSaldosMercadoPago(rows, { monedaPesosId: ARS });
+    expect(saldos.dolares).toBeCloseTo(100 - 20 + 10 - 5 + 0.5, 6);
+    expect(saldos.dineroEnCuenta).toBe(26000 - 130000);
   });
 });

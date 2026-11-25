@@ -26,6 +26,7 @@ export const MP_MOVEMENT_KIND_LABELS = {
   // Copy corto: son moves internos, no plata que entra/sale
   RESERVE_RELEASE: 'Desde reserva',
   RESERVE_LOCK: 'A reserva',
+  RESERVE_PAYMENT: 'Pago desde reserva',
   INVESTMENT_IN: 'A inversión',
   INVESTMENT_OUT: 'Desde inversión',
   INVESTMENT_YIELD: 'Rendimiento',

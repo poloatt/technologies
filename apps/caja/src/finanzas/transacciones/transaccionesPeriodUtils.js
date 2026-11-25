@@ -8,7 +8,7 @@ export const YEAR_PRESETS = [
 
 export const MONTH_PRESET = {
   id: 'month',
-  label: 'Mensual',
+  label: 'M',
   hint: 'Un mes calendario. Las flechas recorren otros meses.',
 };
 
@@ -246,6 +246,17 @@ export function fillDailySeries(porDia, fechaInicio, fechaFin) {
     const egresos = day?.egresos || 0;
     return { fecha, ingresos, egresos, neto: ingresos - egresos };
   });
+}
+
+/** Dólares con centavos y signo solo si es negativo: "U$D 1.234,56". */
+export function formatUsdMonto(monto, showValues) {
+  if (!showValues) return '****';
+  const n = Number(monto) || 0;
+  const body = Math.abs(n).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${n < 0 ? '−' : ''}U$D ${body}`;
 }
 
 export function formatMonto(monto, simbolo, showValues) {

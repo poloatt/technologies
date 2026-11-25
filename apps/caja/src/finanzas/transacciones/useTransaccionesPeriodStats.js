@@ -58,6 +58,13 @@ export function useTransaccionesPeriodStats({
       porMoneda,
       fechaInicio: data.fechaInicio,
       fechaFin: data.fechaFin,
+      // Totales USD de toda la cuenta (no por moneda): el libro dólares se lee de acá.
+      usdVendido: data.usdVendido ?? 0,
+      usdComprado: data.usdComprado ?? 0,
+      usdRecibido: data.usdRecibido ?? 0,
+      usdEnviado: data.usdEnviado ?? 0,
+      usdPagado: data.usdPagado ?? 0,
+      usdRendimientos: data.usdRendimientos ?? 0,
     };
   }, [data, rangeMatches, params.fechaInicio, params.fechaFin]);
 

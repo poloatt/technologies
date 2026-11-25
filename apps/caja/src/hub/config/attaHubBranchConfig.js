@@ -37,7 +37,8 @@ export const CAJA_HUB_BRANCHES = {
       deudores: DeudoresHubSection,
     },
     // Cuentas y Monedas se abren como popup desde el header, no como sección del hub.
-    hubExcludePageIds: ['cuentas', 'monedas'],
+    // 'dolares', 'inversiones' y 'creditos' ocultos temporalmente del hub (quitar de esta lista para volver a mostrarlos).
+    hubExcludePageIds: ['cuentas', 'monedas', 'dolares', 'inversiones', 'creditos'],
     getStripPages: getFinanzasBranchPages,
   },
   propiedades: {

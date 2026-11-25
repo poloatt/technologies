@@ -94,7 +94,9 @@ function DetailRow({ label, value, icon = null }) {
 
 function positionSign(kind, tipo) {
   if (kind === 'RESERVE_LOCK' || kind === 'INVESTMENT_IN' || kind === 'FX_SELL' || kind === 'USD_IN') return '+';
-  if (kind === 'RESERVE_RELEASE' || kind === 'INVESTMENT_OUT' || kind === 'FX_BUY' || kind === 'USD_OUT' || kind === 'USD_PAYMENT') return '−';
+  // Un rescate de reserva puede entrar a la cuenta (INGRESO): el signo depende del tipo.
+  if (kind === 'RESERVE_RELEASE') return tipo === 'INGRESO' ? '+' : '−';
+  if (kind === 'INVESTMENT_OUT' || kind === 'FX_BUY' || kind === 'USD_OUT' || kind === 'USD_PAYMENT') return '−';
   return tipo === 'EGRESO' ? '−' : '+';
 }
 

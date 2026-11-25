@@ -12,6 +12,9 @@ export const BRANCH_TRANSACCIONES_PATHS = {
 };
 
 export const MONEDAS_PATH = '/finanzas/monedas';
+export const INVERSIONES_PATH = '/finanzas/inversiones';
+export const DOLARES_PATH = '/finanzas/dolares';
+export const CREDITOS_PATH = '/finanzas/creditos';
 export const CUENTAS_PATH = BRANCH_CUENTAS_PATHS.finanzas;
 
 /** @typedef {'finanzas' | 'propiedades' | 'inventario'} FinanzasBranchId */

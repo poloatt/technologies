@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { createSchema, commonFields } from './BaseSchema.js';
 import { parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
-import { buildLedgerMatch } from '../services/mercadoPagoUtils.js';
+import { buildLedgerMatch, MP_CREDITOS_KINDS } from '../services/mercadoPagoUtils.js';
 
 const transaccionSchema = createSchema({
   descripcion: {
@@ -186,8 +186,10 @@ transaccionSchema.methods.getLabel = function() {
   return `${tipoSymbol}${this.monto} - ${this.descripcion}`;
 };
 
-// Saldo de la cuenta: todo movimiento completado que entra o sale del disponible
-// (flujo, reservas, rescates y rendimientos). `ledger: 'flujo'` deja solo la caja.
+// Saldo de la cuenta: todo movimiento completado que entra o sale del dinero de la cuenta
+// (caja, reservas, rescates, rendimientos, dólares e inversiones). Las compras con tarjeta
+// no son dinero de la cuenta: el efectivo sale cuando se paga el resumen (pago de crédito).
+// `ledger: 'flujo'` deja solo la caja.
 transaccionSchema.statics.getBalance = async function(cuentaId, options = {}) {
   const { estado = 'PAGADO', fechaFin, ledger = 'disponible' } = options;
 
@@ -196,6 +198,10 @@ transaccionSchema.statics.getBalance = async function(cuentaId, options = {}) {
   };
   if (ledger === 'flujo' || ledger === 'inversiones') {
     Object.assign(match, buildLedgerMatch(ledger));
+  } else if (ledger === 'disponible') {
+    // Pesos: sin compras con tarjeta y sin movimientos en USD (esos van al libro dólares).
+    match['origen.metadata.movementKind'] = { $nin: [...MP_CREDITOS_KINDS] };
+    match['origen.metadata.currencyId'] = { $ne: 'USD' };
   }
   const estadoFilter = buildEstadoFilter(estado);
   if (estadoFilter) match.estado = estadoFilter;

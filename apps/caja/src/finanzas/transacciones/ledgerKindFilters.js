@@ -28,7 +28,7 @@ export const INVERSION_TYPE_FILTERS = [
   {
     id: 'reserve',
     label: 'Reservado',
-    kinds: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'INVESTMENT_YIELD', 'YIELD'],
+    kinds: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'RESERVE_PAYMENT', 'INVESTMENT_YIELD', 'YIELD'],
     yieldSide: 'reserva',
   },
   {

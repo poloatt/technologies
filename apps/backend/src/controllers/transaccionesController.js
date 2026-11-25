@@ -5,8 +5,13 @@ import { arMonthBounds, formatArDateKey, parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
 import { addCalendarMonths, arDateKey, cuotaEnRangoClave, expandirCuotas } from '../../../shared/utils/cuotasCredito.js';
 import {
+  MP_CREDITOS_KINDS,
+  MP_FLUJO_EXCLUDED_KINDS,
+  SALDOS_YIELD_INVERSION_SOURCE,
+  SALDOS_YIELD_RESERVA_SOURCE,
   acumularBucketDolares,
   acumularBucketInversiones,
+  calcularSaldosMercadoPago,
   applyMovementKindFilter,
   applyYieldSideFilter,
   buildLedgerMatch,
@@ -80,6 +85,7 @@ class TransaccionesController extends BaseController {
 
     // Bind de los métodos al contexto de la instancia
     this.getStats = this.getStats.bind(this);
+    this.getSaldos = this.getSaldos.bind(this);
     this.getBalance = this.getBalance.bind(this);
     this.getByCuenta = this.getByCuenta.bind(this);
     this.create = this.create.bind(this);
@@ -238,6 +244,7 @@ class TransaccionesController extends BaseController {
                 kind: '$origen.metadata.movementKind',
                 tipo: '$tipo',
                 moneda: '$moneda',
+                compraventa: { $eq: ['$origen.metadata.compraventa', true] },
                 yieldSide: {
                   $cond: [
                     { $in: ['$origen.metadata.movementKind', ['INVESTMENT_YIELD', 'YIELD']] },
@@ -274,6 +281,24 @@ class TransaccionesController extends BaseController {
                     to: 'double',
                     onError: 0,
                     onNull: 0,
+                  },
+                },
+              },
+              // Cantidad en dólares por fila: usdAmount si existe, si no el monto (las filas USD ya vienen en USD).
+              face: {
+                $sum: {
+                  $let: {
+                    vars: {
+                      u: {
+                        $convert: {
+                          input: '$origen.metadata.usdAmount',
+                          to: 'double',
+                          onError: 0,
+                          onNull: 0,
+                        },
+                      },
+                    },
+                    in: { $cond: [{ $gt: ['$$u', 0] }, '$$u', { $ifNull: ['$monto', 0] }] },
                   },
                 },
               },
@@ -347,6 +372,7 @@ class TransaccionesController extends BaseController {
             usdRecibido: 0,
             usdEnviado: 0,
             usdPagado: 0,
+            usdRendimientos: 0,
             pesosVenta: 0,
             pesosCompra: 0,
             dias: new Map(),
@@ -394,6 +420,7 @@ class TransaccionesController extends BaseController {
       let usdRecibido = 0;
       let usdEnviado = 0;
       let usdPagado = 0;
+      let usdRendimientos = 0;
       let pesosVenta = 0;
       let pesosCompra = 0;
       for (const row of kinds) {
@@ -402,12 +429,13 @@ class TransaccionesController extends BaseController {
         const kind = row._id?.kind;
         const monedaId = row._id?.moneda?.toString?.() || row._id?.moneda || 'sin-moneda';
         const entry = ensureMoneda(monedaId);
-        const dolares = acumularBucketDolares(kind, monto, row.usd);
+        const dolares = acumularBucketDolares(kind, monto, row.usd, row.face, row._id?.compraventa === true);
         entry.usdVendido += dolares.usdVendido || 0;
         entry.usdComprado += dolares.usdComprado || 0;
         entry.usdRecibido += dolares.usdRecibido || 0;
         entry.usdEnviado += dolares.usdEnviado || 0;
         entry.usdPagado += dolares.usdPagado || 0;
+        entry.usdRendimientos += dolares.usdRendimientos || 0;
         entry.pesosVenta += dolares.pesosVenta || 0;
         entry.pesosCompra += dolares.pesosCompra || 0;
         usdVendido += dolares.usdVendido || 0;
@@ -415,6 +443,7 @@ class TransaccionesController extends BaseController {
         usdRecibido += dolares.usdRecibido || 0;
         usdEnviado += dolares.usdEnviado || 0;
         usdPagado += dolares.usdPagado || 0;
+        usdRendimientos += dolares.usdRendimientos || 0;
         pesosVenta += dolares.pesosVenta || 0;
         pesosCompra += dolares.pesosCompra || 0;
         const bucket = acumularBucketInversiones(kind, tipo, monto, row._id?.yieldSide);
@@ -456,6 +485,7 @@ class TransaccionesController extends BaseController {
             usdRecibido: m.usdRecibido,
             usdEnviado: m.usdEnviado,
             usdPagado: m.usdPagado,
+            usdRendimientos: m.usdRendimientos,
             pesosVenta: m.pesosVenta,
             pesosCompra: m.pesosCompra,
             rendimientos: (m.rendimientosReserva || 0) + (m.rendimientosInversion || 0),
@@ -492,6 +522,7 @@ class TransaccionesController extends BaseController {
         usdRecibido,
         usdEnviado,
         usdPagado,
+        usdRendimientos,
         pesosVenta,
         pesosCompra,
         neto: netoInversiones,
@@ -510,6 +541,140 @@ class TransaccionesController extends BaseController {
       });
     } catch (error) {
       console.error('Error en getStats transacciones:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Deuda de tarjeta pendiente: cuotas de todas las compras cuyo mes ya pasó el
+   * mes corriente (el resumen del mes en curso se da por pagado).
+   */
+  async saldoCreditoPendiente({ usuario, estadoFilter, cuenta }) {
+    const hoy = new Date();
+    const query = {
+      usuario,
+      fecha: { $gte: addCalendarMonths(hoy, -60), $lte: hoy },
+      'origen.metadata.movementKind': { $in: [...MP_CREDITOS_KINDS] },
+    };
+    if (estadoFilter) query.estado = estadoFilter;
+    if (cuenta) query.cuenta = cuenta;
+    const docs = await this.Model.find(query).select('fecha monto origen.metadata').lean();
+    const mesCorriente = formatArDateKey(hoy).slice(0, 7);
+    let pendiente = 0;
+    for (const doc of docs) {
+      const cuotas = expandirCuotas({
+        fecha: doc.fecha,
+        monto: doc.monto,
+        installments: doc.origen?.metadata?.installments,
+        installmentAmount: doc.origen?.metadata?.installmentAmount,
+      });
+      for (const cuota of cuotas) {
+        if (arDateKey(cuota.due).slice(0, 7) > mesCorriente) pendiente += Number(cuota.amount) || 0;
+      }
+    }
+    return Math.round(pendiente * 100) / 100;
+  }
+
+  // GET /api/transacciones/saldos?cuenta
+  // Saldos acumulados de la cuenta Mercado Pago, sin período: dinero en cuenta,
+  // reservado, invertido, dólares y crédito pendiente.
+  async getSaldos(req, res) {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Usuario no autenticado' });
+      }
+      const usuario = new mongoose.Types.ObjectId(req.user.id);
+      const estadoFilter = buildEstadoFilter('PAGADO');
+      const query = { usuario };
+      if (estadoFilter) query.estado = estadoFilter;
+      let cuentaId = null;
+      if (req.query.cuenta) {
+        if (!mongoose.Types.ObjectId.isValid(req.query.cuenta)) {
+          return res.status(400).json({ error: 'ID de cuenta inválido' });
+        }
+        cuentaId = new mongoose.Types.ObjectId(req.query.cuenta);
+        query.cuenta = cuentaId;
+      }
+
+      const cuentaMp = await Cuentas.findOne(
+        cuentaId ? { _id: cuentaId, usuario } : { usuario, tipo: 'MERCADO_PAGO' },
+      ).lean();
+      const monedaPesosId = cuentaMp?.moneda?._id ?? cuentaMp?.moneda ?? null;
+
+      const kindField = '$origen.metadata.movementKind';
+      const usdAmount = {
+        $convert: { input: '$origen.metadata.usdAmount', to: 'double', onError: 0, onNull: 0 },
+      };
+      const textoRendimiento = {
+        $concat: [
+          { $ifNull: ['$descripcion', ''] },
+          ' ',
+          { $ifNull: ['$origen.metadata.description', ''] },
+          ' ',
+          { $ifNull: ['$origen.metadata.operationType', ''] },
+        ],
+      };
+      const esFlujo = {
+        $and: [
+          { $ne: ['$origen.metadata.statsExclude', true] },
+          { $ne: ['$origen.metadata.isInternal', true] },
+          { $not: [{ $in: [kindField, [...MP_FLUJO_EXCLUDED_KINDS]] }] },
+        ],
+      };
+
+      const [rows, creditoPendiente] = await Promise.all([
+        this.Model.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: {
+                kind: kindField,
+                tipo: '$tipo',
+                moneda: '$moneda',
+                compraventa: { $eq: ['$origen.metadata.compraventa', true] },
+                flujo: esFlujo,
+                side: {
+                  $switch: {
+                    branches: [
+                      {
+                        case: { $regexMatch: { input: textoRendimiento, regex: SALDOS_YIELD_INVERSION_SOURCE, options: 'i' } },
+                        then: 'inversion',
+                      },
+                      {
+                        case: { $regexMatch: { input: textoRendimiento, regex: SALDOS_YIELD_RESERVA_SOURCE, options: 'i' } },
+                        then: 'reserva',
+                      },
+                    ],
+                    default: 'cuenta',
+                  },
+                },
+              },
+              total: { $sum: { $ifNull: ['$monto', 0] } },
+              usd: { $sum: usdAmount },
+              face: {
+                $sum: {
+                  $let: {
+                    vars: { u: usdAmount },
+                    in: { $cond: [{ $gt: ['$$u', 0] }, '$$u', { $ifNull: ['$monto', 0] }] },
+                  },
+                },
+              },
+            },
+          },
+        ]),
+        this.saldoCreditoPendiente({ usuario, estadoFilter, cuenta: cuentaId }),
+      ]);
+
+      const saldos = calcularSaldosMercadoPago(rows, { monedaPesosId });
+      res.json({
+        ...saldos,
+        // La deuda baja el patrimonio: se informa con signo negativo.
+        credito: -creditoPendiente,
+        cuenta: cuentaMp ? { id: cuentaMp._id, nombre: cuentaMp.nombre } : null,
+        monedaId: monedaPesosId ? String(monedaPesosId) : null,
+      });
+    } catch (error) {
+      console.error('Error en getSaldos transacciones:', error);
       res.status(500).json({ error: error.message });
     }
   }

@@ -1,0 +1,40 @@
+import { useEffect } from 'react';
+import { useAPI } from '@shared/hooks/useAPI';
+
+const EMPTY = {
+  dineroEnCuenta: 0,
+  reservado: 0,
+  invertido: 0,
+  rendimientos: 0,
+  dolares: 0,
+  credito: 0,
+};
+
+/**
+ * Saldos acumulados de la cuenta Mercado Pago (no dependen del período).
+ * Solo consulta mientras `enabled`; se refresca cuando cambian las transacciones.
+ */
+export function useSaldosCuenta({ enabled = true, cuentaId } = {}) {
+  const { data, loading, error, refetch } = useAPI(
+    enabled ? '/api/transacciones/saldos' : null,
+    {
+      params: cuentaId ? { cuenta: cuentaId } : {},
+      enableCache: true,
+      cacheDuration: 60000,
+    },
+  );
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const onRefresh = () => refetch();
+    window.addEventListener('transaccionesRefreshed', onRefresh);
+    return () => window.removeEventListener('transaccionesRefreshed', onRefresh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
+
+  return {
+    saldos: data ? { ...EMPTY, ...data } : null,
+    loading: enabled && loading,
+    error: enabled ? error : null,
+  };
+}

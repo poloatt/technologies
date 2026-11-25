@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Box, Skeleton, Typography } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { filterToggleRowSx, getFilterToggleHubRowSx } from '@shared/styles/filterToggleStyles';
-import { hubLabelSx, hubPeriodSx } from '../../hub';
+import { hubLabelSx, hubEyebrowSx } from '../../hub';
 import FilterToggleButton from '../FilterToggleButton';
 import HubBalanceDivider from '../hub/HubBalanceDivider';
+import { HubBalanceRow } from '@shared/components/hub';
+import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
@@ -56,6 +58,7 @@ export default function InversionesResumen({
   onKindsChange,
 }) {
   const { showValues } = useValuesVisibility();
+  const { nombre: cuentaNombre } = useCuentaMostrada();
   const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
     density,
     preset,
@@ -121,32 +124,22 @@ export default function InversionesResumen({
   } else {
     body = (
       <>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 1,
-            mb: dense ? 0 : 1.5,
-          }}
-        >
-          <Typography
-            sx={{
-              fontWeight: 700,
-              fontSize: dense ? '1rem' : '1.75rem',
-              lineHeight: 1.15,
-              letterSpacing: '-0.02em',
-              color: resultadoColor,
-            }}
-          >
-            {conSigno(resultado, simbolo, showValues)}
-          </Typography>
-          {dense && (
-            <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0, flexShrink: 0, textAlign: 'right' }}>
+        <HubBalanceRow
+          cuenta={cuentaNombre}
+          amount={conSigno(resultado, simbolo, showValues)}
+          color={resultadoColor}
+          dense={dense}
+          mb={dense ? 0 : 1.5}
+          below={dense && showPeriodControl ? (
+            // En el hub Finanzas el período se muestra una sola vez, junto al selector.
+            <Typography
+              variant="caption"
+              sx={{ ...hubEyebrowSx, display: 'block', mb: 0, textAlign: 'right' }}
+            >
               {span}
             </Typography>
-          )}
-        </Box>
+          ) : null}
+        />
         {dense && <HubBalanceDivider />}
         <Box sx={dense ? getFilterToggleHubRowSx() : filterToggleRowSx}>
           {groups.map((group) => (
@@ -189,7 +182,7 @@ export default function InversionesResumen({
           )}
         </Box>
         {!dense && (
-          <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
+          <Typography variant="caption" sx={{ ...hubEyebrowSx, mb: 0 }}>
             {span}
             {monedas.length > 1 ? ` · ${activa.codigo || 'moneda'}` : ''}
           </Typography>
