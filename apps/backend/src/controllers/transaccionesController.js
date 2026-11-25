@@ -11,7 +11,6 @@ import {
   buildLedgerMatch,
   buildListLedgerMatch,
   resultadoFci,
-  stockReserva,
 } from '../services/mercadoPagoUtils.js';
 
 const STATS_TZ = 'America/Argentina/Buenos_Aires';
@@ -281,52 +280,8 @@ class TransaccionesController extends BaseController {
           },
         ])
         : Promise.resolve([]);
-      const stockQuery = { ...query };
-      delete stockQuery.fecha;
-      const stockPromise = ledger === 'inversiones'
-        ? this.Model.aggregate([
-          { $match: stockQuery },
-          {
-            $group: {
-              _id: {
-                kind: '$origen.metadata.movementKind',
-                tipo: '$tipo',
-                moneda: '$moneda',
-                yieldSide: {
-                  $cond: [
-                    { $in: ['$origen.metadata.movementKind', ['INVESTMENT_YIELD', 'YIELD']] },
-                    {
-                      $cond: [
-                        {
-                          $regexMatch: {
-                            input: {
-                              $concat: [
-                                { $ifNull: ['$descripcion', ''] },
-                                ' ',
-                                { $ifNull: ['$origen.metadata.description', ''] },
-                                ' ',
-                                { $ifNull: ['$origen.metadata.operationType', ''] },
-                              ],
-                            },
-                            regex: 'asset_management|inversi|\\bfci\\b|investment',
-                            options: 'i',
-                          },
-                        },
-                        'inversion',
-                        'reserva',
-                      ],
-                    },
-                    null,
-                  ],
-                },
-              },
-              total: { $sum: { $ifNull: ['$monto', 0] } },
-            },
-          },
-        ])
-        : Promise.resolve([]);
 
-      const [resultados, dias, kinds, stockRows] = await Promise.all([
+      const [resultados, dias, kinds] = await Promise.all([
         this.Model.aggregate([
           { $match: query },
           {
@@ -365,7 +320,6 @@ class TransaccionesController extends BaseController {
           },
         ]),
         kindPromise,
-        stockPromise,
       ]);
 
       let ingresos = 0;
@@ -478,25 +432,10 @@ class TransaccionesController extends BaseController {
       }
       const rendimientos = rendimientosReserva + rendimientosInversion;
 
-      const stockPorMoneda = new Map();
-      for (const row of stockRows || []) {
-        const monedaId = row._id?.moneda?.toString?.() || row._id?.moneda || 'sin-moneda';
-        const bucket = acumularBucketInversiones(row._id?.kind, row._id?.tipo, row.total || 0, row._id?.yieldSide);
-        const acc = stockPorMoneda.get(monedaId) || { enviado: 0, rescatado: 0, rendimientosReserva: 0 };
-        acc.enviado += bucket.enviado || 0;
-        acc.rescatado += bucket.rescatado || 0;
-        acc.rendimientosReserva += bucket.rendimientosReserva || 0;
-        stockPorMoneda.set(monedaId, acc);
-        ensureMoneda(monedaId);
-      }
-      let stockReservaTotal = 0;
-      for (const acc of stockPorMoneda.values()) stockReservaTotal += stockReserva(acc);
-
       const porMoneda = [...porMonedaMap.values()]
         .map((m) => {
           const porDia = [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
           const neto = resultadoFci(m);
-          const reservaStock = stockReserva(stockPorMoneda.get(m.monedaId) || {});
           return {
             monedaId: m.monedaId,
             codigo: m.codigo,
@@ -519,7 +458,6 @@ class TransaccionesController extends BaseController {
             pesosVenta: m.pesosVenta,
             pesosCompra: m.pesosCompra,
             rendimientos: (m.rendimientosReserva || 0) + (m.rendimientosInversion || 0),
-            stockReserva: reservaStock,
             neto,
             porDia,
           };
@@ -548,7 +486,6 @@ class TransaccionesController extends BaseController {
         ingresado,
         rescatadoInversion,
         rendimientos,
-        stockReserva: stockReservaTotal,
         usdVendido,
         usdComprado,
         usdRecibido,

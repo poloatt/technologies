@@ -33,6 +33,17 @@ import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
 
+function pendingInsideWindow(pending, beginDate, endDate) {
+  if (!pending?.beginDate || !pending?.endDate) return undefined;
+  const from = new Date(pending.beginDate).getTime();
+  const to = new Date(pending.endDate).getTime();
+  const windowFrom = new Date(beginDate).getTime();
+  const windowTo = new Date(endDate).getTime();
+  if ([from, to, windowFrom, windowTo].some((value) => Number.isNaN(value))) return undefined;
+  if (to < windowFrom || from > windowTo) return undefined;
+  return pending;
+}
+
 function camposCuotas(pago) {
   if (!pago || typeof pago !== 'object') return {};
   const installments = Number(pago.installments);
@@ -511,8 +522,13 @@ export class BankSyncService {
         });
         const beginDate = fechaDesde.toISOString();
         const endDate = fechaHasta.toISOString();
-        const pending = bankConnection.mercadopago?.reportePendiente;
-        const report = await reportService.fetchAllSettlementMovements(beginDate, endDate, { pending });
+        const storedPending = bankConnection.mercadopago?.reportePendiente;
+        const pending = pendingInsideWindow(storedPending, beginDate, endDate);
+        // Rápido es un solo reporte de la ventana de 90 días.
+        // El recorrido mes a mes queda solo para el sync histórico.
+        const report = historialMode
+          ? await reportService.fetchAllSettlementMovements(beginDate, endDate, { pending })
+          : await reportService.fetchSettlementMovements(beginDate, endDate, { pending });
 
         totalCsvRows = report.total || report.rows?.length || 0;
 

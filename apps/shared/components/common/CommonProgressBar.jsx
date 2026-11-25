@@ -36,6 +36,9 @@ const ProgressBar = ({
   
   // Estilos personalizados
   sx = {},
+
+  // Barra en movimiento mientras no hay un valor cerrado
+  indeterminate = false,
   
   // Contexto específico
   isAssets = false
@@ -123,9 +126,9 @@ const ProgressBar = ({
           )}
         </Box>
       )}
-      <LinearProgress 
-        variant="determinate" 
-        value={progressValue}
+      <LinearProgress
+        variant={indeterminate ? 'indeterminate' : 'determinate'}
+        value={indeterminate ? undefined : progressValue}
         sx={{ 
           height: finalHeight,
           borderRadius: 0,

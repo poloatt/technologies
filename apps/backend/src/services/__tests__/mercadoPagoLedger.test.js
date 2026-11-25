@@ -19,7 +19,6 @@ import {
   normalizeAccountMovement,
   parseHistorySince,
   resultadoFci,
-  stockReserva,
 } from '../mercadoPagoUtils.js';
 
 describe('clasificarMovimientoEconomicoMp libros', () => {
@@ -552,7 +551,6 @@ describe('buildLedgerMatch', () => {
       rescatadoInversion: 40,
       rendimientos: 5,
     })).toBe((100 - 60) + (80 - 40) + 5);
-    expect(stockReserva({ enviado: 1000, rescatado: 200, rendimientosReserva: 35 })).toBe(835);
   });
 });
 

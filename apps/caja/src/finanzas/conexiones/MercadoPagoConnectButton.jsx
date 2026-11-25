@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, CircularProgress, Alert, Box } from '@mui/material';
+import { Button, Alert, Box } from '@mui/material';
 import { FORM_HEIGHTS } from '@shared/config/uiConstants';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
 import { isMercadoPagoEnabled, getRedirectURI } from '@shared/config/mercadopago';
@@ -15,7 +15,7 @@ try {
 }
 
 export default function MercadoPagoConnectButton({ onSuccess, onError, fullWidth = false }) {
-  const { connecting, connect } = useMercadoPago();
+  const { connect } = useMercadoPago();
   const [localError, setLocalError] = useState(null);
 
   const handleConnect = async () => {
@@ -73,7 +73,6 @@ export default function MercadoPagoConnectButton({ onSuccess, onError, fullWidth
       )}
       <Button
         onClick={handleConnect}
-        disabled={connecting}
         sx={{
           minWidth: 0,
           minHeight: 48,
@@ -87,14 +86,10 @@ export default function MercadoPagoConnectButton({ onSuccess, onError, fullWidth
           justifyContent: 'center',
           background: 'transparent',
           '&:hover': { bgcolor: 'grey.900' },
-          '&:disabled': { opacity: 0.6 }
         }}
         fullWidth={fullWidth}
       >
-        {connecting ? (
-          <CircularProgress size={24} color="inherit" />
-        ) : (
-          mercadopagoLogo ? (
+        {mercadopagoLogo ? (
             <img 
               src={mercadopagoLogo} 
               alt="MercadoPago" 
@@ -117,7 +112,6 @@ export default function MercadoPagoConnectButton({ onSuccess, onError, fullWidth
             }}>
               Conectar MercadoPago
             </Box>
-          )
         )}
       </Button>
     </Box>

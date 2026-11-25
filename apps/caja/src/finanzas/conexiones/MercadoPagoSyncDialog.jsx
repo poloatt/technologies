@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import EmergentWindow from '@shared/components/common/EmergentWindow';
 import { getApiBaseUrl } from '@shared/config/apiBaseUrl';
-import MercadoPagoConnectButton from './MercadoPagoConnectButton';
 import MercadoPagoSyncOptions, { SyncModePill } from './MercadoPagoSyncOptions';
 
 function bankConnectionsUrl() {
@@ -33,9 +32,12 @@ export default function MercadoPagoSyncDialog({ open, onClose, onSuccess }) {
     setHistorico(false);
     setLoaded(false);
     const token = localStorage.getItem('token');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     fetch(bankConnectionsUrl(), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       credentials: 'include',
+      signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
       .then((data) => {
@@ -48,10 +50,13 @@ export default function MercadoPagoSyncDialog({ open, onClose, onSuccess }) {
         if (!cancel) setConexion(null);
       })
       .finally(() => {
+        clearTimeout(timeoutId);
         if (!cancel) setLoaded(true);
       });
     return () => {
       cancel = true;
+      controller.abort();
+      clearTimeout(timeoutId);
     };
   }, [open]);
 
@@ -69,45 +74,25 @@ export default function MercadoPagoSyncDialog({ open, onClose, onSuccess }) {
       bodySx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', px: 2 }}>
-        {!loaded ? (
-          <CircularProgress size={22} />
-        ) : conexionId(conexion) ? (
-          <MercadoPagoSyncOptions
-            connectionId={conexionId(conexion)}
-            historial={conexion.mercadopago?.historial}
-            historico={historico}
-            onHistoricoChange={setHistorico}
-            showPill={false}
-            onBusyChange={handleBusy}
-            onSynced={(result) => {
-              const chunk = result?.resultado?.historial;
-              if (chunk) {
-                setConexion((current) => (current
-                  ? { ...current, mercadopago: { ...current.mercadopago, historial: chunk } }
-                  : current));
-              }
-              onSuccess?.(result);
-              window.dispatchEvent(new CustomEvent('cuentasRefreshed'));
-            }}
-          />
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, width: '100%', maxWidth: 360 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-              Conectá Mercado Pago para importar la cuenta.
-            </Typography>
-            <MercadoPagoConnectButton
-              fullWidth
-              onSuccess={() => {
-                onSuccess?.();
-                onClose?.();
-                window.dispatchEvent(new CustomEvent('cuentasRefreshed'));
-              }}
-              onError={(error) => {
-                console.error('Error en conexión MercadoPago:', error);
-              }}
-            />
-          </Box>
-        )}
+        <MercadoPagoSyncOptions
+          connectionId={conexionId(conexion)}
+          ready={loaded}
+          historial={conexion?.mercadopago?.historial}
+          historico={historico}
+          onHistoricoChange={setHistorico}
+          showPill={false}
+          onBusyChange={handleBusy}
+          onSynced={(result) => {
+            const chunk = result?.resultado?.historial;
+            if (chunk) {
+              setConexion((current) => (current
+                ? { ...current, mercadopago: { ...current.mercadopago, historial: chunk } }
+                : current));
+            }
+            onSuccess?.(result);
+            window.dispatchEvent(new CustomEvent('cuentasRefreshed'));
+          }}
+        />
       </Box>
     </EmergentWindow>
   );

@@ -1329,18 +1329,6 @@ export function acumularBucketDolares(kind, monto, usd) {
   return {};
 }
 
-/**
- * Saldo de reserva importado: pases de todo el historial más el rendimiento acreditado en la reserva.
- * El rendimiento del período se muestra aparte.
- */
-export function stockReserva({
-  enviado = 0,
-  rescatado = 0,
-  rendimientosReserva = 0,
-} = {}) {
-  return (Number(enviado) || 0) - (Number(rescatado) || 0) + (Number(rendimientosReserva) || 0);
-}
-
 /** Saldo que quedó: reservado − volvió, más invertido − rescatado, más el rendimiento de cada cuenta. */
 export function resultadoFci({
   enviado = 0,

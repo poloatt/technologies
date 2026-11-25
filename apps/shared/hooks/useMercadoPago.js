@@ -41,6 +41,7 @@ export const useMercadoPago = () => {
       console.error('Error conectando con MercadoPago:', error);
       enqueueSnackbar(error.message, { variant: 'error' });
       setConnectionStatus('error');
+    } finally {
       setConnecting(false);
     }
   }, [enqueueSnackbar]);

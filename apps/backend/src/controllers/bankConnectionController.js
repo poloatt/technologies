@@ -292,7 +292,7 @@ class BankConnectionController extends BaseController {
       const historialPedido = req.body?.mode === 'historial';
       const options = historialPedido
         ? { mode: 'historial', since: req.body?.since }
-        : {};
+        : { mode: 'rapido' };
       const resultado = await this.bankSyncService.sincronizarConexion(conexion, options);
 
       if (resultado?.exito === false && resultado?.error) {

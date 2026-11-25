@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import { useSnackbar } from 'notistack';
+import CommonProgressBar from '@shared/components/common/CommonProgressBar';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
+import mercadopagoService from '@shared/services/mercadopagoService';
 import {
   TASK_FORM_PILL_FILL_BG,
   TASK_FORM_PILL_FONT_SIZE,
@@ -23,17 +25,6 @@ function historyTarget() {
   return new Date(`${HISTORIAL_DESDE}T00:00:00.000-03:00`);
 }
 
-function monthKey(date) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    year: 'numeric',
-    month: '2-digit',
-  }).formatToParts(date);
-  const year = parts.find((part) => part.type === 'year')?.value;
-  const month = parts.find((part) => part.type === 'month')?.value;
-  return year && month ? `${year}-${month}` : '';
-}
-
 function monthStamp(date) {
   if (!date || Number.isNaN(date.getTime())) return '';
   const raw = date.toLocaleDateString('es-AR', {
@@ -53,7 +44,7 @@ function buildHistorySpan(now = new Date()) {
     const begin = new Date(edge);
     begin.setMonth(begin.getMonth() - 1);
     if (begin.getTime() < target.getTime()) begin.setTime(target.getTime());
-    months.push({ begin, key: monthKey(begin) });
+    months.push({ begin });
     if (begin.getTime() <= target.getTime()) break;
     edge = begin;
   }
@@ -61,12 +52,11 @@ function buildHistorySpan(now = new Date()) {
 }
 
 function coveredCount(months, cubiertoHasta) {
-  if (!cubiertoHasta) return 0;
-  const key = monthKey(new Date(cubiertoHasta));
-  if (!key) return 0;
+  const until = new Date(cubiertoHasta).getTime();
+  if (!cubiertoHasta || Number.isNaN(until)) return 0;
   let count = 0;
   for (const month of months) {
-    if (month.key >= key) count += 1;
+    if (month.begin.getTime() >= until) count += 1;
     else break;
   }
   return count;
@@ -76,14 +66,6 @@ function progressDoneFrom(historial, span) {
   if (!historial?.cubiertoHasta) return 0;
   if (historial.completo || historial.quedaHistorial === false) return span.total;
   return coveredCount(span.months, historial.cubiertoHasta);
-}
-
-function progressLabelFrom(historial, span, done) {
-  if (!span.total) return '';
-  if (done >= span.total) return monthStamp(span.months[span.total - 1]?.begin);
-  if (done <= 0) return monthStamp(span.months[0]?.begin);
-  const at = historial?.ultimoMes?.beginDate || historial?.cubiertoHasta;
-  return monthStamp(at ? new Date(at) : span.months[done - 1]?.begin);
 }
 
 function formatDay(value) {
@@ -190,6 +172,7 @@ export default function MercadoPagoSyncOptions({
   historial = null,
   showPill = true,
   onBusyChange,
+  ready = true,
 }) {
   const { loading, syncConnection } = useMercadoPago();
   const { enqueueSnackbar } = useSnackbar();
@@ -222,13 +205,6 @@ export default function MercadoPagoSyncOptions({
   };
 
   const runHistorico = async () => {
-    const storedDone = progressDoneFrom(historial, span);
-    const atMonth = (index) => span.months[Math.min(Math.max(index, 0), Math.max(span.total - 1, 0))];
-    setFlight({
-      label: monthStamp(atMonth(storedDone)?.begin),
-      done: storedDone,
-    });
-
     const recent = await syncConnection(connectionId, { silent: true });
     if (!cancelRef.current) onSynced?.(recent);
     if (cancelRef.current || stopped(recent)) {
@@ -240,13 +216,17 @@ export default function MercadoPagoSyncOptions({
     }
 
     let last = recent;
-    let cursor = null;
-    let done = storedDone;
+    let done = progressDoneFrom(historial, span);
+    let cursorTime = historial?.cubiertoHasta ? new Date(historial.cubiertoHasta).getTime() : null;
+    if (cursorTime != null && Number.isNaN(cursorTime)) cursorTime = null;
+
     for (let step = 0; step < span.total; step += 1) {
       if (cancelRef.current || done >= span.total) return last;
-      const current = span.months[done];
+      const current = span.months[Math.min(done, span.total - 1)];
       if (!current) break;
-      setFlight({ label: monthStamp(current.begin), done });
+      if (!cancelRef.current) {
+        setFlight({ label: monthStamp(current.begin), done, active: true });
+      }
       const result = await syncConnection(connectionId, {
         mode: 'historial',
         since: HISTORIAL_DESDE,
@@ -255,20 +235,18 @@ export default function MercadoPagoSyncOptions({
       last = result;
       const chunk = result?.resultado?.historial;
       if (!cancelRef.current) onSynced?.(result);
+      const finished = Boolean(chunk?.completo || chunk?.quedaHistorial === false);
+      const halted = !chunk || finished || chunk.cuotaAgotada || chunk.pendiente;
+      const nextTime = chunk?.cubiertoHasta ? new Date(chunk.cubiertoHasta).getTime() : NaN;
+      const movedBack = Number.isFinite(nextTime) && (cursorTime == null || nextTime < cursorTime);
+      if (!halted && !movedBack) break;
+      if (movedBack) cursorTime = nextTime;
+      const covered = finished ? span.total : coveredCount(span.months, chunk?.cubiertoHasta);
+      done = finished ? span.total : Math.min(span.total, Math.max(covered, movedBack ? done + 1 : done));
       const reached = chunk?.ultimoMes?.beginDate || chunk?.cubiertoHasta;
       const label = reached ? monthStamp(new Date(reached)) : monthStamp(current.begin);
-      const halted = !chunk || chunk.completo || chunk.cuotaAgotada || chunk.pendiente || chunk.quedaHistorial === false;
-      const finished = !chunk || chunk.completo || chunk.quedaHistorial === false;
-      let covered = finished ? span.total : coveredCount(span.months, chunk?.cubiertoHasta);
-      if (!halted && covered <= done) covered = Math.min(span.total, done + 1);
-      done = covered;
-      if (!cancelRef.current) setFlight({ label, done });
-      if (!chunk || chunk.completo || chunk.cuotaAgotada || chunk.pendiente || chunk.quedaHistorial === false) {
-        break;
-      }
-      const nextCursor = chunk.cubiertoHasta || '';
-      if (nextCursor && nextCursor === cursor) break;
-      cursor = nextCursor;
+      if (!cancelRef.current) setFlight({ label, done, active: false });
+      if (halted) break;
     }
     if (cancelRef.current) return last;
     const note = describeRun(last?.resultado?.historial);
@@ -279,21 +257,29 @@ export default function MercadoPagoSyncOptions({
     return last;
   };
 
-  const run = async () => {
-    if (!connectionId || loading || running) return;
+  const openMercadoPago = async () => {
+    try {
+      await mercadopagoService.connect();
+    } catch (error) {
+      enqueueSnackbar(error.message || 'No se pudo abrir Mercado Pago', { variant: 'error' });
+    }
+  };
+
+  const run = async (wantHistory = false) => {
+    if (loading || running || !ready || !connectionId) return;
     cancelRef.current = false;
     setRunning(true);
     try {
-      if (historico) {
+      if (wantHistory) {
         await runHistorico();
       } else {
-        const result = await syncConnection(connectionId, {});
+        const result = await syncConnection(connectionId, { mode: 'rapido' });
         onSynced?.(result);
       }
     } catch {
       // El hook ya muestra el error.
     } finally {
-      if (!cancelRef.current) setRunning(false);
+      setRunning(false);
     }
   };
 
@@ -303,11 +289,7 @@ export default function MercadoPagoSyncOptions({
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
 
-  const storedDone = progressDoneFrom(historial, span);
-  const storedLabel = progressLabelFrom(historial, span, storedDone);
-  const progressDone = flight?.done ?? storedDone;
-  const progressLabel = flight?.label || storedLabel;
-  const progressRatio = span.total ? Math.min(1, progressDone / span.total) : 0;
+  const showProgress = running && historico && flight && span.total > 0;
 
   return (
     <Box sx={{
@@ -326,11 +308,8 @@ export default function MercadoPagoSyncOptions({
       <Box
         component="button"
         type="button"
-        aria-label={busy
-          ? (historico ? 'Trayendo historial' : 'Sincronizando')
-          : 'Sincronizar Mercado Pago'}
-        disabled={busy || !connectionId}
-        onClick={run}
+        aria-label="Abrir Mercado Pago"
+        onClick={openMercadoPago}
         sx={{
           appearance: 'none',
           alignSelf: 'center',
@@ -343,55 +322,27 @@ export default function MercadoPagoSyncOptions({
           borderRadius: 0,
           bgcolor: 'transparent',
           cursor: 'pointer',
-          opacity: busy || !connectionId ? 0.5 : 1,
           '&:hover': { bgcolor: 'action.hover' },
-          '&:disabled': { cursor: 'default' },
         }}
       >
-        {busy ? (
-          <CircularProgress size={22} />
-        ) : (
-          <img
-            src={mercadopagoLogo}
-            alt=""
-            style={{ width: 148, height: 38, objectFit: 'contain', display: 'block' }}
-          />
-        )}
+        <img
+          src={mercadopagoLogo}
+          alt=""
+          style={{ width: 148, height: 38, objectFit: 'contain', display: 'block' }}
+        />
       </Box>
-      {historico && span.total > 0 && (
-        <Box sx={{ alignSelf: 'stretch', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          <Typography
-            component="p"
-            sx={{
-              m: 0,
-              textAlign: 'center',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              letterSpacing: '0.04em',
-              color: 'text.secondary',
-            }}
-          >
-            <Box component="span" sx={{ color: 'text.primary' }}>{progressLabel}</Box>
-            {` / ${span.total} meses`}
-          </Typography>
-          <Box
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={span.total}
-            aria-valuenow={Math.min(progressDone, span.total)}
-            aria-label={`${progressLabel} de ${span.total} meses`}
-            sx={{ height: 2, bgcolor: 'divider', overflow: 'hidden' }}
-          >
-            <Box
-              sx={{
-                width: `${progressRatio * 100}%`,
-                height: '100%',
-                bgcolor: 'text.primary',
-                transition: 'width 240ms ease',
-              }}
-            />
-          </Box>
-        </Box>
+      {showProgress && (
+        <CommonProgressBar
+          value={flight.done}
+          maxValue={span.total}
+          leftLabel={flight.label}
+          rightLabel={`${flight.done} / ${span.total}`}
+          indeterminate={flight.active && flight.done <= 0}
+          showLabels
+          variant="compact"
+          color="primary"
+          sx={{ alignSelf: 'stretch', width: '100%' }}
+        />
       )}
     </Box>
   );
