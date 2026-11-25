@@ -507,11 +507,17 @@ class BankConnectionController extends BaseController {
       }
 
       const { authUrl, state, codeVerifier } = getAuthUrl(redirectUri);
+      const syncMode = req.query.sync_mode === 'historial' ? 'historial' : 'rapido';
 
       // state + redirect + PKCE verifier (servidor; no exponer al cliente)
+      // El modo viaja en la sesión: al volver de Mercado Pago el navegador ya no lo tiene.
       req.session.mercadopagoState = state;
       req.session.mercadopagoRedirectUri = redirectUri;
       req.session.mercadopagoCodeVerifier = codeVerifier;
+      req.session.mercadopagoSyncMode = syncMode;
+      req.session.mercadopagoSyncSince = typeof req.query.sync_since === 'string' && req.query.sync_since
+        ? req.query.sync_since
+        : '2010-01-01';
 
       await new Promise((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
@@ -692,21 +698,25 @@ class BankConnectionController extends BaseController {
         conexionId: conexion._id
       });
 
+      // El modo queda en la sesión desde el auth-url. Hay que leerlo antes de limpiarla.
+      const historialPedido = req.session?.mercadopagoSyncMode === 'historial'
+        || req.body?.mode === 'historial';
+      const since = req.session?.mercadopagoSyncSince || req.body?.since || '2010-01-01';
+
       // Limpiar OAuth/PKCE antes de responder (el sync no debe bloquear el callback)
       if (req.session) {
         delete req.session.mercadopagoState;
         delete req.session.mercadopagoRedirectUri;
         delete req.session.mercadopagoCodeVerifier;
+        delete req.session.mercadopagoSyncMode;
+        delete req.session.mercadopagoSyncSince;
         await new Promise((resolve) => {
           req.session.save(() => resolve());
         });
       }
 
       // Sync en background: settlement puede tardar >2 min y hacía fallar el OAuth en el browser.
-      // El modo lo eligió el usuario antes de ir a Mercado Pago.
       const conexionId = conexion._id;
-      const historialPedido = req.body?.mode === 'historial';
-      const since = req.body?.since || '2010-01-01';
       setImmediate(async () => {
         try {
           if (!historialPedido) {

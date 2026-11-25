@@ -100,6 +100,27 @@ async function findTransaccionMp(cuenta, ids) {
   });
 }
 
+/** Ids de pago de Mercado Pago. Una referencia corta no alcanza para borrar copias. */
+function idsOperacionMp(...values) {
+  return idsMp(values).filter((key) => /^\d{8,}$/.test(key));
+}
+
+/** El pago y el reporte del mismo id no pueden convivir como dos transacciones. */
+async function dejarUnaSolaMp(cuenta, canonical, ids) {
+  const keys = idsOperacionMp(ids);
+  if (!cuenta || !canonical?._id || !keys.length) return;
+  const numeric = keys.map((key) => Number(key));
+  await Transacciones.deleteMany({
+    cuenta,
+    _id: { $ne: canonical._id },
+    'origen.tipo': { $in: MP_ORIGEN_TIPOS },
+    $or: [
+      { 'origen.transaccionId': { $in: keys } },
+      { 'origen.metadata.paymentId': { $in: [...keys, ...numeric] } },
+    ],
+  });
+}
+
 export class BankSyncService {
   constructor() {
     this.encryptionKey = process.env.ENCRYPTION_KEY || 'default-key-change-in-production';
@@ -1216,6 +1237,11 @@ export class BankSyncService {
             await transaccionExistente.save();
             actualizadas++;
           }
+          await dejarUnaSolaMp(bankConnection.cuenta, transaccionExistente, [
+            pago.id,
+            transaccionExistente.origen?.transaccionId,
+            paymentMeta.paymentId,
+          ]);
           continue;
         }
 
@@ -1252,6 +1278,7 @@ export class BankSyncService {
 
         await nuevaTransaccion.save();
         nuevas++;
+        await dejarUnaSolaMp(bankConnection.cuenta, nuevaTransaccion, [pago.id]);
       } catch (error) {
         console.error(`Error procesando pago ${pago.id}:`, error.message);
       }
@@ -1379,6 +1406,7 @@ export class BankSyncService {
             currency_id: mov.payment?.currency_id || mov.currency || mov.raw?.CURRENCY,
             counter_currency: mov.payment?.counter_currency,
           }),
+          paymentId: mov.payment?.id || mov.raw?.payment_id || mov.raw?.reference_id || null,
           externalReference: mov.externalReference || mov.payment?.external_reference || null,
           currency: mov.currency,
           source: mov.payment ? 'settlement_enriched' : (mov.source || 'settlement_report'),
@@ -1400,6 +1428,10 @@ export class BankSyncService {
         const transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
           transaccionId,
           mov.payment?.id,
+          mov.raw?.payment_id,
+          mov.raw?.reference_id,
+          mov.raw?.REFERENCE_ID,
+          mov.raw?.SOURCE_ID,
           mov.externalReference,
           mov.payment?.external_reference,
         ]);
@@ -1481,6 +1513,15 @@ export class BankSyncService {
           } else {
             omitidas++;
           }
+          await dejarUnaSolaMp(bankConnection.cuenta, transaccionExistente, [
+            transaccionId,
+            mov.payment?.id,
+            mov.raw?.payment_id,
+            mov.raw?.reference_id,
+            mov.raw?.SOURCE_ID,
+            transaccionExistente.origen?.transaccionId,
+            transaccionExistente.origen?.metadata?.paymentId,
+          ]);
           continue;
         }
 
@@ -1514,6 +1555,13 @@ export class BankSyncService {
 
         await transaccion.save();
         nuevas++;
+        await dejarUnaSolaMp(bankConnection.cuenta, transaccion, [
+          transaccionId,
+          mov.payment?.id,
+          mov.raw?.payment_id,
+          mov.raw?.reference_id,
+          mov.raw?.SOURCE_ID,
+        ]);
       } catch (error) {
         console.error(`Error procesando movimiento ${mov.id}:`, error.message);
       }

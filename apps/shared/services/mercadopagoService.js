@@ -17,14 +17,18 @@ class MercadoPagoService {
    * @returns {Promise<{authUrl: string, state: string}>} URL de autorización y state
    * @throws {Error} Si hay error en la comunicación con el backend
    */
-  async getAuthUrl() {
+  async getAuthUrl({ mode, since } = {}) {
     try {
       const redirectURI = getRedirectURI();
       console.log('🔵 [MercadoPagoService] getAuthUrl - baseURL:', this.baseURL);
       console.log('🔵 [MercadoPagoService] getAuthUrl - redirectURI:', redirectURI);
       
       const { data } = await clienteAxios.get(`${this.baseURL}/auth-url`, {
-        params: { redirect_uri: redirectURI },
+        params: {
+          redirect_uri: redirectURI,
+          sync_mode: mode === 'historial' ? 'historial' : 'rapido',
+          ...(since ? { sync_since: since } : {}),
+        },
         timeout: this.timeout
       });
       
@@ -113,9 +117,9 @@ class MercadoPagoService {
    * @returns {Promise<void>}
    * @throws {Error} Si hay error al iniciar la conexión
    */
-  async connect() {
+  async connect({ mode, since } = {}) {
     try {
-      const { authUrl, state } = await this.getAuthUrl();
+      const { authUrl, state } = await this.getAuthUrl({ mode, since });
       
       console.log('🔵 [MercadoPagoService] connect - authUrl:', authUrl);
       console.log('🔵 [MercadoPagoService] connect - state:', state);

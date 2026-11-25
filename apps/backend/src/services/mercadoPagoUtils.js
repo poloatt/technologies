@@ -495,7 +495,7 @@ export const MP_MOVEMENT_KIND_LABELS = {
 // Evitar match amplio de "reserva" suelto (falsos positivos sobre pagos/descripciones)
 // digital_accounts / wallet: códigos crudos de parking/reserva en Account Money AR
 const RESERVE_RELEASE_RE =
-  /extracci[oó]n\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|sacar\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|retir(?:ar|aste|o)\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|release.?reserve|unpark|desde\s+(?:(?:la|tu|mi)\s+)?reserva|reserve_for_.*_cancel|salida\s+de\s+(?:(?:la|tu|mi)\s+)?reserva/i;
+  /extracci[oó]n\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|sacar\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|retir(?:ar|aste|o)\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|release.?reserve|unpark|desde\s+(?:(?:la|tu|mi)\s+)?reserva|reserve_for_.*_cancel|salida\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|pag(?:ar|o|aste|ó|ue)\s+con\s+(?:(?:la|tu|mi)\s+)?reserva|usando\s+(?:(?:la|tu|mi)\s+)?reserva/i;
 const RESERVE_LOCK_RE =
   /a\s+(?:(?:la|tu|mi)\s+)?reserva|enviar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|guardar\s+en\s+(?:(?:la|tu|mi)\s+)?reserva|env[ií]o\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|pasar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|mover\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|lock.?reserve|parking|reserve_for_(?!.*_cancel)/i;
 // digital_accounts_cards es la partición de la tarjeta, no la Reserva.
@@ -867,20 +867,29 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 4) Pase disponible ↔ reserva.
-  // Entra al flujo: al reservar sale del disponible y al usar la reserva vuelve.
-  // Si el regreso no suma, el pago del comercio resta una segunda vez.
+  // 4) Pase disponible ↔ reserva. Vive en el libro de reservas, no en Transacciones.
   // partition_transfer, digital_accounts o el branch pot alcanzan: un pago
   // con reserva trae el branch aunque el operation_type sea el del comercio.
+  const poiInfo = (
+    input.point_of_interaction || input.payment?.point_of_interaction || {}
+  ).business_info || {};
   const branch = reserveBranchOf({
-    businessBranch: input.businessBranch || metadata?.businessBranch,
+    businessBranch: input.businessBranch || metadata?.businessBranch || poiInfo.branch,
     metadata,
     point_of_interaction: input.payment?.point_of_interaction || input.point_of_interaction
   }).toLowerCase();
+  const canalReserva = [poiInfo.sub_unit, poiInfo.subUnit, poiInfo.unit, branch]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  // Un pago elegido "con reserva" trae el pot en el canal, no un partition_transfer.
+  const pagoConReserva = /pag(?:ar|o|aste|ó|ue)\s+con\s+(?:(?:la|tu|mi)\s+)?reserva|usando\s+(?:(?:la|tu|mi)\s+)?reserva/i.test(blob)
+    || /\bpots?\b|from_reserve|reserve_payment/.test(canalReserva);
   const looksReserveInternal =
     operationType === 'partition_transfer' ||
     branch.includes('am-to-pot') ||
     branch.includes('pot-to-am') ||
+    pagoConReserva ||
     RESERVE_INTERNAL_CODE_RE.test(blob) ||
     RESERVE_RELEASE_RE.test(blob) ||
     RESERVE_LOCK_RE.test(blob);
@@ -908,6 +917,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     let release = false;
     if (branch.includes('am-to-pot')) release = false;
     else if (branch.includes('pot-to-am')) release = true;
+    else if (pagoConReserva && netAmount < 0 && !RESERVE_LOCK_RE.test(blob)) release = true;
     else if (!etiquetaPropia && RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
       release = true;
     } else if (!etiquetaPropia && RESERVE_LOCK_RE.test(blob) && !RESERVE_RELEASE_RE.test(blob)) {
@@ -919,12 +929,12 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       movementKind: release
         ? MP_MOVEMENT_KINDS.RESERVE_RELEASE
         : MP_MOVEMENT_KINDS.RESERVE_LOCK,
-      statsExclude: false,
+      statsExclude: true,
       label: release
         ? MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE
         : MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
       isTransfer: false,
-      isInternal: false
+      isInternal: true
     };
   }
 
@@ -1134,13 +1144,6 @@ export const MP_INVERSIONES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.YIELD
 ]);
 
-/** Fondo y rendimiento. La reserva no va acá: también mueve el disponible. */
-const MP_FONDO_KINDS = Object.freeze([
-  MP_MOVEMENT_KINDS.INVESTMENT_IN,
-  MP_MOVEMENT_KINDS.INVESTMENT_OUT,
-  MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
-  MP_MOVEMENT_KINDS.YIELD
-]);
 
 /** Libro dólares: movimientos, compraventa y pagos en USD. No entran al flujo. */
 export const MP_DOLARES_KINDS = Object.freeze([
@@ -1157,7 +1160,7 @@ export const MP_CREDITOS_KINDS = Object.freeze([
 ]);
 
 export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
-  ...MP_FONDO_KINDS,
+  ...MP_INVERSIONES_KINDS,
   ...MP_DOLARES_KINDS,
   ...MP_CREDITOS_KINDS,
   MP_MOVEMENT_KINDS.INTERNAL
@@ -1182,7 +1185,7 @@ export function isCreditosMovementKind(kind) {
 
 /**
  * Filtro de libro.
- * flujo: disponible. Incluye el pase a reserva y el regreso, y deja afuera el fondo, los dólares y la tarjeta.
+ * flujo: caja, sin reservas, fondo, dólares ni tarjeta.
  * inversiones: reserva, fondo y rendimientos.
  */
 export function buildLedgerMatch(ledger = 'flujo') {
@@ -1217,7 +1220,7 @@ export function buildListLedgerMatch(ledger = 'flujo') {
   if (ledger === 'creditos') return buildLedgerMatch('creditos');
   return {
     'origen.metadata.movementKind': {
-      $nin: [...MP_FONDO_KINDS, ...MP_DOLARES_KINDS, ...MP_CREDITOS_KINDS]
+      $nin: [...MP_INVERSIONES_KINDS, ...MP_DOLARES_KINDS, ...MP_CREDITOS_KINDS]
     }
   };
 }

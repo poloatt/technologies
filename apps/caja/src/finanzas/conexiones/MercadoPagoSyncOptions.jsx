@@ -270,10 +270,14 @@ export default function MercadoPagoSyncOptions({
 
   const openMercadoPago = async () => {
     try {
-      localStorage.setItem(SYNC_MODE_KEY, historico ? 'historial' : 'rapido');
+      const mode = historico ? 'historial' : 'rapido';
+      localStorage.setItem(SYNC_MODE_KEY, mode);
       if (historico) localStorage.setItem(SYNC_SINCE_KEY, HISTORIAL_DESDE);
       else localStorage.removeItem(SYNC_SINCE_KEY);
-      await mercadopagoService.connect();
+      await mercadopagoService.connect({
+        mode,
+        since: historico ? HISTORIAL_DESDE : undefined,
+      });
     } catch (error) {
       enqueueSnackbar(error.message || 'No se pudo abrir Mercado Pago', { variant: 'error' });
     }
