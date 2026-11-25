@@ -242,65 +242,176 @@ export function formatPaymentMethodLabel(method, methodId) {
   return base;
 }
 
+const GENERIC_COUNTERPARTY_SET = new Set([
+  ...Object.values(MP_TRANSACTION_TYPE_LABELS),
+  ...Object.keys(MP_TRANSACTION_TYPE_LABELS),
+  ...Object.values(MP_MOVEMENT_KIND_LABELS),
+  ...Object.keys(MP_MOVEMENT_KIND_LABELS),
+  ...Object.values(PAYMENT_METHOD_LABELS),
+  ...Object.keys(PAYMENT_METHOD_LABELS),
+  'MercadoPago',
+  'Mercado Pago',
+  'MercadoLibre',
+  'Mercado Libre',
+  'Pago',
+  'Pago con QR',
+  'Pago QR',
+  'Movimiento',
+  'Movimiento Mercado Pago',
+  'Transferencia',
+  'Transferencia bancaria',
+  'Dinero en cuenta',
+  'Tarjeta de credito',
+  'Tarjeta de debito',
+  'Devolucion',
+  'Comision',
+  'Retiro',
+  'account_money',
+  'available_money',
+  'credit_card',
+  'debit_card',
+  'prepaid_card',
+  'bank_transfer',
+  'debin_transfer',
+  'money_transfer',
+  'account_fund',
+  'regular_payment',
+  'pos_payment',
+  'cvu',
+  'cbu',
+  'ticket',
+  'atm',
+  'digital_accounts',
+  'digital_accounts_cards',
+  'wallet',
+  'marketplace',
+  'online_payments',
+  'point',
+  'qr',
+  'mobile_app',
+  'instore',
+  'p2p',
+].map((v) => String(v).toLowerCase()));
+
+const SYNTHETIC_MERCHANT_RE = /^comercio\s*#\d+$/i;
+const EMPTY_ITEM_TITLE_RE = /^(?:producto\s+)?sin\s+descripci[oó]n$/i;
+const COUNTERPARTY_PREFIX_RE =
+  /^(?:pago\s+(?:a|en)|pagaste\s+a|compra\s+en|transferencia\s+(?:a|de|hacia|desde|enviada\s+a|recibida\s+de)|transferiste\s+a|recibiste\s+de|env[ií]o\s+(?:de\s+dinero\s+)?(?:a|de))\s+/i;
+
+function isSyntheticMerchantId(name) {
+  return Boolean(name && SYNTHETIC_MERCHANT_RE.test(String(name).trim()));
+}
+
 function isGenericCounterpartyName(name) {
   if (!name) return true;
   const cleaned = String(name).trim();
   if (!cleaned) return true;
+  if (EMPTY_ITEM_TITLE_RE.test(cleaned)) return true;
   if (looksLikeMpInternalReserveText(cleaned)) return true;
-  const generic = new Set([
-    ...Object.values(MP_TRANSACTION_TYPE_LABELS),
-    ...Object.keys(MP_TRANSACTION_TYPE_LABELS),
-    'MercadoPago',
-    'Mercado Pago',
-    'Pago',
-    'Movimiento',
-    'Movimiento Mercado Pago',
-    'account_money',
-    'credit_card',
-    'debit_card',
-    'bank_transfer',
-    'ticket',
-    'atm',
-    'digital_accounts',
-    'digital_accounts_cards',
-    'wallet',
-    'marketplace',
-  ].map((v) => String(v).toLowerCase()));
-  return generic.has(cleaned.toLowerCase());
+  const lower = cleaned.toLowerCase();
+  if (GENERIC_COUNTERPARTY_SET.has(lower)) return true;
+
+  // Etiquetas compuestas de medio de pago, ej: "Dinero en cuenta · account money"
+  const parts = lower.split(/\s*[·]\s*/).filter(Boolean);
+  if (parts.length > 1 && parts.every((part) => GENERIC_COUNTERPARTY_SET.has(part) || GENERIC_COUNTERPARTY_SET.has(part.replace(/\s+/g, '_')))) {
+    return true;
+  }
+  return false;
+}
+
+function cleanCounterpartyCandidate(raw, { stripPrefix = false } = {}) {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed || isGenericCounterpartyName(trimmed)) return null;
+  if (stripPrefix) {
+    const stripped = trimmed.replace(COUNTERPARTY_PREFIX_RE, '').trim();
+    if (stripped && !isGenericCounterpartyName(stripped)) return stripped;
+  }
+  return trimmed;
+}
+
+function extractCounterpartyFromDescripcion(descripcion, origen) {
+  const formatted = formatMpTransactionDescription(descripcion, origen);
+  const cleaned = (formatted || '')
+    .replace(/^MercadoPago\s*[-–—]\s*/i, '')
+    .replace(/\s*\(Ref:[^)]*\)\s*$/i, '')
+    .trim();
+  if (!cleaned) return null;
+
+  const withoutMethodSuffix = cleaned.split(' · ')[0].trim();
+  if (!withoutMethodSuffix) return null;
+
+  // Soporta formatos como "account_money - Farmacity" o "Transferencia - Juan Perez"
+  const segments = withoutMethodSuffix.split(/\s+[-–—]\s+/);
+  for (const segment of segments) {
+    const candidate = cleanCounterpartyCandidate(segment, { stripPrefix: true });
+    if (candidate && !isSyntheticMerchantId(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 export function getCounterparty(transaccion) {
   const meta = getOrigenMetadata(transaccion?.origen);
+  const isTransfer = Boolean(
+    meta.isTransfer ||
+    meta.movementKind === 'EXTERNAL_TRANSFER' ||
+    meta.movementKind === 'P2P_TRANSFER' ||
+    String(meta.operationType || '').toLowerCase() === 'money_transfer'
+  );
+  const defaultLabel = transaccion?.tipo === 'EGRESO'
+    ? (isTransfer ? 'Transferiste a' : 'Pagaste a')
+    : 'Recibiste de';
 
-  const metaName = meta.counterpartyName || meta.businessName || meta.itemTitle || null;
-  if (metaName && !isGenericCounterpartyName(metaName)) {
+  const metaCandidates = [
+    { value: meta.counterpartyName, stripPrefix: false },
+    { value: meta.businessName, stripPrefix: false },
+    { value: meta.statementDescriptor, stripPrefix: false },
+    { value: meta.itemTitle, stripPrefix: false },
+    { value: meta.description, stripPrefix: true },
+  ];
+
+  let syntheticFallback = null;
+  for (const { value, stripPrefix } of metaCandidates) {
+    const cleaned = cleanCounterpartyCandidate(value, { stripPrefix });
+    if (!cleaned) continue;
+    if (isSyntheticMerchantId(cleaned)) {
+      if (!syntheticFallback) syntheticFallback = cleaned;
+      continue;
+    }
     return {
-      name: metaName,
-      label:
-        meta.counterpartyLabel ||
-        (transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de'),
+      name: cleaned,
+      label: meta.counterpartyLabel || defaultLabel,
       role: meta.counterpartyRole || null,
       email: meta.counterpartyEmail || null,
     };
   }
 
-  // Fallback: inferir desde descripción legacy (sin usar "Pago aprobado" como negocio)
-  const formatted = formatMpTransactionDescription(transaccion?.descripcion, transaccion?.origen);
-  const cleaned = (formatted || '').replace(/^MercadoPago\s*[-–—]\s*/i, '').trim();
-  if (!cleaned) return null;
-
-  const methodOnly = /^(credit_card|debit_card|account_money|bank_transfer|ticket|atm)\b/i;
-  const candidate = cleaned.split(' · ')[0].split(' (Ref:')[0].trim();
-  if (!candidate || methodOnly.test(candidate) || isGenericCounterpartyName(candidate)) {
-    return null;
+  // Fallback: inferir desde descripción (sin usar "Pago aprobado" / "Dinero en cuenta" como negocio)
+  const fromDescripcion = extractCounterpartyFromDescripcion(
+    transaccion?.descripcion,
+    transaccion?.origen
+  );
+  if (fromDescripcion) {
+    return {
+      name: fromDescripcion,
+      label: meta.counterpartyLabel || defaultLabel,
+      role: meta.counterpartyRole || null,
+      email: meta.counterpartyEmail || null,
+    };
   }
 
-  return {
-    name: candidate,
-    label: transaccion?.tipo === 'EGRESO' ? 'Pagaste a' : 'Recibiste de',
-    role: null,
-    email: null,
-  };
+  if (syntheticFallback) {
+    return {
+      name: syntheticFallback,
+      label: meta.counterpartyLabel || defaultLabel,
+      role: meta.counterpartyRole || null,
+      email: meta.counterpartyEmail || null,
+    };
+  }
+
+  return null;
 }
 
 /**

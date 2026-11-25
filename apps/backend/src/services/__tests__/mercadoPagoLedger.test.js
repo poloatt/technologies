@@ -22,6 +22,78 @@ import {
   resultadoFci,
 } from '../mercadoPagoUtils.js';
 
+describe('pagos que salen de un pot de la Reserva', () => {
+  const pagoDesdePot = (potName, monto, potMonto = monto) => ({
+    operationType: 'regular_payment',
+    transactionType: 'SETTLEMENT',
+    description: 'Edesur',
+    netAmount: -monto,
+    transaction_amount: monto,
+    amounts: {
+      payer: {
+        transaction_source: {
+          partitions: [
+            { partition: 'available_for_pots', amount: potMonto, subpartition: { id: 'fdc61236-51c3-4e78-bd4f-f706e705c2c8', name: potName } },
+          ],
+          sources: [
+            { partitions: [{ partition: 'available_for_pots', amount: potMonto, subpartition: { id: 'fdc61236-51c3-4e78-bd4f-f706e705c2c8', name: potName } }] },
+          ],
+        },
+      },
+    },
+  });
+
+  it('un pago cubierto por un pot sale de la Reserva y no de Transacciones', () => {
+    const r = clasificarMovimientoEconomicoMp(pagoDesdePot('OPEX/TAX', 37328.77));
+    expect(r.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(r.statsExclude).toBe(true);
+    expect(r.potName).toBe('OPEX/TAX');
+    expect(r.potId).toBe('fdc61236-51c3-4e78-bd4f-f706e705c2c8');
+    expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin)
+      .toContain(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(acumularBucketInversiones(r.movementKind, 'EGRESO', 37328.77)).toEqual({ rescatado: 37328.77 });
+  });
+
+  it('un pago parcialmente cubierto por el pot no se toma como salida de reserva', () => {
+    const r = clasificarMovimientoEconomicoMp(pagoDesdePot('OPEX/TAX', 37328.77, 10000));
+    expect(r.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(r.potName).toBeUndefined();
+  });
+
+  it('una entrada a un pot (AM-to-POT) es reserva in con el pot como destino', () => {
+    const r = clasificarMovimientoEconomicoMp({
+      operationType: 'partition_transfer',
+      businessBranch: 'AM-to-POT - Partition Transfer',
+      netAmount: -560000,
+      transaction_amount: 560000,
+      amounts: {
+        collector: {
+          transaction_destination: {
+            fund_partition: 'available_for_pots',
+            subpartition: { id: '56fa79ef-ef51-4497-a9a8-120bfe897b3c', name: 'CAPEX' },
+          },
+        },
+      },
+    });
+    expect(r.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
+    expect(r.potName).toBe('CAPEX');
+    expect(r.potId).toBe('56fa79ef-ef51-4497-a9a8-120bfe897b3c');
+  });
+
+  it('un pago sin pot sigue como pago normal', () => {
+    const r = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      transactionType: 'SETTLEMENT',
+      description: 'Edesur',
+      netAmount: -37328.77,
+      transaction_amount: 37328.77,
+      amounts: { payer: { transaction_source: { partitions: [{ partition: 'available_money', amount: 37328.77 }] } } },
+    });
+    expect(r.movementKind).toBe(MP_MOVEMENT_KINDS.PAYMENT);
+    expect(r.statsExclude).toBe(false);
+  });
+});
+
 describe('clasificarMovimientoEconomicoMp libros', () => {
   it('distingue reserva out e in por el branch aunque el usuario sea payer y collector', () => {
     const lockPago = {
@@ -268,27 +340,6 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
       .toContain(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
     expect(pago.movementKind).toBe(MP_MOVEMENT_KINDS.PAYMENT);
     expect(pago.statsExclude).toBe(false);
-  });
-
-  it('un pago elegido con reserva sale de la reserva y no de transacciones', () => {
-    const conPot = clasificarMovimientoEconomicoMp({
-      operationType: 'regular_payment',
-      transactionType: 'SETTLEMENT',
-      description: 'Edesur',
-      netAmount: -18000,
-      point_of_interaction: { business_info: { sub_unit: 'pots', unit: 'wallet' } },
-    });
-    const conTexto = clasificarMovimientoEconomicoMp({
-      operationType: 'regular_payment',
-      description: 'Pagaste con reserva Edenor',
-      netAmount: -5000,
-    });
-    expect(conPot.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
-    expect(conPot.statsExclude).toBe(true);
-    expect(conTexto.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
-    expect(conTexto.statsExclude).toBe(true);
-    expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin)
-      .toContain(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
   });
 });
 

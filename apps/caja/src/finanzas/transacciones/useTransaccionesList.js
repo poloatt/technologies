@@ -153,7 +153,12 @@ export function useTransaccionesList({
       if (generation.current !== gen) return;
       pageRef.current = data?.page || nextPage;
       hasMoreRef.current = pageHasMore(data);
-      setDocs((prev) => [...prev, ...(data?.docs || [])]);
+      setDocs((prev) => {
+        // Evita filas repetidas si una página trae documentos que ya están en la lista.
+        const seen = new Set(prev.map((doc) => String(doc.id || doc._id)));
+        const fresh = (data?.docs || []).filter((doc) => !seen.has(String(doc.id || doc._id)));
+        return [...prev, ...fresh];
+      });
       setHasMore(hasMoreRef.current);
     } catch (err) {
       if (generation.current !== gen || isCanceled(err)) return;

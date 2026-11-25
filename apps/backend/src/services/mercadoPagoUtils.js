@@ -202,25 +202,67 @@ export function limpiarNombreContraparte(name) {
   if (!name) return null;
   const cleaned = String(name).trim();
   if (!cleaned) return null;
+  if (/^(?:producto\s+)?sin\s+descripci[oó]n$/i.test(cleaned)) return null;
   const generic = new Set([
     ...Object.values(MP_TRANSACTION_TYPE_LABELS),
     ...Object.keys(MP_TRANSACTION_TYPE_LABELS),
     'MercadoPago',
     'Mercado Pago',
+    'MercadoLibre',
+    'Mercado Libre',
     'Pago',
+    'Pago con QR',
+    'Pago QR',
     'Movimiento',
+    'Movimiento Mercado Pago',
+    'Dinero en cuenta',
+    'Tarjeta de crédito',
+    'Tarjeta de credito',
+    'Tarjeta de débito',
+    'Tarjeta de debito',
+    'Tarjeta prepaga',
+    'Transferencia a usuario',
+    'Compra con tarjeta',
+    'Retiro de efectivo',
     'account_money',
+    'available_money',
     'credit_card',
     'debit_card',
+    'prepaid_card',
     'bank_transfer',
+    'debin_transfer',
+    'money_transfer',
+    'account_fund',
+    'regular_payment',
+    'pos_payment',
+    'cvu',
+    'cbu',
+    'ticket',
+    'atm',
     'digital_accounts',
-    'digital_accounts_cards'
+    'digital_accounts_cards',
+    'wallet',
+    'marketplace',
+    'online_payments',
+    'point',
+    'qr',
+    'mobile_app',
+    'instore',
+    'p2p'
   ].map((v) => String(v).toLowerCase()));
   if (generic.has(cleaned.toLowerCase())) return null;
   if (/\b(digital_accounts(?:_cards)?|asset_management|money_park)\b/i.test(cleaned)) {
     return null;
   }
   return cleaned;
+}
+
+function primeraContraparteValida(candidates) {
+  for (const candidate of candidates) {
+    const cleaned = limpiarNombreContraparte(candidate);
+    if (cleaned) return cleaned;
+  }
+  return null;
 }
 
 export function extraerContrapartePago(pago, userId) {
@@ -230,12 +272,9 @@ export function extraerContrapartePago(pago, userId) {
   const userIsPayer = payerId === mpUserId && collectorId !== mpUserId;
   const userIsCollector = collectorId === mpUserId && payerId !== mpUserId;
 
-  const businessName = (
-    pago?.point_of_interaction?.business_info?.name ||
-    pago?.point_of_interaction?.business_info?.unit ||
-    pago?.merchant?.name ||
-    ''
-  ).trim();
+  const businessInfoName = (pago?.point_of_interaction?.business_info?.name || '').trim();
+  const merchantName = (pago?.merchant?.name || '').trim();
+  const businessUnit = (pago?.point_of_interaction?.business_info?.unit || '').trim();
   const itemTitle = (pago?.additional_info?.items?.[0]?.title || '').trim();
   const description = (pago?.description || '').trim();
   const statement = (pago?.statement_descriptor || '').trim();
@@ -254,9 +293,15 @@ export function extraerContrapartePago(pago, userId) {
   const isTransfer = esTransferenciaPago(pago);
 
   if (userIsPayer) {
-    const name = limpiarNombreContraparte(
-      businessName || description || itemTitle || statement || counterpartyFromExtra || null
-    );
+    const name = primeraContraparteValida([
+      businessInfoName,
+      merchantName,
+      description,
+      itemTitle,
+      statement,
+      counterpartyFromExtra,
+      businessUnit
+    ]);
     return {
       role: 'destino',
       label: isTransfer ? 'Transferiste a' : 'Pagaste a',
@@ -267,9 +312,14 @@ export function extraerContrapartePago(pago, userId) {
   }
 
   if (userIsCollector) {
-    const name = limpiarNombreContraparte(
-      payerName || description || itemTitle || businessName || null
-    );
+    const name = primeraContraparteValida([
+      payerName,
+      description,
+      itemTitle,
+      businessInfoName,
+      merchantName,
+      businessUnit
+    ]);
     return {
       role: 'origen',
       label: 'Recibiste de',
@@ -279,9 +329,16 @@ export function extraerContrapartePago(pago, userId) {
     };
   }
 
-  const fallback = limpiarNombreContraparte(
-    businessName || description || itemTitle || statement || payerName || counterpartyFromExtra || null
-  );
+  const fallback = primeraContraparteValida([
+    businessInfoName,
+    merchantName,
+    description,
+    itemTitle,
+    statement,
+    payerName,
+    counterpartyFromExtra,
+    businessUnit
+  ]);
   return {
     role: 'contraparte',
     label: 'Contraparte',
@@ -495,7 +552,7 @@ export const MP_MOVEMENT_KIND_LABELS = {
 // Evitar match amplio de "reserva" suelto (falsos positivos sobre pagos/descripciones)
 // digital_accounts / wallet: códigos crudos de parking/reserva en Account Money AR
 const RESERVE_RELEASE_RE =
-  /extracci[oó]n\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|sacar\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|retir(?:ar|aste|o)\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|release.?reserve|unpark|desde\s+(?:(?:la|tu|mi)\s+)?reserva|reserve_for_.*_cancel|salida\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|pag(?:ar|o|aste|ó|ue)\s+con\s+(?:(?:la|tu|mi)\s+)?reserva|usando\s+(?:(?:la|tu|mi)\s+)?reserva/i;
+  /extracci[oó]n\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|sacar\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|retir(?:ar|aste|o)\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|release.?reserve|unpark|desde\s+(?:(?:la|tu|mi)\s+)?reserva|reserve_for_.*_cancel|salida\s+de\s+(?:(?:la|tu|mi)\s+)?reserva/i;
 const RESERVE_LOCK_RE =
   /a\s+(?:(?:la|tu|mi)\s+)?reserva|enviar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|guardar\s+en\s+(?:(?:la|tu|mi)\s+)?reserva|env[ií]o\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|pasar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|mover\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|lock.?reserve|parking|reserve_for_(?!.*_cancel)/i;
 // digital_accounts_cards es la partición de la tarjeta, no la Reserva.
@@ -755,6 +812,37 @@ export function datosCompraTarjeta(input = {}) {
 /**
  * @returns {{ movementKind: string, statsExclude: boolean, label: string, isTransfer: boolean, isInternal: boolean }}
  */
+/**
+ * Pago que sale de un pot de la Reserva de Mercado Pago (Edesur, Telecentro, etc.).
+ * Mercado Pago lo marca en amounts.payer.transaction_source: partition
+ * "available_for_pots" y el pot en subpartition (id y nombre). Solo cuenta si el
+ * pot cubre todo el monto; un pago mixto (parte pot, parte saldo) no se toma.
+ */
+export function datosPotPago(input = {}) {
+  const amounts = input.amounts || input.payment?.amounts || input.raw?.amounts;
+  const ts = amounts?.payer?.transaction_source;
+  if (!ts) return null;
+  // partitions y sources repiten la misma partición: usamos una sola lista.
+  const fuente = ts.partitions?.length
+    ? ts.partitions
+    : (ts.sources || []).flatMap((s) => s.partitions || []);
+  const pots = fuente.filter((x) => x?.partition === 'available_for_pots');
+  if (!pots.length) return null;
+  const cubierto = pots.reduce((suma, x) => suma + (Number(x.amount) || 0), 0);
+  const monto = Math.abs(Number(input.transaction_amount ?? input.payment?.transaction_amount ?? 0));
+  if (monto && cubierto + 0.01 < monto) return null;
+  const sub = pots[0].subpartition || {};
+  return { potId: sub.id || null, potName: sub.name || null };
+}
+
+/** Entrada a un pot (AM-to-POT): el pot viene como destino de la transferencia. */
+export function datosPotDestino(input = {}) {
+  const amounts = input.amounts || input.payment?.amounts || input.raw?.amounts;
+  const dest = amounts?.collector?.transaction_destination;
+  if (dest?.fund_partition !== 'available_for_pots' || !dest.subpartition) return null;
+  return { potId: dest.subpartition.id || null, potName: dest.subpartition.name || null };
+}
+
 export function clasificarMovimientoEconomicoMp(input = {}) {
   const transactionType = String(
     input.transactionType || input.TRANSACTION_TYPE || input.type || ''
@@ -867,29 +955,33 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
+  // 3b) Pago que sale de un pot de la Reserva: baja el Reservado y no entra a Transacciones.
+  // Un reembolso o contracargo hacia el pot entra positivo, así que solo tomamos egresos.
+  const pot = datosPotPago(input);
+  if (pot && !(netAmount > 0) && !/REFUND|CHARGEBACK/.test(transactionType)) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.RESERVE_RELEASE,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE,
+      isTransfer: false,
+      isInternal: false,
+      potId: pot.potId,
+      potName: pot.potName
+    };
+  }
+
   // 4) Pase disponible ↔ reserva. Vive en el libro de reservas, no en Transacciones.
   // partition_transfer, digital_accounts o el branch pot alcanzan: un pago
   // con reserva trae el branch aunque el operation_type sea el del comercio.
-  const poiInfo = (
-    input.point_of_interaction || input.payment?.point_of_interaction || {}
-  ).business_info || {};
   const branch = reserveBranchOf({
-    businessBranch: input.businessBranch || metadata?.businessBranch || poiInfo.branch,
+    businessBranch: input.businessBranch || metadata?.businessBranch,
     metadata,
     point_of_interaction: input.payment?.point_of_interaction || input.point_of_interaction
   }).toLowerCase();
-  const canalReserva = [poiInfo.sub_unit, poiInfo.subUnit, poiInfo.unit, branch]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  // Un pago elegido "con reserva" trae el pot en el canal, no un partition_transfer.
-  const pagoConReserva = /pag(?:ar|o|aste|ó|ue)\s+con\s+(?:(?:la|tu|mi)\s+)?reserva|usando\s+(?:(?:la|tu|mi)\s+)?reserva/i.test(blob)
-    || /\bpots?\b|from_reserve|reserve_payment/.test(canalReserva);
   const looksReserveInternal =
     operationType === 'partition_transfer' ||
     branch.includes('am-to-pot') ||
     branch.includes('pot-to-am') ||
-    pagoConReserva ||
     RESERVE_INTERNAL_CODE_RE.test(blob) ||
     RESERVE_RELEASE_RE.test(blob) ||
     RESERVE_LOCK_RE.test(blob);
@@ -917,7 +1009,6 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     let release = false;
     if (branch.includes('am-to-pot')) release = false;
     else if (branch.includes('pot-to-am')) release = true;
-    else if (pagoConReserva && netAmount < 0 && !RESERVE_LOCK_RE.test(blob)) release = true;
     else if (!etiquetaPropia && RESERVE_RELEASE_RE.test(blob) && !RESERVE_LOCK_RE.test(blob)) {
       release = true;
     } else if (!etiquetaPropia && RESERVE_LOCK_RE.test(blob) && !RESERVE_RELEASE_RE.test(blob)) {
@@ -925,6 +1016,7 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     } else {
       release = netAmount > 0;
     }
+    const potInfo = datosPotPago(input) || datosPotDestino(input);
     return {
       movementKind: release
         ? MP_MOVEMENT_KINDS.RESERVE_RELEASE
@@ -934,7 +1026,9 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
         ? MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE
         : MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
       isTransfer: false,
-      isInternal: true
+      isInternal: true,
+      potId: potInfo?.potId ?? null,
+      potName: potInfo?.potName ?? null
     };
   }
 
@@ -1426,23 +1520,27 @@ export function extraerContraparteMovimiento(row) {
 
   // Patrones frecuentes en CSV Account Money AR / movements
   const patterns = [
-    /(?:transferencia|pago|envio|envío|a|de|hacia|from|to)\s+(.+)$/i,
+    /^(?:transferencia\s+(?:a|de|hacia|desde|enviada\s+a|recibida\s+de)|pago\s+(?:a|en)|compra\s+en|env[ií]o\s+(?:de\s+dinero\s+)?(?:a|de))\s+(.+)$/i,
     /^(.+?)\s+-\s+(?:cvu|cbu|alias)/i,
   ];
-  let name = metaName || null;
-  for (const pattern of patterns) {
-    const match = description.match(pattern);
-    if (match?.[1]) {
-      name = match[1].trim();
-      break;
+  let name = limpiarNombreContraparte(metaName);
+  if (!name && limpiarNombreContraparte(description)) {
+    for (const pattern of patterns) {
+      const match = description.match(pattern);
+      if (match?.[1]) {
+        const extracted = limpiarNombreContraparte(match[1]);
+        if (extracted) {
+          name = extracted;
+          break;
+        }
+      }
     }
   }
   if (!name && description && description.length >= 3 && description.length <= 80) {
-    name = description;
+    name = limpiarNombreContraparte(description);
   }
-  if (!name && externalRef) name = externalRef;
+  if (!name && externalRef) name = limpiarNombreContraparte(externalRef);
   if (!name && metaCbu) name = `Cuenta ${metaCbu}`;
-  name = limpiarNombreContraparte(name);
 
   const net = Number(row.netAmount ?? row.SETTLEMENT_NET_AMOUNT ?? 0);
   const isIngreso = net >= 0;

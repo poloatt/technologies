@@ -558,7 +558,8 @@ class TransaccionesController extends BaseController {
       const options = {
         page: parseInt(page),
         limit: parseInt(limit),
-        sort,
+        // Desempate por _id: sin él, fechas iguales se paginan de forma inestable y se repiten filas.
+        sort: sort === '-fecha' ? { fecha: -1, _id: -1 } : sort,
         populate: ['moneda']
       };
 
@@ -732,7 +733,8 @@ class TransaccionesController extends BaseController {
       const options = {
         page: parseInt(page),
         limit: parseInt(limit),
-        sort,
+        // Desempate por _id: sin él, fechas iguales se paginan de forma inestable y se repiten filas.
+        sort: sort === '-fecha' ? { fecha: -1, _id: -1 } : sort,
         populate: ['moneda', 'cuenta'],
         lean: true, // Para mejor rendimiento
         leanWithId: true, // Agrega 'id' además de '_id'

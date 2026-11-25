@@ -102,7 +102,8 @@ async function findTransaccionMp(cuenta, ids) {
 
 /** Ids de pago de Mercado Pago. Una referencia corta no alcanza para borrar copias. */
 function idsOperacionMp(...values) {
-  return idsMp(values).filter((key) => /^\d{8,}$/.test(key));
+  // Spread: si llega un array de ids, idsMp debe recibir cada id por separado.
+  return idsMp(...values).filter((key) => /^\d{8,}$/.test(key));
 }
 
 /** El pago y el reporte del mismo id no pueden convivir como dos transacciones. */
@@ -1055,7 +1056,7 @@ export class BankSyncService {
         const monto = Math.abs(pago.transaction_amount || 0);
         const montoNeto = monto - comisiones.total;
         const contraparte = extraerContrapartePago(pago, userId);
-        const descripcion = formatearDescripcionPago(pago, userId);
+        let descripcion = formatearDescripcionPago(pago, userId);
         const isTransfer = esTransferenciaPago(pago);
         const businessBranch = pago.point_of_interaction?.business_info?.branch || null;
         let tipoPago = determinarTipoPago(pago, userId);
@@ -1078,7 +1079,10 @@ export class BankSyncService {
             : -Math.abs(pago.transaction_amount || 0)
         });
 
+        if (economic.potName) descripcion = `${descripcion} · desde ${economic.potName}`;
         const paymentMeta = {
+          potId: economic.potId || null,
+          potName: economic.potName || null,
           paymentId: pago.id,
           status: pago.status,
           statusDetail: pago.status_detail,
@@ -1104,10 +1108,9 @@ export class BankSyncService {
           businessBranch
         };
 
-        let transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
-          pago.id,
-          pago.external_reference,
-        ]);
+        // Solo por id de pago: la referencia externa puede compartirla un pago distinto
+        // (p. ej. "Lomitas"), y eso devolvía otra transacción y generaba copias.
+        let transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [pago.id]);
         if (transaccionExistente) {
           const propios = idsMp(
             transaccionExistente.origen?.transaccionId,
@@ -1392,6 +1395,10 @@ export class BankSyncService {
         } else if (economic.isTransfer && !contraparte?.name) {
           descripcion = `MercadoPago - ${economic.label}`;
         }
+        if (economic.potName) {
+          const base = mov.payment ? formatearDescripcionPago(mov.payment, userId) : economic.label;
+          descripcion = `${base} · desde ${economic.potName}`;
+        }
 
         const metadataPatch = {
           transactionType: mov.transactionType,
@@ -1409,6 +1416,13 @@ export class BankSyncService {
           paymentId: mov.payment?.id || mov.raw?.payment_id || mov.raw?.reference_id || null,
           externalReference: mov.externalReference || mov.payment?.external_reference || null,
           currency: mov.currency,
+          // Pot de la Reserva: nombre si el pago lo trae; si es una transferencia
+          // disponible ↔ reserva, el ID del pot viene en externalReference (POTS3_<uuid>_...).
+          potId:
+            economic.potId ||
+            String(mov.externalReference || '').match(/^POTS\d*_([0-9a-f-]{36})_/i)?.[1] ||
+            null,
+          potName: economic.potName || null,
           source: mov.payment ? 'settlement_enriched' : (mov.source || 'settlement_report'),
           isTransfer,
           movementKind: economic.movementKind,
@@ -1492,6 +1506,7 @@ export class BankSyncService {
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             (isTransfer && !prevMeta.isTransfer) ||
             prevMeta.movementKind !== metadataPatch.movementKind ||
+            (prevMeta.potId || null) !== (metadataPatch.potId || null) ||
             Boolean(prevMeta.statsExclude) !== Boolean(metadataPatch.statsExclude) ||
             transaccionExistente.tipo !== nextTipo ||
             (Number(metadataPatch.installments) > 0 &&
