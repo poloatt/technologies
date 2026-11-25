@@ -76,12 +76,18 @@ class MercadoPagoService {
         throw new Error('Código de autorización requerido');
       }
       
-      const { data } = await clienteAxios.post(`${this.baseURL}/callback`, { 
-        code, 
-        state 
+      const mode = localStorage.getItem('mercadopago_sync_mode') === 'historial' ? 'historial' : 'rapido';
+      const since = localStorage.getItem('mercadopago_sync_since') || undefined;
+      const { data } = await clienteAxios.post(`${this.baseURL}/callback`, {
+        code,
+        state,
+        mode,
+        since,
       }, {
         timeout: 180000
       });
+      localStorage.removeItem('mercadopago_sync_mode');
+      localStorage.removeItem('mercadopago_sync_since');
       
       return data;
     } catch (error) {

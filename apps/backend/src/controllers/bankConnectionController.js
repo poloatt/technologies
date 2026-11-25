@@ -702,25 +702,58 @@ class BankConnectionController extends BaseController {
         });
       }
 
-      // Sync en background: settlement puede tardar >2 min y hacía fallar el OAuth en el browser
+      // Sync en background: settlement puede tardar >2 min y hacía fallar el OAuth en el browser.
+      // El modo lo eligió el usuario antes de ir a Mercado Pago.
       const conexionId = conexion._id;
-      setImmediate(() => {
-        this.bankSyncService
-          .sincronizarConexion(conexion)
-          .then((syncResult) => {
+      const historialPedido = req.body?.mode === 'historial';
+      const since = req.body?.since || '2010-01-01';
+      setImmediate(async () => {
+        try {
+          if (!historialPedido) {
+            const syncResult = await this.bankSyncService.sincronizarConexion(conexion, { mode: 'rapido' });
             console.log('✅ Sync post-OAuth completada:', {
               conexionId: String(conexionId),
+              mode: 'rapido',
               nuevas: syncResult?.transaccionesNuevas || 0,
               actualizadas: syncResult?.transaccionesActualizadas || 0,
               syncParcial: syncResult?.syncParcial
             });
-          })
-          .catch((syncError) => {
-            console.error('⚠️ Sync post-OAuth falló (conexión ya guardada):', {
-              conexionId: String(conexionId),
-              error: syncError.message
+            return;
+          }
+
+          let current = conexion;
+          for (let step = 0; step < 240; step += 1) {
+            const before = current.mercadopago?.historial?.cubiertoHasta
+              ? new Date(current.mercadopago.historial.cubiertoHasta).getTime()
+              : null;
+            const syncResult = await this.bankSyncService.sincronizarConexion(current, {
+              mode: 'historial',
+              since,
             });
+            const historial = syncResult?.historial;
+            const after = historial?.cubiertoHasta
+              ? new Date(historial.cubiertoHasta).getTime()
+              : NaN;
+            console.log('✅ Sync histórica post-OAuth:', {
+              conexionId: String(conexionId),
+              step,
+              mes: historial?.mesLabel || null,
+              completo: Boolean(syncResult?.historialCompleto || historial?.completo),
+              cuotaAgotada: Boolean(historial?.cuotaAgotada),
+              pendiente: Boolean(historial?.pendiente),
+            });
+            if (!syncResult || syncResult.exito === false || syncResult.historialCompleto) break;
+            if (!historial || historial.completo || historial.cuotaAgotada || historial.pendiente) break;
+            if (!Number.isFinite(after) || (before != null && after >= before)) break;
+            current = await BankConnection.findById(conexionId);
+            if (!current) break;
+          }
+        } catch (syncError) {
+          console.error('⚠️ Sync post-OAuth falló (conexión ya guardada):', {
+            conexionId: String(conexionId),
+            error: syncError.message
           });
+        }
       });
 
       res.json({

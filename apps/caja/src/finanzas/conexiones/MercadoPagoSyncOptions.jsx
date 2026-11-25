@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import { useSnackbar } from 'notistack';
 import CommonProgressBar from '@shared/components/common/CommonProgressBar';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
+import mercadopagoService from '@shared/services/mercadopagoService';
 import {
   TASK_FORM_PILL_FILL_BG,
   TASK_FORM_PILL_FONT_SIZE,
@@ -13,6 +14,8 @@ import {
 } from '@shared/components/forms/tareaFormTokens';
 
 const mercadopagoLogo = new URL('./logos/mercadopago.svg', import.meta.url).href;
+const SYNC_MODE_KEY = 'mercadopago_sync_mode';
+const SYNC_SINCE_KEY = 'mercadopago_sync_since';
 
 /** Piso del recorrido histórico. Mercado Pago no entrega años anteriores a esto. */
 const HISTORIAL_DESDE = '2010-01-01';
@@ -265,6 +268,17 @@ export default function MercadoPagoSyncOptions({
     return last;
   };
 
+  const openMercadoPago = async () => {
+    try {
+      localStorage.setItem(SYNC_MODE_KEY, historico ? 'historial' : 'rapido');
+      if (historico) localStorage.setItem(SYNC_SINCE_KEY, HISTORIAL_DESDE);
+      else localStorage.removeItem(SYNC_SINCE_KEY);
+      await mercadopagoService.connect();
+    } catch (error) {
+      enqueueSnackbar(error.message || 'No se pudo abrir Mercado Pago', { variant: 'error' });
+    }
+  };
+
   const run = async (wantHistory = false) => {
     if (loading || running || !ready || !connectionId) return;
     cancelRef.current = false;
@@ -308,8 +322,8 @@ export default function MercadoPagoSyncOptions({
       <Box
         component="button"
         type="button"
-        aria-label={historico ? 'Sincronizar historial de Mercado Pago' : 'Sincronizar Mercado Pago'}
-        onClick={() => run(historico)}
+        aria-label="Abrir Mercado Pago"
+        onClick={openMercadoPago}
         sx={{
           appearance: 'none',
           alignSelf: 'center',
