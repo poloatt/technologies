@@ -9,7 +9,7 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
-import { INVERSION_TYPE_FILTERS, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
+import { inversionListQuery } from '../finanzas/transacciones/ledgerKindFilters';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 
 function getScrollParent(node) {
@@ -37,6 +37,7 @@ export default function Inversiones() {
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
   const [enabledKinds, setEnabledKinds] = useState(null);
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
+  const listQuery = useMemo(() => inversionListQuery(enabledKinds), [enabledKinds]);
   const sentinelRef = useRef(null);
 
   const {
@@ -53,7 +54,8 @@ export default function Inversiones() {
     fechaFin: periodRange.fechaFin,
     ledger: 'inversiones',
     estado: 'PAGADO',
-    kinds: kindsQueryFor(INVERSION_TYPE_FILTERS, enabledKinds),
+    kinds: listQuery.kinds,
+    yieldSide: listQuery.yieldSide,
   });
 
   useEffect(() => {

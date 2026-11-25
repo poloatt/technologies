@@ -867,11 +867,20 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
     };
   }
 
-  // 4) Reservas / parking interno (NO deben entrar a stats de flujo).
-  // partition_transfer + digital_accounts = disponible ↔ reserva dentro de MP.
-  // No exigir !TRANSFER_RE: la descripción suele decir "· Transferencia".
+  // 4) Pase disponible ↔ reserva.
+  // Entra al flujo: al reservar sale del disponible y al usar la reserva vuelve.
+  // Si el regreso no suma, el pago del comercio resta una segunda vez.
+  // partition_transfer, digital_accounts o el branch pot alcanzan: un pago
+  // con reserva trae el branch aunque el operation_type sea el del comercio.
+  const branch = reserveBranchOf({
+    businessBranch: input.businessBranch || metadata?.businessBranch,
+    metadata,
+    point_of_interaction: input.payment?.point_of_interaction || input.point_of_interaction
+  }).toLowerCase();
   const looksReserveInternal =
     operationType === 'partition_transfer' ||
+    branch.includes('am-to-pot') ||
+    branch.includes('pot-to-am') ||
     RESERVE_INTERNAL_CODE_RE.test(blob) ||
     RESERVE_RELEASE_RE.test(blob) ||
     RESERVE_LOCK_RE.test(blob);
@@ -894,11 +903,6 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
   // no trae el nombre del comercio; no es un pase a reserva.
 
   if (looksReserveInternal) {
-    const branch = reserveBranchOf({
-      businessBranch: input.businessBranch || metadata?.businessBranch,
-      metadata,
-      point_of_interaction: input.payment?.point_of_interaction || input.point_of_interaction
-    }).toLowerCase();
     // La etiqueta que escribimos nosotros ("Desde reserva") no es evidencia.
     const etiquetaPropia = /mercado\s*pago\s*-\s*(desde reserva|a reserva)\b/i.test(description);
     let release = false;
@@ -915,12 +919,12 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       movementKind: release
         ? MP_MOVEMENT_KINDS.RESERVE_RELEASE
         : MP_MOVEMENT_KINDS.RESERVE_LOCK,
-      statsExclude: true,
+      statsExclude: false,
       label: release
         ? MP_MOVEMENT_KIND_LABELS.RESERVE_RELEASE
         : MP_MOVEMENT_KIND_LABELS.RESERVE_LOCK,
       isTransfer: false,
-      isInternal: true
+      isInternal: false
     };
   }
 
@@ -1130,6 +1134,14 @@ export const MP_INVERSIONES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.YIELD
 ]);
 
+/** Fondo y rendimiento. La reserva no va acá: también mueve el disponible. */
+const MP_FONDO_KINDS = Object.freeze([
+  MP_MOVEMENT_KINDS.INVESTMENT_IN,
+  MP_MOVEMENT_KINDS.INVESTMENT_OUT,
+  MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
+  MP_MOVEMENT_KINDS.YIELD
+]);
+
 /** Libro dólares: movimientos, compraventa y pagos en USD. No entran al flujo. */
 export const MP_DOLARES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.FX_SELL,
@@ -1145,7 +1157,7 @@ export const MP_CREDITOS_KINDS = Object.freeze([
 ]);
 
 export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
-  ...MP_INVERSIONES_KINDS,
+  ...MP_FONDO_KINDS,
   ...MP_DOLARES_KINDS,
   ...MP_CREDITOS_KINDS,
   MP_MOVEMENT_KINDS.INTERNAL
@@ -1170,8 +1182,8 @@ export function isCreditosMovementKind(kind) {
 
 /**
  * Filtro de libro.
- * flujo: stats de caja (sin reservas, inversiones, rendimientos ni ajustes).
- * inversiones: solo ese libro.
+ * flujo: disponible. Incluye el pase a reserva y el regreso, y deja afuera el fondo, los dólares y la tarjeta.
+ * inversiones: reserva, fondo y rendimientos.
  */
 export function buildLedgerMatch(ledger = 'flujo') {
   if (ledger === 'inversiones') {
@@ -1205,7 +1217,7 @@ export function buildListLedgerMatch(ledger = 'flujo') {
   if (ledger === 'creditos') return buildLedgerMatch('creditos');
   return {
     'origen.metadata.movementKind': {
-      $nin: [...MP_INVERSIONES_KINDS, ...MP_DOLARES_KINDS, ...MP_CREDITOS_KINDS]
+      $nin: [...MP_FONDO_KINDS, ...MP_DOLARES_KINDS, ...MP_CREDITOS_KINDS]
     }
   };
 }
@@ -1241,6 +1253,33 @@ const YIELD_INVERSION_RE = /asset_management|inversi|\bfci\b|investment/i;
 /** El crédito diario sin texto es de la reserva. Solo pasa a la inversión si el movimiento lo dice. */
 export function ladoRendimiento(texto = '') {
   return YIELD_INVERSION_RE.test(String(texto || '')) ? 'inversion' : 'reserva';
+}
+
+const YIELD_SIDE_FIELDS = [
+  'descripcion',
+  'origen.metadata.description',
+  'origen.metadata.operationType',
+];
+
+/**
+ * Dentro de un libro ya recortado por kind, deja el rendimiento del lado pedido.
+ * Reserva in/out e invertido/rescatado siguen. `inversion` se queda con el
+ * rendimiento del fondo; `reserva`, con el de la reserva y el dinero en cuenta.
+ * Las pérdidas son el mismo kind con signo negativo y no se descartan.
+ */
+export function applyYieldSideFilter(query, side) {
+  if (side !== 'reserva' && side !== 'inversion') return;
+  const yieldKinds = [MP_MOVEMENT_KINDS.INVESTMENT_YIELD, MP_MOVEMENT_KINDS.YIELD];
+  const investmentText = {
+    $or: YIELD_SIDE_FIELDS.map((field) => ({ [field]: YIELD_INVERSION_RE })),
+  };
+  const isYield = { 'origen.metadata.movementKind': { $in: yieldKinds } };
+  const notYield = { 'origen.metadata.movementKind': { $nin: yieldKinds } };
+  const yieldMatch = side === 'inversion'
+    ? { $and: [isYield, investmentText] }
+    : { $and: [isYield, { $nor: [investmentText] }] };
+  if (!query.$and) query.$and = [];
+  query.$and.push({ $or: [notYield, yieldMatch] });
 }
 
 /** Suma montos de un grupo de kinds. Rendimiento resta los egresos (pérdidas). */

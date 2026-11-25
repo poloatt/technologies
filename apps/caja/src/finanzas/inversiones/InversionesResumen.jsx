@@ -85,15 +85,22 @@ export default function InversionesResumen({
   const saldoReserva = reservado - volvio;
   const saldoInversion = invertido - rescatadoFci;
   const rendimientos = rendimientoReserva + rendimientoInversion;
+  // El botón muestra el saldo de su cuenta. Al elegirlo, el total de arriba
+  // suma también el rendimiento y las pérdidas de esa cuenta.
   const groups = [
-    { id: 'reserve', label: 'Reservado', neto: saldoReserva },
-    { id: 'invest', label: 'Inversiones', neto: saldoInversion },
-    { id: 'yield', label: 'Rendimientos', neto: rendimientos },
+    { id: 'reserve', label: 'Reservado', neto: saldoReserva, alElegir: saldoReserva + rendimientoReserva },
+    { id: 'invest', label: 'Inversiones', neto: saldoInversion, alElegir: saldoInversion + rendimientoInversion },
+    { id: 'yield', label: 'Rendimientos', neto: rendimientos, alElegir: rendimientos },
   ];
   const selectedIds = kindSelection == null ? groups.map((group) => group.id) : kindSelection;
-  const resultado = groups
-    .filter((group) => selectedIds.includes(group.id))
-    .reduce((acc, group) => acc + group.neto, 0);
+  const elegido = selectedIds.length === 1
+    ? groups.find((group) => group.id === selectedIds[0])
+    : null;
+  const resultado = elegido
+    ? elegido.alElegir
+    : groups
+      .filter((group) => selectedIds.includes(group.id))
+      .reduce((acc, group) => acc + group.neto, 0);
   const monedaColor = activa.color || 'success.main';
   const resultadoColor = resultado < 0 ? 'error.main' : monedaColor;
 

@@ -16,7 +16,7 @@ function pageHasMore(data) {
   return page < totalPages;
 }
 
-function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger, kinds, estado }) {
+function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger, kinds, yieldSide, estado }) {
   const params = {
     page,
     limit,
@@ -27,6 +27,7 @@ function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger, kind
   if (cuentaId) params.cuenta = cuentaId;
   if (ledger) params.ledger = ledger;
   if (kinds) params.kinds = kinds;
+  if (yieldSide) params.yieldSide = yieldSide;
   if (estado) params.estado = estado;
   return params;
 }
@@ -42,6 +43,7 @@ export function useTransaccionesList({
   cuentaId,
   ledger,
   kinds,
+  yieldSide,
   estado,
   pageSize = TRANSACCIONES_PAGE_SIZE,
 } = {}) {
@@ -67,13 +69,14 @@ export function useTransaccionesList({
         cuentaId,
         ledger,
         kinds,
+        yieldSide,
         estado,
         page,
         limit: pageSize,
       }),
       signal,
     }).then((response) => response.data)
-  ), [fechaInicio, fechaFin, cuentaId, ledger, kinds, estado, pageSize]);
+  ), [fechaInicio, fechaFin, cuentaId, ledger, kinds, yieldSide, estado, pageSize]);
 
   const reload = useCallback(async () => {
     abortRef.current?.abort();

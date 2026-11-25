@@ -8,6 +8,7 @@ import {
   tipoDeCambioUsd,
   acumularBucketInversiones,
   applyMovementKindFilter,
+  applyYieldSideFilter,
   buildLedgerMatch,
   buildListLedgerMatch,
   clasificarMovimientoEconomicoMp,
@@ -75,15 +76,18 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
     expect(sinBranch.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
   });
 
-  it('manda partition_transfer a reserva y fuera del flujo', () => {
+  it('manda partition_transfer a reserva y también al disponible', () => {
     const out = clasificarMovimientoEconomicoMp({
       operationType: 'partition_transfer',
       description: 'digital_accounts',
       netAmount: -1500,
     });
     expect(out.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
-    expect(out.statsExclude).toBe(true);
+    expect(out.statsExclude).toBe(false);
+    expect(out.isInternal).toBe(false);
     expect(isInversionesMovementKind(out.movementKind)).toBe(true);
+    expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin)
+      .not.toContain(MP_MOVEMENT_KINDS.RESERVE_LOCK);
   });
 
   it('separa asset management de la reserva', () => {
@@ -143,7 +147,7 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
       netAmount: -5500,
     });
     expect(reserva.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
-    expect(reserva.statsExclude).toBe(true);
+    expect(reserva.statsExclude).toBe(false);
     expect(tarjeta.movementKind).toBe(MP_MOVEMENT_KINDS.P2P_TRANSFER);
     expect(tarjeta.statsExclude).toBe(false);
   });
@@ -241,6 +245,26 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
     expect(pago.statsExclude).toBe(false);
     expect(ingreso.statsExclude).toBe(false);
   });
+
+  it('un pago con branch de reserva vuelve al disponible y baja la reserva', () => {
+    const vuelta = clasificarMovimientoEconomicoMp({
+      transactionType: 'SETTLEMENT',
+      operationType: 'regular_payment',
+      businessBranch: 'POT-to-AM-Partition Transfer',
+      description: 'Supermercado',
+      netAmount: 2000,
+    });
+    const pago = clasificarMovimientoEconomicoMp({
+      transactionType: 'SETTLEMENT',
+      operationType: 'regular_payment',
+      description: 'Supermercado',
+      netAmount: -2000,
+    });
+    expect(vuelta.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(vuelta.statsExclude).toBe(false);
+    expect(pago.movementKind).toBe(MP_MOVEMENT_KINDS.PAYMENT);
+    expect(pago.statsExclude).toBe(false);
+  });
 });
 
 describe('buildLedgerMatch', () => {
@@ -248,11 +272,14 @@ describe('buildLedgerMatch', () => {
     const flujo = buildLedgerMatch('flujo');
     const listado = buildListLedgerMatch('flujo');
     expect(flujo['origen.metadata.movementKind'].$nin).toEqual(
-      expect.arrayContaining(['RESERVE_LOCK', 'INVESTMENT_YIELD', 'INTERNAL', 'YIELD'])
+      expect.arrayContaining(['INVESTMENT_YIELD', 'INTERNAL', 'YIELD'])
     );
+    expect(flujo['origen.metadata.movementKind'].$nin).not.toContain('RESERVE_LOCK');
+    expect(flujo['origen.metadata.movementKind'].$nin).not.toContain('RESERVE_RELEASE');
     expect(listado['origen.metadata.movementKind'].$nin).toEqual(
-      expect.arrayContaining(['INVESTMENT_IN', 'RESERVE_RELEASE'])
+      expect.arrayContaining(['INVESTMENT_IN'])
     );
+    expect(listado['origen.metadata.movementKind'].$nin).not.toContain('RESERVE_RELEASE');
     expect(listado['origen.metadata.movementKind'].$nin).not.toContain('INTERNAL');
     expect(listado['origen.metadata.statsExclude']).toBeUndefined();
   });
@@ -521,14 +548,29 @@ describe('buildLedgerMatch', () => {
   it('recorta el libro a los kinds marcados', () => {
     const flujo = buildListLedgerMatch('flujo');
     applyMovementKindFilter(flujo, 'flujo', 'PAYMENT,RESERVE_LOCK');
-    expect(flujo['origen.metadata.movementKind'].$in).toEqual(['PAYMENT']);
-    expect(flujo['origen.metadata.movementKind'].$nin).toEqual(
-      expect.arrayContaining(['RESERVE_LOCK'])
-    );
+    expect(flujo['origen.metadata.movementKind'].$in).toEqual(['PAYMENT', 'RESERVE_LOCK']);
+    expect(flujo['origen.metadata.movementKind'].$nin).not.toContain('RESERVE_LOCK');
 
     const inversiones = buildLedgerMatch('inversiones');
     applyMovementKindFilter(inversiones, 'inversiones', 'none');
     expect(inversiones['origen.metadata.movementKind'].$in).toEqual([]);
+  });
+
+  it('el lado del rendimiento no se lleva la reserva in ni la reserva out', () => {
+    const reserva = buildLedgerMatch('inversiones');
+    applyMovementKindFilter(reserva, 'inversiones', 'RESERVE_LOCK,RESERVE_RELEASE,INVESTMENT_YIELD,YIELD');
+    applyYieldSideFilter(reserva, 'reserva');
+    const clause = reserva.$and[0].$or;
+    expect(clause[0]['origen.metadata.movementKind'].$nin).toEqual(
+      expect.arrayContaining(['INVESTMENT_YIELD', 'YIELD'])
+    );
+    expect(clause[1].$and[1].$nor).toBeTruthy();
+
+    const fondo = {};
+    applyYieldSideFilter(fondo, 'inversion');
+    expect(fondo.$and[0].$or[1].$and[1].$or.length).toBeGreaterThan(0);
+    applyYieldSideFilter(fondo, 'otra');
+    expect(fondo.$and).toHaveLength(1);
   });
 
   it('compara la reserva consigo misma y deja el rescate de inversión aparte', () => {

@@ -3,7 +3,6 @@ import { Box } from '@mui/material';
 import { useSnackbar } from 'notistack';
 import CommonProgressBar from '@shared/components/common/CommonProgressBar';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
-import mercadopagoService from '@shared/services/mercadopagoService';
 import {
   TASK_FORM_PILL_FILL_BG,
   TASK_FORM_PILL_FONT_SIZE,
@@ -192,12 +191,11 @@ export default function MercadoPagoSyncOptions({
     if (!historico) setFlight(null);
   }, [historico]);
 
-  const stopped = (result) => {
+  const haltHistory = (result) => {
     const chunk = result?.resultado?.historial;
     const quota = result?.resultado?.detalles?.errores?.some((item) => item.quotaExceeded);
     return !result
       || result.exito === false
-      || result.resultado?.syncParcial
       || result.resultado?.settlementPending
       || quota
       || chunk?.cuotaAgotada
@@ -205,11 +203,21 @@ export default function MercadoPagoSyncOptions({
   };
 
   const runHistorico = async () => {
-    const recent = await syncConnection(connectionId, { silent: true });
+    const done0 = progressDoneFrom(historial, span);
+    const firstMonth = span.months[Math.min(done0, Math.max(span.total - 1, 0))];
+    if (!cancelRef.current && span.total > 0) {
+      setFlight({
+        label: firstMonth ? monthStamp(firstMonth.begin) : 'Historial',
+        done: done0,
+        active: true,
+      });
+    }
+
+    const recent = await syncConnection(connectionId, { mode: 'rapido', silent: true });
     if (!cancelRef.current) onSynced?.(recent);
-    if (cancelRef.current || stopped(recent)) {
+    if (cancelRef.current || haltHistory(recent)) {
       enqueueSnackbar(recent?.message || 'Sincronización detenida', {
-        variant: recent?.exito === false || recent?.resultado?.syncParcial ? 'warning' : 'success',
+        variant: recent?.exito === false || recent?.resultado?.settlementPending ? 'warning' : 'success',
         autoHideDuration: 8000,
       });
       return recent;
@@ -221,7 +229,7 @@ export default function MercadoPagoSyncOptions({
     if (cursorTime != null && Number.isNaN(cursorTime)) cursorTime = null;
 
     for (let step = 0; step < span.total; step += 1) {
-      if (cancelRef.current || done >= span.total) return last;
+      if (cancelRef.current || done >= span.total) break;
       const current = span.months[Math.min(done, span.total - 1)];
       if (!current) break;
       if (!cancelRef.current) {
@@ -255,14 +263,6 @@ export default function MercadoPagoSyncOptions({
       autoHideDuration: 8000,
     });
     return last;
-  };
-
-  const openMercadoPago = async () => {
-    try {
-      await mercadopagoService.connect();
-    } catch (error) {
-      enqueueSnackbar(error.message || 'No se pudo abrir Mercado Pago', { variant: 'error' });
-    }
   };
 
   const run = async (wantHistory = false) => {
@@ -308,8 +308,8 @@ export default function MercadoPagoSyncOptions({
       <Box
         component="button"
         type="button"
-        aria-label="Abrir Mercado Pago"
-        onClick={openMercadoPago}
+        aria-label={historico ? 'Sincronizar historial de Mercado Pago' : 'Sincronizar Mercado Pago'}
+        onClick={() => run(historico)}
         sx={{
           appearance: 'none',
           alignSelf: 'center',

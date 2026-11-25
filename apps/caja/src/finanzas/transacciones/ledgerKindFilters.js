@@ -25,10 +25,39 @@ export function dolarSignedAmount(transaccion) {
 }
 
 export const INVERSION_TYPE_FILTERS = [
-  { id: 'reserve', label: 'Reservado', kinds: ['RESERVE_LOCK', 'RESERVE_RELEASE'] },
-  { id: 'invest', label: 'Inversiones', kinds: ['INVESTMENT_IN', 'INVESTMENT_OUT'] },
+  {
+    id: 'reserve',
+    label: 'Reservado',
+    kinds: ['RESERVE_LOCK', 'RESERVE_RELEASE', 'INVESTMENT_YIELD', 'YIELD'],
+    yieldSide: 'reserva',
+  },
+  {
+    id: 'invest',
+    label: 'Inversiones',
+    kinds: ['INVESTMENT_IN', 'INVESTMENT_OUT', 'INVESTMENT_YIELD', 'YIELD'],
+    yieldSide: 'inversion',
+  },
   { id: 'yield', label: 'Rendimientos', kinds: ['INVESTMENT_YIELD', 'YIELD'] },
 ];
+
+/**
+ * Listado de un botón de Inversiones.
+ * Reservado trae reserva in y reserva out, más el rendimiento y las pérdidas de la reserva.
+ * Inversiones trae lo invertido y lo rescatado, más el rendimiento y las pérdidas del fondo.
+ * Rendimientos trae ganancias y pérdidas, de las dos cuentas.
+ */
+export function inversionListQuery(enabledIds) {
+  if (enabledIds == null) return { kinds: undefined, yieldSide: undefined };
+  const selected = INVERSION_TYPE_FILTERS.filter((option) => enabledIds.includes(option.id));
+  if (selected.length === 0) return { kinds: 'none', yieldSide: undefined };
+  if (selected.length === INVERSION_TYPE_FILTERS.length) {
+    return { kinds: undefined, yieldSide: undefined };
+  }
+  return {
+    kinds: [...new Set(selected.flatMap((option) => option.kinds))].join(','),
+    yieldSide: selected.length === 1 ? selected[0].yieldSide : undefined,
+  };
+}
 
 /** null = todos. [] = ninguno. Un subconjunto se manda como kinds. */
 export function kindsQueryFor(options, enabledIds) {

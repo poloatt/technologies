@@ -524,11 +524,15 @@ export class BankSyncService {
         const endDate = fechaHasta.toISOString();
         const storedPending = bankConnection.mercadopago?.reportePendiente;
         const pending = pendingInsideWindow(storedPending, beginDate, endDate);
-        // Rápido es un solo reporte de la ventana de 90 días.
-        // El recorrido mes a mes queda solo para el sync histórico.
-        const report = historialMode
-          ? await reportService.fetchAllSettlementMovements(beginDate, endDate, { pending })
-          : await reportService.fetchSettlementMovements(beginDate, endDate, { pending });
+        // Un solo reporte por request. Mercado Pago arma como máximo 60 días,
+        // y el histórico ya llega cortado de a un mes. Volver a partir el rango
+        // y esperar cada parte hace que el request no vuelva y la pantalla quede cargando.
+        const report = await reportService.fetchSettlementMovements(beginDate, endDate, {
+          pending,
+          ...(historialMode
+            ? { pollOptions: { maxPollAttempts: 20, pollIntervalMs: 3000 } }
+            : {}),
+        });
 
         totalCsvRows = report.total || report.rows?.length || 0;
 
@@ -621,8 +625,12 @@ export class BankSyncService {
 
       let activitiesWithdraw = [];
       const settlementBlocked = errores.some((e) => e.tipo === 'settlement_report');
-      if (historialMode && settlementBlocked) {
-        console.warn('[MP] Historial: no se piden más reportes; el mes queda pendiente.');
+      // El mes histórico ya pidió su reporte (include_withdraw trae los retiros).
+      // Un segundo reporte acá alarga el request hasta el timeout y corta el recorrido.
+      if (historialMode) {
+        if (settlementBlocked) {
+          console.warn('[MP] Historial: no se piden más reportes; el mes queda pendiente.');
+        }
       } else {
       try {
         const activitiesService = new MercadoPagoActivitiesService({

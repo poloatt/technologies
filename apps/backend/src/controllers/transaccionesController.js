@@ -8,6 +8,7 @@ import {
   acumularBucketDolares,
   acumularBucketInversiones,
   applyMovementKindFilter,
+  applyYieldSideFilter,
   buildLedgerMatch,
   buildListLedgerMatch,
   resultadoFci,
@@ -546,6 +547,7 @@ class TransaccionesController extends BaseController {
         ...buildListLedgerMatch(ledger),
       };
       applyMovementKindFilter(query, ledger, kindsRaw);
+      applyYieldSideFilter(query, req.query.yieldSide);
 
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
@@ -708,6 +710,7 @@ class TransaccionesController extends BaseController {
         cuenta,
         ledger: ledgerRaw,
         kinds: kindsRaw,
+        yieldSide,
       } = req.query;
 
       const ledger = normalizeLedger(ledgerRaw);
@@ -716,6 +719,7 @@ class TransaccionesController extends BaseController {
         ...buildListLedgerMatch(ledger),
       };
       applyMovementKindFilter(query, ledger, kindsRaw);
+      applyYieldSideFilter(query, yieldSide);
 
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
