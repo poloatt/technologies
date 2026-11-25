@@ -1,8 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import EmergentWindow from '@shared/components/common/EmergentWindow';
+import { getApiBaseUrl } from '@shared/config/apiBaseUrl';
 import MercadoPagoConnectButton from './MercadoPagoConnectButton';
 import MercadoPagoSyncOptions, { SyncModePill } from './MercadoPagoSyncOptions';
+
+function bankConnectionsUrl() {
+  const base = String(getApiBaseUrl() || '').replace(/\/$/, '');
+  return `${base}/api/bankconnections?limit=20`;
+}
 
 function pickConexion(docs) {
   const list = Array.isArray(docs) ? docs : [];
@@ -27,13 +33,15 @@ export default function MercadoPagoSyncDialog({ open, onClose, onSuccess }) {
     setHistorico(false);
     setLoaded(false);
     const token = localStorage.getItem('token');
-    fetch('/api/bankconnections?limit=20', {
+    fetch(bankConnectionsUrl(), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
     })
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
       .then((data) => {
         if (cancel) return;
-        const propias = (data?.docs || []).filter((item) => item?.tipo === 'MERCADOPAGO');
+        const docs = Array.isArray(data) ? data : (data?.docs || []);
+        const propias = docs.filter((item) => item?.tipo === 'MERCADOPAGO');
         setConexion(pickConexion(propias));
       })
       .catch(() => {
@@ -55,9 +63,9 @@ export default function MercadoPagoSyncDialog({ open, onClose, onSuccess }) {
       onClose={onClose}
       title="Sincronizar"
       halfScreen
-      headerActions={connected ? (
-        <SyncModePill historico={historico} disabled={syncing} onChange={setHistorico} />
-      ) : null}
+      headerActions={(
+        <SyncModePill historico={historico} disabled={syncing || !connected} onChange={setHistorico} />
+      )}
       bodySx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', px: 2 }}>
