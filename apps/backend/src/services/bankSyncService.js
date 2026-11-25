@@ -1072,6 +1072,7 @@ export class BankSyncService {
           transaction_amount: pago.transaction_amount,
           exchange_operation: pago.exchange_operation,
           amounts: pago.amounts,
+          userIsPayer: String(pago.payer_id ?? pago.payer?.id ?? '') === String(userId),
           point_of_interaction: pago.point_of_interaction,
           metadata: { ...(pago.metadata || {}), businessBranch },
           netAmount: tipoPago === 'INGRESO'
@@ -1363,6 +1364,9 @@ export class BankSyncService {
           operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE,
           exchange_operation: mov.payment?.exchange_operation,
           amounts: mov.payment?.amounts,
+          userIsPayer: mov.payment && userId != null
+            ? String(mov.payment.payer_id ?? mov.payment.payer?.id ?? '') === String(userId)
+            : undefined,
           point_of_interaction: mov.payment?.point_of_interaction,
           description: mov.description || mov.payment?.description || mov.raw?.DESCRIPTION,
           paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id,

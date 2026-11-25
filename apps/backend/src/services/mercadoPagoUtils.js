@@ -956,9 +956,16 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
   }
 
   // 3b) Pago que sale de un pot de la Reserva: baja el Reservado y no entra a Transacciones.
-  // Un reembolso o contracargo hacia el pot entra positivo, así que solo tomamos egresos.
+  // El pot es del pagador: si no sabemos quién paga, el reporte trae el monto sin signo
+  // fiable, así que solo usamos el signo como respaldo.
   const pot = datosPotPago(input);
-  if (pot && !(netAmount > 0) && !/REFUND|CHARGEBACK/.test(transactionType)) {
+  const pagaElUsuario = input.userIsPayer ?? !(netAmount > 0);
+  if (
+    pot &&
+    pagaElUsuario &&
+    operationType !== 'partition_transfer' &&
+    !/REFUND|CHARGEBACK/.test(transactionType)
+  ) {
     return {
       movementKind: MP_MOVEMENT_KINDS.RESERVE_RELEASE,
       statsExclude: true,

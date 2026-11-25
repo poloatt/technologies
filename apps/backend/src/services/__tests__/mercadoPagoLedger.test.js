@@ -54,6 +54,22 @@ describe('pagos que salen de un pot de la Reserva', () => {
     expect(acumularBucketInversiones(r.movementKind, 'EGRESO', 37328.77)).toEqual({ rescatado: 37328.77 });
   });
 
+  it('el reporte trae el monto positivo: decide quién paga, no el signo', () => {
+    const propio = clasificarMovimientoEconomicoMp({
+      ...pagoDesdePot('OPEX/TAX', 37328.77),
+      netAmount: 37328.77,
+      userIsPayer: true,
+    });
+    const ajeno = clasificarMovimientoEconomicoMp({
+      ...pagoDesdePot('OPEX/TAX', 37328.77),
+      netAmount: 37328.77,
+      userIsPayer: false,
+    });
+    expect(propio.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+    expect(propio.potName).toBe('OPEX/TAX');
+    expect(ajeno.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
+  });
+
   it('un pago parcialmente cubierto por el pot no se toma como salida de reserva', () => {
     const r = clasificarMovimientoEconomicoMp(pagoDesdePot('OPEX/TAX', 37328.77, 10000));
     expect(r.movementKind).not.toBe(MP_MOVEMENT_KINDS.RESERVE_RELEASE);
