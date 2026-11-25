@@ -5,6 +5,7 @@ import {
 } from '@shared/navigation/appNavResolver';
 import {
   DeudoresHubSection,
+  CreditosHubSection,
   DolaresHubSection,
   InversionesHubSection,
   TransaccionesHubSection,
@@ -32,6 +33,7 @@ export const CAJA_HUB_BRANCHES = {
       transacciones: TransaccionesHubSection,
       inversiones: InversionesHubSection,
       dolares: DolaresHubSection,
+      creditos: CreditosHubSection,
       deudores: DeudoresHubSection,
     },
     // Cuentas y Monedas se abren como popup desde el header, no como sección del hub.

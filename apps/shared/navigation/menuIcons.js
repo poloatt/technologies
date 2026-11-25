@@ -27,6 +27,7 @@ import {
   DirectionsCarOutlined, // auto
   Inventory2Outlined, // inventario
   AttachMoneyOutlined, // bolsa de dinero (finanzas)
+  CreditCardOutlined,
   CurrencyExchangeOutlined,
   FitnessCenterOutlined, // pesa de gym para rutinas
   CleaningServicesOutlined,
@@ -89,6 +90,7 @@ export const icons = {
   auto: DirectionsCarOutlined, // auto
   inversiones: TrendingUpOutlined, // flecha hacia arriba
   dolares: CurrencyExchangeOutlined,
+  creditos: CreditCardOutlined,
   inventario: Inventory2Outlined, // caja de inventario
   moneyBag: AttachMoneyOutlined, // bolsa de dinero (finanzas)
   fitnessCenter: FitnessCenterOutlined, // pesa de gym para rutinas

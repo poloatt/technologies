@@ -132,6 +132,9 @@ export class MercadoPagoAdapter {
       if (filter?.status) {
         params.append('status', String(filter.status));
       }
+      if (filter?.currencyId) {
+        params.append('currency_id', String(filter.currencyId));
+      }
 
       const url = `https://api.mercadopago.com/v1/payments/search?${params.toString()}`;
       const response = await fetch(url, { headers: mpAuthHeaders(this.accessToken) });
@@ -353,6 +356,18 @@ export class MercadoPagoAdapter {
         filter: { paymentTypeId: 'account_money', payerId: 'me' }
       },
       { label: 'account_money', since, filter: { paymentTypeId: 'account_money' } },
+      // La búsqueda general de payer se corta a 1000 filas y deja afuera
+      // compras con tarjeta más viejas. Este filtro las trae todas.
+      {
+        label: 'credit_card+payer',
+        since,
+        filter: { paymentTypeId: 'credit_card', payerId: mpUserId }
+      },
+      {
+        label: 'credit_card+payer=me',
+        since,
+        filter: { paymentTypeId: 'credit_card', payerId: 'me' }
+      },
       { label: 'payment_method=account_money', since, filter: { paymentMethodId: 'account_money' } },
       { label: 'payment_method=cvu', since, filter: { paymentMethodId: 'cvu' } },
       {
@@ -377,7 +392,9 @@ export class MercadoPagoAdapter {
         label: 'bank_transfer+payer=me',
         since,
         filter: { paymentTypeId: 'bank_transfer', payerId: 'me' }
-      }
+      },
+      // La búsqueda sin moneda se queda en pesos y no trae el saldo en dólares.
+      { label: 'currency=USD', since, filter: { currencyId: 'USD' } }
     ];
 
     const results = await Promise.allSettled(

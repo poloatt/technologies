@@ -3,6 +3,7 @@ import { useAPI } from '@shared/hooks/useAPI';
 import {
   DEFAULT_PERIOD_PRESET,
   getPeriodLabel,
+  getCreditosPeriodRange,
   getPeriodRange,
 } from './transaccionesPeriodUtils';
 
@@ -19,7 +20,7 @@ export function useTransaccionesPeriodStats({
   kinds,
 } = {}) {
   const params = useMemo(() => {
-    const range = getPeriodRange(preset);
+    const range = ledger === 'creditos' ? getCreditosPeriodRange(preset) : getPeriodRange(preset);
     const next = ledger ? { ...range, ledger } : { ...range };
     if (cuentaId) next.cuenta = cuentaId;
     if (kinds) next.kinds = kinds;

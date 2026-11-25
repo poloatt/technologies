@@ -43,6 +43,7 @@ export const modulos = [
           { id: 'monedas', title: 'Monedas', path: '/finanzas/monedas', icon: 'currency', canAdd: true },
           { id: 'inversiones', title: 'Inversiones', path: '/finanzas/inversiones', icon: 'inversiones' },
           { id: 'dolares', title: 'Dólares', path: '/finanzas/dolares', icon: 'dolares' },
+          { id: 'creditos', title: 'Créditos', path: '/finanzas/creditos', icon: 'creditos' },
           { id: 'deudores', title: 'Deudores', path: '/finanzas/deudores', icon: 'personSearch', isUnderConstruction: true },
         ],
       },

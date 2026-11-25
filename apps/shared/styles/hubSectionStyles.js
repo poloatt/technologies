@@ -48,7 +48,8 @@ export const HUB_SECTION = {
   sectionRadius: 0,
   blockGap: 1,
   headerPx: 1.75,
-  /** Cabeceras hub (Transacciones, etc.): barra compacta. */
+  /** Cabeceras hub (Transacciones, etc.): una sola altura para todas las barras. */
+  headerHeight: 28,
   headerPy: 0.375,
   bodyPx: 1.5,
   bodyPy: 1.25,
@@ -105,8 +106,20 @@ export const hubHeaderActionSx = {
   py: 0.375,
   display: 'flex',
   alignItems: 'center',
-  minHeight: 28,
-  height: 28,
+  minHeight: HUB_SECTION.headerHeight,
+  height: HUB_SECTION.headerHeight,
+  maxHeight: HUB_SECTION.headerHeight,
+  boxSizing: 'border-box',
+};
+
+/** Acción dentro de la cabecera. No hereda el touch target global de 44px. */
+export const hubHeaderSlotButtonSx = {
+  width: HUB_SECTION.headerHeight,
+  height: HUB_SECTION.headerHeight,
+  minWidth: HUB_SECTION.headerHeight,
+  minHeight: HUB_SECTION.headerHeight,
+  maxWidth: HUB_SECTION.headerHeight,
+  maxHeight: HUB_SECTION.headerHeight,
   boxSizing: 'border-box',
 };
 
@@ -114,8 +127,9 @@ export const hubSectionHeaderSx = {
   ...hubHeaderActionSx,
   px: HUB_SECTION.headerPx,
   py: HUB_SECTION.headerPy,
-  minHeight: 28,
-  height: 28,
+  minHeight: HUB_SECTION.headerHeight,
+  height: HUB_SECTION.headerHeight,
+  maxHeight: HUB_SECTION.headerHeight,
   borderBottom: 1,
   borderColor: 'divider',
   bgcolor: (theme) =>

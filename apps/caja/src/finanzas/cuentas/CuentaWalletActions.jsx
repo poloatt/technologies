@@ -1,11 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
-  Button,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -21,7 +16,6 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { transaccionesCuentaFilterPath } from '../finanzasDeepLink';
-import MercadoPagoSyncOptions from '../conexiones/MercadoPagoSyncOptions';
 
 export default function CuentaWalletActions({
   cuentaId,
@@ -31,12 +25,10 @@ export default function CuentaWalletActions({
   importing = false,
   onSync,
   onImportCsv,
-  onHistorialSynced,
   disabled = false,
 }) {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [historialOpen, setHistorialOpen] = useState(false);
   const fileInputRef = useRef(null);
   const open = Boolean(anchorEl);
 
@@ -99,18 +91,6 @@ export default function CuentaWalletActions({
             secondary={sinConexion ? 'Sin conexión activa' : undefined}
           />
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            handleClose();
-            setHistorialOpen(true);
-          }}
-          disabled={sinConexion || syncing}
-        >
-          <ListItemIcon>
-            <SyncIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Traer historial" secondary="Un mes hacia atrás" />
-        </MenuItem>
         <MenuItem onClick={handleImport} disabled={sinConexion || importing}>
           <ListItemIcon>
             <UploadIcon fontSize="small" />
@@ -124,25 +104,6 @@ export default function CuentaWalletActions({
           <ListItemText primary="Ver todas en Transacciones" />
         </MenuItem>
       </Menu>
-
-      <Dialog
-        open={historialOpen}
-        onClose={() => setHistorialOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Traer historial</DialogTitle>
-        <DialogContent>
-          <MercadoPagoSyncOptions
-            connectionId={conexion?._id}
-            historial={conexion?.mercadopago?.historial}
-            onSynced={onHistorialSynced}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setHistorialOpen(false)}>Cerrar</Button>
-        </DialogActions>
-      </Dialog>
 
       <input
         ref={fileInputRef}

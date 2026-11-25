@@ -104,9 +104,11 @@ export const useMercadoPago = () => {
    * Sincroniza manualmente una conexión MercadoPago
    */
   const syncConnection = useCallback(async (connectionId, options = {}) => {
+    const { silent, ...body } = options;
     setLoading(true);
     try {
-      const result = await mercadopagoService.syncConnection(connectionId, options);
+      const result = await mercadopagoService.syncConnection(connectionId, body);
+      if (silent) return result;
       const historial = result?.resultado?.historial;
       if (historial) {
         const warning = historial.cuotaAgotada || historial.pendiente;

@@ -14,11 +14,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useSnackbar } from 'notistack';
 import { useAPI } from '@shared/hooks/useAPI';
-import { useMercadoPago } from '@shared/hooks/useMercadoPago';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import clienteAxios from '@shared/config/axios';
 import { TransaccionTable } from '../transacciones';
 import { MercadoPagoPartialSyncAlert } from '../conexiones/MercadoPagoPartialSyncBanner';
+import MercadoPagoSyncDialog from '../conexiones/MercadoPagoSyncDialog';
 import { getCuentasPath } from '../finanzasDeepLink';
 import { useCuentaBalance } from './useCuentaBalance';
 import CuentaWalletHeader from './CuentaWalletHeader';
@@ -31,9 +31,9 @@ export default function CuentaTransaccionesPanel({
 }) {
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
-  const { syncConnection, loading: syncing } = useMercadoPago();
   const { showValues } = useValuesVisibility();
   const [importing, setImporting] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const cuentaId = cuenta?.id || cuenta?._id;
   const isMercadoPago = cuenta?.tipo === 'MERCADO_PAGO';
@@ -68,15 +68,14 @@ export default function CuentaTransaccionesPanel({
     navigate(getCuentasPath(branchId), { replace: true });
   };
 
-  const handleSync = async () => {
+  const handleSync = () => {
     if (!conexion?._id) return;
-    try {
-      await syncConnection(conexion._id);
-      await refetch();
-      onRefresh?.();
-    } catch (err) {
-      enqueueSnackbar(err.message || 'Error al sincronizar', { variant: 'error' });
-    }
+    setSyncOpen(true);
+  };
+
+  const handleSynced = async () => {
+    await Promise.all([refetch(), refetchConexiones()]);
+    onRefresh?.();
   };
 
   const handleImportCsv = async (file) => {
@@ -122,14 +121,9 @@ export default function CuentaTransaccionesPanel({
         conexion={conexion}
         saldoCalculado={saldoCalculado}
         saldoCalculadoLoading={saldoCalculadoLoading}
-        syncing={syncing}
         importing={importing}
         onSync={handleSync}
         onImportCsv={handleImportCsv}
-        onHistorialSynced={async () => {
-          await Promise.all([refetch(), refetchConexiones()]);
-          onRefresh?.();
-        }}
         onClose={handleClose}
         branchId={branchId}
       />
@@ -174,9 +168,9 @@ export default function CuentaTransaccionesPanel({
                   <Button
                     size="small"
                     variant="contained"
-                    startIcon={syncing ? <CircularProgress size={14} color="inherit" /> : <SyncIcon />}
+                    startIcon={<SyncIcon />}
                     onClick={handleSync}
-                    disabled={!conexion || syncing}
+                    disabled={!conexion}
                   >
                     Sincronizar
                   </Button>
@@ -205,6 +199,7 @@ export default function CuentaTransaccionesPanel({
           />
         )}
       </Box>
+      <MercadoPagoSyncDialog open={syncOpen} onClose={() => setSyncOpen(false)} onSuccess={handleSynced} />
     </Wrapper>
   );
 }

@@ -33,6 +33,7 @@ import {
   mapearTipoTransaccionMpDisplay,
 } from '@shared/utils/mpDisplayUtils';
 import { getEstadoColor, getStatusIconComponent } from '@shared/components/common/StatusSystem';
+import { dolarSignedAmount } from './ledgerKindFilters';
 import {
   EditOutlined as EditIcon,
   DeleteOutlined as DeleteIcon,
@@ -92,9 +93,21 @@ function DetailRow({ label, value, icon = null }) {
 }
 
 function positionSign(kind, tipo) {
-  if (kind === 'RESERVE_LOCK' || kind === 'INVESTMENT_IN' || kind === 'FX_SELL') return '+';
-  if (kind === 'RESERVE_RELEASE' || kind === 'INVESTMENT_OUT' || kind === 'FX_BUY') return '−';
+  if (kind === 'RESERVE_LOCK' || kind === 'INVESTMENT_IN' || kind === 'FX_SELL' || kind === 'USD_IN') return '+';
+  if (kind === 'RESERVE_RELEASE' || kind === 'INVESTMENT_OUT' || kind === 'FX_BUY' || kind === 'USD_OUT' || kind === 'USD_PAYMENT') return '−';
   return tipo === 'EGRESO' ? '−' : '+';
+}
+
+function formatUsdList(monto, showValues) {
+  if (!showValues) return 'U$D ••••';
+  const n = Number(monto) || 0;
+  const body = Math.abs(n).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (n < 0) return `−U$D ${body}`;
+  if (n > 0) return `+U$D ${body}`;
+  return `U$D ${body}`;
 }
 
 const TransaccionTable = ({
@@ -103,6 +116,7 @@ const TransaccionTable = ({
   onDelete,
   showValues = true,
   variant = 'default',
+  inColor,
 }) => {
   const [expandedRow, setExpandedRow] = useState(null);
   const { isMobile, theme } = useResponsive();
@@ -245,6 +259,10 @@ const TransaccionTable = ({
             const amountSign = ledgerRows
               ? positionSign(meta.movementKind, transaccion.tipo)
               : (transaccion.tipo === 'EGRESO' ? '−' : '+');
+            const dolarNeto = ledgerRows ? dolarSignedAmount(transaccion) : null;
+            const dolarColor = dolarNeto == null
+              ? null
+              : (dolarNeto < 0 ? 'error.main' : (inColor || 'text.primary'));
             const titled = formatMpTransactionTitle(
               transaccion.descripcion,
               transaccion.origen
@@ -285,8 +303,8 @@ const TransaccionTable = ({
                     cursor: 'pointer',
                     transition: 'background-color 0.15s ease',
                     bgcolor: expanded ? 'action.hover' : 'transparent',
-                    opacity: internal && !yieldRow ? 0.72 : 1,
-                    '&:hover': { bgcolor: 'action.hover', opacity: internal && !yieldRow ? 0.9 : 1 },
+                    opacity: internal && !yieldRow && dolarNeto == null ? 0.72 : 1,
+                    '&:hover': { bgcolor: 'action.hover', opacity: internal && !yieldRow && dolarNeto == null ? 0.9 : 1 },
                   }}
                 >
                   <TableCell
@@ -360,14 +378,16 @@ const TransaccionTable = ({
                           sx={{
                             fontWeight: yieldRow ? 650 : 500,
                             fontSize: '0.75rem',
-                            color: yieldRow ? getMontoColor(transaccion) : 'text.disabled',
+                            color: dolarColor || (yieldRow ? getMontoColor(transaccion) : 'text.disabled'),
                             fontVariantNumeric: 'tabular-nums',
                             lineHeight: 1.15,
                             whiteSpace: 'nowrap',
                             flexShrink: 0,
                           }}
                         >
-                          {amountSign}{simbolo(transaccion)} {formatMonto(transaccion.monto)}
+                          {dolarNeto == null
+                            ? `${amountSign}${simbolo(transaccion)} ${formatMonto(transaccion.monto)}`
+                            : formatUsdList(dolarNeto, showValues)}
                         </Typography>
                       </Box>
                     ) : (

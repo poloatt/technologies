@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
+import { useAPI } from '@shared/hooks/useAPI';
 import { FinanzasSectionNav } from '../finanzas';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 import DolaresResumen from '../finanzas/dolares/DolaresResumen';
@@ -9,7 +10,7 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
-import { DOLAR_TYPE_FILTERS, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
+import { DOLAR_TYPE_FILTERS, dolarSignedAmount, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 
 function getScrollParent(node) {
@@ -20,6 +21,18 @@ function getScrollParent(node) {
     current = current.parentElement;
   }
   return null;
+}
+
+function formatUsdTotal(monto, showValues) {
+  if (!showValues) return 'U$D ••••';
+  const n = Number(monto) || 0;
+  const body = Math.abs(n).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (n < 0) return `−U$D ${body}`;
+  if (n > 0) return `+U$D ${body}`;
+  return `U$D ${body}`;
 }
 
 function ListSkeleton() {
@@ -34,6 +47,8 @@ function ListSkeleton() {
 
 export default function Dolares() {
   const { showValues } = useValuesVisibility();
+  const { data: monedasData } = useAPI('/api/monedas');
+  const usdColor = (monedasData?.docs || []).find((moneda) => moneda.codigo === 'USD')?.color;
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
   const [enabledKinds, setEnabledKinds] = useState(null);
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
@@ -65,6 +80,12 @@ export default function Dolares() {
     observer.observe(node);
     return () => observer.disconnect();
   }, [hasMore, loadMore, transacciones.length]);
+
+  const totalListado = transacciones.reduce(
+    (acc, transaccion) => acc + (dolarSignedAmount(transaccion) || 0),
+    0,
+  );
+  const totalColor = totalListado < 0 ? 'error.main' : (usdColor || 'text.primary');
 
   const emptyTitle = hasAny
     ? 'Sin operaciones de dólares en este período'
@@ -106,10 +127,19 @@ export default function Dolares() {
         </Box>
       ) : (
         <Box sx={{ mt: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 650, letterSpacing: '0.04em', color: 'text.secondary' }}>
+              {`${transacciones.length} movimientos`}
+            </Typography>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: totalColor, fontVariantNumeric: 'tabular-nums' }}>
+              {formatUsdTotal(totalListado, showValues)}
+            </Typography>
+          </Box>
           <TransaccionTable
             transacciones={transacciones}
             variant="ledger"
             showValues={showValues}
+            inColor={usdColor}
           />
           {(hasMore || loadingMore) && (
             <Box

@@ -1,14 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  Button,
-  Divider,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from '@mui/material';
+import React, { useEffect, useRef, useState } from 'react';
+import { Box, CircularProgress } from '@mui/material';
+import { useSnackbar } from 'notistack';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
+import {
+  TASK_FORM_PILL_FILL_BG,
+  TASK_FORM_PILL_GAP,
+  TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+  TASK_FORM_PILL_OUTLINED_BG,
+  TASK_FORM_PILL_OUTLINED_BG_HOVER,
+  taskFormPillOutlinedSx,
+} from '@shared/components/forms/tareaFormTokens';
+
+const mercadopagoLogo = new URL('./logos/mercadopago.svg', import.meta.url).href;
+
+/** Piso del recorrido histórico. Mercado Pago no entrega años anteriores a esto. */
+const HISTORIAL_DESDE = '2010-01-01';
+const HISTORIAL_MAX_MESES = 240;
 
 function formatDay(value) {
   if (!value) return null;
@@ -22,110 +29,204 @@ function formatDay(value) {
   });
 }
 
-function describeHistorial(historial) {
-  if (!historial?.cubiertoHasta && !historial?.ultimoMes) {
-    return 'Cada corrida trae un mes anterior a los últimos 90 días. Se puede repetir hasta cubrir la fecha elegida.';
-  }
-  const hasta = formatDay(historial.cubiertoHasta);
-  const objetivo = formatDay(historial.objetivo);
+function describeRun(historial) {
+  if (!historial) return null;
   if (historial.cuotaAgotada) {
-    return `Cupo de Mercado Pago agotado en ${historial.mesLabel || 'el mes pedido'}. Ese mes queda pendiente.`;
+    return `Cupo de Mercado Pago agotado en ${historial.mesLabel || 'el último mes'}. Se puede retomar.`;
   }
   if (historial.pendiente) {
-    return `Quedó pendiente ${historial.mesLabel || 'el último mes'}. Reintentá ese tramo antes de seguir.`;
+    return `Quedó pendiente ${historial.mesLabel || 'el último mes'}. Reintentá ese tramo.`;
   }
   if (historial.completo || historial.quedaHistorial === false) {
-    return hasta
-      ? `Historial cubierto hasta el ${hasta}.`
-      : 'Esa fecha ya está dentro de los últimos 90 días.';
+    const hasta = formatDay(historial.cubiertoHasta || historial.objetivo);
+    return hasta ? `Historial cubierto hasta el ${hasta}.` : 'El historial pedido ya está cubierto.';
   }
-  return `Cubierto hasta el ${hasta || 'el último mes'}. Falta llegar al ${objetivo || 'la fecha elegida'}.`;
+  return historial.mesLabel ? `Último tramo: ${historial.mesLabel}.` : null;
+}
+
+export function SyncModePill({ historico, onChange, disabled = false }) {
+  const modes = [
+    { id: 'rapido', label: 'Rápido', selected: !historico, onClick: () => onChange(false) },
+    { id: 'historico', label: 'Histórico', selected: historico, onClick: () => onChange(true) },
+  ];
+
+  return (
+    <Box
+      role="group"
+      aria-label="Tipo de sincronización"
+      sx={{
+        display: 'inline-flex',
+        flexShrink: 0,
+        alignItems: 'center',
+        gap: TASK_FORM_PILL_GAP,
+        ...(disabled ? { pointerEvents: 'none', opacity: 0.45 } : null),
+      }}
+    >
+      {modes.map((mode) => (
+        <Box
+          key={mode.id}
+          component="button"
+          type="button"
+          aria-pressed={mode.selected}
+          disabled={disabled}
+          onClick={mode.onClick}
+          sx={{
+            ...taskFormPillOutlinedSx,
+            appearance: 'none',
+            m: 0,
+            px: 1.25,
+            fontWeight: mode.selected ? 500 : 400,
+            bgcolor: mode.selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG,
+            color: mode.selected ? 'text.primary' : 'text.secondary',
+            borderColor: mode.selected ? TASK_FORM_PILL_OUTLINE_BORDER_HOVER : undefined,
+            '&:hover': {
+              bgcolor: mode.selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG_HOVER,
+              borderColor: TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
+            },
+          }}
+        >
+          {mode.label}
+        </Box>
+      ))}
+    </Box>
+  );
 }
 
 export default function MercadoPagoSyncOptions({
   connectionId,
-  historial = null,
-  showDailySync = false,
   onSynced,
+  historico: historicoProp,
+  onHistoricoChange,
+  showPill = true,
+  onBusyChange,
 }) {
   const { loading, syncConnection } = useMercadoPago();
-  const year = new Date().getFullYear();
-  const [preset, setPreset] = useState('este-anio');
-  const [since, setSince] = useState(`${year}-01-01`);
-  const [progress, setProgress] = useState(historial);
+  const { enqueueSnackbar } = useSnackbar();
+  const [innerHistorico, setInnerHistorico] = useState(false);
+  const historico = historicoProp ?? innerHistorico;
+  const setHistorico = onHistoricoChange ?? setInnerHistorico;
+  const [running, setRunning] = useState(false);
+  const cancelRef = useRef(false);
 
-  useEffect(() => {
-    setProgress(historial);
-  }, [historial]);
+  useEffect(() => () => {
+    cancelRef.current = true;
+  }, []);
 
-  const targetSince = preset === 'anio-anterior'
-    ? `${year - 1}-01-01`
-    : preset === 'fecha'
-      ? since
-      : `${year}-01-01`;
-
-  const run = async (options) => {
-    if (!connectionId) return;
-    const result = await syncConnection(connectionId, options);
-    if (result?.resultado?.historial) {
-      setProgress(result.resultado.historial);
-    }
-    onSynced?.(result);
+  const stopped = (result) => {
+    const chunk = result?.resultado?.historial;
+    const quota = result?.resultado?.detalles?.errores?.some((item) => item.quotaExceeded);
+    return !result
+      || result.exito === false
+      || result.resultado?.syncParcial
+      || result.resultado?.settlementPending
+      || quota
+      || chunk?.cuotaAgotada
+      || chunk?.pendiente;
   };
 
+  const runHistorico = async () => {
+    const recent = await syncConnection(connectionId, { silent: true });
+    if (!cancelRef.current) onSynced?.(recent);
+    if (cancelRef.current || stopped(recent)) {
+      enqueueSnackbar(recent?.message || 'Sincronización detenida', {
+        variant: recent?.exito === false || recent?.resultado?.syncParcial ? 'warning' : 'success',
+        autoHideDuration: 8000,
+      });
+      return recent;
+    }
+
+    let last = recent;
+    let cursor = null;
+    for (let step = 0; step < HISTORIAL_MAX_MESES; step += 1) {
+      if (cancelRef.current) return last;
+      const result = await syncConnection(connectionId, {
+        mode: 'historial',
+        since: HISTORIAL_DESDE,
+        silent: true,
+      });
+      last = result;
+      const chunk = result?.resultado?.historial;
+      if (!cancelRef.current) onSynced?.(result);
+      if (!chunk || chunk.completo || chunk.cuotaAgotada || chunk.pendiente || chunk.quedaHistorial === false) {
+        break;
+      }
+      const nextCursor = chunk.cubiertoHasta || '';
+      if (nextCursor && nextCursor === cursor) break;
+      cursor = nextCursor;
+    }
+    if (cancelRef.current) return last;
+    const note = describeRun(last?.resultado?.historial);
+    enqueueSnackbar(note || last?.message || 'Historial actualizado', {
+      variant: last?.resultado?.historial?.cuotaAgotada || last?.resultado?.historial?.pendiente ? 'warning' : 'success',
+      autoHideDuration: 8000,
+    });
+    return last;
+  };
+
+  const run = async () => {
+    if (!connectionId || loading || running) return;
+    cancelRef.current = false;
+    setRunning(true);
+    try {
+      if (historico) {
+        await runHistorico();
+      } else {
+        const result = await syncConnection(connectionId, {});
+        onSynced?.(result);
+      }
+    } catch {
+      // El hook ya muestra el error.
+    } finally {
+      if (!cancelRef.current) setRunning(false);
+    }
+  };
+
+  const busy = loading || running;
+
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-      {showDailySync && (
-        <>
-          <Typography variant="body2" color="text.secondary">
-            La sincronización habitual trae los últimos 90 días. No recorre el año anterior.
-          </Typography>
-          <Button
-            variant="contained"
-            disabled={loading || !connectionId}
-            onClick={() => run({})}
-            sx={{ borderRadius: 0, alignSelf: 'flex-start' }}
-          >
-            Sincronizar últimos 90 días
-          </Button>
-          <Divider />
-        </>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: showPill ? 2 : 0.5, pb: 1 }}>
+      {showPill && (
+        <SyncModePill historico={historico} disabled={busy} onChange={setHistorico} />
       )}
-      <Typography variant="subtitle2">Traer historial</Typography>
-      <Typography variant="body2" color="text.secondary">
-        {describeHistorial(progress)}
-      </Typography>
-      <ToggleButtonGroup
-        exclusive
-        size="small"
-        value={preset}
-        onChange={(_, value) => {
-          if (value) setPreset(value);
+      <Box
+        component="button"
+        type="button"
+        aria-label={busy
+          ? (historico ? 'Trayendo historial' : 'Sincronizando')
+          : 'Sincronizar Mercado Pago'}
+        disabled={busy || !connectionId}
+        onClick={run}
+        sx={{
+          appearance: 'none',
+          alignSelf: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          m: 0,
+          p: 0.5,
+          border: 0,
+          borderRadius: 0,
+          bgcolor: 'transparent',
+          cursor: 'pointer',
+          opacity: busy || !connectionId ? 0.5 : 1,
+          '&:hover': { bgcolor: 'action.hover' },
+          '&:disabled': { cursor: 'default' },
         }}
       >
-        <ToggleButton value="este-anio">Este año</ToggleButton>
-        <ToggleButton value="anio-anterior">Año anterior</ToggleButton>
-        <ToggleButton value="fecha">Una fecha</ToggleButton>
-      </ToggleButtonGroup>
-      {preset === 'fecha' && (
-        <TextField
-          label="Desde"
-          type="date"
-          value={since}
-          onChange={(e) => setSince(e.target.value)}
-          InputLabelProps={{ shrink: true }}
-          fullWidth
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0 } }}
-        />
-      )}
-      <Button
-        variant={showDailySync ? 'outlined' : 'contained'}
-        disabled={loading || !connectionId || !targetSince}
-        onClick={() => run({ mode: 'historial', since: targetSince })}
-        sx={{ borderRadius: 0, alignSelf: 'flex-start' }}
-      >
-        {loading ? 'Trayendo un mes...' : 'Traer un mes'}
-      </Button>
+        {busy ? (
+          <CircularProgress size={22} />
+        ) : (
+          <img
+            src={mercadopagoLogo}
+            alt=""
+            style={{ width: 148, height: 38, objectFit: 'contain', display: 'block' }}
+          />
+        )}
+      </Box>
     </Box>
   );
 }

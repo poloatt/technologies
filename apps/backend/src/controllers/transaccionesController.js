@@ -3,6 +3,7 @@ import { Transacciones, Cuentas } from '../models/index.js';
 import mongoose from 'mongoose';
 import { arMonthBounds, formatArDateKey, parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
+import { addCalendarMonths, arDateKey, cuotaEnRangoClave, expandirCuotas } from '../../../shared/utils/cuotasCredito.js';
 import {
   acumularBucketDolares,
   acumularBucketInversiones,
@@ -33,8 +34,34 @@ function applyFechaRange(query, fechaInicio, fechaFin) {
 }
 
 function normalizeLedger(raw) {
-  if (raw === 'inversiones' || raw === 'dolares') return raw;
+  if (raw === 'inversiones' || raw === 'dolares' || raw === 'creditos') return raw;
   return 'flujo';
+}
+
+/**
+ * Una compra de septiembre puede tener cuotas en diciembre. El listado trae
+ * las compras cuyo calendario puede pisar el período; la UI deja solo esas cuotas.
+ */
+function applyCreditosFechaRange(query, fechaInicio, fechaFin) {
+  if (!fechaInicio && !fechaFin) return null;
+  const range = {};
+  if (fechaInicio) {
+    const inicio = parseArDay(fechaInicio);
+    if (!inicio || Number.isNaN(inicio.getTime())) return 'Fecha de inicio inválida';
+    range.$gte = addCalendarMonths(inicio, -36);
+  }
+  if (fechaFin) {
+    const fin = parseArDay(fechaFin, true);
+    if (!fin || Number.isNaN(fin.getTime())) return 'Fecha de fin inválida';
+    range.$lte = fin;
+  }
+  query.fecha = range;
+  return null;
+}
+
+function applyLedgerFechaRange(query, ledger, fechaInicio, fechaFin) {
+  if (ledger === 'creditos') return applyCreditosFechaRange(query, fechaInicio, fechaFin);
+  return applyFechaRange(query, fechaInicio, fechaFin);
 }
 
 function applyCuentaFilter(query, cuenta) {
@@ -57,6 +84,110 @@ class TransaccionesController extends BaseController {
     this.create = this.create.bind(this);
     this.updateEstado = this.updateEstado.bind(this);
     this.getResumen = this.getResumen.bind(this);
+  }
+
+  async statsCreditos({ query, inicio, fin, estado, cuenta, kindsRaw, ledger }) {
+    const widened = {
+      ...query,
+      fecha: { $gte: addCalendarMonths(inicio, -36), $lte: fin },
+    };
+    const docs = await this.Model.find(widened).populate('moneda').lean();
+    const inicioClave = formatArDateKey(inicio);
+    const finClave = formatArDateKey(fin);
+    const porMonedaMap = new Map();
+    let cuotas = 0;
+    // Devoluciones de tarjeta del período: bajan la deuda, no son una cuota nueva.
+    const reembolsos = await this.Model.find({
+      ...query,
+      fecha: { $gte: inicio, $lte: fin },
+      'origen.metadata.movementKind': 'REFUND',
+      'origen.metadata.paymentMethodType': 'credit_card',
+    }).select('monto').lean();
+    const pagado = reembolsos.reduce((acc, doc) => acc + (Number(doc.monto) || 0), 0);
+
+    const pagosResumen = await this.Model.find({
+      usuario: query.usuario,
+      estado: query.estado,
+      fecha: { $gte: inicio, $lte: fin },
+      tipo: 'EGRESO',
+      'origen.metadata.movementKind': { $nin: ['CARD_PURCHASE', 'RESERVE_LOCK', 'RESERVE_RELEASE'] },
+      $or: [
+        { descripcion: /\btarjeta\b/i },
+        { 'origen.metadata.description': /\btarjeta\b/i },
+      ],
+    }).select('monto').lean();
+    const pagadoResumen = pagosResumen.reduce((acc, doc) => acc + (Number(doc.monto) || 0), 0);
+    // El resumen del mes en curso ya está pago. Una cuota cuenta como pagada
+    // si su mes es el corriente o uno anterior; los meses siguientes siguen en gastado.
+    const mesCorriente = formatArDateKey(new Date()).slice(0, 7);
+    let cuotasPagadas = 0;
+
+    for (const doc of docs) {
+      const partes = expandirCuotas({
+        fecha: doc.fecha,
+        monto: doc.monto,
+        installments: doc.origen?.metadata?.installments,
+        installmentAmount: doc.origen?.metadata?.installmentAmount,
+      }).filter((cuota) => cuotaEnRangoClave(cuota.due, inicioClave, finClave));
+      const suma = partes.reduce((acc, cuota) => acc + (Number(cuota.amount) || 0), 0);
+      cuotasPagadas += partes.reduce((acc, cuota) => (
+        arDateKey(cuota.due).slice(0, 7) <= mesCorriente ? acc + (Number(cuota.amount) || 0) : acc
+      ), 0);
+      if (!suma) continue;
+      cuotas += suma;
+      const monedaDoc = doc.moneda && doc.moneda.codigo ? doc.moneda : null;
+      const monedaId = (monedaDoc?._id || doc.moneda)?.toString?.() || 'sin-moneda';
+      if (!porMonedaMap.has(monedaId)) {
+        porMonedaMap.set(monedaId, {
+          monedaId,
+          codigo: monedaDoc?.codigo || '—',
+          simbolo: monedaDoc?.simbolo || '$',
+          color: monedaDoc?.color || '#5C6BC0',
+          ingresos: 0,
+          egresos: 0,
+          cuotas: 0,
+          pagado: 0,
+          balance: 0,
+          porDia: [],
+        });
+      }
+      const entry = porMonedaMap.get(monedaId);
+      entry.egresos += suma;
+      entry.cuotas += suma;
+      entry.balance -= suma;
+    }
+
+    const porMoneda = [...porMonedaMap.values()];
+    const pagadoTotal = pagado + pagadoResumen + cuotasPagadas;
+    if (pagadoTotal && porMoneda[0]) porMoneda[0].pagado = pagadoTotal;
+    return {
+      ingresos: pagadoTotal,
+      egresos: cuotas,
+      balance: pagadoTotal - cuotas,
+      cuotas,
+      pagado: pagadoTotal,
+      enviado: 0,
+      rescatado: 0,
+      ingresado: 0,
+      rescatadoInversion: 0,
+      rendimientos: 0,
+      usdVendido: 0,
+      usdComprado: 0,
+      pesosVenta: 0,
+      pesosCompra: 0,
+      neto: 0,
+      ledger,
+      fechaInicio: inicioClave,
+      fechaFin: finClave,
+      estado,
+      cuenta: cuenta || null,
+      kinds: kindsRaw || null,
+      porMoneda,
+      porDia: [],
+      ingresosMensuales: 0,
+      egresosMensuales: cuotas,
+      balanceTotal: -cuotas,
+    };
   }
 
   // GET /api/transacciones/stats?fechaInicio&fechaFin&estado&cuenta
@@ -89,6 +220,13 @@ class TransaccionesController extends BaseController {
       const estadoFilter = buildEstadoFilter(estado);
       if (estadoFilter) query.estado = estadoFilter;
       applyMovementKindFilter(query, ledger, kindsRaw);
+
+      if (ledger === 'creditos') {
+        const payload = await this.statsCreditos({
+          query, inicio, fin, estado, cuenta, kindsRaw, ledger,
+        });
+        return res.json(payload);
+      }
 
       const kindPromise = ledger === 'inversiones' || ledger === 'dolares'
         ? this.Model.aggregate([
@@ -205,6 +343,9 @@ class TransaccionesController extends BaseController {
             rendimientosInversion: 0,
             usdVendido: 0,
             usdComprado: 0,
+            usdRecibido: 0,
+            usdEnviado: 0,
+            usdPagado: 0,
             pesosVenta: 0,
             pesosCompra: 0,
             dias: new Map(),
@@ -249,6 +390,9 @@ class TransaccionesController extends BaseController {
       let rendimientosInversion = 0;
       let usdVendido = 0;
       let usdComprado = 0;
+      let usdRecibido = 0;
+      let usdEnviado = 0;
+      let usdPagado = 0;
       let pesosVenta = 0;
       let pesosCompra = 0;
       for (const row of kinds) {
@@ -260,10 +404,16 @@ class TransaccionesController extends BaseController {
         const dolares = acumularBucketDolares(kind, monto, row.usd);
         entry.usdVendido += dolares.usdVendido || 0;
         entry.usdComprado += dolares.usdComprado || 0;
+        entry.usdRecibido += dolares.usdRecibido || 0;
+        entry.usdEnviado += dolares.usdEnviado || 0;
+        entry.usdPagado += dolares.usdPagado || 0;
         entry.pesosVenta += dolares.pesosVenta || 0;
         entry.pesosCompra += dolares.pesosCompra || 0;
         usdVendido += dolares.usdVendido || 0;
         usdComprado += dolares.usdComprado || 0;
+        usdRecibido += dolares.usdRecibido || 0;
+        usdEnviado += dolares.usdEnviado || 0;
+        usdPagado += dolares.usdPagado || 0;
         pesosVenta += dolares.pesosVenta || 0;
         pesosCompra += dolares.pesosCompra || 0;
         const bucket = acumularBucketInversiones(kind, tipo, monto, row._id?.yieldSide);
@@ -302,6 +452,9 @@ class TransaccionesController extends BaseController {
             rendimientosInversion: m.rendimientosInversion,
             usdVendido: m.usdVendido,
             usdComprado: m.usdComprado,
+            usdRecibido: m.usdRecibido,
+            usdEnviado: m.usdEnviado,
+            usdPagado: m.usdPagado,
             pesosVenta: m.pesosVenta,
             pesosCompra: m.pesosCompra,
             rendimientos: (m.rendimientosReserva || 0) + (m.rendimientosInversion || 0),
@@ -335,6 +488,9 @@ class TransaccionesController extends BaseController {
         rendimientos,
         usdVendido,
         usdComprado,
+        usdRecibido,
+        usdEnviado,
+        usdPagado,
         pesosVenta,
         pesosCompra,
         neto: netoInversiones,
@@ -394,7 +550,7 @@ class TransaccionesController extends BaseController {
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
       if (categoria) query.categoria = categoria;
-      const fechaError = applyFechaRange(query, fechaInicio, fechaFin);
+      const fechaError = applyLedgerFechaRange(query, ledger, fechaInicio, fechaFin);
       if (fechaError) return res.status(400).json({ error: fechaError });
 
       const options = {
@@ -564,7 +720,7 @@ class TransaccionesController extends BaseController {
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
       if (categoria) query.categoria = categoria;
-      const fechaError = applyFechaRange(query, fechaInicio, fechaFin);
+      const fechaError = applyLedgerFechaRange(query, ledger, fechaInicio, fechaFin);
       if (fechaError) return res.status(400).json({ error: fechaError });
       const cuentaError = applyCuentaFilter(query, cuenta);
       if (cuentaError) return res.status(400).json({ error: cuentaError });

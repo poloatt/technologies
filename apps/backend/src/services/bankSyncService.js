@@ -22,7 +22,9 @@ import {
   limpiarNombreContraparte,
   clasificarMovimientoEconomicoMp,
   conservarClasificacionUsd,
+  conservarClasificacionTarjeta,
   datosCambioUsd,
+  datosPosicionUsd,
   isDolaresMovementKind,
   isInversionesMovementKind,
   tipoDeCambioUsd
@@ -31,16 +33,34 @@ import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
 import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
 
+function camposCuotas(pago) {
+  if (!pago || typeof pago !== 'object') return {};
+  const installments = Number(pago.installments);
+  const installmentAmount = Number(pago.transaction_details?.installment_amount);
+  const paymentMethodType = pago.payment_type_id || pago.payment_method?.type || null;
+  const out = {};
+  if (Number.isFinite(installments) && installments > 0) out.installments = Math.round(installments);
+  if (Number.isFinite(installmentAmount) && installmentAmount > 0) {
+    out.installmentAmount = installmentAmount;
+  }
+  if (paymentMethodType) out.paymentMethodType = String(paymentMethodType);
+  return out;
+}
+
 function camposCambioUsd(pago) {
   const fx = datosCambioUsd(pago || {});
-  if (!fx) return {};
-  return {
-    exchangeOperation: fx.exchangeOperation,
-    usdAmount: fx.usdAmount,
-    exchangeRate: fx.exchangeRate,
-    payerCurrency: fx.payerCurrency,
-    collectorCurrency: fx.collectorCurrency,
-  };
+  if (fx) {
+    return {
+      exchangeOperation: fx.exchangeOperation,
+      usdAmount: fx.usdAmount,
+      exchangeRate: fx.exchangeRate,
+      payerCurrency: fx.payerCurrency,
+      collectorCurrency: fx.collectorCurrency,
+    };
+  }
+  const posicion = datosPosicionUsd(pago || {});
+  if (!posicion) return {};
+  return { usdAmount: posicion.usdAmount, currency: 'USD' };
 }
 
 function libroConEtiqueta(kind) {
@@ -998,7 +1018,10 @@ export class BankSyncService {
           operationType: pago.operation_type,
           description: pago.description,
           paymentMethod: pago.payment_method?.type || pago.payment_method_id,
+          paymentMethodType: pago.payment_type_id || pago.payment_method?.type,
+          paymentMethodId: pago.payment_method_id,
           businessBranch,
+          currency: pago.currency_id,
           exchange_operation: pago.exchange_operation,
           amounts: pago.amounts,
           point_of_interaction: pago.point_of_interaction,
@@ -1014,6 +1037,7 @@ export class BankSyncService {
           statusDetail: pago.status_detail,
           paymentMethod: pago.payment_method?.type,
           paymentMethodId: pago.payment_method_id,
+          ...camposCuotas(pago),
           operationType: pago.operation_type || null,
           externalReference: pago.external_reference || null,
           ...camposCambioUsd(pago),
@@ -1033,10 +1057,18 @@ export class BankSyncService {
           businessBranch
         };
 
-        const transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
+        let transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
           pago.id,
           pago.external_reference,
         ]);
+        if (transaccionExistente) {
+          const propios = idsMp(
+            transaccionExistente.origen?.transaccionId,
+            transaccionExistente.origen?.metadata?.paymentId
+          );
+          // La referencia externa a veces la comparten dos pagos distintos.
+          if (!propios.includes(String(pago.id))) transaccionExistente = null;
+        }
         const fxTipo = tipoDeCambioUsd(economic.movementKind);
         if (fxTipo) tipoPago = fxTipo;
 
@@ -1103,6 +1135,28 @@ export class BankSyncService {
               collectorCurrency: keptUsd.collectorCurrency,
             });
           }
+          const keptCard = conservarClasificacionTarjeta(prevMeta, {
+            ...economic,
+            installments: paymentMeta.installments,
+            installmentAmount: paymentMeta.installmentAmount,
+            paymentMethod: paymentMeta.paymentMethod,
+            paymentMethodType: paymentMeta.paymentMethodType,
+          });
+          if (keptCard.movementKind !== economic.movementKind) {
+            economic.movementKind = keptCard.movementKind;
+            economic.statsExclude = true;
+            economic.isInternal = false;
+            economic.label = keptCard.label;
+            Object.assign(paymentMeta, {
+              movementKind: keptCard.movementKind,
+              statsExclude: true,
+              isInternal: false,
+              installments: keptCard.installments,
+              installmentAmount: keptCard.installmentAmount,
+              paymentMethod: keptCard.paymentMethod,
+              paymentMethodType: keptCard.paymentMethodType,
+            });
+          }
           const keptTipo = tipoDeCambioUsd(economic.movementKind);
           if (keptTipo) tipoPago = keptTipo;
           const prevKind = prevMeta.movementKind;
@@ -1113,7 +1167,11 @@ export class BankSyncService {
             prevKind !== economic.movementKind ||
             transaccionExistente.tipo !== tipoPago ||
             (Number(paymentMeta.usdAmount) > 0 &&
-              Number(prevMeta.usdAmount) !== Number(paymentMeta.usdAmount));
+              Number(prevMeta.usdAmount) !== Number(paymentMeta.usdAmount)) ||
+            (Number(paymentMeta.installments) > 0 &&
+              Number(prevMeta.installments) !== Number(paymentMeta.installments)) ||
+            (Number(paymentMeta.installmentAmount) > 0 &&
+              Number(prevMeta.installmentAmount) !== Number(paymentMeta.installmentAmount));
           if (shouldUpdate) {
             if (transaccionExistente.tipo !== tipoPago) {
               transaccionExistente.tipo = tipoPago;
@@ -1162,7 +1220,6 @@ export class BankSyncService {
               collectorId: pago.collector_id,
               payerId: pago.payer?.id,
               currencyId: pago.currency_id,
-              installments: pago.installments
             }
           }
         });
@@ -1254,7 +1311,9 @@ export class BankSyncService {
           description: mov.description || mov.payment?.description || mov.raw?.DESCRIPTION,
           paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id,
           paymentMethodType: mov.paymentMethodType || mov.payment?.payment_type_id || mov.raw?.PAYMENT_METHOD_TYPE,
+          paymentMethodId: mov.payment?.payment_method_id || mov.raw?.PAYMENT_METHOD,
           businessBranch,
+          currency: mov.payment?.currency_id || mov.currency || mov.raw?.CURRENCY,
           netAmount: mov.netAmount,
           metadata: {
             ...(mov.raw?.METADATA || mov.payment?.metadata || {}),
@@ -1285,8 +1344,12 @@ export class BankSyncService {
           paymentMethod: mov.paymentMethod || mov.payment?.payment_type_id || null,
           paymentMethodType: mov.paymentMethodType || mov.payment?.payment_type_id || null,
           paymentMethodId: mov.payment?.payment_method_id || null,
+          ...camposCuotas(mov.payment),
           operationType: mov.payment?.operation_type || mov.raw?.OPERATION_TYPE || null,
-          ...camposCambioUsd(mov.payment),
+          ...camposCambioUsd({
+            ...(mov.payment || {}),
+            currency_id: mov.payment?.currency_id || mov.currency || mov.raw?.CURRENCY,
+          }),
           externalReference: mov.externalReference || mov.payment?.external_reference || null,
           currency: mov.currency,
           source: mov.payment ? 'settlement_enriched' : (mov.source || 'settlement_report'),
@@ -1353,13 +1416,27 @@ export class BankSyncService {
             descripcion = `MercadoPago - ${keptUsd.label}`;
             tipoMovimiento = tipoDeCambioUsd(keptUsd.movementKind) || tipoMovimiento;
           }
+          const keptCard = conservarClasificacionTarjeta(prevMeta, metadataPatch);
+          if (keptCard.movementKind !== metadataPatch.movementKind) {
+            metadataPatch.movementKind = keptCard.movementKind;
+            metadataPatch.statsExclude = true;
+            metadataPatch.isInternal = false;
+            metadataPatch.installments = keptCard.installments;
+            metadataPatch.installmentAmount = keptCard.installmentAmount;
+            metadataPatch.paymentMethod = keptCard.paymentMethod;
+            metadataPatch.paymentMethodType = keptCard.paymentMethodType;
+          }
           const nextTipo = keepReserve ? transaccionExistente.tipo : tipoMovimiento;
           const shouldEnrich =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             (isTransfer && !prevMeta.isTransfer) ||
             prevMeta.movementKind !== metadataPatch.movementKind ||
             Boolean(prevMeta.statsExclude) !== Boolean(metadataPatch.statsExclude) ||
-            transaccionExistente.tipo !== nextTipo;
+            transaccionExistente.tipo !== nextTipo ||
+            (Number(metadataPatch.installments) > 0 &&
+              Number(prevMeta.installments) !== Number(metadataPatch.installments)) ||
+            (Number(metadataPatch.installmentAmount) > 0 &&
+              Number(prevMeta.installmentAmount) !== Number(metadataPatch.installmentAmount));
 
           if (shouldEnrich) {
             if (transaccionExistente.tipo !== nextTipo) {

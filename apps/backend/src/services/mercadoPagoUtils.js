@@ -453,6 +453,10 @@ export const MP_MOVEMENT_KINDS = {
   INVESTMENT_OUT: 'INVESTMENT_OUT',
   FX_SELL: 'FX_SELL',
   FX_BUY: 'FX_BUY',
+  USD_IN: 'USD_IN',
+  USD_OUT: 'USD_OUT',
+  USD_PAYMENT: 'USD_PAYMENT',
+  CARD_PURCHASE: 'CARD_PURCHASE',
   INVESTMENT_YIELD: 'INVESTMENT_YIELD',
   YIELD: 'YIELD',
   CASHBACK: 'CASHBACK',
@@ -474,6 +478,10 @@ export const MP_MOVEMENT_KIND_LABELS = {
   INVESTMENT_OUT: 'Desde inversión',
   FX_SELL: 'Venta de dólares',
   FX_BUY: 'Compra de dólares',
+  USD_IN: 'Dólares recibidos',
+  USD_OUT: 'Dólares enviados',
+  USD_PAYMENT: 'Pago en dólares',
+  CARD_PURCHASE: 'Compra con tarjeta',
   INVESTMENT_YIELD: 'Rendimiento',
   YIELD: 'Rendimiento',
   CASHBACK: 'Cashback',
@@ -583,6 +591,113 @@ export function datosCambioUsd(input = {}) {
 }
 
 /**
+ * Movimiento que ya está en dólares: entra, sale o se usa para pagar.
+ * Un cambio ARS/USD no entra acá; lo resuelve datosCambioUsd.
+ */
+export function datosPosicionUsd(input = {}) {
+  const currency = String(input.currency || input.currency_id || input.currencyId || '').toUpperCase();
+  if (currency !== 'USD') return null;
+  const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
+  if (exchange === 'SELL' || exchange === 'BUY') return null;
+  const payerCcy = String(input.payerCurrency || input.amounts?.payer?.currency_id || '').toUpperCase();
+  const collectorCcy = String(input.collectorCurrency || input.amounts?.collector?.currency_id || '').toUpperCase();
+  if (payerCcy && collectorCcy && payerCcy !== collectorCcy) return null;
+
+  const op = String(input.operationType || input.operation_type || '').toLowerCase();
+  const medios = [
+    input.paymentMethod,
+    input.paymentMethodType,
+    input.paymentMethodId,
+    input.payment_type_id,
+    input.payment_method_id,
+  ].map((value) => String(value || '').toLowerCase());
+  const usd = Math.abs(Number(
+    input.usdAmount ?? input.transaction_amount ?? input.amount ?? input.netAmount ?? 0
+  ));
+  if (!usd) return null;
+
+  const esPago = op === 'regular_payment' || op === 'pos_payment'
+    || medios.some((id) => (
+      id === 'debit_card' || id === 'credit_card' || id === 'account_money' || id === 'available_money'
+      || MP_DEBIT_METHOD_IDS.has(id) || MP_CREDIT_METHOD_IDS.has(id)
+    ));
+  let movementKind = MP_MOVEMENT_KINDS.USD_IN;
+  if (esPago) movementKind = MP_MOVEMENT_KINDS.USD_PAYMENT;
+  else if (op === 'withdrawal' || op === 'money_withdrawal' || op === 'payout') {
+    movementKind = MP_MOVEMENT_KINDS.USD_OUT;
+  } else if (op !== 'account_fund') {
+    const net = Number(input.netAmount ?? input.amount ?? 0);
+    if (net < 0) movementKind = MP_MOVEMENT_KINDS.USD_OUT;
+  }
+  return { movementKind, usdAmount: usd, currency: 'USD' };
+}
+
+/**
+ * Compra del usuario pagada con tarjeta de crédito. El neto positivo es un
+ * cobro (la plata entra) y se queda en el flujo. La validación de tarjeta no
+ * es una compra.
+ * @returns {{ movementKind: string } | null}
+ */
+const MP_CREDIT_METHOD_IDS = new Set([
+  'visa',
+  'master',
+  'amex',
+  'naranja',
+  'cabal',
+  'argencard',
+  'cencosud',
+  'diners',
+  'cmr',
+  'magna',
+  'nevada',
+  'cordobesa',
+  'tarshop',
+  'shopping'
+]);
+
+const MP_DEBIT_METHOD_IDS = new Set([
+  'debvisa',
+  'debmaster',
+  'maestro',
+  'debcabal',
+  'debamex'
+]);
+
+function medioEsCredito(method, methodType, methodId) {
+  const ids = [method, methodType, methodId].map((value) => String(value || '').toLowerCase());
+  if (ids.some((id) => id === 'debit_card' || MP_DEBIT_METHOD_IDS.has(id))) return false;
+  return ids.some((id) => id === 'credit_card' || MP_CREDIT_METHOD_IDS.has(id));
+}
+
+export function datosCompraTarjeta(input = {}) {
+  const operationType = String(
+    input.operationType || input.operation_type || ''
+  ).toLowerCase();
+  if (operationType === 'card_validation') return null;
+  const method = String(
+    input.paymentMethod || input.payment_method || input.PAYMENT_METHOD || ''
+  ).toLowerCase();
+  const methodType = String(
+    input.paymentMethodType ||
+    input.payment_method_type ||
+    input.PAYMENT_METHOD_TYPE ||
+    input.raw?.PAYMENT_METHOD_TYPE ||
+    ''
+  ).toLowerCase();
+  const methodId = String(
+    input.paymentMethodId ||
+    input.payment_method_id ||
+    input.metadata?.paymentMethodId ||
+    input.raw?.PAYMENT_METHOD ||
+    ''
+  ).toLowerCase();
+  if (!medioEsCredito(method, methodType, methodId)) return null;
+  const net = Number(input.netAmount ?? input.amount ?? NaN);
+  if (!(Number.isFinite(net) && net < 0)) return null;
+  return { movementKind: MP_MOVEMENT_KINDS.CARD_PURCHASE };
+}
+
+/**
  * @returns {{ movementKind: string, statsExclude: boolean, label: string, isTransfer: boolean, isInternal: boolean }}
  */
 export function clasificarMovimientoEconomicoMp(input = {}) {
@@ -643,6 +758,18 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       statsExclude: true,
       label: MP_MOVEMENT_KIND_LABELS[cambio.movementKind],
       isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  const posicionUsd = datosPosicionUsd(input);
+  if (posicionUsd) {
+    const pagoUsd = posicionUsd.movementKind === MP_MOVEMENT_KINDS.USD_PAYMENT;
+    return {
+      movementKind: posicionUsd.movementKind,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS[posicionUsd.movementKind],
+      isTransfer: !pagoUsd,
       isInternal: false
     };
   }
@@ -760,6 +887,19 @@ export function clasificarMovimientoEconomicoMp(input = {}) {
       movementKind: MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
       statsExclude: true,
       label: MP_MOVEMENT_KIND_LABELS.INVESTMENT_YIELD,
+      isTransfer: false,
+      isInternal: false
+    };
+  }
+
+  // Compra pagada con tarjeta: no sale de la billetera. El cobro con tarjeta
+  // (neto positivo) sigue en el flujo.
+  const tarjeta = datosCompraTarjeta(input);
+  if (tarjeta) {
+    return {
+      movementKind: tarjeta.movementKind,
+      statsExclude: true,
+      label: MP_MOVEMENT_KIND_LABELS.CARD_PURCHASE,
       isTransfer: false,
       isInternal: false
     };
@@ -935,15 +1075,24 @@ export const MP_INVERSIONES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.YIELD
 ]);
 
-/** Libro dólares: compra y venta de USD. No entran a inversiones ni al flujo. */
+/** Libro dólares: movimientos, compraventa y pagos en USD. No entran al flujo. */
 export const MP_DOLARES_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.FX_SELL,
-  MP_MOVEMENT_KINDS.FX_BUY
+  MP_MOVEMENT_KINDS.FX_BUY,
+  MP_MOVEMENT_KINDS.USD_IN,
+  MP_MOVEMENT_KINDS.USD_OUT,
+  MP_MOVEMENT_KINDS.USD_PAYMENT
+]);
+
+/** Libro créditos: compras con tarjeta. Los cobros con tarjeta no entran. */
+export const MP_CREDITOS_KINDS = Object.freeze([
+  MP_MOVEMENT_KINDS.CARD_PURCHASE
 ]);
 
 export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
   ...MP_INVERSIONES_KINDS,
   ...MP_DOLARES_KINDS,
+  ...MP_CREDITOS_KINDS,
   MP_MOVEMENT_KINDS.INTERNAL
 ]);
 
@@ -958,6 +1107,10 @@ export function isInversionesMovementKind(kind) {
 
 export function isDolaresMovementKind(kind) {
   return MP_DOLARES_KINDS.includes(kind);
+}
+
+export function isCreditosMovementKind(kind) {
+  return MP_CREDITOS_KINDS.includes(kind);
 }
 
 /**
@@ -976,6 +1129,11 @@ export function buildLedgerMatch(ledger = 'flujo') {
       'origen.metadata.movementKind': { $in: [...MP_DOLARES_KINDS] }
     };
   }
+  if (ledger === 'creditos') {
+    return {
+      'origen.metadata.movementKind': { $in: [...MP_CREDITOS_KINDS] }
+    };
+  }
   return {
     'origen.metadata.statsExclude': { $ne: true },
     'origen.metadata.isInternal': { $ne: true },
@@ -989,8 +1147,11 @@ export function buildLedgerMatch(ledger = 'flujo') {
 export function buildListLedgerMatch(ledger = 'flujo') {
   if (ledger === 'inversiones') return buildLedgerMatch('inversiones');
   if (ledger === 'dolares') return buildLedgerMatch('dolares');
+  if (ledger === 'creditos') return buildLedgerMatch('creditos');
   return {
-    'origen.metadata.movementKind': { $nin: [...MP_INVERSIONES_KINDS, ...MP_DOLARES_KINDS] }
+    'origen.metadata.movementKind': {
+      $nin: [...MP_INVERSIONES_KINDS, ...MP_DOLARES_KINDS, ...MP_CREDITOS_KINDS]
+    }
   };
 }
 
@@ -1007,6 +1168,7 @@ export function applyMovementKindFilter(query, ledger, raw) {
   const allowed = requested.filter((kind) => {
     if (ledger === 'inversiones') return MP_INVERSIONES_KINDS.includes(kind);
     if (ledger === 'dolares') return MP_DOLARES_KINDS.includes(kind);
+    if (ledger === 'creditos') return MP_CREDITOS_KINDS.includes(kind);
     return !MP_FLUJO_EXCLUDED_KINDS.includes(kind);
   });
   const field = 'origen.metadata.movementKind';
@@ -1044,8 +1206,12 @@ export function acumularBucketInversiones(kind, tipo, monto, yieldSide) {
 
 /** El settlement trae el neto en positivo para los dos lados. La dirección del dólar manda. */
 export function tipoDeCambioUsd(kind) {
-  if (kind === MP_MOVEMENT_KINDS.FX_SELL) return 'INGRESO';
-  if (kind === MP_MOVEMENT_KINDS.FX_BUY) return 'EGRESO';
+  if (kind === MP_MOVEMENT_KINDS.FX_SELL || kind === MP_MOVEMENT_KINDS.USD_IN) return 'INGRESO';
+  if (
+    kind === MP_MOVEMENT_KINDS.FX_BUY
+    || kind === MP_MOVEMENT_KINDS.USD_OUT
+    || kind === MP_MOVEMENT_KINDS.USD_PAYMENT
+  ) return 'EGRESO';
   return null;
 }
 
@@ -1072,12 +1238,37 @@ export function conservarClasificacionUsd(prevMeta = {}, next = {}) {
   };
 }
 
+/**
+ * Un settlement sin el medio de pago no alcanza para ver la tarjeta.
+ * Si la fila ya era una compra con tarjeta, no vuelve al flujo.
+ */
+export function conservarClasificacionTarjeta(prevMeta = {}, next = {}) {
+  if (!isCreditosMovementKind(prevMeta.movementKind) || isCreditosMovementKind(next.movementKind)) {
+    return next;
+  }
+  return {
+    ...next,
+    movementKind: MP_MOVEMENT_KINDS.CARD_PURCHASE,
+    statsExclude: true,
+    isInternal: false,
+    label: MP_MOVEMENT_KIND_LABELS.CARD_PURCHASE,
+    installments: next.installments || prevMeta.installments || 1,
+    installmentAmount: next.installmentAmount || prevMeta.installmentAmount || 0,
+    paymentMethod: next.paymentMethod || prevMeta.paymentMethod || 'credit_card',
+    paymentMethodType: next.paymentMethodType || prevMeta.paymentMethodType || 'credit_card',
+  };
+}
+
 /** Pesos y dólares de una compra o venta. `usd` es la cantidad de dólares, no el monto en pesos. */
 export function acumularBucketDolares(kind, monto, usd) {
   const amount = Number(monto) || 0;
   const dollars = Number(usd) || 0;
   if (kind === MP_MOVEMENT_KINDS.FX_SELL) return { usdVendido: dollars, pesosVenta: amount };
   if (kind === MP_MOVEMENT_KINDS.FX_BUY) return { usdComprado: dollars, pesosCompra: amount };
+  const face = dollars || amount;
+  if (kind === MP_MOVEMENT_KINDS.USD_IN) return { usdRecibido: face };
+  if (kind === MP_MOVEMENT_KINDS.USD_OUT) return { usdEnviado: face };
+  if (kind === MP_MOVEMENT_KINDS.USD_PAYMENT) return { usdPagado: face };
   return {};
 }
 

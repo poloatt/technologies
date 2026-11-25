@@ -263,6 +263,8 @@ function isGenericCounterpartyName(name) {
     'atm',
     'digital_accounts',
     'digital_accounts_cards',
+    'wallet',
+    'marketplace',
   ].map((v) => String(v).toLowerCase()));
   return generic.has(cleaned.toLowerCase());
 }
@@ -330,6 +332,18 @@ export function formatMpTransactionTitle(descripcion, origen) {
     return 'Movimiento Mercado Pago';
   }
   return title;
+}
+
+/** Nombre de la compra con tarjeta. El punto de interacción a veces dice solo "wallet". */
+export function formatCardPurchaseTitle(transaccion) {
+  const meta = getOrigenMetadata(transaccion?.origen);
+  const candidates = [meta.statementDescriptor, meta.itemTitle, meta.description, meta.businessName];
+  for (const candidate of candidates) {
+    const text = String(candidate || '').trim();
+    if (!text || /^producto sin descripci/i.test(text) || isGenericCounterpartyName(text)) continue;
+    return text;
+  }
+  return formatMpTransactionTitle(transaccion?.descripcion, transaccion?.origen);
 }
 
 /**

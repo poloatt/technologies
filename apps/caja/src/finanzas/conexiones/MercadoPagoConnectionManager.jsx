@@ -276,7 +276,6 @@ export default function MercadoPagoConnectionManager({ connectionId, onConnectio
           <MercadoPagoSyncOptions
             connectionId={connectionId}
             historial={historial}
-            showDailySync
             onSynced={handleSynced}
           />
         </DialogContent>

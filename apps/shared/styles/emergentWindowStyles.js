@@ -22,6 +22,16 @@ export const emergentWindowPaperSx = {
   boxShadow: 'none',
 };
 
+/** Misma ventana, pero media pantalla y centrada. Solo desktop; en mobile sigue a pantalla completa. */
+export const emergentWindowHalfPaperSx = {
+  width: '50vw',
+  maxWidth: '50vw',
+  height: '50vh',
+  minHeight: '50vh',
+  maxHeight: '50vh',
+  margin: 0,
+};
+
 export const emergentWindowHeaderSx = {
   display: 'flex',
   alignItems: 'center',

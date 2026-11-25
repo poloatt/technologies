@@ -36,7 +36,15 @@ function listParams({ fechaInicio, fechaFin, cuentaId, page, limit, ledger, kind
  * `hasAny` distingue "no hay movimientos" de "no hay en este corte"
  * con una sonda de 1 documento, solo cuando la página del período viene vacía.
  */
-export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger, kinds, estado } = {}) {
+export function useTransaccionesList({
+  fechaInicio,
+  fechaFin,
+  cuentaId,
+  ledger,
+  kinds,
+  estado,
+  pageSize = TRANSACCIONES_PAGE_SIZE,
+} = {}) {
   const [docs, setDocs] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -61,11 +69,11 @@ export function useTransaccionesList({ fechaInicio, fechaFin, cuentaId, ledger, 
         kinds,
         estado,
         page,
-        limit: TRANSACCIONES_PAGE_SIZE,
+        limit: pageSize,
       }),
       signal,
     }).then((response) => response.data)
-  ), [fechaInicio, fechaFin, cuentaId, ledger, kinds, estado]);
+  ), [fechaInicio, fechaFin, cuentaId, ledger, kinds, estado, pageSize]);
 
   const reload = useCallback(async () => {
     abortRef.current?.abort();

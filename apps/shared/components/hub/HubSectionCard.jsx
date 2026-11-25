@@ -17,6 +17,7 @@ export default function HubSectionCard({
   cardSx,
   headerSx,
   bodySx,
+  action = null,
 }) {
   const navigate = useNavigate();
 
@@ -32,6 +33,7 @@ export default function HubSectionCard({
         isActive={isActive}
         onTitleClick={() => navigate(path)}
         headerSx={headerSx}
+        action={action}
       />
 
       {children != null && children !== false ? (

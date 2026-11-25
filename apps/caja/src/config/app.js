@@ -35,6 +35,7 @@ export const cajaConfig = {
     monedas: true,
     inversiones: true,
     dolares: true,
+    creditos: true,
     deudores: true,
     recurrente: true,
     inquilinos: true,

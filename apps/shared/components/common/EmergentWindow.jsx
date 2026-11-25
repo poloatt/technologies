@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import useResponsive from '../../hooks/useResponsive';
 import {
   emergentWindowBodySx,
+  emergentWindowHalfPaperSx,
   emergentWindowHeaderSx,
   emergentWindowIconButtonSx,
   emergentWindowPaperSx,
@@ -28,19 +29,32 @@ export default function EmergentWindow({
   subtitle,
   fullPagePath = null,
   headerActions = null,
+  halfScreen = false,
+  bodySx,
   children,
 }) {
   const navigate = useNavigate();
   const { isMobile } = useResponsive();
+  const useHalf = halfScreen && !isMobile;
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
       fullScreen={isMobile}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{ sx: emergentWindowPaperSx }}
+      maxWidth={useHalf ? false : 'sm'}
+      fullWidth={!useHalf}
+      PaperProps={{
+        sx: useHalf
+          ? { ...emergentWindowPaperSx, ...emergentWindowHalfPaperSx }
+          : emergentWindowPaperSx,
+      }}
+      sx={useHalf ? {
+        '& .MuiDialog-container': {
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+      } : undefined}
     >
       <Box sx={emergentWindowHeaderSx}>
         <IconButton
@@ -82,7 +96,7 @@ export default function EmergentWindow({
           </Box>
         ) : null}
       </Box>
-      <Box sx={emergentWindowBodySx}>
+      <Box sx={{ ...emergentWindowBodySx, ...bodySx }}>
         {open ? children : null}
       </Box>
     </Dialog>

@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Box, Skeleton, Typography } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { hubLabelSx, hubPeriodSx } from '../../hub';
+import { useAPI } from '@shared/hooks/useAPI';
+import { filterToggleRowSx, getFilterToggleHubRowSx } from '@shared/styles/filterToggleStyles';
+import { hubPeriodSx } from '../../hub';
+import FilterToggleButton from '../FilterToggleButton';
+import HubBalanceDivider from '../hub/HubBalanceDivider';
+import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
-import LedgerKindFilter from '../transacciones/LedgerKindFilter';
-import { DOLAR_TYPE_FILTERS, kindsQueryFor } from '../transacciones/ledgerKindFilters';
+import { DOLAR_TYPE_FILTERS, toggleKindId } from '../transacciones/ledgerKindFilters';
 import {
   DEFAULT_PERIOD_PRESET,
-  formatMonto,
   formatPeriodSpan,
   getPeriodRange,
 } from '../transacciones/transaccionesPeriodUtils';
@@ -19,23 +22,10 @@ const EMPTY_MONEDA = {
   color: '#F9A825',
   usdVendido: 0,
   usdComprado: 0,
-  pesosVenta: 0,
-  pesosCompra: 0,
+  usdRecibido: 0,
+  usdEnviado: 0,
+  usdPagado: 0,
 };
-
-function pesoEntero(monto) {
-  const n = Number(monto) || 0;
-  const sign = n < 0 ? -1 : 1;
-  return sign * Math.round(Math.abs(n));
-}
-
-function conSigno(monto, simbolo, showValues) {
-  if (!showValues) return formatMonto(monto, simbolo, false);
-  const body = formatMonto(Math.abs(monto), simbolo, true);
-  if (monto < 0) return `−${body}`;
-  if (monto > 0) return `+${body}`;
-  return body;
-}
 
 function formatUsd(monto, showValues, signed = true) {
   if (!showValues) return 'U$D ••••';
@@ -50,22 +40,6 @@ function formatUsd(monto, showValues, signed = true) {
   return `U$D ${body}`;
 }
 
-function Metric({ label, amount, color, yieldText }) {
-  return (
-    <Box sx={{ minWidth: 0, flex: '1 1 0' }}>
-      <Typography sx={hubLabelSx}>{label}</Typography>
-      <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', lineHeight: 1.25, mt: 0.25, color }}>
-        {amount}
-      </Typography>
-      {yieldText ? (
-        <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'text.secondary' }}>
-          {yieldText}
-        </Typography>
-      ) : null}
-    </Box>
-  );
-}
-
 export default function DolaresResumen({
   density = 'page',
   preset = DEFAULT_PERIOD_PRESET,
@@ -73,33 +47,41 @@ export default function DolaresResumen({
   enabledKinds,
   onKindsChange,
 }) {
-  const dense = density === 'compact';
   const { showValues } = useValuesVisibility();
-  const [hubPreset, setHubPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
+    density,
+    preset,
+    onPresetChange,
+  });
   const [localKinds, setLocalKinds] = useState(null);
   const controlledKinds = typeof onKindsChange === 'function';
   const kindSelection = controlledKinds ? enabledKinds : localKinds;
   const setKindSelection = controlledKinds ? onKindsChange : setLocalKinds;
-  const activePreset = dense ? hubPreset : preset;
-  const changePreset = dense ? setHubPreset : onPresetChange;
   const range = getPeriodRange(activePreset);
   const span = formatPeriodSpan(range.fechaInicio, range.fechaFin);
   const { stats, loading, error } = useTransaccionesPeriodStats({
     preset: activePreset,
     ledger: 'dolares',
-    kinds: kindsQueryFor(DOLAR_TYPE_FILTERS, kindSelection),
   });
 
   const activa = stats.porMoneda?.[0] || EMPTY_MONEDA;
-  const simbolo = activa.simbolo || '$';
   const vendido = Number(activa.usdVendido) || 0;
   const comprado = Number(activa.usdComprado) || 0;
-  // Vender dólares deja pesos a favor. Comprar los saca.
-  const netoUsd = vendido - comprado;
-  const pesosVenta = pesoEntero(activa.pesosVenta || 0);
-  const pesosCompra = pesoEntero(activa.pesosCompra || 0);
-  const recibido = pesosVenta - pesosCompra;
-  const resultadoColor = netoUsd < 0 ? 'error.main' : (activa.color || 'success.main');
+  const recibido = Number(activa.usdRecibido) || 0;
+  const enviado = Number(activa.usdEnviado) || 0;
+  const pagos = Number(activa.usdPagado) || 0;
+  const groups = [
+    { id: 'move', label: 'Movimientos', neto: recibido - enviado },
+    { id: 'card', label: 'Pagos', neto: -pagos },
+    { id: 'fx', label: 'Compraventa', neto: comprado - vendido },
+  ];
+  const selectedIds = kindSelection == null ? groups.map((group) => group.id) : kindSelection;
+  const netoUsd = groups
+    .filter((group) => selectedIds.includes(group.id))
+    .reduce((acc, group) => acc + group.neto, 0);
+  const { data: monedasData } = useAPI('/api/monedas');
+  const usdColor = (monedasData?.docs || []).find((moneda) => moneda.codigo === 'USD')?.color;
+  const resultadoColor = netoUsd < 0 ? 'error.main' : (usdColor || '#006400');
 
   let body;
   if (loading) {
@@ -143,20 +125,18 @@ export default function DolaresResumen({
             </Typography>
           )}
         </Box>
-        <Box sx={{ display: 'flex', gap: 1.5, mt: dense ? 1 : 1.5 }}>
-          <Metric
-            label="Recibido"
-            amount={conSigno(recibido, simbolo, showValues)}
-            color={recibido < 0 ? 'error.main' : undefined}
-          />
-          <Metric
-            label="Vendido"
-            amount={conSigno(pesosVenta, simbolo, showValues)}
-          />
-          <Metric
-            label="Comprado"
-            amount={conSigno(pesosCompra, simbolo, showValues)}
-          />
+        {dense && <HubBalanceDivider />}
+        <Box sx={dense ? getFilterToggleHubRowSx() : { ...filterToggleRowSx, mt: 1.5 }}>
+          {groups.map((group) => (
+            <FilterToggleButton
+              key={group.id}
+              label={group.label}
+              amount={formatUsd(group.neto, showValues)}
+              amountColor={group.neto < 0 ? 'error.main' : (group.neto > 0 ? (usdColor || 'text.primary') : 'text.secondary')}
+              selected={selectedIds.includes(group.id)}
+              onClick={() => setKindSelection(toggleKindId(DOLAR_TYPE_FILTERS, kindSelection, group.id))}
+            />
+          ))}
         </Box>
       </>
     );
@@ -168,16 +148,23 @@ export default function DolaresResumen({
       aria-label="Dólares del período"
       sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
     >
+      {(showPeriodControl || !dense) && (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%', minHeight: 28 }}>
-          <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-            <PeriodControl preset={activePreset} onChange={changePreset} />
-          </Box>
-          <LedgerKindFilter
-            options={DOLAR_TYPE_FILTERS}
-            enabledIds={kindSelection}
-            onChange={setKindSelection}
-          />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: showPeriodControl ? 'flex-start' : 'flex-end',
+            gap: 0.5,
+            width: '100%',
+            minHeight: 28,
+          }}
+        >
+          {showPeriodControl && (
+            <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+              <PeriodControl preset={activePreset} onChange={changePreset} />
+            </Box>
+          )}
         </Box>
         {!dense && (
           <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
@@ -185,6 +172,7 @@ export default function DolaresResumen({
           </Typography>
         )}
       </Box>
+      )}
       {body}
     </Box>
   );

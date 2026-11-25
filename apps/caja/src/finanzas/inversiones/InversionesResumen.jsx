@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { Box, Skeleton, Typography } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
+import { filterToggleRowSx, getFilterToggleHubRowSx } from '@shared/styles/filterToggleStyles';
 import { hubLabelSx, hubPeriodSx } from '../../hub';
+import FilterToggleButton from '../FilterToggleButton';
+import HubBalanceDivider from '../hub/HubBalanceDivider';
+import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
-import LedgerKindFilter from '../transacciones/LedgerKindFilter';
-import { INVERSION_TYPE_FILTERS, kindsQueryFor } from '../transacciones/ledgerKindFilters';
+import { INVERSION_TYPE_FILTERS, toggleKindId } from '../transacciones/ledgerKindFilters';
 import {
   DEFAULT_PERIOD_PRESET,
   formatMonto,
@@ -41,22 +44,6 @@ function conSigno(monto, simbolo, showValues) {
   return body;
 }
 
-function Metric({ label, amount, color, yieldText }) {
-  return (
-    <Box sx={{ minWidth: 0, flex: '1 1 0' }}>
-      <Typography sx={hubLabelSx}>{label}</Typography>
-      <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', lineHeight: 1.25, mt: 0.25, color }}>
-        {amount}
-      </Typography>
-      {yieldText ? (
-        <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'text.secondary' }}>
-          {yieldText}
-        </Typography>
-      ) : null}
-    </Box>
-  );
-}
-
 /**
  * Totales del libro inversiones: enviado, rescatado, rendimientos y neto del período.
  * `compact` entra en la tarjeta del hub. `page` va arriba del listado.
@@ -68,22 +55,22 @@ export default function InversionesResumen({
   enabledKinds,
   onKindsChange,
 }) {
-  const dense = density === 'compact';
   const { showValues } = useValuesVisibility();
-  const [hubPreset, setHubPreset] = useState(DEFAULT_PERIOD_PRESET);
+  const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
+    density,
+    preset,
+    onPresetChange,
+  });
   const [monedaElegida, setMonedaElegida] = useState(null);
   const [localKinds, setLocalKinds] = useState(null);
   const controlledKinds = typeof onKindsChange === 'function';
   const kindSelection = controlledKinds ? enabledKinds : localKinds;
   const setKindSelection = controlledKinds ? onKindsChange : setLocalKinds;
-  const activePreset = dense ? hubPreset : preset;
-  const changePreset = dense ? setHubPreset : onPresetChange;
   const range = getPeriodRange(activePreset);
   const span = formatPeriodSpan(range.fechaInicio, range.fechaFin);
   const { stats, loading, error } = useTransaccionesPeriodStats({
     preset: activePreset,
     ledger: 'inversiones',
-    kinds: kindsQueryFor(INVERSION_TYPE_FILTERS, kindSelection),
   });
 
   const monedas = stats.porMoneda;
@@ -98,8 +85,17 @@ export default function InversionesResumen({
   const saldoReserva = reservado - volvio;
   const saldoInversion = invertido - rescatadoFci;
   const rendimientos = rendimientoReserva + rendimientoInversion;
-  const resultado = saldoReserva + saldoInversion + rendimientos;
-  const resultadoColor = resultado < 0 ? 'error.main' : (activa.color || 'success.main');
+  const groups = [
+    { id: 'reserve', label: 'Reservado', neto: saldoReserva },
+    { id: 'invest', label: 'Inversiones', neto: saldoInversion },
+    { id: 'yield', label: 'Rendimientos', neto: rendimientos },
+  ];
+  const selectedIds = kindSelection == null ? groups.map((group) => group.id) : kindSelection;
+  const resultado = groups
+    .filter((group) => selectedIds.includes(group.id))
+    .reduce((acc, group) => acc + group.neto, 0);
+  const monedaColor = activa.color || 'success.main';
+  const resultadoColor = resultado < 0 ? 'error.main' : monedaColor;
 
   let body;
   if (loading) {
@@ -124,7 +120,7 @@ export default function InversionesResumen({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 1,
-            mb: dense ? 1 : 1.5,
+            mb: dense ? 0 : 1.5,
           }}
         >
           <Typography
@@ -144,26 +140,18 @@ export default function InversionesResumen({
             </Typography>
           )}
         </Box>
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <Metric
-            label="Reservado"
-            amount={conSigno(saldoReserva, simbolo, showValues)}
-            color={saldoReserva < 0 ? 'error.main' : undefined}
-            yieldText={dense ? undefined : `rendimiento ${conSigno(rendimientoReserva, simbolo, showValues)}`}
-          />
-          <Metric
-            label="Invertido"
-            amount={conSigno(saldoInversion, simbolo, showValues)}
-            color={saldoInversion < 0 ? 'error.main' : undefined}
-            yieldText={dense ? undefined : `rendimiento ${conSigno(rendimientoInversion, simbolo, showValues)}`}
-          />
-          {dense && (
-            <Metric
-              label="Rendimientos"
-              amount={conSigno(rendimientos, simbolo, showValues)}
-              color={rendimientos < 0 ? 'error.main' : undefined}
+        {dense && <HubBalanceDivider />}
+        <Box sx={dense ? getFilterToggleHubRowSx() : filterToggleRowSx}>
+          {groups.map((group) => (
+            <FilterToggleButton
+              key={group.id}
+              label={group.label}
+              amount={conSigno(group.neto, simbolo, showValues)}
+              amountColor={group.neto < 0 ? 'error.main' : (group.neto === 0 ? 'text.primary' : monedaColor)}
+              selected={selectedIds.includes(group.id)}
+              onClick={() => setKindSelection(toggleKindId(INVERSION_TYPE_FILTERS, kindSelection, group.id))}
             />
-          )}
+          ))}
         </Box>
       </>
     );
@@ -175,16 +163,23 @@ export default function InversionesResumen({
       aria-label="Inversiones del período"
       sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
     >
+      {(showPeriodControl || !dense) && (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, width: '100%', minHeight: 28 }}>
-          <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-            <PeriodControl preset={activePreset} onChange={changePreset} />
-          </Box>
-          <LedgerKindFilter
-            options={INVERSION_TYPE_FILTERS}
-            enabledIds={kindSelection}
-            onChange={setKindSelection}
-          />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: showPeriodControl ? 'flex-start' : 'flex-end',
+            gap: 0.5,
+            width: '100%',
+            minHeight: 28,
+          }}
+        >
+          {showPeriodControl && (
+            <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+              <PeriodControl preset={activePreset} onChange={changePreset} />
+            </Box>
+          )}
         </Box>
         {!dense && (
           <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
@@ -217,6 +212,7 @@ export default function InversionesResumen({
           </Box>
         )}
       </Box>
+      )}
       {body}
     </Box>
   );

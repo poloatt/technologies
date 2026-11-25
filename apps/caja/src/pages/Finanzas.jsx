@@ -6,6 +6,8 @@ import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
 import { useAPI } from '@shared/hooks/useAPI';
 import { FinanzasSectionNav } from '../finanzas';
+import FinanzasHubPeriodBar from '../finanzas/hub/FinanzasHubPeriodBar';
+import { FinanzasHubPeriodProvider } from '../finanzas/hub/finanzasHubPeriod';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 
 export default function Finanzas() {
@@ -105,7 +107,7 @@ export default function Finanzas() {
     <Box
       component="main"
       className="page-main-content"
-      sx={{ ...cajaPageLayoutSx, display: 'flex', flexDirection: 'column' }}
+      sx={{ ...cajaPageLayoutSx, display: 'flex', flexDirection: 'column', pt: 0 }}
     >
       <CommonForm
         open={openCuenta}
@@ -135,7 +137,10 @@ export default function Finanzas() {
         isEditing={false}
       />
 
-      <FinanzasSectionNav variant="hub" />
+      <FinanzasHubPeriodProvider>
+        <FinanzasHubPeriodBar />
+        <FinanzasSectionNav variant="hub" />
+      </FinanzasHubPeriodProvider>
     </Box>
   );
 }

@@ -1,8 +1,10 @@
+import { expandirCuotas, cuotaEnRangoClave } from '../../../../shared/utils/cuotasCredito.js';
 import { normalizeActivitiesWithdrawRow } from '../mercadoPagoActivitiesService.js';
 import {
   MP_MOVEMENT_KINDS,
   acumularBucketDolares,
   conservarClasificacionUsd,
+  conservarClasificacionTarjeta,
   tipoDeCambioUsd,
   acumularBucketInversiones,
   applyMovementKindFilter,
@@ -160,6 +162,16 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
       amounts: { payer: { currency_id: 'USD', transaction: 587.75 } },
     });
     expect(venta.movementKind).toBe(MP_MOVEMENT_KINDS.FX_SELL);
+    const ventaSinPago = clasificarMovimientoEconomicoMp({
+      transactionType: 'SETTLEMENT',
+      operationType: 'investment',
+      exchangeOperation: 'SELL',
+      payerCurrency: 'USD',
+      collectorCurrency: 'ARS',
+      usdAmount: 195.36,
+      netAmount: 291712,
+    });
+    expect(ventaSinPago.movementKind).toBe(MP_MOVEMENT_KINDS.FX_SELL);
     expect(venta.statsExclude).toBe(true);
     expect(determinarTipoPago({
       operation_type: 'investment',
@@ -237,7 +249,9 @@ describe('buildLedgerMatch', () => {
 
   it('el libro dólares queda afuera del flujo y de inversiones', () => {
     const dolares = buildLedgerMatch('dolares');
-    expect(dolares['origen.metadata.movementKind'].$in).toEqual(['FX_SELL', 'FX_BUY']);
+    expect(dolares['origen.metadata.movementKind'].$in).toEqual([
+      'FX_SELL', 'FX_BUY', 'USD_IN', 'USD_OUT', 'USD_PAYMENT',
+    ]);
     expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
       expect.arrayContaining(['FX_SELL', 'FX_BUY'])
     );
@@ -249,6 +263,33 @@ describe('buildLedgerMatch', () => {
       usdVendido: 587.75,
       pesosVenta: 891581.9,
     });
+    expect(acumularBucketDolares('USD_IN', 2990, 2990)).toEqual({ usdRecibido: 2990 });
+    expect(acumularBucketDolares('USD_PAYMENT', 40, 40)).toEqual({ usdPagado: 40 });
+    const recibido = clasificarMovimientoEconomicoMp({
+      operationType: 'account_fund',
+      paymentMethod: 'bank_transfer',
+      paymentMethodId: 'cvu',
+      currency: 'USD',
+      transaction_amount: 2990,
+      netAmount: 2990,
+    });
+    expect(recibido.movementKind).toBe('USD_IN');
+    expect(recibido.statsExclude).toBe(true);
+    const pagoUsd = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethodType: 'debit_card',
+      currency: 'USD',
+      transaction_amount: 40,
+      netAmount: -40,
+    });
+    expect(pagoUsd.movementKind).toBe('USD_PAYMENT');
+    const enviado = clasificarMovimientoEconomicoMp({
+      operationType: 'money_transfer',
+      currency: 'USD',
+      transaction_amount: 100,
+      netAmount: -100,
+    });
+    expect(enviado.movementKind).toBe('USD_OUT');
     expect(tipoDeCambioUsd('FX_SELL')).toBe('INGRESO');
     expect(tipoDeCambioUsd('FX_BUY')).toBe('EGRESO');
     const kept = conservarClasificacionUsd(
@@ -257,6 +298,73 @@ describe('buildLedgerMatch', () => {
     );
     expect(kept.movementKind).toBe('FX_SELL');
     expect(kept.usdAmount).toBe(587.75);
+  });
+
+  it('una compra con tarjeta sale del flujo y un cobro con tarjeta se queda', () => {
+    const compra = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethod: 'credit_card',
+      paymentMethodType: 'credit_card',
+      netAmount: -21315,
+    });
+    const cobro = clasificarMovimientoEconomicoMp({
+      transactionType: 'SETTLEMENT',
+      operationType: 'regular_payment',
+      paymentMethod: 'credit_card',
+      paymentMethodType: 'credit_card',
+      netAmount: 95996,
+    });
+    const validacion = clasificarMovimientoEconomicoMp({
+      operationType: 'card_validation',
+      paymentMethod: 'credit_card',
+      netAmount: -1,
+    });
+    expect(compra.movementKind).toBe('CARD_PURCHASE');
+    expect(compra.statsExclude).toBe(true);
+    expect(cobro.movementKind).toBe('PAYMENT');
+    expect(cobro.statsExclude).toBe(false);
+    expect(validacion.movementKind).not.toBe('CARD_PURCHASE');
+    const visa = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethod: 'visa',
+      paymentMethodId: 'visa',
+      netAmount: -1500,
+    });
+    const debito = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethod: 'debvisa',
+      paymentMethodType: 'debit_card',
+      paymentMethodId: 'debvisa',
+      netAmount: -1500,
+    });
+    expect(visa.movementKind).toBe('CARD_PURCHASE');
+    expect(debito.movementKind).not.toBe('CARD_PURCHASE');
+    expect(buildLedgerMatch('creditos')['origen.metadata.movementKind'].$in).toEqual(['CARD_PURCHASE']);
+    expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
+      expect.arrayContaining(['CARD_PURCHASE'])
+    );
+    expect(buildListLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
+      expect.arrayContaining(['CARD_PURCHASE'])
+    );
+    const kept = conservarClasificacionTarjeta(
+      { movementKind: 'CARD_PURCHASE', installments: 6, installmentAmount: 100 },
+      { movementKind: 'PAYMENT', statsExclude: false }
+    );
+    expect(kept.movementKind).toBe('CARD_PURCHASE');
+    expect(kept.installments).toBe(6);
+    const cuotas = expandirCuotas({
+      fecha: new Date('2026-09-09T15:00:00.000-03:00'),
+      monto: 300,
+      installments: 3,
+      installmentAmount: 100,
+    });
+    expect(cuotas.map((cuota) => cuota.due.toISOString().slice(0, 10))).toEqual([
+      '2026-09-09',
+      '2026-10-09',
+      '2026-11-09',
+    ]);
+    expect(cuotaEnRangoClave(cuotas[2].due, '2026-11-25', '2026-12-31')).toBe(false);
+    expect(cuotaEnRangoClave(cuotas[1].due, '2026-01-01', '2026-11-24')).toBe(true);
   });
 
   it('el libro inversiones incluye reserva, inversión y rendimiento viejo', () => {

@@ -1,16 +1,23 @@
 import { useEffect, useId, useState } from 'react';
-import { Box, Skeleton, Typography, useTheme } from '@mui/material';
+import { Box, Collapse, Skeleton, Typography, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { hubLabelSx, hubPeriodSx, hubValueSx } from '../../hub';
+import HubBalanceDivider from '../hub/HubBalanceDivider';
+import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import {
   DEFAULT_PERIOD_PRESET,
+  MONTH_PRESET,
   QUARTER_PRESETS,
   YEAR_PRESETS,
   fillDailySeries,
+  formatMonthPresetLabel,
   formatMonto,
   formatPeriodSpan,
   getCurrentQuarter,
   getPeriodRange,
+  isMonthPreset,
+  monthPresetId,
+  shiftMonthPreset,
 } from './transaccionesPeriodUtils';
 import { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
 import LedgerKindFilter from './LedgerKindFilter';
@@ -87,53 +94,155 @@ function PeriodSeg({ item, selected, marked, onChange }) {
   );
 }
 
-/** YTD · YTG | Q1–Q4 en una sola línea, estética de cabecera de sección. */
-export function PeriodControl({ preset, onChange }) {
-  const currentQuarter = `q${getCurrentQuarter()}`;
-  const items = [...YEAR_PRESETS, { divider: true }, ...QUARTER_PRESETS];
+function MonthStepButton({ label, onClick, children }) {
   return (
     <Box
-      role="group"
-      aria-label="Período"
+      component="button"
+      type="button"
+      aria-label={label}
+      onClick={onClick}
       sx={{
-        display: 'flex',
-        flexDirection: 'row',
-        flexWrap: 'nowrap',
+        ...hubLabelSx,
+        appearance: 'none',
+        display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 0.75,
-        minWidth: 0,
-        width: '100%',
+        width: 28,
         height: 28,
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        scrollbarWidth: 'none',
-        '&::-webkit-scrollbar': { display: 'none' },
+        minWidth: 28,
+        minHeight: 28,
+        m: 0,
+        p: 0,
+        border: 0,
+        borderRadius: 0,
+        bgcolor: 'transparent',
+        color: 'text.secondary',
+        cursor: 'pointer',
+        font: 'inherit',
+        fontWeight: 600,
+        lineHeight: 1,
+        '&:hover': { color: 'text.primary' },
       }}
     >
-      {items.map((item) =>
-        item.divider ? (
-          <Box
-            key="period-divider"
-            aria-hidden
-            sx={{
-              width: '1px',
-              alignSelf: 'stretch',
-              my: 0.75,
-              bgcolor: 'divider',
-              flex: '0 0 auto',
-            }}
-          />
-        ) : (
-          <PeriodSeg
-            key={item.id}
-            item={item}
-            selected={item.id === preset}
-            marked={item.id === currentQuarter}
-            onChange={onChange}
-          />
-        )
-      )}
+      {children}
+    </Box>
+  );
+}
+
+/** `< mes >` en columnas fijas para que el nombre no mueva las flechas. */
+function MonthStepper({ preset, onChange }) {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', pt: 0.25 }}>
+      <Box
+        role="group"
+        aria-label="Mes"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: '28px 11rem 28px',
+          alignItems: 'center',
+          justifyItems: 'center',
+        }}
+      >
+        <MonthStepButton
+          label="Mes anterior"
+          onClick={() => onChange?.(shiftMonthPreset(preset, -1))}
+        >
+          {'<'}
+        </MonthStepButton>
+        <Typography
+          component="span"
+          aria-live="polite"
+          sx={{
+            ...hubLabelSx,
+            mb: 0,
+            width: '100%',
+            textAlign: 'center',
+            color: 'text.primary',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {formatMonthPresetLabel(preset)}
+        </Typography>
+        <MonthStepButton
+          label="Mes siguiente"
+          onClick={() => onChange?.(shiftMonthPreset(preset, 1))}
+        >
+          {'>'}
+        </MonthStepButton>
+      </Box>
+    </Box>
+  );
+}
+
+/** YTD · YTG | Q1–Q4 | Mensual en una sola línea, estética de cabecera de sección. */
+export function PeriodControl({ preset, onChange }) {
+  const currentQuarter = `q${getCurrentQuarter()}`;
+  const monthSelected = isMonthPreset(preset);
+  const items = [
+    ...YEAR_PRESETS,
+    { id: 'div-quarters', divider: true },
+    ...QUARTER_PRESETS,
+    { id: 'div-month', divider: true },
+    MONTH_PRESET,
+  ];
+
+  const handleChange = (id) => {
+    if (id === 'month') {
+      onChange?.(monthPresetId(new Date()));
+      return;
+    }
+    onChange?.(id);
+  };
+
+  return (
+    <Box sx={{ width: '100%', minWidth: 0 }}>
+      <Box
+        role="group"
+        aria-label="Período"
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          flexWrap: 'nowrap',
+          alignItems: 'center',
+          justifyContent: 'safe center',
+          gap: 0.75,
+          minWidth: 0,
+          width: '100%',
+          height: 28,
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
+        }}
+      >
+        {items.map((item) =>
+          item.divider ? (
+            <Box
+              key={item.id}
+              aria-hidden
+              sx={{
+                width: '1px',
+                alignSelf: 'stretch',
+                my: 0.75,
+                bgcolor: 'divider',
+                flex: '0 0 auto',
+              }}
+            />
+          ) : (
+            <PeriodSeg
+              key={item.id}
+              item={item}
+              selected={item.id === 'month' ? monthSelected : item.id === preset}
+              marked={item.id === currentQuarter}
+              onChange={handleChange}
+            />
+          )
+        )}
+      </Box>
+      <Collapse in={monthSelected} unmountOnExit timeout={180}>
+        <MonthStepper preset={preset} onChange={onChange} />
+      </Collapse>
     </Box>
   );
 }
@@ -178,7 +287,7 @@ function MonedaControl({ monedas, activaId, onChange }) {
   );
 }
 
-function ProportionTrack({ label, amount, value, max, color, dense }) {
+export function ProportionTrack({ label, amount, value, max, color, dense }) {
   const ratio = max > 0 && value > 0 ? Math.max(value / max, 0.04) : 0;
   return (
     <Box>
@@ -292,17 +401,18 @@ export default function TransaccionesFlujoVisual({
   enabledKinds,
   onKindsChange,
 }) {
-  const dense = density === 'compact';
   const theme = useTheme();
   const { showValues } = useValuesVisibility();
+  const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
+    density,
+    preset,
+    onPresetChange,
+  });
   const [monedaElegida, setMonedaElegida] = useState(null);
-  const [hubPreset, setHubPreset] = useState(DEFAULT_PERIOD_PRESET);
   const [localKinds, setLocalKinds] = useState(null);
   const controlledKinds = typeof onKindsChange === 'function';
   const kindSelection = controlledKinds ? enabledKinds : localKinds;
   const setKindSelection = controlledKinds ? onKindsChange : setLocalKinds;
-  const activePreset = dense ? hubPreset : preset;
-  const changePreset = dense ? setHubPreset : onPresetChange;
   const span = formatPeriodSpan(
     getPeriodRange(activePreset).fechaInicio,
     getPeriodRange(activePreset).fechaFin,
@@ -347,7 +457,7 @@ export default function TransaccionesFlujoVisual({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 1,
-            mb: dense ? 1 : 0,
+            mb: 0,
           }}
         >
           <Typography
@@ -367,6 +477,7 @@ export default function TransaccionesFlujoVisual({
             </Typography>
           )}
         </Box>
+        {dense && <HubBalanceDivider />}
         {!dense && (
           <Typography
             variant="body2"
@@ -404,21 +515,25 @@ export default function TransaccionesFlujoVisual({
       aria-label={`Flujo de ${periodLabel}`}
       sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
     >
+      {(showPeriodControl || !dense || extras > 0) && (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
         <Box
           sx={{
             display: 'flex',
             flexDirection: 'row',
             flexWrap: 'nowrap',
-            alignItems: 'center',
+            alignItems: 'flex-start',
+            justifyContent: showPeriodControl ? 'flex-start' : 'flex-end',
             gap: 1,
             minHeight: 28,
             width: '100%',
           }}
         >
-          <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-            <PeriodControl preset={activePreset} onChange={changePreset} />
-          </Box>
+          {showPeriodControl && (
+            <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+              <PeriodControl preset={activePreset} onChange={changePreset} />
+            </Box>
+          )}
           {dense && extras > 0 && (
             <Typography
               variant="caption"
@@ -427,11 +542,13 @@ export default function TransaccionesFlujoVisual({
               {activa.codigo} +{extras}
             </Typography>
           )}
-          <LedgerKindFilter
-            options={FLUJO_TYPE_FILTERS}
-            enabledIds={kindSelection}
-            onChange={setKindSelection}
-          />
+          {!dense && (
+            <LedgerKindFilter
+              options={FLUJO_TYPE_FILTERS}
+              enabledIds={kindSelection}
+              onChange={setKindSelection}
+            />
+          )}
         </Box>
         {!dense && (
           <Typography variant="caption" sx={{ ...hubPeriodSx, mb: 0 }}>
@@ -442,6 +559,7 @@ export default function TransaccionesFlujoVisual({
           <MonedaControl monedas={monedas} activaId={activa.monedaId} onChange={setMonedaElegida} />
         )}
       </Box>
+      )}
       {body}
     </Box>
   );

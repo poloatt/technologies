@@ -33,6 +33,10 @@ export const FINANZAS_SECTION_META = {
     description: 'Compras y ventas de dólares',
     accent: '#F9A825',
   },
+  creditos: {
+    description: 'Compras con tarjeta y cuotas del mes',
+    accent: '#5C6BC0',
+  },
   deudores: {
     description: 'Préstamos, deudas y cobros pendientes',
     accent: '#F44336',

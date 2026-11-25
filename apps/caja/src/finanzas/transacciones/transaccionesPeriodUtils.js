@@ -1,9 +1,20 @@
 /** Cortes de gestión. El id viaja al hook; el label es el de la UI.
- * YTD/YTG y Q1–Q4 usan el año calendario local (1 ene–31 dic), no rolling 365 días.
+ * YTD/YTG, el mes en curso y Q1–Q4 usan el año calendario local (1 ene–31 dic), no rolling 365 días.
  */
 export const YEAR_PRESETS = [
   { id: 'ytd', label: 'YTD', hint: '1 ene → hoy (año calendario)' },
   { id: 'ytg', label: 'YTG', hint: 'Mañana → 31 dic (año calendario)' },
+];
+
+export const MONTH_PRESET = {
+  id: 'month',
+  label: 'Mensual',
+  hint: 'Un mes calendario. Las flechas recorren otros meses.',
+};
+
+const MONTH_NAMES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ];
 
 export const QUARTER_PRESETS = [
@@ -13,12 +24,51 @@ export const QUARTER_PRESETS = [
   { id: 'q4', label: 'Q4', hint: 'Oct–dic (año calendario)' },
 ];
 
-export const PERIOD_PRESETS = [...YEAR_PRESETS, ...QUARTER_PRESETS];
+export const PERIOD_PRESETS = [...YEAR_PRESETS, MONTH_PRESET, ...QUARTER_PRESETS];
 
 export const DEFAULT_PERIOD_PRESET = 'ytd';
 
 function pad(n) {
   return String(n).padStart(2, '0');
+}
+
+/** Id de un mes calendario: `month:2026-11`. `month` solo sigue siendo el mes en curso. */
+export function monthPresetId(date = new Date()) {
+  return `month:${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
+}
+
+export function parseMonthPreset(preset, now = new Date()) {
+  if (preset === 'month') {
+    return { year: now.getFullYear(), monthIndex: now.getMonth() };
+  }
+  if (typeof preset !== 'string') return null;
+  const match = /^month:(\d{4})-(\d{2})$/.exec(preset);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  if (!Number.isInteger(year) || monthIndex < 0 || monthIndex > 11) return null;
+  return { year, monthIndex };
+}
+
+export function isMonthPreset(preset) {
+  return parseMonthPreset(preset) != null;
+}
+
+export function shiftMonthPreset(preset, delta, now = new Date()) {
+  const parsed = parseMonthPreset(preset, now) ?? {
+    year: now.getFullYear(),
+    monthIndex: now.getMonth(),
+  };
+  return monthPresetId(new Date(parsed.year, parsed.monthIndex + delta, 1));
+}
+
+/** Nombre del mes. El año se agrega solo cuando no es el año en curso. */
+export function formatMonthPresetLabel(preset, now = new Date()) {
+  const parsed = parseMonthPreset(preset, now);
+  if (!parsed) return 'Mensual';
+  const name = MONTH_NAMES[parsed.monthIndex];
+  if (parsed.year === now.getFullYear()) return name;
+  return `${name} ${parsed.year}`;
 }
 
 /** YYYY-MM-DD en calendario local, sin pasar por UTC. */
@@ -55,6 +105,7 @@ function quarterBounds(year, quarter) {
 /**
  * Rango inclusivo del preset, en claves YYYY-MM-DD del calendario local.
  * YTD es el año hasta hoy. YTG es desde mañana hasta el 31 de diciembre.
+ * Mensual es un mes calendario completo (`month` = el mes en curso, `month:AAAA-MM` = ese mes).
  * Q1–Q4 son el trimestre calendario completo, aunque todavía no haya cerrado.
  */
 export function getPeriodRange(preset = DEFAULT_PERIOD_PRESET, now = new Date()) {
@@ -63,7 +114,11 @@ export function getPeriodRange(preset = DEFAULT_PERIOD_PRESET, now = new Date())
   let start;
   let end;
 
-  switch (preset) {
+  const selectedMonth = parseMonthPreset(preset, now);
+  if (selectedMonth) {
+    start = new Date(selectedMonth.year, selectedMonth.monthIndex, 1);
+    end = monthEnd(selectedMonth.year, selectedMonth.monthIndex);
+  } else switch (preset) {
     case 'ytg': {
       start = new Date(year, month, now.getDate() + 1);
       end = new Date(year, 11, 31);
@@ -95,6 +150,32 @@ export function getPeriodRange(preset = DEFAULT_PERIOD_PRESET, now = new Date())
   };
 }
 
+/**
+ * En créditos el mes no se parte. YTD llega al último día del mes en curso
+ * e YTG arranca el 1 del mes siguiente, incluyendo cuotas del año que viene.
+ */
+export function getCreditosPeriodRange(preset = DEFAULT_PERIOD_PRESET, now = new Date()) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  if (preset === 'ytd') {
+    return {
+      fechaInicio: formatDateKey(new Date(year, 0, 1)),
+      fechaFin: formatDateKey(monthEnd(year, month)),
+      estado: 'PAGADO',
+    };
+  }
+  if (preset === 'ytg') {
+    const start = new Date(year, month + 1, 1);
+    const end = new Date(start.getFullYear(), start.getMonth() + 36, 0);
+    return {
+      fechaInicio: formatDateKey(start),
+      fechaFin: formatDateKey(end),
+      estado: 'PAGADO',
+    };
+  }
+  return getPeriodRange(preset, now);
+}
+
 /** Rango del mes calendario actual (YYYY-MM-DD). */
 export function getCurrentMonthRange(now = new Date()) {
   const year = now.getFullYear();
@@ -107,6 +188,7 @@ export function getCurrentMonthRange(now = new Date()) {
 }
 
 export function getPeriodLabel(preset = DEFAULT_PERIOD_PRESET) {
+  if (isMonthPreset(preset)) return formatMonthPresetLabel(preset);
   return PERIOD_PRESETS.find((item) => item.id === preset)?.label || 'YTD';
 }
 
@@ -123,6 +205,17 @@ export function formatPeriodSpan(fechaInicio, fechaFin) {
     return `${day} ${SPAN_MONTHS[month - 1]}`;
   };
   return `${short(fechaInicio)} – ${short(fechaFin)}`;
+}
+
+/** YTG de créditos no cierra el 31 de diciembre: sigue con las cuotas posteriores. */
+export function formatCreditosPeriodSpan(preset, fechaInicio, fechaFin) {
+  if (preset === 'ytg' && fechaInicio) {
+    const parts = fechaInicio.split('-').map(Number);
+    const day = parts[2];
+    const month = parts[1];
+    if (day && month) return `${day} ${SPAN_MONTHS[month - 1]} en adelante`;
+  }
+  return formatPeriodSpan(fechaInicio, fechaFin);
 }
 
 /** Días inclusivos entre dos claves YYYY-MM-DD. */
