@@ -400,7 +400,8 @@ export class MercadoPagoReportService {
       fileName: fileNames[0],
       fileNames,
       total: byId.size,
-      reused: true
+      reused: true,
+      strictMatch: Boolean(strict)
     };
   }
 
@@ -473,11 +474,20 @@ export class MercadoPagoReportService {
       }
     }
 
-    // Preferir reporte NUEVO: con include_withdraw los CSV viejos omiten la mayoría
-    // de PAYOUTS/WITHDRAWAL. Solo reutilizar ante cupo 429.
+    // Si ya existe un reporte procesado que cubre exactamente este rango Y trae retiros
+    // (include_withdraw), reutilizarlo directo sin quemar el cupo diario de MP (429).
     let reusedFallback = null;
     try {
       reusedFallback = await this.reuseExistingReports(beginDate, endDate);
+      if (reusedFallback?.strictMatch && this.settlementHasBankTransfers(reusedFallback.rows)) {
+        console.log('[MP Report] Reutilizando reporte estricto con retiros (sin crear nuevo):', {
+          beginDate,
+          endDate,
+          fileName: reusedFallback.fileName,
+          rows: reusedFallback.rows.length
+        });
+        return reusedFallback;
+      }
     } catch (error) {
       console.warn('[MP Report] Reuso previo falló:', error.message);
     }

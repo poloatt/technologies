@@ -448,7 +448,7 @@ export class MercadoPagoAdapter {
   }
 
   async getAccountBalance() {
-    if (!this.userId) return { available: 0, unavailable: 0 };
+    if (!this.userId) return { available: 0, unavailable: 0, ok: false };
 
     return this.withRetry(async () => {
       const url = `https://api.mercadopago.com/users/${this.userId}/mercadopago_account/balance`;
@@ -456,15 +456,16 @@ export class MercadoPagoAdapter {
 
       if (!response.ok) {
         console.warn('[MP] Balance no disponible:', response.status);
-        return { available: 0, unavailable: 0, error: response.status };
+        return { available: 0, unavailable: 0, ok: false, error: response.status };
       }
 
       const data = await response.json();
       return {
         available: data.available_balance || 0,
-        unavailable: data.unavailable_balance || 0
+        unavailable: data.unavailable_balance || 0,
+        ok: true
       };
-    }).catch(() => ({ available: 0, unavailable: 0 }));
+    }).catch(() => ({ available: 0, unavailable: 0, ok: false }));
   }
 
   /**

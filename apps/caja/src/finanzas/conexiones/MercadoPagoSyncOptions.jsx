@@ -17,13 +17,18 @@ const mercadopagoLogo = new URL('./logos/mercadopago.svg', import.meta.url).href
 const SYNC_MODE_KEY = 'mercadopago_sync_mode';
 const SYNC_SINCE_KEY = 'mercadopago_sync_since';
 
-/** Piso del recorrido histórico. Mercado Pago no entrega años anteriores a esto. */
+/** Piso del recorrido histórico. El backend lo acota al inicio real de actividad de la cuenta. */
 const HISTORIAL_DESDE = '2010-01-01';
-const HISTORIAL_MAX_MESES = 240;
+const HISTORIAL_MAX_TRAMOS = 120;
 const HISTORY_DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_SYNC_DAYS = 90;
+const HISTORY_CHUNK_DAYS = 58;
 
-function historyTarget() {
+function historyTarget(since = HISTORIAL_DESDE) {
+  if (since && since !== HISTORIAL_DESDE) {
+    const parsed = new Date(since);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
   return new Date(`${HISTORIAL_DESDE}T00:00:00.000-03:00`);
 }
 
@@ -37,14 +42,13 @@ function monthStamp(date) {
   return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
 }
 
-/** Los mismos tramos de un mes que recorre el sync, del borde de 90 días hacia 2010. */
-function buildHistorySpan(now = new Date()) {
-  const target = historyTarget();
+/** Los mismos tramos de 58 días que recorre el sync, del borde de 90 días hacia el inicio de la cuenta. */
+function buildHistorySpan(now = new Date(), since = HISTORIAL_DESDE) {
+  const target = historyTarget(since);
   const months = [];
   let edge = new Date(now.getTime() - HISTORY_SYNC_DAYS * HISTORY_DAY_MS);
-  while (months.length < HISTORIAL_MAX_MESES && edge.getTime() > target.getTime()) {
-    const begin = new Date(edge);
-    begin.setMonth(begin.getMonth() - 1);
+  while (months.length < HISTORIAL_MAX_TRAMOS && edge.getTime() > target.getTime()) {
+    const begin = new Date(edge.getTime() - HISTORY_CHUNK_DAYS * HISTORY_DAY_MS);
     if (begin.getTime() < target.getTime()) begin.setTime(target.getTime());
     months.push({ begin });
     if (begin.getTime() <= target.getTime()) break;
@@ -184,7 +188,10 @@ export default function MercadoPagoSyncOptions({
   const [running, setRunning] = useState(false);
   const [flight, setFlight] = useState(null);
   const cancelRef = useRef(false);
-  const span = useMemo(() => buildHistorySpan(), []);
+  const span = useMemo(
+    () => buildHistorySpan(new Date(), historial?.inicioActividad || historial?.objetivo || HISTORIAL_DESDE),
+    [historial?.inicioActividad, historial?.objetivo]
+  );
 
   useEffect(() => () => {
     cancelRef.current = true;
@@ -216,17 +223,22 @@ export default function MercadoPagoSyncOptions({
       });
     }
 
-    const recent = await syncConnection(connectionId, { mode: 'rapido', silent: true });
-    if (!cancelRef.current) onSynced?.(recent);
-    if (cancelRef.current || haltHistory(recent)) {
-      enqueueSnackbar(recent?.message || 'Sincronización detenida', {
-        variant: recent?.exito === false || recent?.resultado?.settlementPending ? 'warning' : 'success',
-        autoHideDuration: 8000,
-      });
-      return recent;
+    // Si estamos retomando un histórico pendiente o con cuota agotada, ir directo al tramo
+    // pendiente sin gastar un reporte extra en el sync rápido.
+    const resumingPending = Boolean(historial?.pendiente || historial?.cuotaAgotada);
+    let last = null;
+    if (!resumingPending) {
+      const recent = await syncConnection(connectionId, { mode: 'rapido', silent: true });
+      if (!cancelRef.current) onSynced?.(recent);
+      if (cancelRef.current || haltHistory(recent)) {
+        enqueueSnackbar(recent?.message || 'Sincronización detenida', {
+          variant: recent?.exito === false || recent?.resultado?.settlementPending ? 'warning' : 'success',
+          autoHideDuration: 8000,
+        });
+        return recent;
+      }
+      last = recent;
     }
-
-    let last = recent;
     let done = progressDoneFrom(historial, span);
     let cursorTime = historial?.cubiertoHasta ? new Date(historial.cubiertoHasta).getTime() : null;
     if (cursorTime != null && Number.isNaN(cursorTime)) cursorTime = null;

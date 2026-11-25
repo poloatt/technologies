@@ -107,6 +107,8 @@ const bankConnectionSchema = createSchema({
       cuotaAgotada: { type: Boolean, default: false },
       quedaHistorial: { type: Boolean, default: false },
       completo: { type: Boolean, default: false },
+      tramosVacios: { type: Number, default: 0 },
+      inicioActividad: String,
       actualizadoEn: Date
     },
     // Diagnóstico de cobertura (P2P / CBU / reconciliación)

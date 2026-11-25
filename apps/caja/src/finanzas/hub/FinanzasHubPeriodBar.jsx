@@ -6,8 +6,8 @@ import { useFinanzasHubPeriod } from './finanzasHubPeriod';
 
 /**
  * Una sola barra de período, bajo el header, para todo el hub.
- * El rango de fechas se muestra acá una vez: a la derecha del selector en
- * misma fila, a la derecha del selector (centrado en pantallas anchas).
+ * El selector (tipo + gráfico de barras) ocupa todo el ancho; el rango de
+ * fechas se muestra una vez, a la derecha de la fila del selector.
  */
 export default function FinanzasHubPeriodBar() {
   const hubPeriod = useFinanzasHubPeriod();
@@ -25,33 +25,28 @@ export default function FinanzasHubPeriodBar() {
         bgcolor: 'background.default',
         pt: 0.5,
         pb: 1.5,
-        display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr) auto', sm: 'minmax(0, 1fr) auto minmax(0, 1fr)' },
-        alignItems: 'start',
-        columnGap: 2.5,
       }}
     >
-      <Box sx={{ gridColumn: { xs: 1, sm: 2 }, gridRow: 1, minWidth: 0 }}>
-        <PeriodControl preset={hubPeriod.preset} onChange={hubPeriod.setPreset} />
-      </Box>
-      {span && (
-        <Typography
-          variant="caption"
-          aria-label="Rango del período"
-          sx={{
-            ...hubEyebrowSx,
-            mb: 0,
-            gridColumn: { xs: 2, sm: 3 },
-            gridRow: 1,
-            justifySelf: 'end',
-            lineHeight: '28px',
-            whiteSpace: 'nowrap',
-            textAlign: 'right',
-          }}
-        >
-          {span}
-        </Typography>
-      )}
+      <PeriodControl
+        preset={hubPeriod.preset}
+        onChange={hubPeriod.setPreset}
+        trailing={span ? (
+          <Typography
+            variant="caption"
+            aria-label="Rango del período"
+            sx={{
+              ...hubEyebrowSx,
+              mb: 0,
+              display: 'block',
+              lineHeight: '28px',
+              whiteSpace: 'nowrap',
+              textAlign: 'right',
+            }}
+          >
+            {span}
+          </Typography>
+        ) : null}
+      />
     </Box>
   );
 }

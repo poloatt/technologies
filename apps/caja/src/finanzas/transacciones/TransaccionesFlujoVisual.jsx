@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { Box, Collapse, Skeleton, Typography, useTheme } from '@mui/material';
+import { Box, Skeleton, Typography, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { hubEyebrowSx, hubLabelSx, hubSupportAmountSx } from '../../hub';
 import HubBalanceDivider from '../hub/HubBalanceDivider';
@@ -19,21 +19,14 @@ import {
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import {
   DEFAULT_PERIOD_PRESET,
-  MONTH_PRESET,
-  QUARTER_PRESETS,
-  YEAR_PRESETS,
   fillDailySeries,
-  formatMonthPresetLabel,
   formatMonto,
   formatPeriodSpan,
   formatUsdMonto,
-  getCurrentQuarter,
   getPeriodRange,
-  isMonthPreset,
-  monthPresetId,
-  shiftMonthPreset,
 } from './transaccionesPeriodUtils';
 import { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
+import PeriodControl from './PeriodPicker';
 import LedgerKindFilter from './LedgerKindFilter';
 import { FLUJO_TYPE_FILTERS, kindsQueryFor } from './ledgerKindFilters';
 
@@ -57,210 +50,7 @@ function flowPhrase(moneda, showValues) {
   return 'Entradas y salidas empataron';
 }
 
-/** Misma tipografía que labels/títulos de sección hub (hubLabelSx / hubEyebrowSx). */
-function PeriodSeg({ item, selected, marked, onChange }) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      onClick={() => onChange?.(item.id)}
-      aria-pressed={selected}
-      title={item.hint}
-      sx={{
-        ...hubLabelSx,
-        appearance: 'none',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 0.375,
-        m: 0,
-        px: 0.25,
-        py: 0,
-        minHeight: 28,
-        height: 28,
-        border: 0,
-        borderRadius: 0,
-        bgcolor: 'transparent',
-        cursor: 'pointer',
-        font: 'inherit',
-        fontWeight: selected ? 600 : 500,
-        color: selected ? 'text.primary' : 'text.secondary',
-        flex: '0 0 auto',
-        whiteSpace: 'nowrap',
-        transition: 'color 120ms ease',
-        '&:hover': { color: 'text.primary' },
-      }}
-    >
-      {item.label}
-      {marked && (
-        <Box
-          aria-hidden
-          sx={{
-            width: 4,
-            height: 4,
-            borderRadius: '50%',
-            bgcolor: selected ? 'text.primary' : 'text.disabled',
-            flex: '0 0 auto',
-          }}
-        />
-      )}
-    </Box>
-  );
-}
-
-function MonthStepButton({ label, onClick, children }) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      sx={{
-        ...hubLabelSx,
-        appearance: 'none',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 28,
-        height: 28,
-        minWidth: 28,
-        minHeight: 28,
-        m: 0,
-        p: 0,
-        border: 0,
-        borderRadius: 0,
-        bgcolor: 'transparent',
-        color: 'text.secondary',
-        cursor: 'pointer',
-        font: 'inherit',
-        fontWeight: 600,
-        lineHeight: 1,
-        '&:hover': { color: 'text.primary' },
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
-
-/** `< mes >` en columnas fijas para que el nombre no mueva las flechas. */
-function MonthStepper({ preset, onChange }) {
-  return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', pt: 0.25 }}>
-      <Box
-        role="group"
-        aria-label="Mes"
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: '28px 11rem 28px',
-          alignItems: 'center',
-          justifyItems: 'center',
-        }}
-      >
-        <MonthStepButton
-          label="Mes anterior"
-          onClick={() => onChange?.(shiftMonthPreset(preset, -1))}
-        >
-          {'<'}
-        </MonthStepButton>
-        <Typography
-          component="span"
-          aria-live="polite"
-          sx={{
-            ...hubLabelSx,
-            mb: 0,
-            width: '100%',
-            textAlign: 'center',
-            color: 'text.primary',
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {formatMonthPresetLabel(preset)}
-        </Typography>
-        <MonthStepButton
-          label="Mes siguiente"
-          onClick={() => onChange?.(shiftMonthPreset(preset, 1))}
-        >
-          {'>'}
-        </MonthStepButton>
-      </Box>
-    </Box>
-  );
-}
-
-/** YTD · YTG | Q1–Q4 | M (mensual) en una sola línea, estética de cabecera de sección. */
-export function PeriodControl({ preset, onChange }) {
-  const currentQuarter = `q${getCurrentQuarter()}`;
-  const monthSelected = isMonthPreset(preset);
-  const items = [
-    ...YEAR_PRESETS,
-    { id: 'div-quarters', divider: true },
-    ...QUARTER_PRESETS,
-    { id: 'div-month', divider: true },
-    MONTH_PRESET,
-  ];
-
-  const handleChange = (id) => {
-    if (id === 'month') {
-      onChange?.(monthPresetId(new Date()));
-      return;
-    }
-    onChange?.(id);
-  };
-
-  return (
-    <Box sx={{ width: '100%', minWidth: 0 }}>
-      <Box
-        role="group"
-        aria-label="Período"
-        sx={{
-          display: 'flex',
-          flexDirection: 'row',
-          flexWrap: 'nowrap',
-          alignItems: 'center',
-          justifyContent: 'safe center',
-          gap: 0,
-          minWidth: 0,
-          width: '100%',
-          height: 28,
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
-        }}
-      >
-        {items.map((item) =>
-          item.divider ? (
-            <Box
-              key={item.id}
-              aria-hidden
-              sx={{
-                width: '1px',
-                alignSelf: 'stretch',
-                my: 0.75,
-                mx: 0.375,
-                bgcolor: 'divider',
-                flex: '0 0 auto',
-              }}
-            />
-          ) : (
-            <PeriodSeg
-              key={item.id}
-              item={item}
-              selected={item.id === 'month' ? monthSelected : item.id === preset}
-              marked={item.id === currentQuarter}
-              onChange={handleChange}
-            />
-          )
-        )}
-      </Box>
-      <Collapse in={monthSelected} unmountOnExit timeout={180}>
-        <MonthStepper preset={preset} onChange={onChange} />
-      </Collapse>
-    </Box>
-  );
-}
+export { PeriodControl };
 
 function MonedaControl({ monedas, activaId, onChange }) {
   if (monedas.length < 2) return null;
@@ -456,13 +246,14 @@ export default function TransaccionesFlujoVisual({
   const extras = monedas.length - 1;
   const serie = fillDailySeries(activa.porDia, stats.fechaInicio, stats.fechaFin);
 
-  // Desglose de la fila de cuenta: saldos acumulados, no del período.
+  // Desglose de la fila de cuenta: responde al período activo del selector.
   // Arranca desplegado: los saldos son lo primero que se quiere ver.
   const [saldosOpen, setSaldosOpen] = useState(true);
   const saldosId = `saldos-${useId().replace(/:/g, '')}`;
   const { saldos, loading: saldosLoading, error: saldosError } = useSaldosCuenta({
     enabled: saldosOpen,
     cuentaId: dense ? undefined : cuentaId || undefined,
+    preset: activePreset,
   });
   // Positivo: el color que el usuario eligió para esa moneda. Negativo: rojo. Cero: texto normal.
   const { data: monedasData } = useAPI('/api/monedas', { enableCache: true, cacheDuration: 60000 });
@@ -479,7 +270,7 @@ export default function TransaccionesFlujoVisual({
     : getCuentasPath(branchId);
   const saldosItems = saldos ? [
     // Fila 1: saldos por moneda y deuda. Fila 2: inversiones (3 columnas).
-    { id: 'cuenta', label: 'Saldo en $', valor: saldos.dineroEnCuenta, destino: cuentaDestino },
+    { id: 'cuenta', label: 'Dinero en cuenta', valor: saldos.dineroEnCuenta, destino: cuentaDestino },
     { id: 'dolares', label: 'Saldo en U$D', valor: saldos.dolares, destino: DOLARES_PATH, usd: true },
     { id: 'credito', label: 'Crédito', valor: saldos.credito, destino: CREDITOS_PATH },
     { id: 'reservado', label: 'Reservado', valor: saldos.reservado, destino: INVERSIONES_PATH },

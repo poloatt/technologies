@@ -54,6 +54,124 @@ export function isMonthPreset(preset) {
   return parseMonthPreset(preset) != null;
 }
 
+/** Id de un año calendario completo: `year:2025`. */
+export function yearPresetId(year) {
+  return `year:${year}`;
+}
+
+export function parseYearPreset(preset) {
+  if (typeof preset !== 'string') return null;
+  const match = /^year:(\d{4})$/.exec(preset);
+  return match ? { year: Number(match[1]) } : null;
+}
+
+/** Id de un trimestre de un año cualquiera: `quarter:2026-2`. */
+export function quarterPresetId(year, quarter) {
+  return `quarter:${year}-${quarter}`;
+}
+
+/** Acepta `quarter:AAAA-N` y los ids históricos `q1`–`q4` (año en curso). */
+export function parseQuarterPreset(preset, now = new Date()) {
+  if (typeof preset !== 'string') return null;
+  const legacy = /^q([1-4])$/.exec(preset);
+  if (legacy) return { year: now.getFullYear(), quarter: Number(legacy[1]) };
+  const match = /^quarter:(\d{4})-([1-4])$/.exec(preset);
+  return match ? { year: Number(match[1]), quarter: Number(match[2]) } : null;
+}
+
+/**
+ * Modo del selector: `year` | `quarter` | `month` para cortes calendario,
+ * `ytd` | `ytg` para los acumulados del año en curso.
+ */
+export function getPeriodMode(preset, now = new Date()) {
+  if (parseMonthPreset(preset, now)) return 'month';
+  if (parseQuarterPreset(preset, now)) return 'quarter';
+  if (parseYearPreset(preset)) return 'year';
+  return preset === 'ytg' ? 'ytg' : 'ytd';
+}
+
+/** Primer día del corte activo: ancla para cambiar de modo sin perder el lugar. */
+function presetAnchorDate(preset, now = new Date()) {
+  const month = parseMonthPreset(preset, now);
+  if (month) return new Date(month.year, month.monthIndex, 1);
+  const quarter = parseQuarterPreset(preset, now);
+  if (quarter) return new Date(quarter.year, (quarter.quarter - 1) * 3, 1);
+  const year = parseYearPreset(preset);
+  if (year) return new Date(year.year, 0, 1);
+  return now;
+}
+
+/** Preset del modo pedido, centrado en el período que ya estaba elegido. */
+export function presetForMode(mode, currentPreset, now = new Date()) {
+  if (mode === 'ytd' || mode === 'ytg') return mode;
+  const anchor = presetAnchorDate(currentPreset, now);
+  if (mode === 'year') return yearPresetId(anchor.getFullYear());
+  if (mode === 'quarter') {
+    return quarterPresetId(anchor.getFullYear(), Math.floor(anchor.getMonth() / 3) + 1);
+  }
+  return monthPresetId(anchor);
+}
+
+/** Año que muestra el gráfico en modo trimestral/mensual/acumulado. */
+export function getPeriodAnchorYear(preset, now = new Date()) {
+  return presetAnchorDate(preset, now).getFullYear();
+}
+
+/** Cantidad de años del modo anual: los últimos N terminando en el año en curso. */
+export const YEAR_BAR_COUNT = 6;
+
+const BAR_MONTH_LABELS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/**
+ * Columnas del gráfico del selector.
+ * `year` da años, `quarter` da Q1–Q4 de `year`, el resto da los 12 meses de `year`.
+ */
+export function getPeriodBuckets(mode, year, now = new Date()) {
+  if (mode === 'year') {
+    const last = now.getFullYear();
+    return Array.from({ length: YEAR_BAR_COUNT }, (_, i) => {
+      const y = last - (YEAR_BAR_COUNT - 1) + i;
+      return {
+        id: yearPresetId(y),
+        label: String(y),
+        fechaInicio: formatDateKey(new Date(y, 0, 1)),
+        fechaFin: formatDateKey(new Date(y, 11, 31)),
+      };
+    });
+  }
+  if (mode === 'quarter') {
+    return [1, 2, 3, 4].map((q) => {
+      const bounds = quarterBounds(year, q);
+      return {
+        id: quarterPresetId(year, q),
+        label: `Q${q}`,
+        fechaInicio: formatDateKey(bounds.start),
+        fechaFin: formatDateKey(bounds.end),
+      };
+    });
+  }
+  return BAR_MONTH_LABELS.map((label, monthIndex) => ({
+    id: monthPresetId(new Date(year, monthIndex, 1)),
+    label,
+    fechaInicio: formatDateKey(new Date(year, monthIndex, 1)),
+    fechaFin: formatDateKey(monthEnd(year, monthIndex)),
+  }));
+}
+
+/** Neto (ingresos menos egresos) de cada columna a partir de la serie diaria. */
+export function sumBucketsNeto(porDia, buckets) {
+  const days = porDia || [];
+  return buckets.map((bucket) => {
+    let neto = 0;
+    for (const day of days) {
+      if (day.fecha >= bucket.fechaInicio && day.fecha <= bucket.fechaFin) {
+        neto += (day.ingresos || 0) - (day.egresos || 0);
+      }
+    }
+    return neto;
+  });
+}
+
 export function shiftMonthPreset(preset, delta, now = new Date()) {
   const parsed = parseMonthPreset(preset, now) ?? {
     year: now.getFullYear(),
@@ -115,9 +233,18 @@ export function getPeriodRange(preset = DEFAULT_PERIOD_PRESET, now = new Date())
   let end;
 
   const selectedMonth = parseMonthPreset(preset, now);
+  const selectedQuarter = parseQuarterPreset(preset, now);
+  const selectedYear = parseYearPreset(preset);
   if (selectedMonth) {
     start = new Date(selectedMonth.year, selectedMonth.monthIndex, 1);
     end = monthEnd(selectedMonth.year, selectedMonth.monthIndex);
+  } else if (selectedQuarter) {
+    const bounds = quarterBounds(selectedQuarter.year, selectedQuarter.quarter);
+    start = bounds.start;
+    end = bounds.end;
+  } else if (selectedYear) {
+    start = new Date(selectedYear.year, 0, 1);
+    end = new Date(selectedYear.year, 11, 31);
   } else switch (preset) {
     case 'ytg': {
       start = new Date(year, month, now.getDate() + 1);
@@ -125,15 +252,6 @@ export function getPeriodRange(preset = DEFAULT_PERIOD_PRESET, now = new Date())
       if (start > end) {
         start = end;
       }
-      break;
-    }
-    case 'q1':
-    case 'q2':
-    case 'q3':
-    case 'q4': {
-      const bounds = quarterBounds(year, Number(preset.slice(1)));
-      start = bounds.start;
-      end = bounds.end;
       break;
     }
     case 'ytd':
@@ -189,6 +307,13 @@ export function getCurrentMonthRange(now = new Date()) {
 
 export function getPeriodLabel(preset = DEFAULT_PERIOD_PRESET) {
   if (isMonthPreset(preset)) return formatMonthPresetLabel(preset);
+  const year = parseYearPreset(preset);
+  if (year) return String(year.year);
+  const quarter = parseQuarterPreset(preset);
+  if (quarter) {
+    const label = `Q${quarter.quarter}`;
+    return quarter.year === new Date().getFullYear() ? label : `${label} ${quarter.year}`;
+  }
   return PERIOD_PRESETS.find((item) => item.id === preset)?.label || 'YTD';
 }
 

@@ -624,9 +624,20 @@ const MP_DEBIT_METHOD_IDS = new Set([
   'debamex'
 ]);
 
+export const MP_EXTERNAL_FUNDING_METHODS = Object.freeze([
+  'debit_card',
+  'debvisa',
+  'debmaster',
+  'maestro',
+  'debcabal',
+  'debamex',
+  'ticket',
+  'atm'
+]);
+
 function medioEsCredito(method, methodType, methodId) {
   const ids = [method, methodType, methodId].map((value) => String(value || '').toLowerCase());
-  if (ids.some((id) => id === 'debit_card' || MP_DEBIT_METHOD_IDS.has(id))) return false;
+  if (ids.some((id) => id === 'debit_card' || id === 'prepaid_card' || MP_DEBIT_METHOD_IDS.has(id))) return false;
   return ids.some((id) => id === 'credit_card' || MP_CREDIT_METHOD_IDS.has(id));
 }
 
@@ -1519,18 +1530,22 @@ export function resultadoFci({
 /** Fuentes de texto del rendimiento, en el mismo orden que `YIELD_SIDE_FIELDS`. */
 export const SALDOS_YIELD_INVERSION_SOURCE = YIELD_INVERSION_RE.source;
 export const SALDOS_YIELD_RESERVA_SOURCE = String.raw`reserva|\bpots?\b`;
+export const SALDOS_YIELD_CUENTA_SOURCE = String.raw`dinero\s+en\s+cuenta|tu\s+dinero|available_money|account_money`;
 const YIELD_RESERVA_RE = new RegExp(SALDOS_YIELD_RESERVA_SOURCE, 'i');
+const YIELD_CUENTA_RE = new RegExp(SALDOS_YIELD_CUENTA_SOURCE, 'i');
 
 /**
- * A quién se acredita un rendimiento. El fondo manda si el texto lo dice; "reserva"
- * va a la reserva; el crédito diario sin texto es dinero en cuenta.
+ * A quién se acredita un rendimiento. El fondo manda si el texto lo dice; si
+ * explicita dinero en cuenta va a la cuenta; el crédito diario sin texto o con
+ * mención a reserva/pot va a la reserva (mismo criterio que `ladoRendimiento`).
  * @returns {'inversion' | 'reserva' | 'cuenta'}
  */
 export function ladoRendimientoSaldo(texto = '') {
   const value = String(texto || '');
   if (YIELD_INVERSION_RE.test(value)) return 'inversion';
   if (YIELD_RESERVA_RE.test(value)) return 'reserva';
-  return 'cuenta';
+  if (YIELD_CUENTA_RE.test(value)) return 'cuenta';
+  return 'reserva';
 }
 
 /**
@@ -1817,23 +1832,59 @@ function formatHistoryDay(date) {
   });
 }
 
+export const HISTORY_CHUNK_DAYS = 58;
+
+/** Inicio del día calendario en Argentina (00:00:00-03:00) para anclar bordes estables. */
+function startOfArDay(date) {
+  const ymd = date.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
+  const anchored = new Date(`${ymd}T00:00:00.000-03:00`);
+  return Number.isNaN(anchored.getTime()) ? date : anchored;
+}
+
 /**
- * Siguiente mes a importar, caminando hacia atrás.
- * Sin cubiertoHasta, el borde es el inicio de la ventana diaria.
+ * Siguiente tramo a importar, caminando hacia atrás de a 58 días (tope 60 días de MP).
+ * Sin cubiertoHasta, el borde se ancla al inicio del día de la ventana diaria para que
+ * reintentos en el mismo día pidan las mismas fechas y puedan reutilizar reportes listos.
+ * Si llega un `pendingRange` (tramo pendiente anterior), lo reintenta con sus mismas fechas.
  * Null cuando el objetivo ya está adentro de lo cubierto.
  */
 export function nextHistoryChunk({
   targetSince,
   coveredUntil = null,
+  pendingRange = null,
   now = new Date(),
   syncDays = getMpSyncDays(),
+  chunkDays = HISTORY_CHUNK_DAYS,
 } = {}) {
   const target = parseHistorySince(targetSince);
   if (!target) return null;
-  const edge = coveredUntil ? parseHistorySince(coveredUntil) : dailySyncSince(now, syncDays);
+
+  if (pendingRange?.beginDate && pendingRange?.endDate) {
+    const pBegin = parseHistorySince(pendingRange.beginDate);
+    const pEnd = parseHistorySince(pendingRange.endDate);
+    const covered = coveredUntil ? parseHistorySince(coveredUntil) : null;
+    const stillNeeded = pBegin && pEnd && pEnd.getTime() > pBegin.getTime()
+      && (!covered || pBegin.getTime() < covered.getTime());
+    if (stillNeeded) {
+      const clampedBegin = pBegin.getTime() < target.getTime() ? target : pBegin;
+      if (clampedBegin.getTime() < pEnd.getTime()) {
+        return {
+          objetivo: target.toISOString(),
+          beginDate: clampedBegin.toISOString(),
+          endDate: pEnd.toISOString(),
+          quedaHistorial: clampedBegin.getTime() > target.getTime(),
+          mesLabel: `${formatHistoryDay(clampedBegin)} – ${formatHistoryDay(new Date(pEnd.getTime() - 1))}`,
+        };
+      }
+    }
+  }
+
+  const edge = coveredUntil
+    ? parseHistorySince(coveredUntil)
+    : startOfArDay(dailySyncSince(now, syncDays));
   if (!edge || edge.getTime() <= target.getTime()) return null;
-  const begin = new Date(edge);
-  begin.setMonth(begin.getMonth() - 1);
+  const spanDays = Number.isFinite(chunkDays) && chunkDays > 0 ? Math.min(chunkDays, 60) : HISTORY_CHUNK_DAYS;
+  const begin = new Date(edge.getTime() - spanDays * HISTORY_DAY_MS);
   if (begin.getTime() < target.getTime()) begin.setTime(target.getTime());
   return {
     objetivo: target.toISOString(),

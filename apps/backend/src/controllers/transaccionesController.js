@@ -6,9 +6,10 @@ import { buildEstadoFilter } from '../utils/transaccionEstado.js';
 import { addCalendarMonths, arDateKey, cuotaEnRangoClave, expandirCuotas } from '../../../shared/utils/cuotasCredito.js';
 import {
   MP_CREDITOS_KINDS,
+  MP_EXTERNAL_FUNDING_METHODS,
   MP_FLUJO_EXCLUDED_KINDS,
+  SALDOS_YIELD_CUENTA_SOURCE,
   SALDOS_YIELD_INVERSION_SOURCE,
-  SALDOS_YIELD_RESERVA_SOURCE,
   acumularBucketDolares,
   acumularBucketInversiones,
   calcularSaldosMercadoPago,
@@ -546,20 +547,23 @@ class TransaccionesController extends BaseController {
   }
 
   /**
-   * Deuda de tarjeta pendiente: cuotas de todas las compras cuyo mes ya pasó el
-   * mes corriente (el resumen del mes en curso se da por pagado).
+   * Deuda de tarjeta pendiente al cierre de `asOf` (o hoy): cuotas de todas las
+   * compras hasta esa fecha cuyo mes todavía no cerró (el mes de corte se da por pagado).
    */
-  async saldoCreditoPendiente({ usuario, estadoFilter, cuenta }) {
+  async saldoCreditoPendiente({ usuario, estadoFilter, cuenta, asOf = null }) {
     const hoy = new Date();
+    const corte = asOf && !Number.isNaN(asOf.getTime()) && asOf.getTime() < hoy.getTime()
+      ? asOf
+      : hoy;
     const query = {
       usuario,
-      fecha: { $gte: addCalendarMonths(hoy, -60), $lte: hoy },
+      fecha: { $gte: addCalendarMonths(corte, -60), $lte: corte },
       'origen.metadata.movementKind': { $in: [...MP_CREDITOS_KINDS] },
     };
     if (estadoFilter) query.estado = estadoFilter;
     if (cuenta) query.cuenta = cuenta;
     const docs = await this.Model.find(query).select('fecha monto origen.metadata').lean();
-    const mesCorriente = formatArDateKey(hoy).slice(0, 7);
+    const mesCorte = formatArDateKey(corte).slice(0, 7);
     let pendiente = 0;
     for (const doc of docs) {
       const cuotas = expandirCuotas({
@@ -569,41 +573,72 @@ class TransaccionesController extends BaseController {
         installmentAmount: doc.origen?.metadata?.installmentAmount,
       });
       for (const cuota of cuotas) {
-        if (arDateKey(cuota.due).slice(0, 7) > mesCorriente) pendiente += Number(cuota.amount) || 0;
+        if (arDateKey(cuota.due).slice(0, 7) > mesCorte) pendiente += Number(cuota.amount) || 0;
       }
     }
     return Math.round(pendiente * 100) / 100;
   }
 
-  // GET /api/transacciones/saldos?cuenta
-  // Saldos acumulados de la cuenta Mercado Pago, sin período: dinero en cuenta,
-  // reservado, invertido, dólares y crédito pendiente.
+  // GET /api/transacciones/saldos?cuenta&fechaInicio&fechaFin
+  // Saldos acumulados de la cuenta Mercado Pago al cierre del período (<= fechaFin):
+  // dinero en cuenta, reservado, invertido, rendimientos, dólares y deuda de crédito.
   async getSaldos(req, res) {
     try {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Usuario no autenticado' });
       }
+      const { fechaInicio, fechaFin } = req.query;
       const usuario = new mongoose.Types.ObjectId(req.user.id);
       const estadoFilter = buildEstadoFilter('PAGADO');
       const query = { usuario };
       if (estadoFilter) query.estado = estadoFilter;
+
+      // Los saldos son fotos de stock al cierre del período (<= fechaFin):
+      // cortar por fechaInicio perdería depósitos anteriores y generaría saldos negativos falsos.
+      const fechaError = applyFechaRange(query, null, fechaFin);
+      if (fechaError) return res.status(400).json({ error: fechaError });
+      const fechaCorte = fechaFin ? parseArDay(fechaFin, true) : null;
+
       let cuentaId = null;
       if (req.query.cuenta) {
         if (!mongoose.Types.ObjectId.isValid(req.query.cuenta)) {
           return res.status(400).json({ error: 'ID de cuenta inválido' });
         }
         cuentaId = new mongoose.Types.ObjectId(req.query.cuenta);
-        query.cuenta = cuentaId;
       }
 
       const cuentaMp = await Cuentas.findOne(
         cuentaId ? { _id: cuentaId, usuario } : { usuario, tipo: 'MERCADO_PAGO' },
       ).lean();
+      if (!cuentaId && cuentaMp?._id) {
+        cuentaId = cuentaMp._id;
+      }
+      if (cuentaId) {
+        query.cuenta = cuentaId;
+      }
       const monedaPesosId = cuentaMp?.moneda?._id ?? cuentaMp?.moneda ?? null;
 
       const kindField = '$origen.metadata.movementKind';
       const usdAmount = {
         $convert: { input: '$origen.metadata.usdAmount', to: 'double', onError: 0, onNull: 0 },
+      };
+      // Neto real de cuenta (descuenta comisiones/retenciones); fallback a monto - comisiones.
+      const montoEfectivo = {
+        $cond: [
+          { $in: [{ $type: '$montoNeto' }, ['double', 'int', 'long', 'decimal']] },
+          { $abs: '$montoNeto' },
+          {
+            $max: [
+              0,
+              {
+                $subtract: [
+                  { $abs: { $ifNull: ['$monto', 0] } },
+                  { $abs: { $ifNull: ['$comisiones.total', 0] } },
+                ],
+              },
+            ],
+          },
+        ],
       };
       const textoRendimiento = {
         $concat: [
@@ -614,15 +649,47 @@ class TransaccionesController extends BaseController {
           { $ifNull: ['$origen.metadata.operationType', ''] },
         ],
       };
-      const esFlujo = {
+      // Egresos pagados con medios externos (débito bancario, Rapipago/PagoFácil, validaciones)
+      // no salen del dinero en cuenta de Mercado Pago.
+      const esEgresoExterno = {
         $and: [
-          { $ne: ['$origen.metadata.statsExclude', true] },
-          { $ne: ['$origen.metadata.isInternal', true] },
-          { $not: [{ $in: [kindField, [...MP_FLUJO_EXCLUDED_KINDS]] }] },
+          { $eq: ['$tipo', 'EGRESO'] },
+          {
+            $or: [
+              { $eq: [{ $toLower: { $ifNull: ['$origen.metadata.operationType', ''] } }, 'card_validation'] },
+              { $in: [{ $toLower: { $ifNull: ['$origen.metadata.paymentMethodType', ''] } }, [...MP_EXTERNAL_FUNDING_METHODS]] },
+              { $in: [{ $toLower: { $ifNull: ['$origen.metadata.paymentMethodId', ''] } }, [...MP_EXTERNAL_FUNDING_METHODS]] },
+              { $in: [{ $toLower: { $ifNull: ['$origen.metadata.paymentMethod', ''] } }, [...MP_EXTERNAL_FUNDING_METHODS]] },
+            ],
+          },
+        ],
+      };
+      // Un retiro cancelado devuelve la plata al dinero en cuenta aunque tenga statsExclude.
+      const esWithdrawalCancel = {
+        $eq: [{ $toUpper: { $ifNull: ['$origen.metadata.transactionType', ''] } }, 'WITHDRAWAL_CANCEL'],
+      };
+      const esFlujo = {
+        $or: [
+          esWithdrawalCancel,
+          {
+            $and: [
+              { $ne: ['$origen.metadata.statsExclude', true] },
+              { $ne: ['$origen.metadata.isInternal', true] },
+              { $not: [{ $in: [kindField, [...MP_FLUJO_EXCLUDED_KINDS]] }] },
+              { $not: [esEgresoExterno] },
+            ],
+          },
         ],
       };
 
-      const [rows, creditoPendiente] = await Promise.all([
+      const creditoPromise = this.saldoCreditoPendiente({
+        usuario,
+        estadoFilter,
+        cuenta: cuentaId,
+        asOf: fechaCorte,
+      }).then((pendiente) => -pendiente);
+
+      const [rows, creditoSaldo] = await Promise.all([
         this.Model.aggregate([
           { $match: query },
           {
@@ -641,35 +708,36 @@ class TransaccionesController extends BaseController {
                         then: 'inversion',
                       },
                       {
-                        case: { $regexMatch: { input: textoRendimiento, regex: SALDOS_YIELD_RESERVA_SOURCE, options: 'i' } },
-                        then: 'reserva',
+                        case: { $regexMatch: { input: textoRendimiento, regex: SALDOS_YIELD_CUENTA_SOURCE, options: 'i' } },
+                        then: 'cuenta',
                       },
                     ],
-                    default: 'cuenta',
+                    default: 'reserva',
                   },
                 },
               },
-              total: { $sum: { $ifNull: ['$monto', 0] } },
+              total: { $sum: montoEfectivo },
               usd: { $sum: usdAmount },
               face: {
                 $sum: {
                   $let: {
                     vars: { u: usdAmount },
-                    in: { $cond: [{ $gt: ['$$u', 0] }, '$$u', { $ifNull: ['$monto', 0] }] },
+                    in: { $cond: [{ $gt: ['$$u', 0] }, '$$u', montoEfectivo] },
                   },
                 },
               },
             },
           },
         ]),
-        this.saldoCreditoPendiente({ usuario, estadoFilter, cuenta: cuentaId }),
+        creditoPromise,
       ]);
 
       const saldos = calcularSaldosMercadoPago(rows, { monedaPesosId });
       res.json({
         ...saldos,
-        // La deuda baja el patrimonio: se informa con signo negativo.
-        credito: -creditoPendiente,
+        credito: creditoSaldo,
+        fechaInicio: fechaInicio || null,
+        fechaFin: fechaFin || null,
         cuenta: cuentaMp ? { id: cuentaMp._id, nombre: cuentaMp.nombre } : null,
         monedaId: monedaPesosId ? String(monedaPesosId) : null,
       });

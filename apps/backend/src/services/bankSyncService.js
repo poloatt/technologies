@@ -31,7 +31,6 @@ import {
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
 import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
-import { extractBalanceFromRows } from './mercadoPagoCsvParser.js';
 
 function pendingInsideWindow(pending, beginDate, endDate) {
   if (!pending?.beginDate || !pending?.endDate) return undefined;
@@ -454,28 +453,41 @@ export class BankSyncService {
       let historyChunk = null;
       let fechaDesde = dailySyncSince();
       let fechaHasta = new Date();
+      let inicioActividadIso = null;
 
       if (historialMode) {
-        const objetivo = options.since || bankConnection.mercadopago?.historial?.objetivo;
-        const parsed = parseHistorySince(objetivo);
+        const storedHist = bankConnection.mercadopago?.historial || {};
+        const objetivo = options.since || storedHist.objetivo;
+        let parsed = parseHistorySince(objetivo);
         if (!parsed) {
           return { exito: false, error: 'Indicá desde cuándo traer el historial' };
         }
+        // Acotar el objetivo a la fecha de alta de la cuenta en MP (/users/me registration_date)
+        // para no pedir años anteriores a que la cuenta existiera.
+        const regDate = userInfo?.registration_date ? parseHistorySince(userInfo.registration_date) : null;
+        if (regDate && regDate.getTime() > parsed.getTime()) {
+          parsed = regDate;
+          inicioActividadIso = regDate.toISOString();
+        } else if (storedHist.inicioActividad) {
+          inicioActividadIso = storedHist.inicioActividad;
+        }
         historyChunk = nextHistoryChunk({
           targetSince: parsed.toISOString(),
-          coveredUntil: bankConnection.mercadopago?.historial?.cubiertoHasta || null,
+          coveredUntil: storedHist.cubiertoHasta || null,
+          pendingRange: storedHist.pendiente ? storedHist.ultimoMes : null,
         });
         if (!historyChunk) {
-          const stored = bankConnection.mercadopago?.historial || {};
           const historial = {
             objetivo: parsed.toISOString(),
-            cubiertoHasta: stored.cubiertoHasta || null,
-            ultimoMes: stored.ultimoMes || null,
-            mesLabel: stored.mesLabel || null,
+            cubiertoHasta: storedHist.cubiertoHasta || null,
+            ultimoMes: storedHist.ultimoMes || null,
+            mesLabel: storedHist.mesLabel || null,
             pendiente: false,
             cuotaAgotada: false,
             quedaHistorial: false,
             completo: true,
+            tramosVacios: storedHist.tramosVacios || 0,
+            inicioActividad: inicioActividadIso,
             actualizadoEn: new Date(),
           };
           bankConnection.mercadopago = {
@@ -495,9 +507,19 @@ export class BankSyncService {
         fechaHasta = new Date(historyChunk.endDate);
       }
 
-      const rememberHistory = ({ pendiente = false, cuotaAgotada = false } = {}) => {
+      const rememberHistory = ({
+        pendiente = false,
+        cuotaAgotada = false,
+        sinMovimientos = false,
+      } = {}) => {
         if (!historialMode || !historyChunk) return null;
-        const prev = bankConnection.mercadopago?.historial?.cubiertoHasta || null;
+        const storedHist = bankConnection.mercadopago?.historial || {};
+        const prev = storedHist.cubiertoHasta || null;
+        const prevVacios = Number(storedHist.tramosVacios) || 0;
+        const tramosVacios = pendiente ? prevVacios : (sinMovimientos ? prevVacios + 1 : 0);
+        // 3 tramos seguidos (~6 meses) completamente vacíos sin errores = llegamos al inicio real de actividad.
+        const alcanzoInicio = !pendiente && tramosVacios >= 3;
+        const quedaHistorial = pendiente ? true : (alcanzoInicio ? false : historyChunk.quedaHistorial);
         const historial = {
           objetivo: historyChunk.objetivo,
           cubiertoHasta: pendiente ? prev : historyChunk.beginDate,
@@ -508,8 +530,10 @@ export class BankSyncService {
           mesLabel: historyChunk.mesLabel,
           pendiente,
           cuotaAgotada,
-          quedaHistorial: pendiente ? true : historyChunk.quedaHistorial,
-          completo: !pendiente && !historyChunk.quedaHistorial,
+          quedaHistorial,
+          completo: !pendiente && !quedaHistorial,
+          tramosVacios,
+          inicioActividad: inicioActividadIso || storedHist.inicioActividad || null,
           actualizadoEn: new Date(),
         };
         const current = bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {};
@@ -646,12 +670,17 @@ export class BankSyncService {
       }
 
       let activitiesWithdraw = [];
+      const settlementQuotaMissingW = errores.some(
+        (e) => e.tipo === 'settlement_report' && (e.quotaExceeded || e.missingWithdrawals)
+      );
       const settlementBlocked = errores.some((e) => e.tipo === 'settlement_report');
-      // El mes histórico ya pidió su reporte (include_withdraw trae los retiros).
-      // Un segundo reporte acá alarga el request hasta el timeout y corta el recorrido.
-      if (historialMode) {
+      // En modo histórico normalmente el settlement con include_withdraw ya trae retiros.
+      // Pero si dio 429 y reutilizó CSV viejo sin retiros, usamos activities_withdraw como respaldo
+      // para recuperar las transferencias salientes CVU→CBU del tramo.
+      const runActivitiesWithdraw = !historialMode || settlementQuotaMissingW;
+      if (!runActivitiesWithdraw) {
         if (settlementBlocked) {
-          console.warn('[MP] Historial: no se piden más reportes; el mes queda pendiente.');
+          console.warn('[MP] Historial: settlement pendiente/error; el tramo queda pendiente.');
         }
       } else {
       try {
@@ -662,7 +691,7 @@ export class BankSyncService {
         const withdrawReport = await activitiesService.fetchWithdrawMovements(
           fechaDesde.toISOString(),
           fechaHasta.toISOString(),
-          { pollOptions: { maxPollAttempts: 16 } }
+          { pollOptions: { maxPollAttempts: historialMode ? 10 : 16 } }
         );
         if (withdrawReport.pending) {
           errores.push({
@@ -718,13 +747,9 @@ export class BankSyncService {
         errores.push({ tipo: 'payment_enrichment', error: error.message });
       }
 
-      let balance = await mpAdapter.getAccountBalance();
-      if ((!balance.available && !balance.unavailable) && movimientosMerged.length > 0) {
-        const fromReport = extractBalanceFromRows(movimientosMerged);
-        if (fromReport.available != null) {
-          balance = { available: fromReport.available, unavailable: 0 };
-        }
-      }
+      const balance = historialMode
+        ? { available: 0, unavailable: 0, ok: false }
+        : await mpAdapter.getAccountBalance();
 
       let transaccionesNuevas = 0;
       let transaccionesActualizadas = 0;
@@ -742,14 +767,18 @@ export class BankSyncService {
       transaccionesNuevas += movResult.nuevas;
       transaccionesActualizadas += movResult.actualizadas;
 
-      try {
-        await Cuentas.findByIdAndUpdate(bankConnection.cuenta, {
-          saldo: balance.available || 0,
-          'mercadopago.disponibleRetiro': balance.available || 0,
-          'mercadopago.disponiblePendiente': balance.unavailable || 0
-        });
-      } catch (error) {
-        console.error('Error actualizando balances:', error);
+      // Solo actualizar el saldo reportado de la cuenta en sync rápido cuando la API
+      // de balance responde OK. Nunca pisarlo con sumas parciales de ventana ni en sync histórico.
+      if (!historialMode && balance.ok) {
+        try {
+          await Cuentas.findByIdAndUpdate(bankConnection.cuenta, {
+            saldo: balance.available || 0,
+            'mercadopago.disponibleRetiro': balance.available || 0,
+            'mercadopago.disponiblePendiente': balance.unavailable || 0
+          });
+        } catch (error) {
+          console.error('Error actualizando balances:', error);
+        }
       }
 
       const transferenciasP2P = Math.max(
@@ -874,13 +903,25 @@ export class BankSyncService {
           `Cobertura incompleta: no hay transferencias P2P y el saldo MP difiere del ledger (${gapSaldo}).`;
       }
 
+      const recoveredViaActivities =
+        settlementQuotaMissingW &&
+        movimientos.length > 0 &&
+        activitiesWithdraw.length > 0;
       const blockCursor =
         historialMode &&
         (settlementPending ||
-          errores.some((e) => e.tipo === 'settlement_report' || e.tipo === 'pagos' || e.quotaExceeded));
+          errores.some(
+            (e) =>
+              e.tipo === 'pagos' ||
+              (e.tipo === 'settlement_report' && !recoveredViaActivities) ||
+              (e.quotaExceeded && !recoveredViaActivities)
+          ));
+      const sinMovimientosEnTramo =
+        !blockCursor && pagos.length === 0 && movimientosMerged.length === 0;
       const historialGuardado = rememberHistory({
         pendiente: blockCursor,
-        cuotaAgotada: errores.some((e) => e.quotaExceeded),
+        cuotaAgotada: errores.some((e) => e.quotaExceeded) && !recoveredViaActivities,
+        sinMovimientos: sinMovimientosEnTramo,
       });
 
       bankConnection.mercadopago = {
@@ -1054,12 +1095,20 @@ export class BankSyncService {
       try {
         const comisiones = calcularComisiones(pago);
         const monto = Math.abs(pago.transaction_amount || 0);
-        const montoNeto = monto - comisiones.total;
         const contraparte = extraerContrapartePago(pago, userId);
         let descripcion = formatearDescripcionPago(pago, userId);
         const isTransfer = esTransferenciaPago(pago);
         const businessBranch = pago.point_of_interaction?.business_info?.branch || null;
         let tipoPago = determinarTipoPago(pago, userId);
+        const netReceivedRaw = Number(pago.transaction_details?.net_received_amount);
+        const montoNeto =
+          tipoPago === 'INGRESO' &&
+          pago.transaction_details?.net_received_amount != null &&
+          Number.isFinite(netReceivedRaw) &&
+          netReceivedRaw >= 0
+            ? Math.abs(netReceivedRaw)
+            : Math.max(0, monto - comisiones.total);
+        const nuevoEstado = mapearEstadoPago(pago.status);
         const economic = clasificarMovimientoEconomicoMp({
           operationType: pago.operation_type,
           description: pago.description,
@@ -1217,6 +1266,9 @@ export class BankSyncService {
             !prevKind ||
             prevKind !== economic.movementKind ||
             transaccionExistente.tipo !== tipoPago ||
+            transaccionExistente.estado !== nuevoEstado ||
+            transaccionExistente.montoNeto !== montoNeto ||
+            (transaccionExistente.comisiones?.total || 0) !== comisiones.total ||
             (Number(paymentMeta.usdAmount) > 0 &&
               Number(prevMeta.usdAmount) !== Number(paymentMeta.usdAmount)) ||
             (Number(paymentMeta.installments) > 0 &&
@@ -1227,6 +1279,11 @@ export class BankSyncService {
             if (transaccionExistente.tipo !== tipoPago) {
               transaccionExistente.tipo = tipoPago;
             }
+            if (transaccionExistente.estado !== nuevoEstado) {
+              transaccionExistente.estado = nuevoEstado;
+            }
+            transaccionExistente.montoNeto = montoNeto;
+            transaccionExistente.comisiones = comisiones;
             if (contraparte?.name || ledgerLabel || economic.isTransfer) {
               transaccionExistente.descripcion = ledgerLabel
                 ? `MercadoPago - ${economic.label}`
@@ -1443,16 +1500,38 @@ export class BankSyncService {
           businessBranch
         };
 
-        const transaccionExistente = await findTransaccionMp(bankConnection.cuenta, [
+        const primaryIds = [
           transaccionId,
           mov.payment?.id,
           mov.raw?.payment_id,
           mov.raw?.reference_id,
           mov.raw?.REFERENCE_ID,
           mov.raw?.SOURCE_ID,
-          mov.externalReference,
-          mov.payment?.external_reference,
-        ]);
+        ];
+        const hasOperationId = idsOperacionMp(primaryIds).length > 0;
+        let transaccionExistente = await findTransaccionMp(
+          bankConnection.cuenta,
+          hasOperationId
+            ? primaryIds
+            : [...primaryIds, mov.externalReference, mov.payment?.external_reference]
+        );
+        if (transaccionExistente && hasOperationId) {
+          const propios = idsMp(
+            transaccionExistente.origen?.transaccionId,
+            transaccionExistente.origen?.metadata?.paymentId
+          );
+          const buscados = idsMp(primaryIds);
+          if (!propios.some((id) => buscados.includes(id))) {
+            transaccionExistente = null;
+          }
+        }
+
+        const monto = Math.abs(mov.amount || mov.netAmount || 0);
+        const feeTotal = Math.abs(mov.feeAmount || 0);
+        const montoNeto =
+          mov.netAmount != null && Number.isFinite(Number(mov.netAmount))
+            ? Math.abs(Number(mov.netAmount))
+            : Math.max(0, monto - feeTotal);
 
         if (transaccionExistente) {
           const prevMeta =
@@ -1464,6 +1543,9 @@ export class BankSyncService {
             !businessBranch &&
             prevMeta.businessBranch &&
             isInversionesMovementKind(prevMeta.movementKind);
+          const keepReservePayment =
+            prevMeta.movementKind === 'RESERVE_PAYMENT' &&
+            !mov.payment?.amounts;
           const prevYield =
             prevMeta.movementKind === 'INVESTMENT_YIELD' || prevMeta.movementKind === 'YIELD';
           const sinComercio =
@@ -1476,6 +1558,12 @@ export class BankSyncService {
             metadataPatch.movementKind = prevMeta.movementKind;
             metadataPatch.statsExclude = prevMeta.statsExclude;
             metadataPatch.isInternal = prevMeta.isInternal;
+          } else if (keepReservePayment) {
+            metadataPatch.movementKind = 'RESERVE_PAYMENT';
+            metadataPatch.statsExclude = false;
+            metadataPatch.isInternal = false;
+            metadataPatch.potId = metadataPatch.potId || prevMeta.potId || null;
+            metadataPatch.potName = metadataPatch.potName || prevMeta.potName || null;
           } else if (keepYield) {
             metadataPatch.movementKind = 'INVESTMENT_YIELD';
             metadataPatch.statsExclude = true;
@@ -1506,6 +1594,14 @@ export class BankSyncService {
             metadataPatch.paymentMethodType = keptCard.paymentMethodType;
           }
           const nextTipo = keepReserve ? transaccionExistente.tipo : tipoMovimiento;
+          const nextComisiones = feeTotal > 0
+            ? {
+                mercadopago: feeTotal,
+                financieras: 0,
+                envio: 0,
+                total: feeTotal
+              }
+            : transaccionExistente.comisiones;
           const shouldEnrich =
             (contraparte?.name && (!prevName || !limpiarNombreContraparte(prevName))) ||
             (isTransfer && !prevMeta.isTransfer) ||
@@ -1513,6 +1609,8 @@ export class BankSyncService {
             (prevMeta.potId || null) !== (metadataPatch.potId || null) ||
             Boolean(prevMeta.statsExclude) !== Boolean(metadataPatch.statsExclude) ||
             transaccionExistente.tipo !== nextTipo ||
+            transaccionExistente.montoNeto !== montoNeto ||
+            (feeTotal > 0 && (transaccionExistente.comisiones?.total || 0) !== feeTotal) ||
             (Number(metadataPatch.installments) > 0 &&
               Number(prevMeta.installments) !== Number(metadataPatch.installments)) ||
             (Number(metadataPatch.installmentAmount) > 0 &&
@@ -1521,6 +1619,10 @@ export class BankSyncService {
           if (shouldEnrich) {
             if (transaccionExistente.tipo !== nextTipo) {
               transaccionExistente.tipo = nextTipo;
+            }
+            transaccionExistente.montoNeto = montoNeto;
+            if (nextComisiones) {
+              transaccionExistente.comisiones = nextComisiones;
             }
             transaccionExistente.descripcion = descripcion;
             transaccionExistente.origen.metadata = {
@@ -1543,9 +1645,6 @@ export class BankSyncService {
           ]);
           continue;
         }
-
-        const monto = Math.abs(mov.amount || mov.netAmount || 0);
-        const montoNeto = Math.abs(mov.netAmount || monto);
 
         const transaccion = new Transacciones({
           descripcion,
@@ -1595,22 +1694,14 @@ export class BankSyncService {
       throw new Error('Cuenta no encontrada');
     }
 
+    const userId = this.decrypt(bankConnection.credenciales.userId);
     const reportService = new MercadoPagoReportService({
       accessToken: this.decrypt(bankConnection.credenciales.accessToken),
-      userId: this.decrypt(bankConnection.credenciales.userId)
+      userId
     });
 
     const movimientos = reportService.parseCsvContent(csvContent);
-    const result = await this.procesarMovimientosReporte(movimientos, bankConnection, cuenta);
-
-    const balance = extractBalanceFromRows(movimientos);
-    if (balance.available != null) {
-      await Cuentas.findByIdAndUpdate(bankConnection.cuenta, {
-        saldo: balance.available,
-        'mercadopago.disponibleRetiro': balance.available,
-        'mercadopago.disponiblePendiente': 0
-      });
-    }
+    const result = await this.procesarMovimientosReporte(movimientos, bankConnection, cuenta, userId);
 
     bankConnection.mercadopago = {
       ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),

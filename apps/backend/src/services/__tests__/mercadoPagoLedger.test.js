@@ -528,8 +528,17 @@ describe('buildLedgerMatch', () => {
       paymentMethodId: 'debvisa',
       netAmount: -1500,
     });
+    const prepaga = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethod: 'master',
+      paymentMethodType: 'prepaid_card',
+      paymentMethodId: 'master',
+      netAmount: -4200,
+    });
     expect(visa.movementKind).toBe('CARD_PURCHASE');
     expect(debito.movementKind).not.toBe('CARD_PURCHASE');
+    expect(prepaga.movementKind).toBe('PAYMENT');
+    expect(prepaga.statsExclude).toBe(false);
     expect(buildLedgerMatch('creditos')['origen.metadata.movementKind'].$in).toEqual(['CARD_PURCHASE']);
     expect(buildLedgerMatch('flujo')['origen.metadata.movementKind'].$nin).toEqual(
       expect.arrayContaining(['CARD_PURCHASE'])
@@ -809,16 +818,22 @@ describe('signo de transferencias CBU', () => {
 describe('nextHistoryChunk', () => {
   const now = new Date('2026-11-24T15:00:00.000Z');
 
-  it('pide un mes anterior a la ventana de 90 días', () => {
+  it('pide un tramo de 58 días anterior a la ventana de 90 días anclado al inicio del día AR', () => {
     const chunk = nextHistoryChunk({ targetSince: '2025-01-01', now, syncDays: 90 });
-    const edge = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    expect(chunk.endDate).toBe(edge.toISOString());
-    const begin = new Date(edge);
-    begin.setMonth(begin.getMonth() - 1);
-    expect(chunk.beginDate).toBe(begin.toISOString());
+    expect(chunk.endDate).toBe('2026-08-26T03:00:00.000Z');
+    const spanDays = (new Date(chunk.endDate).getTime() - new Date(chunk.beginDate).getTime()) / (24 * 60 * 60 * 1000);
+    expect(spanDays).toBe(58);
     expect(chunk.quedaHistorial).toBe(true);
-    expect(new Date(chunk.endDate).getTime() - new Date(chunk.beginDate).getTime())
-      .toBeLessThanOrEqual(32 * 24 * 60 * 60 * 1000);
+  });
+
+  it('reintenta las mismas fechas cuando hay un tramo pendiente', () => {
+    const pendingRange = {
+      beginDate: '2026-07-01T03:00:00.000Z',
+      endDate: '2026-08-26T03:00:00.000Z',
+    };
+    const chunk = nextHistoryChunk({ targetSince: '2025-01-01', pendingRange, now, syncDays: 90 });
+    expect(chunk.beginDate).toBe(pendingRange.beginDate);
+    expect(chunk.endDate).toBe(pendingRange.endDate);
   });
 
   it('el cursor solo retrocede y no vuelve a cubrir lo ya pedido', () => {
@@ -862,8 +877,10 @@ describe('saldos acumulados de la cuenta Mercado Pago', () => {
   });
 
   it('reparte el rendimiento entre cuenta, reserva e inversión según el texto', () => {
-    expect(ladoRendimientoSaldo('')).toBe('cuenta');
+    expect(ladoRendimientoSaldo('')).toBe('reserva');
+    expect(ladoRendimientoSaldo('MercadoPago - Rendimiento')).toBe('reserva');
     expect(ladoRendimientoSaldo('Rendimiento de tu dinero')).toBe('cuenta');
+    expect(ladoRendimientoSaldo('Rendimiento dinero en cuenta')).toBe('cuenta');
     expect(ladoRendimientoSaldo('Rendimiento de reserva')).toBe('reserva');
     expect(ladoRendimientoSaldo('asset_management_gain')).toBe('inversion');
     expect(ladoRendimientoSaldo('Rendimiento de reserva en fondo de inversión')).toBe('inversion');
