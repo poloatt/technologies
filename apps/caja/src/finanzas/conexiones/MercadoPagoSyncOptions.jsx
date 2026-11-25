@@ -4,9 +4,9 @@ import { useSnackbar } from 'notistack';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
 import {
   TASK_FORM_PILL_FILL_BG,
-  TASK_FORM_PILL_GAP,
-  TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
-  TASK_FORM_PILL_OUTLINED_BG,
+  TASK_FORM_PILL_FONT_SIZE,
+  TASK_FORM_PILL_LINE_HEIGHT,
+  TASK_FORM_PILL_OUTLINE_BORDER,
   TASK_FORM_PILL_OUTLINED_BG_HOVER,
   taskFormPillOutlinedSx,
 } from '@shared/components/forms/tareaFormTokens';
@@ -55,38 +55,59 @@ export function SyncModePill({ historico, onChange, disabled = false }) {
       role="group"
       aria-label="Tipo de sincronización"
       sx={{
+        ...taskFormPillOutlinedSx,
         display: 'inline-flex',
+        alignItems: 'stretch',
         flexShrink: 0,
-        alignItems: 'center',
-        gap: TASK_FORM_PILL_GAP,
+        p: 0,
+        gap: 0,
+        overflow: 'hidden',
+        cursor: 'default',
         ...(disabled ? { pointerEvents: 'none', opacity: 0.45 } : null),
       }}
     >
-      {modes.map((mode) => (
-        <Box
-          key={mode.id}
-          component="button"
-          type="button"
-          aria-pressed={mode.selected}
-          disabled={disabled}
-          onClick={mode.onClick}
-          sx={{
-            ...taskFormPillOutlinedSx,
-            appearance: 'none',
-            m: 0,
-            px: 1.25,
-            fontWeight: mode.selected ? 500 : 400,
-            bgcolor: mode.selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG,
-            color: mode.selected ? 'text.primary' : 'text.secondary',
-            borderColor: mode.selected ? TASK_FORM_PILL_OUTLINE_BORDER_HOVER : undefined,
-            '&:hover': {
-              bgcolor: mode.selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG_HOVER,
-              borderColor: TASK_FORM_PILL_OUTLINE_BORDER_HOVER,
-            },
-          }}
-        >
-          {mode.label}
-        </Box>
+      {modes.map((mode, index) => (
+        <React.Fragment key={mode.id}>
+          {index > 0 && (
+            <Box
+              aria-hidden
+              sx={{
+                width: '1px',
+                alignSelf: 'stretch',
+                bgcolor: TASK_FORM_PILL_OUTLINE_BORDER,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <Box
+            component="button"
+            type="button"
+            aria-pressed={mode.selected}
+            disabled={disabled}
+            onClick={mode.onClick}
+            sx={{
+              appearance: 'none',
+              border: 0,
+              m: 0,
+              px: 1.5,
+              minWidth: 0,
+              minHeight: 0,
+              bgcolor: mode.selected ? TASK_FORM_PILL_FILL_BG : 'transparent',
+              color: mode.selected ? 'text.primary' : 'text.secondary',
+              fontFamily: 'inherit',
+              fontSize: TASK_FORM_PILL_FONT_SIZE,
+              fontWeight: mode.selected ? 500 : 400,
+              lineHeight: TASK_FORM_PILL_LINE_HEIGHT,
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              '&:hover': {
+                bgcolor: mode.selected ? TASK_FORM_PILL_FILL_BG : TASK_FORM_PILL_OUTLINED_BG_HOVER,
+              },
+            }}
+          >
+            {mode.label}
+          </Box>
+        </React.Fragment>
       ))}
     </Box>
   );

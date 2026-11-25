@@ -76,13 +76,13 @@ export default function InversionesResumen({
   const monedas = stats.porMoneda;
   const activa = monedas.find((moneda) => moneda.monedaId === monedaElegida) || monedas[0] || EMPTY_MONEDA;
   const simbolo = activa.simbolo || '$';
-  const reservado = pesoEntero(activa.enviado || 0);
-  const volvio = pesoEntero(activa.rescatado || 0);
   const invertido = pesoEntero(activa.ingresado || 0);
   const rescatadoFci = pesoEntero(activa.rescatadoInversion || 0);
   const rendimientoReserva = pesoEntero(activa.rendimientosReserva || 0);
   const rendimientoInversion = pesoEntero(activa.rendimientosInversion || 0);
-  const saldoReserva = reservado - volvio;
+  const saldoReserva = pesoEntero(
+    activa.stockReserva ?? ((activa.enviado || 0) - (activa.rescatado || 0) + (activa.rendimientosReserva || 0))
+  );
   const saldoInversion = invertido - rescatadoFci;
   const rendimientos = rendimientoReserva + rendimientoInversion;
   const groups = [

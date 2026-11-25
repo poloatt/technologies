@@ -11,6 +11,7 @@ import {
   buildLedgerMatch,
   buildListLedgerMatch,
   clasificarMovimientoEconomicoMp,
+  datosPosicionUsd,
   determinarTipoMovimientoMp,
   determinarTipoPago,
   isInversionesMovementKind,
@@ -18,6 +19,7 @@ import {
   normalizeAccountMovement,
   parseHistorySince,
   resultadoFci,
+  stockReserva,
 } from '../mercadoPagoUtils.js';
 
 describe('clasificarMovimientoEconomicoMp libros', () => {
@@ -126,16 +128,25 @@ describe('clasificarMovimientoEconomicoMp libros', () => {
     expect(isInversionesMovementKind(cashback.movementKind)).toBe(false);
   });
 
-  it('trata digital_accounts_cards como reserva aunque el tipo sea money_transfer', () => {
-    const lock = clasificarMovimientoEconomicoMp({
+  it('deja digital_accounts en la reserva y digital_accounts_cards en el flujo', () => {
+    const reserva = clasificarMovimientoEconomicoMp({
+      transactionType: 'MONEY_TRANSFER',
+      operationType: 'money_transfer',
+      description: 'Varios',
+      metadata: { counterpartyName: 'digital_accounts' },
+      netAmount: -5500,
+    });
+    const tarjeta = clasificarMovimientoEconomicoMp({
       transactionType: 'MONEY_TRANSFER',
       operationType: 'money_transfer',
       description: 'Varios',
       metadata: { counterpartyName: 'digital_accounts_cards' },
       netAmount: -5500,
     });
-    expect(lock.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
-    expect(lock.statsExclude).toBe(true);
+    expect(reserva.movementKind).toBe(MP_MOVEMENT_KINDS.RESERVE_LOCK);
+    expect(reserva.statsExclude).toBe(true);
+    expect(tarjeta.movementKind).toBe(MP_MOVEMENT_KINDS.P2P_TRANSFER);
+    expect(tarjeta.statsExclude).toBe(false);
   });
 
   it('clasifica operation_type investment por el signo', () => {
@@ -283,6 +294,41 @@ describe('buildLedgerMatch', () => {
       netAmount: -40,
     });
     expect(pagoUsd.movementKind).toBe('USD_PAYMENT');
+    const masterUsd = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethod: 'credit_card',
+      paymentMethodType: 'credit_card',
+      paymentMethodId: 'master',
+      currency: 'ARS',
+      amounts: {
+        payer: { currency_id: 'USD', transaction: 42.5 },
+        collector: { currency_id: 'ARS', transaction: 52000 },
+      },
+      transaction_amount: 52000,
+      netAmount: 52000,
+    });
+    expect(masterUsd.movementKind).toBe('USD_PAYMENT');
+    expect(masterUsd.statsExclude).toBe(true);
+    expect(datosPosicionUsd({
+      operationType: 'regular_payment',
+      paymentMethodId: 'master',
+      payment_type_id: 'credit_card',
+      currency_id: 'ARS',
+      amounts: {
+        payer: { currency_id: 'USD', transaction: 42.5 },
+        collector: { currency_id: 'ARS', transaction: 52000 },
+      },
+      transaction_amount: 52000,
+      netAmount: 52000,
+    })).toEqual({ movementKind: 'USD_PAYMENT', usdAmount: 42.5, currency: 'USD' });
+    const masterMonedaUsd = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethodId: 'master',
+      currency: 'USD',
+      transaction_amount: 18,
+      netAmount: 18,
+    });
+    expect(masterMonedaUsd.movementKind).toBe('USD_PAYMENT');
     const enviado = clasificarMovimientoEconomicoMp({
       operationType: 'money_transfer',
       currency: 'USD',
@@ -352,6 +398,12 @@ describe('buildLedgerMatch', () => {
     );
     expect(kept.movementKind).toBe('CARD_PURCHASE');
     expect(kept.installments).toBe(6);
+    const pasoADolares = conservarClasificacionTarjeta(
+      { movementKind: 'CARD_PURCHASE', installments: 1 },
+      { movementKind: 'USD_PAYMENT', statsExclude: true, usdAmount: 42.5 }
+    );
+    expect(pasoADolares.movementKind).toBe('USD_PAYMENT');
+    expect(pasoADolares.usdAmount).toBe(42.5);
     const cuotas = expandirCuotas({
       fecha: new Date('2026-09-09T15:00:00.000-03:00'),
       monto: 300,
@@ -482,6 +534,7 @@ describe('buildLedgerMatch', () => {
       rescatadoInversion: 40,
       rendimientos: 5,
     })).toBe((100 - 60) + (80 - 40) + 5);
+    expect(stockReserva({ enviado: 1000, rescatado: 200, rendimientosReserva: 35 })).toBe(835);
   });
 });
 

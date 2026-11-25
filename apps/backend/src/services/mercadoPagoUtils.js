@@ -498,8 +498,9 @@ const RESERVE_RELEASE_RE =
   /extracci[oó]n\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|sacar\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|retir(?:ar|aste|o)\s+de\s+(?:(?:la|tu|mi)\s+)?reserva|release.?reserve|unpark|desde\s+(?:(?:la|tu|mi)\s+)?reserva|reserve_for_.*_cancel|salida\s+de\s+(?:(?:la|tu|mi)\s+)?reserva/i;
 const RESERVE_LOCK_RE =
   /a\s+(?:(?:la|tu|mi)\s+)?reserva|enviar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|guardar\s+en\s+(?:(?:la|tu|mi)\s+)?reserva|env[ií]o\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|pasar\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|mover\s+a\s+(?:(?:la|tu|mi)\s+)?reserva|lock.?reserve|parking|reserve_for_(?!.*_cancel)/i;
+// digital_accounts_cards es la partición de la tarjeta, no la Reserva.
 const RESERVE_INTERNAL_CODE_RE =
-  /\b(digital_accounts(?:_cards)?|money_park)\b/i;
+  /\b(digital_accounts|money_park)\b/i;
 const INVESTMENT_OUT_RE =
   /asset_management_withdrawal|investment.?unlock|rescate\s+de\s+inversi|retir(?:ar|o)\s+(?:de\s+)?inversi/i;
 const INVESTMENT_IN_RE =
@@ -536,108 +537,6 @@ function textoClasificacionMp({ description, transactionType, operationType, pay
     .toLowerCase();
 }
 
-/**
- * Cambio ARS/USD de Mercado Pago. El operation_type sigue siendo investment,
- * pero la plata de un lado está en dólares. Una suscripción a un fondo
- * (destino distinto de USD, o Marketplace de inversiones) no entra acá.
- * @returns {{ movementKind: string, usdAmount: number, exchangeRate: number, exchangeOperation: string|null, payerCurrency: string|null, collectorCurrency: string|null } | null}
- */
-export function datosCambioUsd(input = {}) {
-  const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
-  const payerCcy = String(
-    input.payerCurrency || input.amounts?.payer?.currency_id || ''
-  ).toUpperCase();
-  const collectorCcy = String(
-    input.collectorCurrency || input.amounts?.collector?.currency_id || ''
-  ).toUpperCase();
-  const destination = String(
-    input.destinationAsset ||
-    input.point_of_interaction?.transaction_data?.destination_asset ||
-    ''
-  ).toUpperCase();
-  const branch = String(
-    input.businessBranch ||
-    input.point_of_interaction?.business_info?.branch ||
-    ''
-  ).toLowerCase();
-  const subType = String(
-    input.subType || input.point_of_interaction?.sub_type || ''
-  ).toUpperCase();
-  if (destination && destination !== 'USD') return null;
-  if (/marketplace|inversiones|\bfci\b/.test(branch)) return null;
-  if (subType === 'SUBSCRIPTION') return null;
-
-  let movementKind = null;
-  if (payerCcy === 'USD' || exchange === 'SELL') movementKind = MP_MOVEMENT_KINDS.FX_SELL;
-  else if (collectorCcy === 'USD' || exchange === 'BUY') movementKind = MP_MOVEMENT_KINDS.FX_BUY;
-  if (!movementKind) return null;
-
-  const payerAmount = Number(input.amounts?.payer?.transaction ?? input.usdAmount ?? 0);
-  const collectorAmount = Number(input.amounts?.collector?.transaction ?? input.usdAmount ?? 0);
-  const usdAmount = movementKind === MP_MOVEMENT_KINDS.FX_SELL
-    ? (payerCcy === 'USD' ? payerAmount : Number(input.usdAmount) || 0)
-    : (collectorCcy === 'USD' ? collectorAmount : Number(input.usdAmount) || 0);
-  const exchangeRate = Number(
-    input.exchangeRate || input.point_of_interaction?.transaction_data?.exchange_rate || 0
-  );
-  return {
-    movementKind,
-    usdAmount,
-    exchangeRate,
-    exchangeOperation: exchange || null,
-    payerCurrency: payerCcy || null,
-    collectorCurrency: collectorCcy || null,
-  };
-}
-
-/**
- * Movimiento que ya está en dólares: entra, sale o se usa para pagar.
- * Un cambio ARS/USD no entra acá; lo resuelve datosCambioUsd.
- */
-export function datosPosicionUsd(input = {}) {
-  const currency = String(input.currency || input.currency_id || input.currencyId || '').toUpperCase();
-  if (currency !== 'USD') return null;
-  const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
-  if (exchange === 'SELL' || exchange === 'BUY') return null;
-  const payerCcy = String(input.payerCurrency || input.amounts?.payer?.currency_id || '').toUpperCase();
-  const collectorCcy = String(input.collectorCurrency || input.amounts?.collector?.currency_id || '').toUpperCase();
-  if (payerCcy && collectorCcy && payerCcy !== collectorCcy) return null;
-
-  const op = String(input.operationType || input.operation_type || '').toLowerCase();
-  const medios = [
-    input.paymentMethod,
-    input.paymentMethodType,
-    input.paymentMethodId,
-    input.payment_type_id,
-    input.payment_method_id,
-  ].map((value) => String(value || '').toLowerCase());
-  const usd = Math.abs(Number(
-    input.usdAmount ?? input.transaction_amount ?? input.amount ?? input.netAmount ?? 0
-  ));
-  if (!usd) return null;
-
-  const esPago = op === 'regular_payment' || op === 'pos_payment'
-    || medios.some((id) => (
-      id === 'debit_card' || id === 'credit_card' || id === 'account_money' || id === 'available_money'
-      || MP_DEBIT_METHOD_IDS.has(id) || MP_CREDIT_METHOD_IDS.has(id)
-    ));
-  let movementKind = MP_MOVEMENT_KINDS.USD_IN;
-  if (esPago) movementKind = MP_MOVEMENT_KINDS.USD_PAYMENT;
-  else if (op === 'withdrawal' || op === 'money_withdrawal' || op === 'payout') {
-    movementKind = MP_MOVEMENT_KINDS.USD_OUT;
-  } else if (op !== 'account_fund') {
-    const net = Number(input.netAmount ?? input.amount ?? 0);
-    if (net < 0) movementKind = MP_MOVEMENT_KINDS.USD_OUT;
-  }
-  return { movementKind, usdAmount: usd, currency: 'USD' };
-}
-
-/**
- * Compra del usuario pagada con tarjeta de crédito. El neto positivo es un
- * cobro (la plata entra) y se queda en el flujo. La validación de tarjeta no
- * es una compra.
- * @returns {{ movementKind: string } | null}
- */
 const MP_CREDIT_METHOD_IDS = new Set([
   'visa',
   'master',
@@ -669,6 +568,146 @@ function medioEsCredito(method, methodType, methodId) {
   return ids.some((id) => id === 'credit_card' || MP_CREDIT_METHOD_IDS.has(id));
 }
 
+function mediosDe(input = {}) {
+  return [
+    input.paymentMethod,
+    input.paymentMethodType,
+    input.paymentMethodId,
+    input.payment_method,
+    input.payment_type_id,
+    input.payment_method_id,
+    input.payment_method_type,
+  ].map((value) => String(value || '').toLowerCase());
+}
+
+/** Un pago o un cargo de tarjeta no es una compraventa de dólares. */
+function esPagoOTarjeta(input = {}) {
+  const op = String(input.operationType || input.operation_type || '').toLowerCase();
+  if (op === 'regular_payment' || op === 'pos_payment') return true;
+  const medios = mediosDe(input);
+  return medios.some((id) => (
+    id === 'debit_card' || id === 'credit_card'
+    || MP_DEBIT_METHOD_IDS.has(id) || MP_CREDIT_METHOD_IDS.has(id)
+  ));
+}
+
+/**
+ * Cambio ARS/USD de Mercado Pago. El operation_type sigue siendo investment,
+ * pero la plata de un lado está en dólares. Una suscripción a un fondo
+ * (destino distinto de USD, o Marketplace de inversiones) no entra acá.
+ * Un pago con la punta del pagador en USD tampoco: es un gasto en dólares.
+ * @returns {{ movementKind: string, usdAmount: number, exchangeRate: number, exchangeOperation: string|null, payerCurrency: string|null, collectorCurrency: string|null } | null}
+ */
+export function datosCambioUsd(input = {}) {
+  const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
+  const payerCcy = String(
+    input.payerCurrency || input.amounts?.payer?.currency_id || ''
+  ).toUpperCase();
+  const collectorCcy = String(
+    input.collectorCurrency || input.amounts?.collector?.currency_id || ''
+  ).toUpperCase();
+  const destination = String(
+    input.destinationAsset ||
+    input.point_of_interaction?.transaction_data?.destination_asset ||
+    ''
+  ).toUpperCase();
+  const branch = String(
+    input.businessBranch ||
+    input.point_of_interaction?.business_info?.branch ||
+    ''
+  ).toLowerCase();
+  const subType = String(
+    input.subType || input.point_of_interaction?.sub_type || ''
+  ).toUpperCase();
+  const op = String(input.operationType || input.operation_type || '').toLowerCase();
+  if (destination && destination !== 'USD') return null;
+  if (/marketplace|inversiones|\bfci\b/.test(branch)) return null;
+  if (subType === 'SUBSCRIPTION') return null;
+  if (esPagoOTarjeta(input)) return null;
+  const esConversion = exchange === 'SELL' || exchange === 'BUY' || op === 'investment';
+  if (!esConversion) return null;
+
+  let movementKind = null;
+  if (payerCcy === 'USD' || exchange === 'SELL') movementKind = MP_MOVEMENT_KINDS.FX_SELL;
+  else if (collectorCcy === 'USD' || exchange === 'BUY') movementKind = MP_MOVEMENT_KINDS.FX_BUY;
+  if (!movementKind) return null;
+
+  const payerAmount = Number(input.amounts?.payer?.transaction ?? input.usdAmount ?? 0);
+  const collectorAmount = Number(input.amounts?.collector?.transaction ?? input.usdAmount ?? 0);
+  const usdAmount = movementKind === MP_MOVEMENT_KINDS.FX_SELL
+    ? (payerCcy === 'USD' ? payerAmount : Number(input.usdAmount) || 0)
+    : (collectorCcy === 'USD' ? collectorAmount : Number(input.usdAmount) || 0);
+  const exchangeRate = Number(
+    input.exchangeRate || input.point_of_interaction?.transaction_data?.exchange_rate || 0
+  );
+  return {
+    movementKind,
+    usdAmount,
+    exchangeRate,
+    exchangeOperation: exchange || null,
+    payerCurrency: payerCcy || null,
+    collectorCurrency: collectorCcy || null,
+  };
+}
+
+/**
+ * Movimiento que ya está en dólares: entra, sale o se usa para pagar.
+ * Un cambio ARS/USD no entra acá; lo resuelve datosCambioUsd.
+ * Un pago Master puede liquidar al comercio en pesos y igual sacar dólares del pagador.
+ */
+export function datosPosicionUsd(input = {}) {
+  const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
+  if (exchange === 'SELL' || exchange === 'BUY') return null;
+
+  const currency = String(input.currency || input.currency_id || input.currencyId || '').toUpperCase();
+  const payerCcy = String(input.payerCurrency || input.amounts?.payer?.currency_id || '').toUpperCase();
+  const collectorCcy = String(input.collectorCurrency || input.amounts?.collector?.currency_id || '').toUpperCase();
+  const payerUsd = payerCcy === 'USD';
+  const collectorUsd = collectorCcy === 'USD';
+  const currencyUsd = currency === 'USD';
+  if (!currencyUsd && !payerUsd && !collectorUsd) return null;
+
+  const op = String(input.operationType || input.operation_type || '').toLowerCase();
+  const medios = mediosDe(input);
+  const esPago = op === 'regular_payment' || op === 'pos_payment'
+    || medios.some((id) => (
+      id === 'debit_card' || id === 'credit_card' || id === 'account_money' || id === 'available_money'
+      || MP_DEBIT_METHOD_IDS.has(id) || MP_CREDIT_METHOD_IDS.has(id)
+    ));
+  const payerAmount = Math.abs(Number(input.amounts?.payer?.transaction ?? 0));
+  const collectorAmount = Math.abs(Number(input.amounts?.collector?.transaction ?? 0));
+  const face = Math.abs(Number(
+    input.usdAmount ?? input.transaction_amount ?? input.amount ?? input.netAmount ?? 0
+  ));
+
+  let usd = 0;
+  let movementKind = MP_MOVEMENT_KINDS.USD_IN;
+  if (payerUsd && collectorCcy && !collectorUsd) {
+    usd = payerAmount || (currencyUsd ? face : 0);
+    movementKind = esPago ? MP_MOVEMENT_KINDS.USD_PAYMENT : MP_MOVEMENT_KINDS.USD_OUT;
+  } else if (collectorUsd && payerCcy && !payerUsd) {
+    usd = collectorAmount || (currencyUsd ? face : 0);
+    movementKind = MP_MOVEMENT_KINDS.USD_IN;
+  } else {
+    usd = face || payerAmount || collectorAmount;
+    if (esPago) movementKind = MP_MOVEMENT_KINDS.USD_PAYMENT;
+    else if (op === 'withdrawal' || op === 'money_withdrawal' || op === 'payout') {
+      movementKind = MP_MOVEMENT_KINDS.USD_OUT;
+    } else if (op !== 'account_fund') {
+      const net = Number(input.netAmount ?? input.amount ?? 0);
+      if (net < 0) movementKind = MP_MOVEMENT_KINDS.USD_OUT;
+    }
+  }
+  if (!usd) return null;
+  return { movementKind, usdAmount: usd, currency: 'USD' };
+}
+
+/**
+ * Compra del usuario pagada con tarjeta de crédito. El neto positivo es un
+ * cobro (la plata entra) y se queda en el flujo. La validación de tarjeta no
+ * es una compra.
+ * @returns {{ movementKind: string } | null}
+ */
 export function datosCompraTarjeta(input = {}) {
   const operationType = String(
     input.operationType || input.operation_type || ''
@@ -1246,6 +1285,8 @@ export function conservarClasificacionTarjeta(prevMeta = {}, next = {}) {
   if (!isCreditosMovementKind(prevMeta.movementKind) || isCreditosMovementKind(next.movementKind)) {
     return next;
   }
+  // Un pago en dólares que antes quedó como compra en pesos tiene que poder salir de Créditos.
+  if (isDolaresMovementKind(next.movementKind)) return next;
   return {
     ...next,
     movementKind: MP_MOVEMENT_KINDS.CARD_PURCHASE,
@@ -1270,6 +1311,18 @@ export function acumularBucketDolares(kind, monto, usd) {
   if (kind === MP_MOVEMENT_KINDS.USD_OUT) return { usdEnviado: face };
   if (kind === MP_MOVEMENT_KINDS.USD_PAYMENT) return { usdPagado: face };
   return {};
+}
+
+/**
+ * Saldo de reserva importado: pases de todo el historial más el rendimiento acreditado en la reserva.
+ * El rendimiento del período se muestra aparte.
+ */
+export function stockReserva({
+  enviado = 0,
+  rescatado = 0,
+  rendimientosReserva = 0,
+} = {}) {
+  return (Number(enviado) || 0) - (Number(rescatado) || 0) + (Number(rendimientosReserva) || 0);
 }
 
 /** Saldo que quedó: reservado − volvió, más invertido − rescatado, más el rendimiento de cada cuenta. */
