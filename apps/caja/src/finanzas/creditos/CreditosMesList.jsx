@@ -21,6 +21,25 @@ function mesLabel(key) {
   return `${MESES[(month || 1) - 1]} ${year}`;
 }
 
+function monedaDeLista(transacciones) {
+  for (const tx of transacciones) {
+    const moneda = tx?.moneda;
+    if (moneda && typeof moneda === 'object') {
+      return {
+        simbolo: moneda.simbolo || '$',
+        color: moneda.color || '#5C6BC0',
+      };
+    }
+  }
+  return { simbolo: '$', color: '#5C6BC0' };
+}
+
+function colorSaldo(monto, monedaColor) {
+  if (monto < 0) return 'error.main';
+  if (monto === 0) return 'text.primary';
+  return monedaColor;
+}
+
 export function agruparCuotas(transacciones, fechaInicio, fechaFin) {
   const meses = new Map();
   for (const tx of transacciones) {
@@ -54,12 +73,21 @@ export function agruparCuotas(transacciones, fechaInicio, fechaFin) {
     }));
 }
 
-export default function CreditosMesList({ transacciones, fechaInicio, fechaFin, simbolo = '$', showValues = true }) {
+export default function CreditosMesList({
+  transacciones,
+  fechaInicio,
+  fechaFin,
+  simbolo: simboloProp,
+  monedaColor: monedaColorProp,
+  showValues = true,
+}) {
+  const moneda = useMemo(() => monedaDeLista(transacciones), [transacciones]);
+  const simbolo = simboloProp || moneda.simbolo;
+  const monedaColor = monedaColorProp || moneda.color;
   const grupos = useMemo(
     () => agruparCuotas(transacciones, fechaInicio, fechaFin),
     [transacciones, fechaInicio, fechaFin],
   );
-  const mesActual = arDateKey(new Date()).slice(0, 7);
   const [abierto, setAbierto] = useState(null);
 
   if (grupos.length === 0) return null;
@@ -68,8 +96,8 @@ export default function CreditosMesList({ transacciones, fechaInicio, fechaFin, 
     <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column' }}>
       {grupos.map((grupo) => {
         const open = abierto === grupo.mes;
-        const pagado = grupo.mes <= mesActual;
-        const colorMonto = pagado ? 'text.primary' : 'error.main';
+        const netoMes = -grupo.total;
+        const colorMes = colorSaldo(netoMes, monedaColor);
         return (
           <Box key={grupo.mes} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box
@@ -103,13 +131,15 @@ export default function CreditosMesList({ transacciones, fechaInicio, fechaFin, 
               <Typography sx={{ ...hubLabelSx, flex: 1, color: 'text.primary', fontSize: '0.8125rem' }}>
                 {mesLabel(grupo.mes)}
               </Typography>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: colorMonto }}>
-                {formatMonto(-grupo.total, simbolo, showValues)}
+              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: colorMes }}>
+                {formatMonto(netoMes, simbolo, showValues)}
               </Typography>
             </Box>
             {open && (
               <Box sx={{ pb: 1, pl: 4.5, pr: 0.5, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                {grupo.items.map((item) => (
+                {grupo.items.map((item) => {
+                  const netoItem = -item.amount;
+                  return (
                   <Box key={item.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, py: 0.5 }}>
                     <Box
                       sx={{
@@ -128,7 +158,7 @@ export default function CreditosMesList({ transacciones, fechaInicio, fechaFin, 
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography
                         sx={{
-                          fontWeight: 560,
+                          fontWeight: 400,
                           fontSize: '0.875rem',
                           lineHeight: 1.3,
                           overflow: 'hidden',
@@ -146,17 +176,18 @@ export default function CreditosMesList({ transacciones, fechaInicio, fechaFin, 
                     </Box>
                     <Typography
                       sx={{
-                        fontWeight: 650,
+                        fontWeight: 400,
                         fontSize: '0.875rem',
-                        color: colorMonto,
+                        color: colorSaldo(netoItem, monedaColor),
                         fontVariantNumeric: 'tabular-nums',
                         flexShrink: 0,
                       }}
                     >
-                      {formatMonto(-item.amount, simbolo, showValues)}
+                      {formatMonto(netoItem, simbolo, showValues)}
                     </Typography>
                   </Box>
-                ))}
+                  );
+                })}
               </Box>
             )}
           </Box>

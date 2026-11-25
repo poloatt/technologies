@@ -8,7 +8,7 @@ import HubBalanceDivider from '../hub/HubBalanceDivider';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
-import { INVERSION_TYPE_FILTERS, toggleKindId } from '../transacciones/ledgerKindFilters';
+import { focusKindId } from '../transacciones/ledgerKindFilters';
 import {
   DEFAULT_PERIOD_PRESET,
   formatMonto,
@@ -148,8 +148,8 @@ export default function InversionesResumen({
               label={group.label}
               amount={conSigno(group.neto, simbolo, showValues)}
               amountColor={group.neto < 0 ? 'error.main' : (group.neto === 0 ? 'text.primary' : monedaColor)}
-              selected={selectedIds.includes(group.id)}
-              onClick={() => setKindSelection(toggleKindId(INVERSION_TYPE_FILTERS, kindSelection, group.id))}
+              selected={Array.isArray(kindSelection) && kindSelection.includes(group.id)}
+              onClick={() => setKindSelection(focusKindId(kindSelection, group.id))}
             />
           ))}
         </Box>

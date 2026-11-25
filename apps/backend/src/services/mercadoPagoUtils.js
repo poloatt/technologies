@@ -655,6 +655,14 @@ export function datosCambioUsd(input = {}) {
  * Un cambio ARS/USD no entra acá; lo resuelve datosCambioUsd.
  * Un pago Master puede liquidar al comercio en pesos y igual sacar dólares del pagador.
  */
+function contramonedaUsd(input = {}) {
+  const counter = input.counter_currency || input.counterCurrency || {};
+  const currency = String(counter.currency_id || counter.currencyId || '').toUpperCase();
+  const amount = Math.abs(Number(counter.amount ?? 0));
+  if (currency !== 'USD' || !amount) return null;
+  return { amount };
+}
+
 export function datosPosicionUsd(input = {}) {
   const exchange = String(input.exchangeOperation || input.exchange_operation || '').toUpperCase();
   if (exchange === 'SELL' || exchange === 'BUY') return null;
@@ -665,8 +673,6 @@ export function datosPosicionUsd(input = {}) {
   const payerUsd = payerCcy === 'USD';
   const collectorUsd = collectorCcy === 'USD';
   const currencyUsd = currency === 'USD';
-  if (!currencyUsd && !payerUsd && !collectorUsd) return null;
-
   const op = String(input.operationType || input.operation_type || '').toLowerCase();
   const medios = mediosDe(input);
   const esPago = op === 'regular_payment' || op === 'pos_payment'
@@ -674,6 +680,16 @@ export function datosPosicionUsd(input = {}) {
       id === 'debit_card' || id === 'credit_card' || id === 'account_money' || id === 'available_money'
       || MP_DEBIT_METHOD_IDS.has(id) || MP_CREDIT_METHOD_IDS.has(id)
     ));
+  // La tarjeta en dólares suele llegar con currency_id ARS y el importe en counter_currency.
+  const contra = contramonedaUsd(input);
+  if (contra && esPago) {
+    return {
+      movementKind: MP_MOVEMENT_KINDS.USD_PAYMENT,
+      usdAmount: contra.amount,
+      currency: 'USD',
+    };
+  }
+  if (!currencyUsd && !payerUsd && !collectorUsd) return null;
   const payerAmount = Math.abs(Number(input.amounts?.payer?.transaction ?? 0));
   const collectorAmount = Math.abs(Number(input.amounts?.collector?.transaction ?? 0));
   const face = Math.abs(Number(

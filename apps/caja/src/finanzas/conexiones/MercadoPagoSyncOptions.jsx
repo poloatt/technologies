@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Box, CircularProgress } from '@mui/material';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import { useSnackbar } from 'notistack';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
 import {
@@ -16,6 +16,75 @@ const mercadopagoLogo = new URL('./logos/mercadopago.svg', import.meta.url).href
 /** Piso del recorrido histórico. Mercado Pago no entrega años anteriores a esto. */
 const HISTORIAL_DESDE = '2010-01-01';
 const HISTORIAL_MAX_MESES = 240;
+const HISTORY_DAY_MS = 24 * 60 * 60 * 1000;
+const HISTORY_SYNC_DAYS = 90;
+
+function historyTarget() {
+  return new Date(`${HISTORIAL_DESDE}T00:00:00.000-03:00`);
+}
+
+function monthKey(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  return year && month ? `${year}-${month}` : '';
+}
+
+function monthStamp(date) {
+  if (!date || Number.isNaN(date.getTime())) return '';
+  const raw = date.toLocaleDateString('es-AR', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).replace(/\./g, '').replace(/\s+de\s+/i, ' ').trim();
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+}
+
+/** Los mismos tramos de un mes que recorre el sync, del borde de 90 días hacia 2010. */
+function buildHistorySpan(now = new Date()) {
+  const target = historyTarget();
+  const months = [];
+  let edge = new Date(now.getTime() - HISTORY_SYNC_DAYS * HISTORY_DAY_MS);
+  while (months.length < HISTORIAL_MAX_MESES && edge.getTime() > target.getTime()) {
+    const begin = new Date(edge);
+    begin.setMonth(begin.getMonth() - 1);
+    if (begin.getTime() < target.getTime()) begin.setTime(target.getTime());
+    months.push({ begin, key: monthKey(begin) });
+    if (begin.getTime() <= target.getTime()) break;
+    edge = begin;
+  }
+  return { months, total: months.length };
+}
+
+function coveredCount(months, cubiertoHasta) {
+  if (!cubiertoHasta) return 0;
+  const key = monthKey(new Date(cubiertoHasta));
+  if (!key) return 0;
+  let count = 0;
+  for (const month of months) {
+    if (month.key >= key) count += 1;
+    else break;
+  }
+  return count;
+}
+
+function progressDoneFrom(historial, span) {
+  if (!historial?.cubiertoHasta) return 0;
+  if (historial.completo || historial.quedaHistorial === false) return span.total;
+  return coveredCount(span.months, historial.cubiertoHasta);
+}
+
+function progressLabelFrom(historial, span, done) {
+  if (!span.total) return '';
+  if (done >= span.total) return monthStamp(span.months[span.total - 1]?.begin);
+  if (done <= 0) return monthStamp(span.months[0]?.begin);
+  const at = historial?.ultimoMes?.beginDate || historial?.cubiertoHasta;
+  return monthStamp(at ? new Date(at) : span.months[done - 1]?.begin);
+}
 
 function formatDay(value) {
   if (!value) return null;
@@ -118,6 +187,7 @@ export default function MercadoPagoSyncOptions({
   onSynced,
   historico: historicoProp,
   onHistoricoChange,
+  historial = null,
   showPill = true,
   onBusyChange,
 }) {
@@ -127,11 +197,17 @@ export default function MercadoPagoSyncOptions({
   const historico = historicoProp ?? innerHistorico;
   const setHistorico = onHistoricoChange ?? setInnerHistorico;
   const [running, setRunning] = useState(false);
+  const [flight, setFlight] = useState(null);
   const cancelRef = useRef(false);
+  const span = useMemo(() => buildHistorySpan(), []);
 
   useEffect(() => () => {
     cancelRef.current = true;
   }, []);
+
+  useEffect(() => {
+    if (!historico) setFlight(null);
+  }, [historico]);
 
   const stopped = (result) => {
     const chunk = result?.resultado?.historial;
@@ -146,6 +222,13 @@ export default function MercadoPagoSyncOptions({
   };
 
   const runHistorico = async () => {
+    const storedDone = progressDoneFrom(historial, span);
+    const atMonth = (index) => span.months[Math.min(Math.max(index, 0), Math.max(span.total - 1, 0))];
+    setFlight({
+      label: monthStamp(atMonth(storedDone)?.begin),
+      done: storedDone,
+    });
+
     const recent = await syncConnection(connectionId, { silent: true });
     if (!cancelRef.current) onSynced?.(recent);
     if (cancelRef.current || stopped(recent)) {
@@ -158,8 +241,12 @@ export default function MercadoPagoSyncOptions({
 
     let last = recent;
     let cursor = null;
-    for (let step = 0; step < HISTORIAL_MAX_MESES; step += 1) {
-      if (cancelRef.current) return last;
+    let done = storedDone;
+    for (let step = 0; step < span.total; step += 1) {
+      if (cancelRef.current || done >= span.total) return last;
+      const current = span.months[done];
+      if (!current) break;
+      setFlight({ label: monthStamp(current.begin), done });
       const result = await syncConnection(connectionId, {
         mode: 'historial',
         since: HISTORIAL_DESDE,
@@ -168,6 +255,14 @@ export default function MercadoPagoSyncOptions({
       last = result;
       const chunk = result?.resultado?.historial;
       if (!cancelRef.current) onSynced?.(result);
+      const reached = chunk?.ultimoMes?.beginDate || chunk?.cubiertoHasta;
+      const label = reached ? monthStamp(new Date(reached)) : monthStamp(current.begin);
+      const halted = !chunk || chunk.completo || chunk.cuotaAgotada || chunk.pendiente || chunk.quedaHistorial === false;
+      const finished = !chunk || chunk.completo || chunk.quedaHistorial === false;
+      let covered = finished ? span.total : coveredCount(span.months, chunk?.cubiertoHasta);
+      if (!halted && covered <= done) covered = Math.min(span.total, done + 1);
+      done = covered;
+      if (!cancelRef.current) setFlight({ label, done });
       if (!chunk || chunk.completo || chunk.cuotaAgotada || chunk.pendiente || chunk.quedaHistorial === false) {
         break;
       }
@@ -208,8 +303,23 @@ export default function MercadoPagoSyncOptions({
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
 
+  const storedDone = progressDoneFrom(historial, span);
+  const storedLabel = progressLabelFrom(historial, span, storedDone);
+  const progressDone = flight?.done ?? storedDone;
+  const progressLabel = flight?.label || storedLabel;
+  const progressRatio = span.total ? Math.min(1, progressDone / span.total) : 0;
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: showPill ? 2 : 0.5, pb: 1 }}>
+    <Box sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: 2,
+      width: '100%',
+      maxWidth: 420,
+      pt: showPill ? 2 : 0.5,
+      pb: 1,
+    }}>
       {showPill && (
         <SyncModePill historico={historico} disabled={busy} onChange={setHistorico} />
       )}
@@ -248,6 +358,41 @@ export default function MercadoPagoSyncOptions({
           />
         )}
       </Box>
+      {historico && span.total > 0 && (
+        <Box sx={{ alignSelf: 'stretch', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          <Typography
+            component="p"
+            sx={{
+              m: 0,
+              textAlign: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              color: 'text.secondary',
+            }}
+          >
+            <Box component="span" sx={{ color: 'text.primary' }}>{progressLabel}</Box>
+            {` / ${span.total} meses`}
+          </Typography>
+          <Box
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={span.total}
+            aria-valuenow={Math.min(progressDone, span.total)}
+            aria-label={`${progressLabel} de ${span.total} meses`}
+            sx={{ height: 2, bgcolor: 'divider', overflow: 'hidden' }}
+          >
+            <Box
+              sx={{
+                width: `${progressRatio * 100}%`,
+                height: '100%',
+                bgcolor: 'text.primary',
+                transition: 'width 240ms ease',
+              }}
+            />
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

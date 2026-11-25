@@ -394,7 +394,18 @@ export class MercadoPagoAdapter {
         filter: { paymentTypeId: 'bank_transfer', payerId: 'me' }
       },
       // La búsqueda sin moneda se queda en pesos y no trae el saldo en dólares.
-      { label: 'currency=USD', since, filter: { currencyId: 'USD' } }
+      { label: 'currency=USD', since, filter: { currencyId: 'USD' } },
+      // Consumos de la tarjeta: a veces no entran en payment_type_id=credit_card.
+      {
+        label: 'master+payer',
+        since,
+        filter: { paymentMethodId: 'master', payerId: mpUserId }
+      },
+      {
+        label: 'master+payer=me',
+        since,
+        filter: { paymentMethodId: 'master', payerId: 'me' }
+      }
     ];
 
     const results = await Promise.allSettled(

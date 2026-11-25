@@ -39,6 +39,15 @@ export function kindsQueryFor(options, enabledIds) {
   return selected.flatMap((option) => option.kinds).join(',');
 }
 
+/**
+ * Un clic deja solo ese filtro. Volver a pulsarlo lo suelta y no queda ningún filtro.
+ * null = sin filtro: se ve todo y ningún botón queda marcado.
+ */
+export function focusKindId(enabledIds, id) {
+  const onlyThis = Array.isArray(enabledIds) && enabledIds.length === 1 && enabledIds[0] === id;
+  return onlyThis ? null : [id];
+}
+
 export function toggleKindId(options, enabledIds, id) {
   const current = enabledIds == null ? options.map((option) => option.id) : enabledIds;
   const next = current.includes(id)

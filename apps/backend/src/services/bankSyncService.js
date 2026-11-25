@@ -1022,6 +1022,8 @@ export class BankSyncService {
           paymentMethodId: pago.payment_method_id,
           businessBranch,
           currency: pago.currency_id,
+          counter_currency: pago.counter_currency,
+          transaction_amount: pago.transaction_amount,
           exchange_operation: pago.exchange_operation,
           amounts: pago.amounts,
           point_of_interaction: pago.point_of_interaction,
@@ -1314,6 +1316,8 @@ export class BankSyncService {
           paymentMethodId: mov.payment?.payment_method_id || mov.raw?.PAYMENT_METHOD,
           businessBranch,
           currency: mov.payment?.currency_id || mov.currency || mov.raw?.CURRENCY,
+          counter_currency: mov.payment?.counter_currency,
+          transaction_amount: mov.payment?.transaction_amount ?? mov.amount,
           netAmount: mov.netAmount,
           metadata: {
             ...(mov.raw?.METADATA || mov.payment?.metadata || {}),
@@ -1349,6 +1353,7 @@ export class BankSyncService {
           ...camposCambioUsd({
             ...(mov.payment || {}),
             currency_id: mov.payment?.currency_id || mov.currency || mov.raw?.CURRENCY,
+            counter_currency: mov.payment?.counter_currency,
           }),
           externalReference: mov.externalReference || mov.payment?.external_reference || null,
           currency: mov.currency,

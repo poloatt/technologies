@@ -43,7 +43,7 @@ export default function CreditosResumen({
   const saldo = pagado - gastado;
   const accent = activa.color || '#5C6BC0';
   const expense = theme.palette.error.main;
-  const resultadoColor = saldo < 0 ? expense : accent;
+  const resultadoColor = saldo < 0 ? expense : (saldo === 0 ? 'text.primary' : accent);
   const maxBar = Math.max(pagado, gastado, 0);
 
   let body;

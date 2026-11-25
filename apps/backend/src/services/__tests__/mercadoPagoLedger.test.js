@@ -329,6 +329,24 @@ describe('buildLedgerMatch', () => {
       netAmount: 18,
     });
     expect(masterMonedaUsd.movementKind).toBe('USD_PAYMENT');
+    const masterContraparte = clasificarMovimientoEconomicoMp({
+      operationType: 'regular_payment',
+      paymentMethodId: 'master',
+      paymentMethodType: 'credit_card',
+      currency: 'ARS',
+      counter_currency: { currency_id: 'USD', amount: 42.5 },
+      transaction_amount: 52000,
+      netAmount: -52000,
+    });
+    expect(masterContraparte.movementKind).toBe('USD_PAYMENT');
+    expect(datosPosicionUsd({
+      operationType: 'regular_payment',
+      payment_method_id: 'master',
+      payment_type_id: 'credit_card',
+      currency_id: 'ARS',
+      counter_currency: { currency_id: 'USD', amount: 42.5 },
+      transaction_amount: 52000,
+    })).toEqual({ movementKind: 'USD_PAYMENT', usdAmount: 42.5, currency: 'USD' });
     const enviado = clasificarMovimientoEconomicoMp({
       operationType: 'money_transfer',
       currency: 'USD',

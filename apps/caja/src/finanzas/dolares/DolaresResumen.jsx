@@ -9,7 +9,7 @@ import HubBalanceDivider from '../hub/HubBalanceDivider';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
-import { DOLAR_TYPE_FILTERS, toggleKindId } from '../transacciones/ledgerKindFilters';
+import { focusKindId } from '../transacciones/ledgerKindFilters';
 import {
   DEFAULT_PERIOD_PRESET,
   formatPeriodSpan,
@@ -133,8 +133,8 @@ export default function DolaresResumen({
               label={group.label}
               amount={formatUsd(group.neto, showValues)}
               amountColor={group.neto < 0 ? 'error.main' : (group.neto > 0 ? (usdColor || 'text.primary') : 'text.secondary')}
-              selected={selectedIds.includes(group.id)}
-              onClick={() => setKindSelection(toggleKindId(DOLAR_TYPE_FILTERS, kindSelection, group.id))}
+              selected={Array.isArray(kindSelection) && kindSelection.includes(group.id)}
+              onClick={() => setKindSelection(focusKindId(kindSelection, group.id))}
             />
           ))}
         </Box>
