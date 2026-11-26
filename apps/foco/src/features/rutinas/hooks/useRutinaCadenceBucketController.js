@@ -1,27 +1,17 @@
 import { useMemo, useCallback } from 'react';
 import { useHabits, useRutinas } from '@shared/context';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
-import { groupRutinaHabitsByCadence, resolveHabitSections } from '@shared/habits';
+import { groupRutinaHabitsByCadence } from '@shared/habits';
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
 import useRutinaItemToggle from './useRutinaItemToggle';
-import useRutinaBucketLocalData from './useRutinaBucketLocalData';
 
-/** Estado compartido para el layout plano de cadencia. */
+/** Estado compartido para el layout plano de cadencia (fuente única: RutinasContext). */
 export default function useRutinaCadenceBucketController({ rutina, readOnly = false }) {
   const { habits, customSections } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
-  // Solo markItemComplete: el optimismo vive en localDataBySection.
-  // Pasar también patchRutinaSection duplicaba writes (local + context) y reorganizaba 2–3 veces por click.
   const { markItemComplete } = useRutinas();
   const habitPrefs = prefsReady ? (habitsPreferences || {}) : {};
   const resolvedHabitChains = prefsReady ? habitChains : [];
-
-  const allSections = useMemo(
-    () => resolveHabitSections(customSections),
-    [customSections],
-  );
-
-  const [localDataBySection, setLocalDataBySection] = useRutinaBucketLocalData(allSections, rutina);
 
   const habitIconsMap = useMemo(
     () => buildHabitSectionIconsMap(habits).iconsMap,
@@ -36,9 +26,8 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
       habitChains: resolvedHabitChains,
       customSections,
       iconsMap: habitIconsMap,
-      localDataBySection,
     }),
-    [rutina, habits, habitPrefs, resolvedHabitChains, customSections, habitIconsMap, localDataBySection],
+    [rutina, habits, habitPrefs, resolvedHabitChains, customSections, habitIconsMap],
   );
 
   const toggleItem = useRutinaItemToggle({
@@ -46,21 +35,6 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
     habitsPreferences: habitPrefs,
     markItemComplete,
     readOnly,
-    getSectionOverrides: (section) => localDataBySection[section] || {},
-    onOptimisticValue: (section, itemId, newValue) => {
-      setLocalDataBySection((prev) => ({
-        ...prev,
-        [section]: { ...(prev[section] || {}), [itemId]: newValue },
-      }));
-    },
-    onRevertValue: (section, itemId, previousValue) => {
-      setLocalDataBySection((prev) => ({
-        ...prev,
-        [section]: { ...(prev[section] || {}), [itemId]: previousValue },
-      }));
-    },
-    // onServerValue omitido a propósito: useRutinaBucketLocalData ya sincroniza
-    // desde `rutina` tras markItemComplete (evita un segundo rewrite de localData).
   });
 
   const handleItemClick = useCallback((section, itemId, event, horario = null) => {
@@ -75,7 +49,6 @@ export default function useRutinaCadenceBucketController({ rutina, readOnly = fa
     habits,
     customSections,
     habitPrefs,
-    localDataBySection,
     cadenceBuckets,
     handleItemClick,
     handleDoneToggle,

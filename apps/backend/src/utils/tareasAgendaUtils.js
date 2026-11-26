@@ -66,7 +66,7 @@ function buildUserAccessClause(userId) {
   };
 }
 
-function buildOverlapQuery(userId, from, to) {
+function buildOverlapQuery(userId, from, to, extraClauses = []) {
   return {
     $and: [
       buildUserAccessClause(userId),
@@ -81,6 +81,7 @@ function buildOverlapQuery(userId, from, to) {
           },
         ],
       },
+      ...extraClauses,
     ],
   };
 }
@@ -88,19 +89,41 @@ function buildOverlapQuery(userId, from, to) {
 /**
  * Tareas para calendario: anclas reales + ocurrencias virtuales (sin materializar en BD).
  */
-export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo) {
+export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo, options = {}) {
   const from = new Date(rangeFrom);
   const to = new Date(rangeTo);
   from.setHours(0, 0, 0, 0);
   to.setHours(23, 59, 59, 999);
 
-  // Series y tareas reales son independientes: se cargan en paralelo.
+  const extraClauses = [];
+  if (options.excludeCancelled) {
+    extraClauses.push({ estado: { $ne: 'CANCELADA' } });
+    extraClauses.push({ 'googleTasksSync.syncStatus': { $ne: 'unlinked' } });
+  }
+  if (options.excludeCompletedNonRecurring) {
+    extraClauses.push({
+      $or: [
+        { estado: { $ne: 'COMPLETADA' } },
+        { serieId: { $ne: null } },
+      ],
+    });
+  }
+
+  // Series + sus anclas Google corren en paralelo con la consulta principal de tareas reales.
   // El frontend solo usa el id de serieId (no rrule/activa/dtstart), por eso no
   // se popula serieId. Se excluyen campos pesados no usados por el calendario
   // (subtareas SÍ se conservan: el form de edición las necesita).
-  const [series, realDocs] = await Promise.all([
-    loadSeriesForAgenda(userId, { from, to }),
-    Tareas.find(buildOverlapQuery(userId, from, to))
+  const seriesWithAnchorsPromise = loadSeriesForAgenda(userId, { from, to }).then(async (series) => {
+    const anchorsBySerie = await loadGoogleAnchorsBySerie(
+      userId,
+      series.map((s) => s._id),
+    );
+    return { series, anchorsBySerie };
+  });
+
+  const [{ series, anchorsBySerie }, realDocs] = await Promise.all([
+    seriesWithAnchorsPromise,
+    Tareas.find(buildOverlapQuery(userId, from, to, extraClauses))
       .select('-googleDueHistory -archivos -googleTasksSync.syncErrors')
       .populate('objetivo', 'nombre estado')
       .populate('owners', 'nombre email')
@@ -109,10 +132,6 @@ export async function getTareasForAgendaRange(userId, rangeFrom, rangeTo) {
   ]);
 
   const deduped = dedupeAgendaTasksByGoogleDay(dedupeSerieInstancesForAgenda(realDocs));
-  const anchorsBySerie = await loadGoogleAnchorsBySerie(
-    userId,
-    series.map((s) => s._id),
-  );
   const virtual = buildVirtualTasksForRange(series, from, to, deduped, anchorsBySerie);
   const seenIds = new Set();
   const merged = [];
@@ -216,7 +235,10 @@ export function filterDocsForListView(docs, options = {}, now = new Date()) {
  * Lista agenda (/tareas): rango acotado + virtuales, sin paginar todo el universo.
  */
 export async function getTareasForListRange(userId, rangeFrom, rangeTo, options = {}) {
-  const docs = await getTareasForAgendaRange(userId, rangeFrom, rangeTo);
+  const docs = await getTareasForAgendaRange(userId, rangeFrom, rangeTo, {
+    excludeCancelled: true,
+    excludeCompletedNonRecurring: options.includeCompleted !== true,
+  });
   const withoutCalendarEvents = docs.filter((d) => !isGoogleCalendarImportedEvent(d));
   return filterDocsForListView(withoutCalendarEvents, options);
 }

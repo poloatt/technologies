@@ -4,11 +4,24 @@ import { alpha, useTheme } from '@mui/material/styles';
 import { startOfDay } from 'date-fns';
 import { formatCalendarDayHeader } from '../../utils/focoNavigationUtils';
 
-/** Pill de % de rutina — tipografía Google Calendar; `subtle` = blanco brilloso suave. */
-export function RutinaCompletionPctChip({ label, color = 'primary', tooltip = '', subtle = false }) {
+/** Pill de % de rutina — tipografía Google Calendar; `subtle` = blanco brilloso suave, `completed` = 100% logrado. */
+export function RutinaCompletionPctChip({
+  label,
+  color = 'primary',
+  tooltip = '',
+  subtle = false,
+  completed = false,
+}) {
   const theme = useTheme();
   const paletteColor = theme.palette[color]?.main ?? theme.palette.primary.main;
-  const subtleStyles = subtle
+  const completedStyles = completed
+    ? {
+      bgcolor: alpha(theme.palette.success.main, 0.18),
+      color: theme.palette.mode === 'dark' ? theme.palette.success.light : theme.palette.success.dark,
+      boxShadow: `inset 0 1px 0 ${alpha(theme.palette.success.light, 0.28)}`,
+    }
+    : null;
+  const subtleStyles = completedStyles || (subtle
     ? {
       bgcolor: alpha(theme.palette.common.white, 0.1),
       color: alpha(theme.palette.common.white, 0.9),
@@ -17,7 +30,7 @@ export function RutinaCompletionPctChip({ label, color = 'primary', tooltip = ''
     : {
       bgcolor: alpha(paletteColor, 0.12),
       color: paletteColor,
-    };
+    });
 
   return (
     <Chip
@@ -33,7 +46,7 @@ export function RutinaCompletionPctChip({ label, color = 'primary', tooltip = ''
           px: 0.75,
           py: 0,
           fontSize: '0.8125rem',
-          fontWeight: 400,
+          fontWeight: completed ? 600 : 400,
           lineHeight: 1.2,
         },
       }}
@@ -41,8 +54,15 @@ export function RutinaCompletionPctChip({ label, color = 'primary', tooltip = ''
   );
 }
 
-/** Estilos de barra de progreso rutina — blanco sutil con ligero brillo. */
-export function getRutinaProgressBarSx(theme, { bleedProgressBar = false } = {}) {
+/** Estilos de barra de progreso rutina — blanco sutil o verde suave al completar 100%. */
+export function getRutinaProgressBarSx(theme, { bleedProgressBar = false, completed = false } = {}) {
+  const barColor = completed
+    ? theme.palette.success.main
+    : alpha(theme.palette.common.white, 0.72);
+  const barGlow = completed
+    ? alpha(theme.palette.success.main, 0.35)
+    : alpha(theme.palette.common.white, 0.22);
+
   return {
     width: '100%',
     height: 4,
@@ -51,8 +71,8 @@ export function getRutinaProgressBarSx(theme, { bleedProgressBar = false } = {})
     bgcolor: alpha(theme.palette.common.white, 0.08),
     '& .MuiLinearProgress-bar': {
       borderRadius: 0,
-      bgcolor: alpha(theme.palette.common.white, 0.72),
-      boxShadow: `0 0 10px ${alpha(theme.palette.common.white, 0.22)}`,
+      bgcolor: barColor,
+      boxShadow: `0 0 10px ${barGlow}`,
     },
     ...(bleedProgressBar && {
       width: { md: `calc(100% + ${theme.spacing(6)})` },

@@ -328,7 +328,10 @@ function HabitRows({
     compact: effectiveStackVariant === 'compact',
   }).size;
 
-  const displayRows = useMemo(() => groupEntriesIntoDisplayRows(items), [items]);
+  const displayRows = useMemo(
+    () => groupEntriesIntoDisplayRows(items, { orderStacksByChain: true }),
+    [items],
+  );
   const layoutRows = useMemo(
     () => (shouldShareRows ? groupDisplayRowsForCompactSharing(displayRows) : displayRows),
     [displayRows, shouldShareRows],
@@ -384,9 +387,10 @@ function HabitRows({
     });
   }
 
-  return layoutRows.map((row, rowIndex) => {
+  return layoutRows.map((row) => {
     if (row.kind === 'compact') {
-      const shareKey = rowKeyPrefix ? `${rowKeyPrefix}-share-${rowIndex}` : `share-${rowIndex}`;
+      const firstKey = resolveEntryRenderKey(row.entries[0], section);
+      const shareKey = rowKeyPrefix ? `${rowKeyPrefix}-share-${firstKey}` : `share-${firstKey}`;
       const useCompactCarousel = shouldUseHabitRowIconCarousel({
         mobile: isMobileOrTablet,
         itemCount: row.entries.length,
@@ -552,7 +556,7 @@ export default function RutinaDayGroupList({
   const hasDone = done.length > 0;
   const visibleItems = useMemo(() => [...today, ...notToday], [today, notToday]);
   const sortableDisplayRows = useMemo(
-    () => groupEntriesIntoDisplayRows(visibleItems),
+    () => groupEntriesIntoDisplayRows(visibleItems, { orderStacksByChain: true }),
     [visibleItems],
   );
   const canSort = sortable

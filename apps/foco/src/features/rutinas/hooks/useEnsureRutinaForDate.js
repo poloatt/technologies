@@ -40,7 +40,7 @@ export default function useEnsureRutinaForDate(targetDate) {
 
     const boot = async (attempt = 0) => {
       if (cancelled) return;
-      if (ensuredDates.has(targetDateStr) || markEnsuredIfPresent()) return;
+      if (ensuredDates.has(targetDateStr)) return;
 
       const inFlight = bootInFlight.get(targetDateStr);
       if (inFlight) {
@@ -49,6 +49,8 @@ export default function useEnsureRutinaForDate(targetDate) {
       }
 
       const run = (async () => {
+        // Siempre revalidar/esperar la carga inicial deduplicada antes de dar por asegurada la fecha
+        // (evita saltear el refresh de red cuando RutinasContext hidrata desde caché SWR local).
         await Promise.all([
           typeof fetchHabits === 'function' ? fetchHabits().catch(() => {}) : undefined,
           typeof fetchRutinas === 'function' ? fetchRutinas().catch(() => {}) : undefined,
@@ -91,5 +93,5 @@ export default function useEnsureRutinaForDate(targetDate) {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [fetchRutinas, fetchHabits, getRutinaById, targetDate, targetDateStr, rutinas]);
+  }, [fetchRutinas, fetchHabits, getRutinaById, targetDate, targetDateStr]);
 }

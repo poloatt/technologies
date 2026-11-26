@@ -7,6 +7,7 @@ import {
   taskFormTitleFieldSx,
 } from '@shared/components/forms/tareaFormUi';
 import HabitChainAfterPicker from '@shared/components/habits/HabitChainAfterPicker.jsx';
+import HabitGroupTabs from '@shared/components/habits/HabitGroupTabs.jsx';
 import { normalizeHabitStep } from '@shared/habits';
 import HabitsManagerMobileChangeButton from './HabitsManagerMobileChangeButton';
 
@@ -92,6 +93,9 @@ export default function HabitsManagerRoutineDetail({
   showMobileChange = false,
   mobilePickerExpanded = false,
   onMobilePickerToggle,
+  /** [{ value: chainId, label }] — pestañas de rutinas reales (solo móvil). */
+  routineOptions = [],
+  onSelectRoutine,
 }) {
   if (!chainId || !draft) {
     return (
@@ -114,8 +118,27 @@ export default function HabitsManagerRoutineDetail({
 
   const steps = (draft.steps || []).map(normalizeHabitStep).filter(Boolean);
   const saveActive = isDirty && (draft.label || '').trim() && steps.length >= 2;
+  const showRoutineTabs = isMobile && routineOptions.length > 0;
 
   return (
+    <Box
+      sx={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+    {showRoutineTabs ? (
+      <Box sx={{ px: 2, pt: 1, flexShrink: 0 }}>
+        <HabitGroupTabs
+          sections={routineOptions}
+          value={chainId}
+          onChange={onSelectRoutine}
+        />
+      </Box>
+    ) : null}
     <Fade in key={chainId}>
       <Box
         sx={{
@@ -125,7 +148,7 @@ export default function HabitsManagerRoutineDetail({
           minHeight: 0,
           overflow: isMobile ? 'hidden' : 'auto',
           borderLeft: { xs: 0, md: 1 },
-          borderTop: { xs: 1, md: 0 },
+          borderTop: showRoutineTabs ? 0 : { xs: 1, md: 0 },
           borderColor: 'divider',
         }}
       >
@@ -249,5 +272,6 @@ export default function HabitsManagerRoutineDetail({
         )}
       </Box>
     </Fade>
+    </Box>
   );
 }

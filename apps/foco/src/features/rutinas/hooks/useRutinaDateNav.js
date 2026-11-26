@@ -125,21 +125,31 @@ export function useRutinaDateNav() {
   );
 
   const completionStats = useMemo(
-    () => getRutinaCompletionStats(effectiveView.rutina, habits, habitPrefs),
-    [effectiveView.rutina, habits, habitPrefs],
+    () => getRutinaCompletionStats(effectiveView.rutina, habits, habitPrefs, {
+      customSections,
+      allRutinas: rutinas,
+    }),
+    [effectiveView.rutina, habits, habitPrefs, customSections, rutinas],
   );
 
   const completionPercentage = effectiveView.rutina ? completionStats.percentage : 0;
   const totalCompleted = completionStats.completed;
   const totalVisible = completionStats.total;
+  const deferredCount = completionStats.deferredCount || 0;
+
+  const deferredSuffix = deferredCount > 0
+    ? ` (${deferredCount} ${deferredCount === 1 ? 'pospuesto/ignorado excluido' : 'pospuestos/ignorados excluidos'})`
+    : '';
 
   const completionTooltip = dayMode === 'future'
     ? RUTINA_FUTURE_PREVIEW_COPY.completionTooltip
     : (totalVisible > 0
-      ? (dayMode === 'historical'
+      ? `${dayMode === 'historical'
         ? RUTINA_HISTORICAL_COPY.completionTooltip(totalCompleted, totalVisible)
-        : `${totalCompleted}/${totalVisible} completados`)
-      : 'Sin ítems activos');
+        : `${totalCompleted}/${totalVisible} completados`}${deferredSuffix}`
+      : (deferredCount > 0
+        ? 'Todos los hábitos de hoy fueron pospuestos o ignorados'
+        : 'Sin ítems activos'));
 
   const navHandlers = useMemo(() => ({
     onPrevious,
@@ -157,6 +167,9 @@ export function useRutinaDateNav() {
     loading,
     completionPercentage,
     completionTooltip,
+    completedCount: totalCompleted,
+    totalCount: totalVisible,
+    deferredCount,
     navHandlers,
     goToToday,
     handleDateClick,

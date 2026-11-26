@@ -63,9 +63,13 @@ export function resolveHabitChainContext(
   section,
   habitId,
 ) {
-  const chain = findChainForHabit(chains, section, habitId);
-  if (!chain) return null;
+  if (!Array.isArray(chains)) return null;
+  const target = { section, habitId };
+  const chainIndex = chains.findIndex((chain) => Array.isArray(chain?.steps)
+    && chain.steps.some((step) => stepsEqual(normalizeHabitStep(step), target)));
+  if (chainIndex < 0) return null;
 
+  const chain = chains[chainIndex];
   const stepIndex = getChainStepIndex(chain, section, habitId);
   if (stepIndex < 0) return null;
 
@@ -74,6 +78,7 @@ export function resolveHabitChainContext(
     label: chain.label || '',
     stepIndex,
     stepCount: chain.steps.length,
+    chainIndex,
   };
 }
 
@@ -116,15 +121,29 @@ export function groupHabitsIntoDisplayRows(habits = [], section, habitChains = [
   return groupEntriesIntoDisplayRows(buildManagerHabitListItems(habits, section, habitChains));
 }
 
+const FRANJA_ORDER = { MAÑANA: 0, TARDE: 1, NOCHE: 2 };
+
+function compareStackEntries(a, b) {
+  const stepDiff = (a.chain?.stepIndex ?? 0) - (b.chain?.stepIndex ?? 0);
+  if (stepDiff !== 0) return stepDiff;
+  const franjaA = FRANJA_ORDER[String(a.franjaKey || '').toUpperCase()] ?? 99;
+  const franjaB = FRANJA_ORDER[String(b.franjaKey || '').toUpperCase()] ?? 99;
+  return franjaA - franjaB;
+}
+
 /**
  * Agrupa entradas visibles: hábitos de la misma rutina comparten fila.
- * Orden interno estable por `chain.stepIndex` (no reordena al marcar franjas).
+ * Orden interno estable por `chain.stepIndex` (y franja como desempate).
  * Mientras quede ≥1 hábito pendiente de una rutina multi-paso, se mantiene el
  * grupo (barra de título) para no saltar a fila simple al completar parcial.
+ * Con `orderStacksByChain: true`, las rutinas van primero según el orden fijo de
+ * `habitChains` (`chain.chainIndex`) y los hábitos sueltos debajo — nunca saltan
+ * al marcar ítems.
  * @returns {Array<{ kind: 'single', entry: object } | { kind: 'stack', chainId: string, entries: object[] }>}
  */
-export function groupEntriesIntoDisplayRows(items = []) {
+export function groupEntriesIntoDisplayRows(items = [], options = {}) {
   if (!Array.isArray(items) || items.length === 0) return [];
+  const { orderStacksByChain = false } = options;
 
   const stackGroups = new Map();
 
@@ -132,19 +151,37 @@ export function groupEntriesIntoDisplayRows(items = []) {
     const chain = entry?.chain;
     if (chain?.id && chain.stepCount > 1) {
       if (!stackGroups.has(chain.id)) {
-        stackGroups.set(chain.id, { entries: [], firstIndex: index });
+        stackGroups.set(chain.id, {
+          chainId: chain.id,
+          entries: [],
+          firstIndex: index,
+          chainIndex: Number.isFinite(chain.chainIndex) ? chain.chainIndex : Number.MAX_SAFE_INTEGER,
+        });
       }
       const group = stackGroups.get(chain.id);
       group.entries.push(entry);
       group.firstIndex = Math.min(group.firstIndex, index);
+      if (Number.isFinite(chain.chainIndex)) {
+        group.chainIndex = Math.min(group.chainIndex, chain.chainIndex);
+      }
     }
   });
 
   stackGroups.forEach((group) => {
-    group.entries.sort((a, b) => (
-      (a.chain?.stepIndex ?? 0) - (b.chain?.stepIndex ?? 0)
-    ));
+    group.entries.sort(compareStackEntries);
   });
+
+  if (orderStacksByChain) {
+    const stackRows = [...stackGroups.values()]
+      .sort((a, b) => (a.chainIndex - b.chainIndex) || (a.firstIndex - b.firstIndex))
+      .map((group) => ({ kind: 'stack', chainId: group.chainId, entries: group.entries }));
+
+    const singleRows = items
+      .filter((entry) => !(entry?.chain?.id && entry.chain.stepCount > 1))
+      .map((entry) => ({ kind: 'single', entry }));
+
+    return [...stackRows, ...singleRows];
+  }
 
   const renderedStacks = new Set();
   const rows = [];

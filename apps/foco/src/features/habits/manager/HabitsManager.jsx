@@ -17,7 +17,7 @@ import { useSidebar } from '@shared/context/SidebarContext';
 import { generateHabitId } from '@shared/habits/form';
 import { invalidateHabitsPreferencesCache, updateHabitChainsOnApi } from '@shared/hooks/useHabitsPreferences';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
-import { normalizeHabitStep, removeHabitFromChains, resolveSectionIconKey, updateHabitChainLabel, generateChainId, isGroupedRoutineChain } from '@shared/habits';
+import { normalizeHabitStep, removeHabitFromChains, resolveSectionIconKey, updateHabitChainLabel, generateChainId, isGroupedRoutineChain, getChainDisplayLabel } from '@shared/habits';
 import { NEW_HABIT_CHAIN_VALUE, createNewRoutineAssignment, applyChainFormSave } from '@shared/habits/routines';
 import { Z_INDEX } from '@shared/config/uiConstants';
 import { DEFAULT_HABIT_CONFIG } from '@shared/habits/form';
@@ -27,13 +27,16 @@ import {
   getHabitConfig,
   normalizeManagerConfig,
 } from '@shared/habits/form/habitsManagerUtils';
-import HabitsManagerList from './components/HabitsManagerList';
+import HabitsManagerHabitPicker from './components/HabitsManagerHabitPicker';
 import HabitsManagerDetail from './components/HabitsManagerDetail';
 import HabitsManagerSidebarHeader from './components/HabitsManagerSidebarHeader';
 import HabitsManagerRoutinesList from './components/HabitsManagerRoutinesList';
 import HabitsManagerRoutineDetail from './components/HabitsManagerRoutineDetail';
 import HabitsManagerCreateDialog from './components/HabitsManagerCreateDialog';
 import HabitsManagerActionFooter from './components/HabitsManagerActionFooter';
+
+/** Vista inicial al abrir el gestor: Rutinas (alternativa: 'habits'). */
+const DEFAULT_MANAGER_MODE = 'routines';
 
 const EMPTY_FORM = {
   label: '',
@@ -52,7 +55,6 @@ export const HabitsManager = ({ open, onClose }) => {
     addHabit,
     updateHabit,
     deleteHabit,
-    reorderHabits,
     customSections,
     updateHabitSection,
   } = useHabits();
@@ -67,9 +69,8 @@ export const HabitsManager = ({ open, onClose }) => {
   const [habitsConfig, setHabitsConfig] = useState({});
   const [editDraft, setEditDraft] = useState(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [mobileListExpanded, setMobileListExpanded] = useState(false);
   const [mobileRoutineListExpanded, setMobileRoutineListExpanded] = useState(false);
-  const [managerMode, setManagerMode] = useState('habits');
+  const [managerMode, setManagerMode] = useState(DEFAULT_MANAGER_MODE);
   const [expandedSection, setExpandedSection] = useState('bodyCare');
   const habitsRef = useRef(habits);
   const editDraftHabitIdRef = useRef(null);
@@ -205,9 +206,8 @@ export const HabitsManager = ({ open, onClose }) => {
     if (!open) {
       if (wasOpenRef.current) {
         resetManagerState();
-        setMobileListExpanded(false);
         setMobileRoutineListExpanded(false);
-        setManagerMode('habits');
+        setManagerMode(DEFAULT_MANAGER_MODE);
       }
       wasOpenRef.current = false;
       return undefined;
@@ -496,10 +496,6 @@ export const HabitsManager = ({ open, onClose }) => {
     onClose,
   ]);
 
-  const handleSectionExpand = useCallback((sectionId) => {
-    setExpandedSection((prev) => (prev === sectionId ? null : sectionId));
-  }, []);
-
   const handleManagerModeChange = useCallback((nextMode) => {
     if (nextMode === managerMode) return;
     const hasUnsaved = nextMode === 'routines' ? isEditDirty : isRoutineDirty;
@@ -509,7 +505,6 @@ export const HabitsManager = ({ open, onClose }) => {
     setManagerMode(nextMode);
     setErrors({});
     setRoutineErrors({});
-    setMobileListExpanded(false);
     setMobileRoutineListExpanded(false);
     if (nextMode === 'routines') {
       setShowAddForm(false);
@@ -752,14 +747,6 @@ export const HabitsManager = ({ open, onClose }) => {
     }
   };
 
-  const handleReorder = async (sectionId, habitIds) => {
-    try {
-      await reorderHabits(sectionId, habitIds);
-    } catch {
-      // manejado en contexto
-    }
-  };
-
   const handleReorderRoutines = useCallback(async (orderedChainIds) => {
     if (!orderedChainIds?.length || !prefsReady) return;
     const visibleSet = new Set(orderedChainIds);
@@ -845,22 +832,10 @@ export const HabitsManager = ({ open, onClose }) => {
     ? (selectedChain ? 'edit' : 'empty')
     : (showAddForm ? 'create' : (selectedHabit ? 'edit' : 'empty'));
 
-  const mobilePickerExpanded = managerMode === 'habits' ? mobileListExpanded : mobileRoutineListExpanded;
-  const showMobileHabitsChange = isMobile && managerMode === 'habits' && !showAddForm && sortedHabits.length > 0;
-  const showMobileRoutinesChange = isMobile && managerMode === 'routines' && routineChains.length > 0;
-
   const dialogContentOffset = useMemo(() => {
     if (!isDesktop) return 0;
     return sidebarOpen ? sidebarWidth : collapsedWidth;
   }, [collapsedWidth, isDesktop, sidebarOpen, sidebarWidth]);
-
-  const handleMobilePickerToggle = useCallback(() => {
-    if (managerMode === 'habits') {
-      setMobileListExpanded((prev) => !prev);
-      return;
-    }
-    setMobileRoutineListExpanded((prev) => !prev);
-  }, [managerMode]);
 
   const footerSaveActive = useMemo(() => {
     if (detailMode === 'empty') return false;
@@ -908,45 +883,71 @@ export const HabitsManager = ({ open, onClose }) => {
     />
   );
 
+  const handleSelectRoutine = (chainId) => {
+    if (chainId === selectedChainId) return;
+    if (isRoutineDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
+      return;
+    }
+    bumpRoutineSession();
+    setRoutineErrors({});
+    setSelectedChainId(chainId);
+  };
+
+  const routineTabOptions = routineChains.map((chain) => ({
+    value: chain.id,
+    label: getChainDisplayLabel(chain, habits),
+  }));
+
+  const handleSelectHabit = (id, sectionId) => {
+    if (id === selectedHabitId && !showAddForm) return;
+    if (isEditDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
+      return;
+    }
+    bumpEditSession();
+    setShowAddForm(false);
+    setErrors({});
+    setCurrentSection(sectionId);
+    setExpandedSection(sectionId);
+    setSelectedHabitId(id);
+    const habit = (habits[sectionId] || []).find((h) => h.id === id);
+    if (habit && !habitsConfig[sectionId]?.[id]) {
+      const defaultConfig = getDefaultHabitConfig(habit);
+      setHabitsConfig((prev) => ({
+        ...prev,
+        [sectionId]: {
+          ...(prev[sectionId] || {}),
+          [id]: defaultConfig,
+        },
+      }));
+    }
+  };
+
+  const browseSection = expandedSection || currentSection;
+
+  const handleAddHabitToGroup = (sectionId) => {
+    setExpandedSection(sectionId);
+    handleOpenCreateDialog();
+  };
+
+  const renderHabitPicker = () => (
+    <HabitsManagerHabitPicker
+      sections={sections}
+      habits={habits}
+      activeSection={browseSection}
+      onSectionChange={setExpandedSection}
+      selectedHabitId={showAddForm ? null : selectedHabitId}
+      onSelectHabit={handleSelectHabit}
+      onAddHabit={handleAddHabitToGroup}
+      onCreateSection={sectionSelectProps.onCreate}
+      createSectionLabel={sectionSelectProps.createLabel}
+      onEditSection={openEditGroupDialog}
+      loading={loading}
+    />
+  );
+
   const renderSelectorList = () => (
     managerMode === 'habits' ? (
-      <HabitsManagerList
-        sections={sections}
-        allHabits={habits}
-        habitChains={habitChains}
-        expandedSection={expandedSection}
-        onSectionExpand={handleSectionExpand}
-        selectedHabitId={showAddForm ? null : selectedHabitId}
-        loading={loading}
-        isMobile={isMobile}
-        listExpanded={mobileListExpanded}
-        onToggleListExpanded={setMobileListExpanded}
-        showAddForm={showAddForm}
-        onSelect={(id, sectionId) => {
-          if (isEditDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
-            return;
-          }
-          bumpEditSession();
-          setShowAddForm(false);
-          setErrors({});
-          setCurrentSection(sectionId);
-          setExpandedSection(sectionId);
-          setSelectedHabitId(id);
-          const habit = (habits[sectionId] || []).find((h) => h.id === id);
-          if (habit && !habitsConfig[sectionId]?.[id]) {
-            const defaultConfig = getDefaultHabitConfig(habit);
-            setHabitsConfig((prev) => ({
-              ...prev,
-              [sectionId]: {
-                ...(prev[sectionId] || {}),
-                [id]: defaultConfig,
-              },
-            }));
-          }
-        }}
-        onReorder={handleReorder}
-        onAddClick={handleOpenCreateDialog}
-      />
+      renderHabitPicker()
     ) : (
       <HabitsManagerRoutinesList
         habitChains={habitChains}
@@ -956,14 +957,7 @@ export const HabitsManager = ({ open, onClose }) => {
         isMobile={isMobile}
         listExpanded={mobileRoutineListExpanded}
         onToggleListExpanded={setMobileRoutineListExpanded}
-        onSelect={(chainId) => {
-          if (isRoutineDirty && !window.confirm('Tienes cambios sin guardar. ?Descartarlos?')) {
-            return;
-          }
-          bumpRoutineSession();
-          setRoutineErrors({});
-          setSelectedChainId(chainId);
-        }}
+        onSelect={handleSelectRoutine}
         onReorder={handleReorderRoutines}
       />
     )
@@ -1066,9 +1060,9 @@ export const HabitsManager = ({ open, onClose }) => {
           {!isMobile && (
             <Box
               sx={{
-                width: '35%',
-                minWidth: 220,
-                maxWidth: 280,
+                width: managerMode === 'habits' ? '42%' : '35%',
+                minWidth: managerMode === 'habits' ? 300 : 220,
+                maxWidth: managerMode === 'habits' ? 380 : 280,
                 display: 'flex',
                 flexDirection: 'column',
                 minHeight: 0,
@@ -1093,6 +1087,22 @@ export const HabitsManager = ({ open, onClose }) => {
             }}
           >
             {isMobile && renderModeHeader()}
+
+            {isMobile && managerMode === 'habits' && (
+              <Box
+                sx={{
+                  height: 'min(38vh, 300px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flexShrink: 0,
+                  minHeight: 0,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                }}
+              >
+                {renderHabitPicker()}
+              </Box>
+            )}
 
             <Box
               sx={{
@@ -1145,9 +1155,6 @@ export const HabitsManager = ({ open, onClose }) => {
               onCreateRoutine={openCreateRoutineDialog}
               onEditRoutine={openEditRoutineDialog}
               hideFooter
-              showMobileChange={showMobileHabitsChange}
-              mobilePickerExpanded={mobilePickerExpanded}
-              onMobilePickerToggle={handleMobilePickerToggle}
             />
             ) : (
             <HabitsManagerRoutineDetail
@@ -1165,37 +1172,14 @@ export const HabitsManager = ({ open, onClose }) => {
               errors={routineErrors}
               hideFooter
               isMobile={isMobile}
-              showMobileChange={showMobileRoutinesChange}
-              mobilePickerExpanded={mobilePickerExpanded}
-              onMobilePickerToggle={handleMobilePickerToggle}
+              routineOptions={routineTabOptions}
+              onSelectRoutine={handleSelectRoutine}
             />
             )}
             </Box>
           </Box>
 
-          {isMobile && (
-            <>
-              {mobilePickerExpanded && (
-                <Box
-                  sx={{
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    minHeight: 0,
-                    flex: '0 0 auto',
-                    borderTop: 1,
-                    borderColor: 'divider',
-                    flexShrink: 0,
-                    bgcolor: 'background.default',
-                  }}
-                >
-                  {renderSelectorList()}
-                </Box>
-              )}
-
-              {renderActionFooter()}
-            </>
-          )}
+          {isMobile && renderActionFooter()}
         </Box>
       </DialogContent>
 

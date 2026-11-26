@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
+import HubSectionHeader from '../../hub/HubSectionHeader';
 import {
   rutinaStackRowSx,
   rutinaStackRowInlineSx,
@@ -7,8 +8,6 @@ import {
   rutinaStackRowWrapSx,
   rutinaStackRowWrapCompactSx,
   rutinaRoutineGroupShellSx,
-  rutinaRoutineGroupTitleBarSx,
-  rutinaRoutineGroupTitleTextSx,
   rutinaRoutineGroupBodySx,
 } from '@shared/styles/rutinaPageStyles';
 
@@ -40,19 +39,7 @@ export default function RoutineStackRow({
         id={rowKeyPrefix ? `habit-stack-row-${rowKeyPrefix}-${chainId}` : `habit-stack-row-${chainId}`}
       >
         <Box sx={rutinaRoutineGroupShellSx}>
-          {chainLabel ? (
-            <Box sx={rutinaRoutineGroupTitleBarSx}>
-              <Typography
-                component="span"
-                variant="caption"
-                noWrap
-                title={chainLabel}
-                sx={rutinaRoutineGroupTitleTextSx}
-              >
-                {chainLabel}
-              </Typography>
-            </Box>
-          ) : null}
+          {chainLabel ? <HubSectionHeader title={chainLabel} /> : null}
           <Box sx={{ ...rutinaRoutineGroupBodySx, ...rowSx }}>
             {children}
           </Box>

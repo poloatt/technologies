@@ -74,7 +74,7 @@ export default function RutinaFranjaIconCarousel({
   const effectiveShowTitleBar = Boolean(showRoutineTitleBar) && carouselMode !== 'luego';
 
   const displayRows = useMemo(
-    () => groupEntriesIntoDisplayRows(pending),
+    () => groupEntriesIntoDisplayRows(pending, { orderStacksByChain: true }),
     [pending],
   );
 

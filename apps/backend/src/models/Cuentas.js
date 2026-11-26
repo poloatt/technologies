@@ -56,7 +56,8 @@ const cuentaSchema = createSchema({
     accountType: String,               // Tipo de cuenta (personal, vendedor, etc.)
     verificado: Boolean,               // Si la cuenta está verificada
     disponibleRetiro: Number,          // Dinero disponible para retiro
-    disponiblePendiente: Number        // Dinero pendiente de acreditación
+    disponiblePendiente: Number,       // Dinero pendiente de acreditación
+    saldoActualizadoEn: Date           // Cuándo se leyó el saldo real de MP (available_balance)
   },
   ...commonFields
 });

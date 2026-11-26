@@ -13,6 +13,8 @@ import {
   acumularBucketDolares,
   acumularBucketInversiones,
   calcularSaldosMercadoPago,
+  rendimientosDelPeriodo,
+  resolverDineroEnCuenta,
   applyMovementKindFilter,
   applyYieldSideFilter,
   buildLedgerMatch,
@@ -598,6 +600,11 @@ class TransaccionesController extends BaseController {
       const fechaError = applyFechaRange(query, null, fechaFin);
       if (fechaError) return res.status(400).json({ error: fechaError });
       const fechaCorte = fechaFin ? parseArDay(fechaFin, true) : null;
+      // Inicio del período: solo marca filas para `rendimientosPeriodo`, no recorta los saldos.
+      const inicioPeriodo = fechaInicio ? parseArDay(fechaInicio) : null;
+      if (fechaInicio && !inicioPeriodo) {
+        return res.status(400).json({ error: 'Fecha de inicio inválida' });
+      }
 
       let cuentaId = null;
       if (req.query.cuenta) {
@@ -700,6 +707,7 @@ class TransaccionesController extends BaseController {
                 moneda: '$moneda',
                 compraventa: { $eq: ['$origen.metadata.compraventa', true] },
                 flujo: esFlujo,
+                enPeriodo: inicioPeriodo ? { $gte: ['$fecha', inicioPeriodo] } : true,
                 side: {
                   $switch: {
                     branches: [
@@ -733,8 +741,23 @@ class TransaccionesController extends BaseController {
       ]);
 
       const saldos = calcularSaldosMercadoPago(rows, { monedaPesosId });
+
+      // "Dinero en cuenta" debe ser el saldo real de MP cuando se puede leer.
+      // El ledger solo lo reconstruye y falla si faltan movimientos (p. ej. CBU).
+      // El saldo real vale para el período actual (fechaFin hoy o sin fecha) y si es reciente.
+      const dineroEnCuenta = resolverDineroEnCuenta({
+        cuenta: cuentaMp,
+        ledger: saldos.dineroEnCuenta,
+        fechaCorte,
+      });
+
       res.json({
         ...saldos,
+        dineroEnCuenta: dineroEnCuenta.valor,
+        dineroEnCuentaLedger: dineroEnCuenta.ledger,
+        dineroEnCuentaFuente: dineroEnCuenta.fuente,
+        dineroEnCuentaActualizadoEn: dineroEnCuenta.actualizadoEn,
+        rendimientosPeriodo: rendimientosDelPeriodo(rows, { monedaPesosId }),
         credito: creditoSaldo,
         fechaInicio: fechaInicio || null,
         fechaFin: fechaFin || null,

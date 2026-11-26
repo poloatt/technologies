@@ -65,6 +65,7 @@ export default function AgendaCalendarDateHeader({
   completionPercentage,
   completionColor = 'primary',
   completionTooltip = '',
+  completionTotal = null,
   dayMode = null,
   hideOuterBorder = false,
   bleedProgressBar = false,
@@ -124,6 +125,7 @@ export default function AgendaCalendarDateHeader({
 
   const showProgress = isRutina && typeof completionPercentage === 'number';
   const progressValue = showProgress ? Math.min(100, Math.max(0, completionPercentage)) : 0;
+  const isDayComplete = showProgress && progressValue === 100 && (completionTotal == null || completionTotal > 0);
   const rutinaPctLabel = showProgress ? `${completionPercentage}%` : '—';
 
   const rutinaModeLabel = isRutina && dayMode && dayMode !== 'today'
@@ -267,6 +269,7 @@ export default function AgendaCalendarDateHeader({
                   <RutinaCompletionPctChip
                     label={rutinaPctLabel}
                     subtle
+                    completed={isDayComplete}
                   />
                 </span>
               </Tooltip>
@@ -346,7 +349,7 @@ export default function AgendaCalendarDateHeader({
           value={progressValue}
           aria-label="Progreso de completitud de la rutina"
           sx={isRutina
-            ? getRutinaProgressBarSx(theme, { bleedProgressBar })
+            ? getRutinaProgressBarSx(theme, { bleedProgressBar, completed: isDayComplete })
             : {
               width: '100%',
               height: 4,

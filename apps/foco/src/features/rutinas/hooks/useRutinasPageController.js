@@ -154,8 +154,11 @@ export function useRutinasPageController() {
   const effectiveRutina = effectiveView.rutina;
 
   const completionStats = useMemo(
-    () => getRutinaCompletionStats(effectiveRutina, habits, habitPrefs),
-    [effectiveRutina, habits, habitPrefs],
+    () => getRutinaCompletionStats(effectiveRutina, habits, habitPrefs, {
+      customSections,
+      allRutinas: rutinas,
+    }),
+    [effectiveRutina, habits, habitPrefs, customSections, rutinas],
   );
 
   const dayMode = useMemo(

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Box, Typography, CircularProgress, Paper } from '@mui/material';
 import RutinaDayView from './RutinaDayView';
 import { RutinaForm } from './dialogs/RutinaForm';
@@ -12,10 +12,7 @@ import {
   rutinaPageLoaderSx,
   rutinaErrorStatePaperSx,
 } from '@shared/styles/rutinaPageStyles';
-import { RUTINA_NAVIGATION_BAR_CONFIG } from '@shared/config/uiConstants';
 import { Info as InfoIcon } from '@mui/icons-material';
-import clienteAxios from '@shared/config/axios';
-import { DietHabitCaptionProvider } from './dietHabitCaptionContext.jsx';
 
 function PageStatusMessage({ error }) {
   if (error) {
@@ -52,26 +49,6 @@ const RutinasWithContext = () => {
     handleCloseForm,
     isMobileOrTablet,
   } = useRutinasPageController();
-  const [dietCaptions, setDietCaptions] = useState({});
-
-  useEffect(() => {
-    const fecha = effectiveRutina?.fecha;
-    if (!fecha) {
-      setDietCaptions({});
-      return undefined;
-    }
-    let cancelled = false;
-    clienteAxios.get('/api/dietas/habit-captions', { params: { fecha } })
-      .then((response) => {
-        if (!cancelled) setDietCaptions(response.data?.captions || {});
-      })
-      .catch(() => {
-        if (!cancelled) setDietCaptions({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [effectiveRutina?.fecha]);
 
   // Mantener el día anterior mientras carga el siguiente (evita flash de spinner).
   const showRutinaContent = Boolean(effectiveRutina) && !editMode;
@@ -89,17 +66,15 @@ const RutinasWithContext = () => {
         gap: 0,
       }}
       >
-        <Box sx={rutinaPageScrollSx(isMobileOrTablet, undefined, RUTINA_NAVIGATION_BAR_CONFIG.height)}>
+        <Box sx={rutinaPageScrollSx(isMobileOrTablet)}>
           {showStatus && <PageStatusMessage error={error} />}
 
           {showRutinaContent && (
-            <DietHabitCaptionProvider captions={dietCaptions}>
-              <RutinaDayView
-                rutina={effectiveRutina}
-                readOnly={rutinaReadOnly}
-                isPreview={isPreview}
-              />
-            </DietHabitCaptionProvider>
+            <RutinaDayView
+              rutina={effectiveRutina}
+              readOnly={rutinaReadOnly}
+              isPreview={isPreview}
+            />
           )}
 
           {editMode && (

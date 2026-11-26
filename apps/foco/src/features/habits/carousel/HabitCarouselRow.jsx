@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useCallback } from 'react';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, Skeleton } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { useRutinas, useHabits } from '@shared/context';
 import { resolveRutinaForDate } from '@shared/habits';
 import { buildHabitSectionIconsMap } from '@shared/utils/habitSectionIcons';
@@ -9,9 +10,12 @@ import { isSameDay } from 'date-fns';
 import useHorizontalDragScroll from '@shared/hooks/useHorizontalDragScroll';
 import { useEnsureRutinaForDate } from '../../rutinas';
 import useHabitsPreferences from '@shared/hooks/useHabitsPreferences';
+import { getHabitCarouselSurface } from '@shared/styles/habitCarouselStyles';
 import useHabitCarouselItems from './useHabitCarouselItems';
 import useHabitCarouselToggle from './useHabitCarouselToggle';
 import HabitCarouselIconRow from './HabitCarouselIconRow';
+
+const SKELETON_SLOTS = [0, 1, 2, 3, 4];
 
 /**
  * Carrusel de hábitos embebido (Ahora / Luego).
@@ -28,6 +32,7 @@ export default function HabitCarouselRow({
   showCompletedToggle = false,
   mobile = false,
 }) {
+  const theme = useTheme();
   const {
     rutina,
     rutinas,
@@ -37,9 +42,10 @@ export default function HabitCarouselRow({
     patchRutinaSection,
     deferHabitItem,
   } = useRutinas();
-  const { habits, loading: habitsLoading, customSections } = useHabits();
+  const { habits, loading: habitsLoading, habitsReady, customSections } = useHabits();
   const { habitsPreferences, habitChains, prefsReady } = useHabitsPreferences();
   const carouselRef = useRef(null);
+  const { size } = getHabitCarouselSurface(theme, { mobile });
 
   const { scrollRef, dragRef, isDragging, bind } = useHorizontalDragScroll({
     enabled: enableDragScroll,
@@ -81,7 +87,7 @@ export default function HabitCarouselRow({
     sectionIconsMap,
     habits,
     currentTimeOfDay,
-    habitsPreferences: habitsPreferences || {},
+    habitsPreferences,
     habitChains: habitChains || [],
     customSections,
     allRutinas: rutinas,
@@ -105,10 +111,38 @@ export default function HabitCarouselRow({
     deferHabitItem(rutinaHoy._id, section, itemId, action, options);
   }, [isInteractive, rutinaHoy?._id, deferHabitItem, dragRef]);
 
-  if (!prefsReady && !hasConfiguredHabits && (habitsLoading || rutinasLoading)) {
+  const isInitialLoading = (
+    !rutinasError
+    && pendingItems.length === 0
+    && completedTodayItems.length === 0
+    && (!prefsReady || !habitsReady || (!rutinaHoy && (rutinasLoading || habitsLoading)))
+  );
+
+  if (isInitialLoading) {
+    const iconSkeletonSize = Math.max(24, Math.round(size * 0.62));
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 36 }}>
-        <CircularProgress size={18} aria-label="Cargando hábitos" />
+      <Box
+        role="status"
+        aria-label="Cargando hábitos"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: mobile ? 1.5 : 1.25,
+          minHeight: size + 4,
+          pt: dense ? 0.25 : 0.5,
+          pb: dense ? 0.25 : 0,
+        }}
+      >
+        {SKELETON_SLOTS.map((slot) => (
+          <Skeleton
+            key={slot}
+            variant="circular"
+            width={iconSkeletonSize}
+            height={iconSkeletonSize}
+            animation="wave"
+          />
+        ))}
       </Box>
     );
   }

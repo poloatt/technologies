@@ -76,7 +76,6 @@ export default function useHabitCarouselToggle({
         newValue,
         previousValue: itemValue,
         markItemComplete,
-        patchRutinaSection,
       });
     } catch {
       console.warn(`${logPrefix} No se pudo togglear`, { section, itemId });
@@ -87,7 +86,6 @@ export default function useHabitCarouselToggle({
     dragRef,
     rutinaHoy,
     markItemComplete,
-    patchRutinaSection,
     currentTimeOfDay,
     habitsPreferences,
     logPrefix,

@@ -1,8 +1,8 @@
 export const FLUJO_TYPE_FILTERS = [
-  { id: 'payment', label: 'Pago', kinds: ['PAYMENT'] },
+  { id: 'payment', label: 'Pago', kinds: ['PAYMENT', 'RESERVE_PAYMENT'] },
   { id: 'p2p', label: 'Transferencia a usuario', kinds: ['P2P_TRANSFER'] },
   { id: 'bank', label: 'Transferencia bancaria', kinds: ['EXTERNAL_TRANSFER'] },
-  { id: 'refund', label: 'Devolución', kinds: ['REFUND'] },
+  { id: 'refund', label: 'Devolución o reintegro', kinds: ['REFUND', 'CASHBACK'] },
   { id: 'other', label: 'Movimiento', kinds: ['UNKNOWN'] },
 ];
 

@@ -27,7 +27,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
     readOnly,
     habits,
     habitPrefs,
-    localDataBySection,
     cadenceBuckets,
     handleItemClick,
     handleDoneToggle,
@@ -108,7 +107,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
           onItemClick={handleItemClick}
           habits={habits}
           habitsPreferences={habitPrefs}
-          localDataBySection={localDataBySection}
           includeDoneSection={false}
           useShortFranjaLabels
           luegoWeekdayGroups={luegoWeekdayGroups}
@@ -123,7 +121,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
             onItemClick={handleItemClick}
             habits={habits}
             habitsPreferences={habitPrefs}
-            localDataBySection={localDataBySection}
             includeDoneSection={false}
             luegoWeekdayGroupsExtra={flexibleWeekdayGroups}
             hideNotToday={hideNotToday}
@@ -139,7 +136,6 @@ function RutinaCadenceFlatLayoutInner({ isPreview = false }) {
           readOnly={readOnly}
           habits={habits}
           habitsPreferences={habitPrefs}
-          localDataBySection={localDataBySection}
           onItemClick={handleItemClick}
           hideNotToday={hideNotToday}
           hideDone={showDoneSection || isPreview || dayMode === 'future'}

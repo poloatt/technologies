@@ -214,7 +214,7 @@ function HabitCarouselIconRow({
   const iconDense = dense && !mobile;
 
   const renderIconsRow = (items, { keySuffix, completionState, rowInteractive, rowOnToggle, rowAllowPostpone } = {}) => (
-    <AnimatePresence mode="popLayout">
+    <AnimatePresence mode="popLayout" initial={false}>
       {items.map((entry, index) => renderCarouselIcon({
         entry,
         index,

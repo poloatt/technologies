@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import {
   TareaFormRow,
   TareaFormPillSelect,
@@ -12,6 +12,7 @@ import {
   resolveSectionLabel,
 } from '@shared/habits';
 import HabitFormSectionLabel from './HabitFormSectionLabel.jsx';
+import HabitGroupTabs from './HabitGroupTabs.jsx';
 import { RoutineAssignmentFields } from './routines';
 
 /**
@@ -45,6 +46,9 @@ export default function HabitFormMetaRows({
   onRoutineRenameSave,
   onCreateRoutine,
   onEditRoutine,
+  /** 'select' (pill desplegable) | 'tabs' (misma UX de grupos que el gestor de rutinas). */
+  groupSelector = 'select',
+  groupLabel = 'Grupo',
 }) {
   const groupRenameValue = resolveSectionLabel(section, customSections);
   const canRenameGroup = enablePillRename && isCustomHabitSection(section);
@@ -69,26 +73,51 @@ export default function HabitFormMetaRows({
     }}>
       {showGroup && (
         <Box sx={{ width: '100%' }}>
-          {showFieldLabels && <HabitFormSectionLabel inset="pill">Grupo</HabitFormSectionLabel>}
-          <TareaFormRow
-            icon={showRowIcons ? TareaFormIcons.folder : null}
-            showDivider={showGroupDivider}
-            align="center"
-            compact={showFieldLabels}
-          >
-            {enablePillRename ? (
-              <TareaFormPillSelectRenameRow
-                renameValue={groupRenameValue}
-                canRename={canRenameGroup}
-                onEditClick={canRenameGroup ? () => onSectionEdit?.(section) : undefined}
-                onRenameSave={(label) => onSectionRenameSave?.(section, label)}
-                renamePlaceholder="Nombre del grupo"
-                pillSelectProps={groupPillSelectProps}
+          {showFieldLabels && (
+            <HabitFormSectionLabel
+              inset={groupSelector === 'tabs' ? 'none' : 'pill'}
+              sx={groupSelector === 'tabs' ? { textAlign: 'center' } : undefined}
+            >
+              {groupLabel}
+            </HabitFormSectionLabel>
+          )}
+          {groupSelector === 'tabs' ? (
+            <>
+              <HabitGroupTabs
+                sections={sectionOptions}
+                value={section}
+                onChange={onSectionChange}
+                onCreate={onCreateSection}
+                createLabel={createSectionLabel}
+                onEdit={canRenameGroup && onSectionEdit ? () => onSectionEdit(section) : undefined}
               />
-            ) : (
-              <TareaFormPillSelect {...groupPillSelectProps} />
-            )}
-          </TareaFormRow>
+              {sectionError ? (
+                <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                  {sectionError}
+                </Typography>
+              ) : null}
+            </>
+          ) : (
+            <TareaFormRow
+              icon={showRowIcons ? TareaFormIcons.folder : null}
+              showDivider={showGroupDivider}
+              align="center"
+              compact={showFieldLabels}
+            >
+              {enablePillRename ? (
+                <TareaFormPillSelectRenameRow
+                  renameValue={groupRenameValue}
+                  canRename={canRenameGroup}
+                  onEditClick={canRenameGroup ? () => onSectionEdit?.(section) : undefined}
+                  onRenameSave={(label) => onSectionRenameSave?.(section, label)}
+                  renamePlaceholder="Nombre del grupo"
+                  pillSelectProps={groupPillSelectProps}
+                />
+              ) : (
+                <TareaFormPillSelect {...groupPillSelectProps} />
+              )}
+            </TareaFormRow>
+          )}
         </Box>
       )}
 

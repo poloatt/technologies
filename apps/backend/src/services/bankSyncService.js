@@ -406,12 +406,28 @@ export class BankSyncService {
     }
   }
 
+  // Renueva access_token con refresh_token y persiste ambos (MP rota el refresh_token).
+  async refrescarTokenMercadoPago(bankConnection) {
+    const refreshCifrado = bankConnection.credenciales?.refreshToken;
+    if (!refreshCifrado) {
+      throw new Error('Token de MercadoPago vencido y sin refresh_token: reconectá la cuenta');
+    }
+    const refreshToken = this.decrypt(refreshCifrado);
+    const { refreshAccessToken } = await import('../oauth/mercadoPagoOAuth.js');
+    const data = await refreshAccessToken({ refreshToken });
+
+    bankConnection.credenciales.accessToken = this.encrypt(data.access_token);
+    bankConnection.credenciales.refreshToken = this.encrypt(data.refresh_token || refreshToken);
+    await bankConnection.save();
+    return data.access_token;
+  }
+
   // Sincronizar transacciones usando MercadoPago (wallet personal AR)
   async sincronizarConMercadoPago(bankConnection, options = {}) {
     try {
       console.log(`Sincronizando con MercadoPago para conexión: ${bankConnection.nombre}`);
 
-      const userAccessToken = this.decrypt(bankConnection.credenciales.accessToken);
+      let userAccessToken = this.decrypt(bankConnection.credenciales.accessToken);
       const userId = this.decrypt(bankConnection.credenciales.userId);
 
       const cuenta = await Cuentas.findById(bankConnection.cuenta);
@@ -426,7 +442,16 @@ export class BankSyncService {
         userId
       });
 
-      const userInfo = await mpAdapter.getUserInfo();
+      let userInfo;
+      try {
+        userInfo = await mpAdapter.getUserInfo();
+      } catch (error) {
+        if (!/expirado o inválido/i.test(String(error?.message || ''))) throw error;
+        console.warn('[MP] Access token vencido; renovando con refresh_token');
+        userAccessToken = await this.refrescarTokenMercadoPago(bankConnection);
+        mpAdapter.accessToken = userAccessToken;
+        userInfo = await mpAdapter.getUserInfo();
+      }
       // Usar siempre el id vivo de /users/me (el guardado en credenciales puede quedar desfasado)
       const mpUserId = String(userInfo.id || userId);
       mpAdapter.userId = mpUserId;
@@ -774,7 +799,8 @@ export class BankSyncService {
           await Cuentas.findByIdAndUpdate(bankConnection.cuenta, {
             saldo: balance.available || 0,
             'mercadopago.disponibleRetiro': balance.available || 0,
-            'mercadopago.disponiblePendiente': balance.unavailable || 0
+            'mercadopago.disponiblePendiente': balance.unavailable || 0,
+            'mercadopago.saldoActualizadoEn': new Date()
           });
         } catch (error) {
           console.error('Error actualizando balances:', error);
@@ -845,8 +871,11 @@ export class BankSyncService {
       try {
         const ledger = await Transacciones.getBalance(bankConnection.cuenta, { estado: 'PAGADO', ledger: 'flujo' });
         saldoLedger = Number(ledger?.balance) || 0;
-        const saldoMp = Number(balance.available) || 0;
-        gapSaldo = Math.round((saldoMp - saldoLedger) * 100) / 100;
+        // Sin balance OK no hay saldo MP real: calcular el gap contra 0 daría un hueco falso.
+        if (balance.ok) {
+          const saldoMp = Number(balance.available) || 0;
+          gapSaldo = Math.round((saldoMp - saldoLedger) * 100) / 100;
+        }
       } catch (error) {
         console.warn('⚠️ No se pudo calcular gap de reconciliación:', error.message);
       }

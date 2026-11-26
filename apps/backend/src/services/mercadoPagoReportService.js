@@ -98,6 +98,47 @@ function findOverlappingReports(reports, beginDate, endDate) {
     .sort((a, b) => new Date(b.generation_date || b.last_modified || 0) - new Date(a.generation_date || a.last_modified || 0));
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SETTLEMENT_REUSE_MAX_AGE_MS_DEFAULT = 6 * 60 * 60 * 1000;
+
+/**
+ * Antigüedad máxima de un reporte para reutilizarlo sin pedir uno nuevo.
+ * La sync rápida mueve la ventana en cada corrida, así que sin esto cada sync
+ * (manual o cron) consume cupo diario de MP.
+ */
+export function getSettlementReuseMaxAgeMs() {
+  const raw = parseInt(process.env.MP_SETTLEMENT_REUSE_MAX_AGE_MS || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : SETTLEMENT_REUSE_MAX_AGE_MS_DEFAULT;
+}
+
+/**
+ * Reporte listo, generado hace como máximo `maxAgeMs`, que empieza antes o en el
+ * inicio del rango pedido y termina a menos de `maxAgeMs` del fin pedido.
+ * Pura: no hace requests.
+ */
+export function findRecentCoveringReport(
+  reports,
+  beginDate,
+  endDate,
+  { maxAgeMs = getSettlementReuseMaxAgeMs(), now = Date.now() } = {}
+) {
+  const begin = new Date(beginDate).getTime();
+  const end = new Date(endDate).getTime();
+  if (!Number.isFinite(begin) || !Number.isFinite(end)) return null;
+
+  return (reports || [])
+    .filter((r) => isReportReady(r))
+    .filter((r) => {
+      const generated = reportGeneratedAt(r);
+      if (!generated || now - generated > maxAgeMs) return false;
+      const rBegin = new Date(r.begin_date).getTime();
+      const rEnd = new Date(r.end_date).getTime();
+      if (!Number.isFinite(rBegin) || !Number.isFinite(rEnd)) return false;
+      return rBegin <= begin + DAY_MS && rEnd >= end - maxAgeMs;
+    })
+    .sort((a, b) => reportGeneratedAt(b) - reportGeneratedAt(a))[0] || null;
+}
+
 export class SettlementReportQuotaError extends Error {
   constructor(message, { beginDate, endDate } = {}) {
     super(message);
@@ -405,6 +446,28 @@ export class MercadoPagoReportService {
     };
   }
 
+  /**
+   * Reutiliza un reporte generado en las últimas horas que cubra el rango y traiga retiros.
+   * No consume cupo de creación. Devuelve null si no hay candidato apto.
+   */
+  async reuseRecentCoveringReport(beginDate, endDate, options = {}) {
+    const reports = await this.listReports();
+    const recent = findRecentCoveringReport(reports, beginDate, endDate, options);
+    if (!recent) return null;
+
+    const fileName = reportFileName(recent);
+    const rows = parseSettlementCsv(await this.downloadReport(fileName));
+    if (!this.settlementHasBankTransfers(rows)) return null;
+
+    console.log('[MP Report] Reutilizando reporte reciente con retiros (sin crear nuevo):', {
+      beginDate,
+      endDate,
+      fileName,
+      rows: rows.length
+    });
+    return { rows, fileName, total: rows.length, reused: true, strictMatch: false, recent: true };
+  }
+
   async requestReport(beginDate, endDate) {
     await this.configureReport();
     return this.createReport(beginDate, endDate);
@@ -472,6 +535,14 @@ export class MercadoPagoReportService {
           endDate: options.pending.endDate
         };
       }
+    }
+
+    // Reporte generado hace poco que cubre el rango y trae retiros: reutilizarlo sin crear otro.
+    try {
+      const recentReuse = await this.reuseRecentCoveringReport(beginDate, endDate);
+      if (recentReuse) return recentReuse;
+    } catch (error) {
+      console.warn('[MP Report] Reuso de reporte reciente falló:', error.message);
     }
 
     // Si ya existe un reporte procesado que cubre exactamente este rango Y trae retiros

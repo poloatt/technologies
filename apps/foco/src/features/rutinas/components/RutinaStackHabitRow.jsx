@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, ListItem, Typography } from '@mui/material';
+import { Box, ListItem } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getCurrentTimeOfDay, normalizeTimeOfDay } from '@shared/utils/timeOfDayUtils';
 import { getRutinaDayMode } from '@shared/utils/rutinaDayMode';
@@ -10,7 +10,6 @@ import {
   resolveRoutineDisplayName,
   resolveActiveDailyFranja,
   isEntryFranjaSinHacer,
-  resolveRutinaStackScheduleLegend,
   resolveDoneFranjaBadges,
   resolveHabitDeferralMenuOptions,
   canDeferHabit,
@@ -21,14 +20,12 @@ import { useRutinas } from '@shared/context';
 import {
   rutinaChecklistItemSx,
   rutinaChecklistRowSx,
-  rutinaChecklistMetaSx,
   rutinaChecklistIconColumnSx,
   getRutinaChecklistDragHandleSlotSx,
   rutinaRoutineGroupShellSx,
-  rutinaRoutineGroupTitleBarSx,
-  rutinaRoutineGroupTitleTextSx,
   rutinaRoutineGroupBodySx,
 } from '@shared/styles/rutinaPageStyles';
+import { HubSectionHeader } from '@shared/components/hub';
 import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
 import { useResponsive, useHabitItemContextMenu } from '@shared/hooks';
@@ -36,7 +33,6 @@ import HabitIconScrollRow from '@shared/components/habits/HabitIconScrollRow';
 import HabitItemPostponeMenu from '@shared/components/habits/HabitItemPostponeMenu';
 import { HabitIconButton } from './ChecklistItem';
 import { resolveEntryLocalData, resolveEntrySection } from '../lib/resolveEntryLocalData';
-import { useDietHabitCaptionsMap } from '../dietHabitCaptionContext.jsx';
 
 const DRAG_HANDLE_INNER_SX = {
   display: 'flex',
@@ -95,15 +91,6 @@ export default function RutinaStackHabitRow({
   const iconSize = iconTokens.size;
   const iconGlyph = iconTokens.glyph;
   const routineName = resolveRoutineDisplayName(entries[0]?.chain);
-  const scheduleLegend = useMemo(
-    () => resolveRutinaStackScheduleLegend(entries, {
-      rutina,
-      section,
-      localData,
-      localDataBySection,
-    }),
-    [entries, rutina, section, localData, localDataBySection],
-  );
 
   const visibleEntries = useMemo(
     () => entries.filter((entry) => {
@@ -146,12 +133,6 @@ export default function RutinaStackHabitRow({
       ? isHabitHorarioCompleted(itemValue, focusHorario)
       : isHabitMarkedCompleteForConfig(entry.config, itemValue);
   });
-
-  const dietCaptions = useDietHabitCaptionsMap();
-  const dietCaption = visibleEntries
-    .map((entry) => dietCaptions?.[resolveEntrySection(entry, section)]?.[entry.itemId])
-    .filter(Boolean)
-    .join(' · ');
 
   if (!visibleEntries.length) return null;
 
@@ -389,20 +370,10 @@ export default function RutinaStackHabitRow({
               ...(allCompleted ? { opacity: 0.72 } : null),
             }}
           >
-            <Box sx={rutinaRoutineGroupTitleBarSx}>
-              <Typography
-                component="span"
-                variant="caption"
-                noWrap
-                title={routineName}
-                sx={{
-                  ...rutinaRoutineGroupTitleTextSx,
-                  ...(allCompleted ? { textDecoration: 'line-through' } : null),
-                }}
-              >
-                {routineName}
-              </Typography>
-            </Box>
+            <HubSectionHeader
+              title={routineName}
+              titleSx={allCompleted ? { textDecoration: 'line-through' } : undefined}
+            />
             <Box sx={rutinaRoutineGroupBodySx}>
               <Box sx={rutinaChecklistIconColumnSx({
                 compact: isCompact,
@@ -412,20 +383,6 @@ export default function RutinaStackHabitRow({
               >
                 {iconColumnContent}
               </Box>
-              {(scheduleLegend || dietCaption) ? (
-                <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.1 }}>
-                  {scheduleLegend ? (
-                    <Typography variant="caption" sx={rutinaChecklistMetaSx}>
-                      {scheduleLegend}
-                    </Typography>
-                  ) : null}
-                  {dietCaption ? (
-                    <Typography variant="caption" sx={rutinaChecklistMetaSx}>
-                      {dietCaption}
-                    </Typography>
-                  ) : null}
-                </Box>
-              ) : null}
             </Box>
           </Box>
         ) : (

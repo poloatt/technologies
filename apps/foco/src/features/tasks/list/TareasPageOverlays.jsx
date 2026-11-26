@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Box, Chip, IconButton } from '@mui/material';
-import { TareaForm } from '../form';
-import GoogleTasksConfig from '../google/GoogleTasksConfig';
 import { HabitsManagerHost } from '../../habits';
+
+const TareaForm = React.lazy(() => import('../form/TareaForm'));
+const GoogleTasksConfig = React.lazy(() => import('../google/GoogleTasksConfig'));
 
 export default function TareasPageOverlays({
   isMobile,
@@ -23,25 +24,31 @@ export default function TareasPageOverlays({
   return (
     <>
       {isFormOpen ? (
-        <TareaForm
-          open={isFormOpen}
-          onClose={() => setIsFormOpen(false)}
-          onSubmit={handleFormSubmit}
-          isEditing={!!editingTarea}
-          initialData={editingTarea}
-          objetivos={objetivos}
-          onObjetivosUpdate={refetchObjetivos}
-          createWithHistory={createWithHistory}
-          updateWithHistory={updateWithHistory}
-          deleteWithHistory={deleteWithHistory}
-        />
+        <Suspense fallback={null}>
+          <TareaForm
+            open={isFormOpen}
+            onClose={() => setIsFormOpen(false)}
+            onSubmit={handleFormSubmit}
+            isEditing={!!editingTarea}
+            initialData={editingTarea}
+            objetivos={objetivos}
+            onObjetivosUpdate={refetchObjetivos}
+            createWithHistory={createWithHistory}
+            updateWithHistory={updateWithHistory}
+            deleteWithHistory={deleteWithHistory}
+          />
+        </Suspense>
       ) : null}
 
       <HabitsManagerHost />
-      <GoogleTasksConfig
-        open={isGoogleTasksConfigOpen}
-        onClose={() => setIsGoogleTasksConfigOpen(false)}
-      />
+      {isGoogleTasksConfigOpen ? (
+        <Suspense fallback={null}>
+          <GoogleTasksConfig
+            open={isGoogleTasksConfigOpen}
+            onClose={() => setIsGoogleTasksConfigOpen(false)}
+          />
+        </Suspense>
+      ) : null}
 
       {selectedTareas.length > 0 ? (
         <Box

@@ -76,7 +76,7 @@ export default function RutinaDoneCarousel({
   }), [isDragging, size]);
 
   const displayRows = useMemo(
-    () => groupEntriesIntoDisplayRows(items),
+    () => groupEntriesIntoDisplayRows(items, { orderStacksByChain: true }),
     [items],
   );
 

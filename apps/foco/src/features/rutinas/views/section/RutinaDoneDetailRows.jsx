@@ -68,7 +68,7 @@ export default function RutinaDoneDetailRows({
   stackVariant = 'inline',
 }) {
   const displayRows = useMemo(
-    () => groupEntriesIntoDisplayRows(items),
+    () => groupEntriesIntoDisplayRows(items, { orderStacksByChain: true }),
     [items],
   );
 

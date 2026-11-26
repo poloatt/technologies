@@ -1295,6 +1295,37 @@ export const MP_FLUJO_EXCLUDED_KINDS = Object.freeze([
   MP_MOVEMENT_KINDS.INTERNAL
 ]);
 
+export const SALDO_MP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Valor de "Dinero en cuenta": el saldo real de MP (available_balance guardado en la sync)
+ * cuando el período termina hoy o después y el dato es reciente. Si no, el ledger.
+ * Pura: no hace requests.
+ */
+export function resolverDineroEnCuenta({ cuenta, ledger, fechaCorte = null, now = Date.now() }) {
+  const ledgerValor = Number(ledger) || 0;
+  const actualizadoEn = cuenta?.mercadopago?.saldoActualizadoEn
+    ? new Date(cuenta.mercadopago.saldoActualizadoEn)
+    : null;
+  const saldoMp = Number(cuenta?.saldo);
+  const esPeriodoActual = !fechaCorte || new Date(fechaCorte).getTime() >= now;
+  const usarMp = Boolean(
+    cuenta?.tipo === 'MERCADO_PAGO' &&
+      esPeriodoActual &&
+      actualizadoEn &&
+      Number.isFinite(actualizadoEn.getTime()) &&
+      now - actualizadoEn.getTime() <= SALDO_MP_MAX_AGE_MS &&
+      Number.isFinite(saldoMp)
+  );
+
+  return {
+    valor: usarMp ? Math.round(saldoMp * 100) / 100 : ledgerValor,
+    ledger: ledgerValor,
+    fuente: usarMp ? 'mercadopago' : 'ledger',
+    actualizadoEn: usarMp ? actualizadoEn : null
+  };
+}
+
 const RENDIMIENTO_KINDS = new Set([
   MP_MOVEMENT_KINDS.INVESTMENT_YIELD,
   MP_MOVEMENT_KINDS.YIELD
@@ -1621,6 +1652,15 @@ export function calcularSaldosMercadoPago(rows = [], { monedaPesosId = null } = 
     dolares: d.usdComprado + d.usdRecibido + d.usdRendimientos
       - d.usdVendido - d.usdEnviado - d.usdPagado,
   };
+}
+
+/**
+ * Rendimientos acreditados dentro del período (no el acumulado al cierre).
+ * Espera filas agrupadas con `_id.enPeriodo` (fecha >= inicio del período).
+ */
+export function rendimientosDelPeriodo(rows = [], options = {}) {
+  const enPeriodo = (rows || []).filter((row) => row?._id?.enPeriodo === true);
+  return calcularSaldosMercadoPago(enPeriodo, options).rendimientos;
 }
 
 export function buildStatsExcludeMatch() {

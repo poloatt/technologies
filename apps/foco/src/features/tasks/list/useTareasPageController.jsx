@@ -292,6 +292,7 @@ export function useTareasPageController() {
     showHabitCarousel: true,
     showCompleted,
     groupingEnabled: true,
+    isFetching,
     onSubmit: handleFormSubmit,
     onObjetivosUpdate: refetchObjetivos,
     onDelete: handleDelete,

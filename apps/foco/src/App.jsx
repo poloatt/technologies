@@ -16,8 +16,9 @@ import { ValuesVisibilityProvider } from '@shared/context/ValuesVisibilityContex
 import { NavigationBarProvider } from '@shared/context/NavigationBarContext';
 import { SidebarProvider } from '@shared/context/SidebarContext';
 import { UISettingsProvider } from '@shared/context/UISettingsContext';
-import { RutinasProvider } from '@shared/context/RutinasContext';
-import { HabitsProvider } from '@shared/context/HabitsContext';
+import { RutinasProvider, useRutinas } from '@shared/context/RutinasContext';
+import { HabitsProvider, useHabits } from '@shared/context/HabitsContext';
+import { fetchHabitsPreferencesFromApi } from '@shared/hooks/useHabitsPreferences';
 import TimezoneInitializer from '@shared/components/TimezoneInitializer';
 import { useAuth } from '@shared/context/AuthContext';
 import { prefetchTasksForList } from './features/tasks/hooks/useTasksForList';
@@ -37,21 +38,28 @@ const Preferencias = React.lazy(() => import('@shared/pages/Preferencias'));
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const { fetchRutinas } = useRutinas();
+  const { fetchHabits } = useHabits();
 
+  // Precarga inmediata (en paralelo con el chunk de la ruta principal) de los datos críticos
+  // del carrusel de hábitos y la lista de tareas para evitar el waterfall al entrar a Foco.
   useEffect(() => {
     if (!user) return undefined;
-    const warm = () => {
-      prefetchTasksForList(false);
+    import('./pages/Tareas').catch(() => {});
+    fetchHabits().catch(() => {});
+    fetchRutinas().catch(() => {});
+    fetchHabitsPreferencesFromApi().catch(() => {});
+    prefetchTasksForList(false);
+
+    const warmSecondary = () => {
       prefetchTasksForCalendar(null, 'week', true);
       prefetchObjetivosLight();
-      // Precargar chunks de rutas frecuentes para no ver Suspense al entrar.
-      import('./pages/Tareas').catch(() => {});
       import('./pages/Objetivos').catch(() => {});
     };
     const ric = typeof window !== 'undefined' && window.requestIdleCallback;
     const id = ric
-      ? window.requestIdleCallback(warm, { timeout: 1500 })
-      : setTimeout(warm, 300);
+      ? window.requestIdleCallback(warmSecondary, { timeout: 1500 })
+      : setTimeout(warmSecondary, 300);
     return () => {
       if (ric && typeof window.cancelIdleCallback === 'function') {
         window.cancelIdleCallback(id);
@@ -59,7 +67,7 @@ function AppContent() {
         clearTimeout(id);
       }
     };
-  }, [user]);
+  }, [user, fetchHabits, fetchRutinas]);
 
   if (import.meta.env.DEV && !user && !loading) {
     console.log('[Foco] auth state:', { authenticated: !!user, loading });

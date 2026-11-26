@@ -3,6 +3,60 @@ import { useSnackbar } from 'notistack';
 import clienteAxios from '../config/axios';
 import { getHabitId, findHabitIndexInSection, habitIdsMatch } from '@shared/habits';
 
+const HABITS_CACHE_KEY = 'attadia_habits_v1';
+const EMPTY_HABITS = {
+  bodyCare: [],
+  nutricion: [],
+  ejercicio: [],
+  cleaning: [],
+};
+
+function getCurrentCachedUserId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('cachedUser');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.id || parsed?._id || null;
+  } catch {
+    return null;
+  }
+}
+
+function readHabitsStorageCache() {
+  if (typeof window === 'undefined') return null;
+  const userId = getCurrentCachedUserId();
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(HABITS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.userId !== userId) return null;
+    return {
+      habits: parsed.habits && typeof parsed.habits === 'object' ? parsed.habits : EMPTY_HABITS,
+      customSections: Array.isArray(parsed.customSections) ? parsed.customSections : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeHabitsStorageCache(habits, customSections) {
+  if (typeof window === 'undefined') return;
+  const userId = getCurrentCachedUserId();
+  if (!userId) return;
+  try {
+    localStorage.setItem(HABITS_CACHE_KEY, JSON.stringify({
+      userId,
+      habits: habits || EMPTY_HABITS,
+      customSections: Array.isArray(customSections) ? customSections : [],
+      ts: Date.now(),
+    }));
+  } catch {
+    // Silenciar errores de cuota/serialización
+  }
+}
+
 // Crear el contexto
 const HabitsContext = createContext();
 
@@ -19,15 +73,22 @@ export const useHabits = () => {
 
 // Provider del contexto
 export const HabitsProvider = ({ children }) => {
-  const [habits, setHabits] = useState({
-    bodyCare: [],
-    nutricion: [],
-    ejercicio: [],
-    cleaning: []
-  });
-  const [customSections, setCustomSections] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const initialCacheRef = useRef(undefined);
+  if (initialCacheRef.current === undefined) {
+    initialCacheRef.current = readHabitsStorageCache();
+  }
+  const initialCache = initialCacheRef.current;
+
+  const [habits, setHabits] = useState(() => initialCache?.habits || EMPTY_HABITS);
+  const [customSections, setCustomSections] = useState(() => initialCache?.customSections || []);
+  const [loading, setLoading] = useState(() => !initialCache);
+  const [habitsReady, setHabitsReady] = useState(() => Boolean(initialCache));
   const [error, setError] = useState(null);
+  const hasCachedDataRef = useRef(Boolean(initialCache));
+  const customSectionsRef = useRef(customSections);
+  customSectionsRef.current = customSections;
+  const habitsRef = useRef(habits);
+  habitsRef.current = habits;
   // Deduplica llamadas concurrentes a fetchHabits (varios componentes la disparan al montar)
   const fetchHabitsInFlightRef = useRef(null);
 
@@ -43,23 +104,22 @@ export const HabitsProvider = ({ children }) => {
 
     const run = (async () => {
       try {
-        setLoading(true);
+        if (!hasCachedDataRef.current) {
+          setLoading(true);
+        }
         setError(null);
 
         const response = await clienteAxios.get('/api/users/habits');
         const payload = response.data;
-        const nextHabits = payload?.habits || payload || {
-          bodyCare: [],
-          nutricion: [],
-          ejercicio: [],
-          cleaning: []
-        };
+        const nextHabits = payload?.habits || payload || EMPTY_HABITS;
         const nextCustomSections = Array.isArray(payload?.customSections)
           ? payload.customSections
           : [];
 
+        hasCachedDataRef.current = true;
         setHabits(nextHabits);
         setCustomSections(nextCustomSections);
+        writeHabitsStorageCache(nextHabits, nextCustomSections);
 
         return { habits: nextHabits, customSections: nextCustomSections };
       } catch (error) {
@@ -74,6 +134,7 @@ export const HabitsProvider = ({ children }) => {
         }
         return null;
       } finally {
+        setHabitsReady(true);
         setLoading(false);
       }
     })();
@@ -100,10 +161,14 @@ export const HabitsProvider = ({ children }) => {
       });
       
       // Actualizar estado local
-      setHabits(prev => ({
-        ...prev,
-        [section]: [...(prev[section] || []), response.data.habit]
-      }));
+      setHabits(prev => {
+        const next = {
+          ...prev,
+          [section]: [...(prev[section] || []), response.data.habit]
+        };
+        writeHabitsStorageCache(next, customSectionsRef.current);
+        return next;
+      });
       
       enqueueSnackbar('Hábito agregado correctamente', { variant: 'success' });
       return response.data.habit;
@@ -132,12 +197,16 @@ export const HabitsProvider = ({ children }) => {
       });
       
       // Actualizar estado local
-      setHabits(prev => ({
-        ...prev,
-        [section]: (prev[section] || []).map(h => 
-          (h.id || h._id) === habitId ? response.data.habit : h
-        )
-      }));
+      setHabits(prev => {
+        const next = {
+          ...prev,
+          [section]: (prev[section] || []).map(h =>
+            (h.id || h._id) === habitId ? response.data.habit : h
+          )
+        };
+        writeHabitsStorageCache(next, customSectionsRef.current);
+        return next;
+      });
       
       enqueueSnackbar('Hábito actualizado correctamente', { variant: 'success' });
       return response.data.habit;
@@ -169,10 +238,14 @@ export const HabitsProvider = ({ children }) => {
         data: { section },
       });
 
-      setHabits((prev) => ({
-        ...prev,
-        [section]: (prev[section] || []).filter((h) => !habitIdsMatch(h, habitId)),
-      }));
+      setHabits((prev) => {
+        const next = {
+          ...prev,
+          [section]: (prev[section] || []).filter((h) => !habitIdsMatch(h, habitId)),
+        };
+        writeHabitsStorageCache(next, customSectionsRef.current);
+        return next;
+      });
       
       enqueueSnackbar('Hábito eliminado correctamente', { variant: 'success' });
     } catch (error) {
@@ -199,10 +272,14 @@ export const HabitsProvider = ({ children }) => {
         habitIds
       });
 
-      setHabits(prev => ({
-        ...prev,
-        [section]: response.data.habits
-      }));
+      setHabits(prev => {
+        const next = {
+          ...prev,
+          [section]: response.data.habits
+        };
+        writeHabitsStorageCache(next, customSectionsRef.current);
+        return next;
+      });
       
       enqueueSnackbar('Hábitos reordenados correctamente', { variant: 'success' });
       return response.data.habits;
@@ -314,6 +391,7 @@ export const HabitsProvider = ({ children }) => {
     habits,
     customSections,
     loading,
+    habitsReady,
     error,
     fetchHabits,
     addHabit,
@@ -323,7 +401,7 @@ export const HabitsProvider = ({ children }) => {
     updateHabit,
     deleteHabit,
     reorderHabits,
-  }), [habits, customSections, loading, error, fetchHabits, addHabit, addHabitSection, updateHabitSection, deleteHabitSection, updateHabit, deleteHabit, reorderHabits]);
+  }), [habits, customSections, loading, habitsReady, error, fetchHabits, addHabit, addHabitSection, updateHabitSection, deleteHabitSection, updateHabit, deleteHabit, reorderHabits]);
 
   return (
     <HabitsContext.Provider value={value}>

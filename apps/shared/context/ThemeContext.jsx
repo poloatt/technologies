@@ -1,4 +1,5 @@
 import { createTheme } from '@mui/material/styles';
+import { SUBTLE_STROKE_COLOR } from '../styles/subtleStrokeStyles';
 
 const theme = createTheme({
   palette: {
@@ -182,7 +183,7 @@ const theme = createTheme({
     MuiDivider: {
       styleOverrides: {
         root: {
-          borderColor: 'rgba(140, 140, 140, 0.15)'
+          borderColor: SUBTLE_STROKE_COLOR
         }
       }
     },

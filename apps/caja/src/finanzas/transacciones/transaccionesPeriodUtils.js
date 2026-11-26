@@ -1,3 +1,5 @@
+export { formatSaldoFuente, formatSaldosCorte } from '@shared/utils/saldoFuente';
+
 /** Cortes de gestión. El id viaja al hook; el label es el de la UI.
  * YTD/YTG, el mes en curso y Q1–Q4 usan el año calendario local (1 ene–31 dic), no rolling 365 días.
  */
@@ -5,6 +7,9 @@ export const YEAR_PRESETS = [
   { id: 'ytd', label: 'YTD', hint: '1 ene → hoy (año calendario)' },
   { id: 'ytg', label: 'YTG', hint: 'Mañana → 31 dic (año calendario)' },
 ];
+
+/** Flujo y saldos solo miran movimientos pagados: YTG (el futuro) siempre da vacío. */
+export const FLUJO_PERIOD_MODES = ['year', 'quarter', 'month', 'ytd'];
 
 export const MONTH_PRESET = {
   id: 'month',

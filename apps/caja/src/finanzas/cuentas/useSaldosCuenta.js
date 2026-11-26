@@ -4,15 +4,20 @@ import { getPeriodRange } from '../transacciones/transaccionesPeriodUtils';
 
 const EMPTY = {
   dineroEnCuenta: 0,
+  dineroEnCuentaFuente: 'ledger',
+  dineroEnCuentaActualizadoEn: null,
   reservado: 0,
   invertido: 0,
   rendimientos: 0,
+  rendimientosPeriodo: 0,
   dolares: 0,
   credito: 0,
 };
 
 /**
  * Saldos acumulados de la cuenta Mercado Pago al cierre del período (`preset`).
+ * `dineroEnCuenta` es el saldo real de MP cuando hay lectura reciente (`dineroEnCuentaFuente`).
+ * `rendimientosPeriodo` es lo acreditado dentro del período, no el acumulado.
  * Solo consulta mientras `enabled`; se refresca cuando cambian las transacciones.
  */
 export function useSaldosCuenta({ enabled = true, cuentaId, preset } = {}) {

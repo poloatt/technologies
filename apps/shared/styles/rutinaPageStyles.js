@@ -3,11 +3,11 @@ import {
   HUB_SECTION,
   hubSectionBg,
   hubSectionShellSx,
-  hubSectionShellBodySx,
+  hubSectionHeaderSx,
+  hubSectionTitleSx,
   hubGridContainerSx,
   hubGridItemSx,
   getHubSubsectionSx,
-  hubPageScrollSx,
 } from './hubSectionStyles';
 import {
   taskFormCaptionTextSx,
@@ -75,10 +75,14 @@ export const rutinaPageContainerSx = (isMobileOrTablet = false) => ({
   gap: 0,
 });
 
-export function rutinaPageScrollSx(isMobileOrTablet, bottomPadding, extraTopOffset = 0) {
+/** Flujo vertical del cuerpo de Rutinas: el scroll vive en Layout (evita barra interna superpuesta). */
+export function rutinaPageScrollSx(isMobileOrTablet, bottomPadding) {
   return {
-    ...hubPageScrollSx({ isMobileOrTablet, bottomPadding, extraTopOffset }),
+    flex: 1,
+    minHeight: 0,
+    py: isMobileOrTablet ? 1 : 2,
     px: 0,
+    pb: bottomPadding ?? (isMobileOrTablet ? 1 : 2),
   };
 }
 
@@ -415,39 +419,23 @@ export const rutinaStackRowHeaderSx = {
   minWidth: 0,
 };
 
-/** Contenedor de rutina con barra de título fina + cuerpo de hábitos. */
+/** Contenedor de rutina con cabecera de sección hub + cuerpo de hábitos. */
 export const rutinaRoutineGroupShellSx = {
+  ...hubSectionShellSx,
+  mb: 0,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'stretch',
   minWidth: 0,
   width: '100%',
   flex: '1 1 auto',
-  border: '1px solid',
-  borderColor: 'divider',
-  borderRadius: 1.25,
-  overflow: 'hidden',
-  bgcolor: 'background.default',
 };
 
-/** Barra superior ultra fina con el nombre de la rutina. */
-export const rutinaRoutineGroupTitleBarSx = {
-  display: 'flex',
-  alignItems: 'center',
-  minHeight: 18,
-  px: 0.85,
-  py: 0,
-  borderBottom: '1px solid',
-  borderColor: 'divider',
-  bgcolor: 'action.hover',
-};
+/** Barra superior con el nombre de la rutina — SSOT desde hubSectionStyles. */
+export const rutinaRoutineGroupTitleBarSx = hubSectionHeaderSx;
 
 export const rutinaRoutineGroupTitleTextSx = {
-  fontWeight: 650,
-  fontSize: '0.7rem',
-  lineHeight: 1.2,
-  letterSpacing: 0.15,
-  color: 'text.secondary',
+  ...hubSectionTitleSx,
   maxWidth: '100%',
 };
 

@@ -17,14 +17,20 @@ export default function HubSectionHeader({
   iconKey,
   isActive = false,
   headerSx,
+  titleSx,
   action = null,
 }) {
   const titleRow = (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
       {iconKey ? (
         <DynamicIcon iconKey={iconKey} size="small" sx={hubHeaderIconSx} />
       ) : null}
-      <Typography variant="body2" sx={{ ...hubSectionTitleSx, flex: '0 1 auto' }}>
+      <Typography
+        variant="body2"
+        noWrap
+        title={typeof title === 'string' ? title : undefined}
+        sx={{ ...hubSectionTitleSx, flex: '0 1 auto', ...titleSx }}
+      >
         {title}
       </Typography>
       {onTitleClick ? (

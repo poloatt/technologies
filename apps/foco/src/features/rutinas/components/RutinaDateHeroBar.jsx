@@ -17,6 +17,7 @@ export default function RutinaDateHeroBar() {
     loading,
     completionPercentage,
     completionTooltip,
+    totalCount,
     navHandlers,
     goToToday,
     handleDateClick,
@@ -43,6 +44,7 @@ export default function RutinaDateHeroBar() {
           onDateChange={handleDateChange}
           completionPercentage={completionPercentage}
           completionTooltip={completionTooltip}
+          completionTotal={totalCount}
           dayMode={dayMode}
           hideOuterBorder
           bleedProgressBar={!isMobileOrTablet}

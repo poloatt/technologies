@@ -1,10 +1,15 @@
 import { addDays, format, isAfter, startOfDay, subDays } from 'date-fns';
 import { es } from '../../utils/localeEs.js';
 import { formatDateForAPI, getNormalizedToday, parseAPIDate } from '../../utils/dateUtils.js';
-import { calculateCompletionPercentage, calculateVisibleItems } from '../../utils/rutinaCalculations.js';
+import { normalizeTimeOfDay, VALID_TIME_OF_DAY } from '../../utils/timeOfDayUtils.js';
 import { groupRutinaHabitsByCadence } from '../desktop/rutinaCadenceUtils.js';
-import { isHabitCompletedForHistorial } from '../domain/habitCompletionUtils.js';
-import { isHabitQuotaOrDayDone } from '../desktop/rutinaDesktopUtils.js';
+import {
+  isHabitHorarioCompleted,
+  isHabitMarkedCompleteForConfig,
+  isHabitValueObject,
+} from '../domain/habitCompletionUtils.js';
+import { isHabitCompletedOnRutinaDay } from '../desktop/rutinaDesktopUtils.js';
+import { isHabitHiddenByDeferral } from './rutinaPostponeUtils.js';
 import { getRutinaDayMode } from '../../utils/rutinaDayMode.js';
 
 export {
@@ -14,44 +19,131 @@ export {
   isRutinaFuturePreview,
 } from '../../utils/rutinaDayMode.js';
 
-/** Ítems visibles vinculados al día (hoy / preview futuro). */
+function isDailyCadenceConfig(config = {}) {
+  const tipo = (config?.tipo || 'DIARIO').toUpperCase();
+  const periodo = (config?.periodo || 'CADA_DIA').toUpperCase();
+  return tipo === 'DIARIO' || (tipo === 'PERSONALIZADO' && periodo === 'CADA_DIA');
+}
+
+function resolveEffectiveDailyHorarios(config = {}, itemValue) {
+  const fromConfig = normalizeTimeOfDay(config?.horarios);
+  if (fromConfig.length > 0) return fromConfig;
+  if (isHabitValueObject(itemValue)) {
+    return VALID_TIME_OF_DAY.filter((h) => Object.prototype.hasOwnProperty.call(itemValue, h));
+  }
+  return [];
+}
+
+/**
+ * Ítems/franjas visibles vinculados al día (hoy e histórico).
+ * - Cuenta por franja (slot) en hábitos diarios multi-franja.
+ * - Excluye hábitos/franjas diferidos (pospuestos, empujados o ignorados).
+ * - Excluye cuotas periódicas cumplidas en otros días (doneByQuota).
+ */
 export function calculateDayLinkedVisibleItems(
   rutina,
   customHabits = null,
   habitsPreferences = {},
+  options = {},
 ) {
   if (!rutina) {
-    return { visibleItems: [], completedItems: [] };
+    return { visibleItems: [], completedItems: [], deferredCount: 0 };
   }
+
+  const { customSections = [], allRutinas = [] } = options || {};
 
   const buckets = groupRutinaHabitsByCadence({
     rutina,
     habits: customHabits,
     habitsPreferences,
+    customSections,
     iconsMap: null,
   });
 
   const visibleItems = [];
   const completedItems = [];
   const seen = new Set();
+  let deferredCount = 0;
 
   buckets.forEach((bucket) => {
-    const linked = [...(bucket.today || []), ...(bucket.done || [])];
-    linked.forEach((entry) => {
+    const taggedEntries = [
+      ...(bucket.today || []).map((entry) => ({ entry, fromDone: false })),
+      ...(bucket.done || []).map((entry) => ({ entry, fromDone: true })),
+    ];
+
+    taggedEntries.forEach(({ entry, fromDone }) => {
       const key = `${entry.section}:${entry.itemId}`;
       if (seen.has(key)) return;
       seen.add(key);
 
       const itemValue = rutina?.[entry.section]?.[entry.itemId];
-      const isCompleted = entry.isCompleted
-        || isHabitCompletedForHistorial(itemValue)
-        || isHabitQuotaOrDayDone({
+      const isDaily = isDailyCadenceConfig(entry.config);
+      const dailyHorarios = isDaily
+        ? resolveEffectiveDailyHorarios(entry.config, itemValue)
+        : [];
+
+      const markedOnDay = dailyHorarios.length > 0
+        ? dailyHorarios.some((h) => isHabitHorarioCompleted(itemValue, h))
+        : isHabitCompletedOnRutinaDay({
           config: entry.config,
           itemValue,
           itemId: entry.itemId,
           section: entry.section,
           rutina,
         });
+
+      // Excluir hábitos en bucket.done cuya cuota se cerró otro día sin marca en esta fecha.
+      if (fromDone && !markedOnDay) {
+        return;
+      }
+
+      if (dailyHorarios.length > 0) {
+        dailyHorarios.forEach((franja) => {
+          const isCompleted = isHabitHorarioCompleted(itemValue, franja);
+          if (
+            !isCompleted
+            && isHabitHiddenByDeferral({
+              rutina,
+              section: entry.section,
+              itemId: entry.itemId,
+              franja,
+              allRutinas,
+            })
+          ) {
+            deferredCount += 1;
+            return;
+          }
+
+          visibleItems.push({
+            section: entry.section,
+            itemId: entry.itemId,
+            franjaKey: franja,
+            isCompleted,
+          });
+          if (isCompleted) {
+            completedItems.push({
+              section: entry.section,
+              itemId: entry.itemId,
+              franjaKey: franja,
+            });
+          }
+        });
+        return;
+      }
+
+      const isCompleted = isHabitMarkedCompleteForConfig(entry.config, itemValue);
+      if (
+        !isCompleted
+        && isHabitHiddenByDeferral({
+          rutina,
+          section: entry.section,
+          itemId: entry.itemId,
+          allRutinas,
+        })
+      ) {
+        deferredCount += 1;
+        return;
+      }
 
       visibleItems.push({ section: entry.section, itemId: entry.itemId, isCompleted });
       if (isCompleted) {
@@ -60,41 +152,44 @@ export function calculateDayLinkedVisibleItems(
     });
   });
 
-  return { visibleItems, completedItems };
+  return { visibleItems, completedItems, deferredCount };
 }
 
-export function getRutinaCompletionStats(rutina, customHabits = null, habitsPreferences = {}) {
+export function getRutinaCompletionStats(
+  rutina,
+  customHabits = null,
+  habitsPreferences = {},
+  options = {},
+) {
   if (!rutina) {
-    return { percentage: 0, completed: 0, total: 0 };
+    return { percentage: 0, completed: 0, total: 0, deferredCount: 0 };
   }
 
-  const dayMode = getRutinaDayMode(rutina.fecha);
+  const dayMode = options?.today !== undefined
+    ? getRutinaDayMode(rutina.fecha, options.today)
+    : getRutinaDayMode(rutina.fecha);
 
   if (dayMode === 'future' || rutina.isPreview) {
-    return { percentage: 0, completed: 0, total: 0 };
+    return { percentage: 0, completed: 0, total: 0, deferredCount: 0 };
   }
 
-  if (dayMode === 'today') {
-    const { visibleItems, completedItems } = calculateDayLinkedVisibleItems(
-      rutina,
-      customHabits,
-      habitsPreferences,
-    );
-    const total = visibleItems.length;
-    const completed = completedItems.length;
-    return {
-      percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
-      completed,
-      total,
-    };
-  }
+  const { visibleItems, completedItems, deferredCount } = calculateDayLinkedVisibleItems(
+    rutina,
+    customHabits,
+    habitsPreferences,
+    options,
+  );
+  const total = visibleItems.length;
+  const completed = completedItems.length;
+  const percentage = total > 0
+    ? Math.min(100, Math.max(0, Math.round((completed / total) * 100)))
+    : 0;
 
-  const percentage = calculateCompletionPercentage(rutina, customHabits);
-  const { visibleItems, completedItems } = calculateVisibleItems(rutina, {}, customHabits);
   return {
     percentage,
-    completed: completedItems.length,
-    total: visibleItems.length,
+    completed,
+    total,
+    deferredCount,
   };
 }
 

@@ -214,22 +214,6 @@ export default function HabitsManagerDetail({
           />
         </Box>
 
-        <Box sx={{ px: 2, pb: 0.5 }}>
-          <HabitFormMetaRows
-            {...metaProps}
-            showGroupDivider={false}
-            showRoutine
-            showFieldLabels
-            enablePillRename
-            onSectionRenameSave={onSectionRenameSave}
-            onSectionEdit={onSectionEdit}
-            onRoutineRenameSave={onRoutineRenameSave}
-            onCreateRoutine={onCreateRoutine}
-            onEditRoutine={onEditRoutine}
-            routinePickerInline={false}
-          />
-        </Box>
-
         <Box sx={{ px: 2, pb: 1 }}>
           <HabitFormFields
             section={activeSection}
@@ -242,6 +226,24 @@ export default function HabitsManagerDetail({
             showCadence
             showCadenceLabel
             hideCadenceTopDivider
+          />
+        </Box>
+
+        <Box sx={{ px: 2, pb: 0.5 }}>
+          <HabitFormMetaRows
+            {...metaProps}
+            showGroupDivider={false}
+            groupSelector={isCreate ? 'tabs' : 'select'}
+            groupLabel={isCreate ? 'Grupo' : 'Mover a grupo'}
+            showRoutine
+            showFieldLabels
+            enablePillRename
+            onSectionRenameSave={onSectionRenameSave}
+            onSectionEdit={onSectionEdit}
+            onRoutineRenameSave={onRoutineRenameSave}
+            onCreateRoutine={onCreateRoutine}
+            onEditRoutine={onEditRoutine}
+            routinePickerInline={false}
           />
         </Box>
 

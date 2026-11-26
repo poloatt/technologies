@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { getTaskHorizonCopy } from '@shared/copy/agendaTerminology';
 import { hubSectionTitleSx } from '@shared/styles/hubSectionStyles';
 import { SplitScreen } from '@shared/components/common';
-import AgendaCalendarPage from '../../agenda/AgendaCalendarPage';
 import TareasTable from './TareasTable';
-import TareaDetailPopup from './TareaDetailPopup';
 import { useTareasPageController } from './useTareasPageController';
 import { useTareasPageView } from './useTareasPageView';
 import TareasPageOverlays from './TareasPageOverlays';
+
+const AgendaCalendarPage = React.lazy(() => import('../../agenda/AgendaCalendarPage'));
+const TareaDetailPopup = React.lazy(() => import('./TareaDetailPopup'));
 
 function TaskHorizonColumnHeader({ view }) {
   const copy = getTaskHorizonCopy(view);
@@ -118,16 +119,18 @@ function TareasListPageContent() {
   }), [objetivos, tareasTableCommonProps]);
 
   const renderDesktopDetail = (sourceView) => (
-    <TareaDetailPopup
-      open
-      onClose={closeDesktopTask}
-      tarea={resolvedDesktopTarea}
-      isMobile={false}
-      agendaView={sourceView}
-      desktopHalfScreen
-      embedded
-      {...detailPopupSharedProps}
-    />
+    <Suspense fallback={null}>
+      <TareaDetailPopup
+        open
+        onClose={closeDesktopTask}
+        tarea={resolvedDesktopTarea}
+        isMobile={false}
+        agendaView={sourceView}
+        desktopHalfScreen
+        embedded
+        {...detailPopupSharedProps}
+      />
+    </Suspense>
   );
 
   return (
@@ -216,7 +219,11 @@ export function TareasListPage() {
   const pageView = useTareasPageView();
   // Agenda monta su propio usePageWithHistory; no montar el de la lista.
   if (pageView === 'agenda') {
-    return <AgendaCalendarPage />;
+    return (
+      <Suspense fallback={null}>
+        <AgendaCalendarPage />
+      </Suspense>
+    );
   }
   return <TareasListPageContent />;
 }

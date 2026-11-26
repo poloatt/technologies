@@ -1,7 +1,12 @@
 import { Box, Typography } from '@mui/material';
 import { hubEyebrowSx } from '../../hub';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
-import { formatPeriodSpan, getPeriodRange } from '../transacciones/transaccionesPeriodUtils';
+import {
+  FLUJO_PERIOD_MODES,
+  formatPeriodSpan,
+  getPeriodRange,
+} from '../transacciones/transaccionesPeriodUtils';
+import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
 import { useFinanzasHubPeriod } from './finanzasHubPeriod';
 
 /**
@@ -11,6 +16,7 @@ import { useFinanzasHubPeriod } from './finanzasHubPeriod';
  */
 export default function FinanzasHubPeriodBar() {
   const hubPeriod = useFinanzasHubPeriod();
+  const { cuenta } = useCuentaMostrada();
   if (!hubPeriod) return null;
 
   const range = getPeriodRange(hubPeriod.preset);
@@ -30,6 +36,8 @@ export default function FinanzasHubPeriodBar() {
       <PeriodControl
         preset={hubPeriod.preset}
         onChange={hubPeriod.setPreset}
+        modes={FLUJO_PERIOD_MODES}
+        cuentaId={cuenta?.id || cuenta?._id}
         trailing={span ? (
           <Typography
             variant="caption"

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Box, MenuItem, Select, alpha, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { useAPI } from '@shared/hooks/useAPI';
+import { SUBTLE_STROKE_COLOR } from '@shared/styles/subtleStrokeStyles';
 import { hubLabelSx } from '../../hub';
 import {
   formatDateKey,
@@ -37,11 +38,9 @@ const COLUMN_MAX = { year: 64, quarter: 84, month: 42 };
 
 /** Mismo lenguaje que los chips del hub: borde sutil, radio 1.5, sin sombra. */
 const controlSx = {
-  border: '1px solid',
-  borderColor: 'divider',
+  border: 0,
+  outline: 'none',
   borderRadius: 1.5,
-  transition: 'border-color 120ms ease',
-  '&:hover': { borderColor: 'text.disabled' },
 };
 
 /** Id canónico del corte elegido (los ids históricos `q2` o `month` se normalizan). */
@@ -85,7 +84,7 @@ function StepButton({ label, onClick, disabled, children }) {
         m: 0,
         p: 0,
         border: 0,
-        borderRadius: 1.5,
+        borderRadius: 0,
         bgcolor: 'transparent',
         color: 'text.secondary',
         cursor: 'pointer',
@@ -93,7 +92,7 @@ function StepButton({ label, onClick, disabled, children }) {
         fontWeight: 600,
         lineHeight: 1,
         '&:hover': { color: 'text.primary' },
-        '&:focus-visible': { outline: '1px solid', outlineColor: 'text.secondary' },
+        '&:focus-visible': { outline: 'none' },
         '&:disabled': { opacity: 0.3, cursor: 'default', color: 'text.secondary' },
       }}
     >
@@ -109,6 +108,7 @@ function YearStepper({ year, canNext, onPrev, onNext }) {
       aria-label="Año"
       sx={{
         ...controlSx,
+        borderRadius: 0,
         display: 'grid',
         gridTemplateColumns: '26px 2.75rem 26px',
         alignItems: 'center',
@@ -131,12 +131,12 @@ function YearStepper({ year, canNext, onPrev, onNext }) {
 }
 
 /** Netos por columna: una sola consulta que cubre todas las barras. */
-function useBucketNetos(buckets) {
+function useBucketNetos(buckets, cuentaId) {
   const fechaInicio = buckets[0]?.fechaInicio;
   const fechaFin = buckets[buckets.length - 1]?.fechaFin;
   const params = useMemo(
-    () => ({ fechaInicio, fechaFin, estado: 'PAGADO' }),
-    [fechaInicio, fechaFin],
+    () => ({ fechaInicio, fechaFin, estado: 'PAGADO', ...(cuentaId ? { cuenta: cuentaId } : {}) }),
+    [fechaInicio, fechaFin, cuentaId],
   );
   const { data, error } = useAPI('/api/transacciones/stats', {
     params,
@@ -149,7 +149,7 @@ function useBucketNetos(buckets) {
     && data.fechaFin === fechaFin
     && (data.ledger || 'flujo') === 'flujo'
     && !data.kinds
-    && !data.cuenta;
+    && (data.cuenta || null) === (cuentaId || null);
 
   return useMemo(() => {
     if (!matches) return { loading: !error, netos: null, moneda: null };
@@ -160,11 +160,11 @@ function useBucketNetos(buckets) {
   }, [matches, data, buckets, error]);
 }
 
-function PeriodBars({ mode, year, preset, onChange }) {
+function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
   const theme = useTheme();
   const { showValues } = useValuesVisibility();
   const buckets = useMemo(() => getPeriodBuckets(mode, year), [mode, year]);
-  const { loading, netos, moneda } = useBucketNetos(buckets);
+  const { loading, netos, moneda } = useBucketNetos(buckets, cuentaId);
 
   const selectedId = selectedBucketId(preset);
   const range = getPeriodRange(preset);
@@ -237,9 +237,9 @@ function PeriodBars({ mode, year, preset, onChange }) {
               pt: 0.75,
               pb: 0.5,
               border: '1px solid',
-              borderColor: selected ? 'divider' : 'transparent',
+              borderColor: selected ? SUBTLE_STROKE_COLOR : 'transparent',
               borderRadius: 1.5,
-              bgcolor: selected ? 'action.selected' : 'transparent',
+              bgcolor: 'transparent',
               cursor: 'pointer',
               font: 'inherit',
               color: selected ? 'text.primary' : 'text.secondary',
@@ -248,7 +248,10 @@ function PeriodBars({ mode, year, preset, onChange }) {
                 opacity: selected ? 1 : future ? 0.3 : 0.55,
                 transition: 'opacity 150ms ease, height 240ms ease, bottom 240ms ease',
               },
-              '&:hover': { bgcolor: selected ? 'action.selected' : 'action.hover', color: 'text.primary' },
+              '&:hover': {
+                bgcolor: selected ? 'transparent' : 'action.hover',
+                color: 'text.primary',
+              },
               '&:hover .period-bar': { opacity: selected ? 1 : 0.85 },
               '&:focus-visible': { outline: '1px solid', outlineColor: 'text.secondary' },
             }}
@@ -324,8 +327,10 @@ function PeriodBars({ mode, year, preset, onChange }) {
 /**
  * Selector de período: tipo (anual, trimestral, mensual, YTD, YTG) y, debajo,
  * un gráfico de barras con el neto de cada corte del tipo elegido. Tocar una barra elige ese corte.
+ * `modes` limita los tipos ofrecidos; `cuentaId` acota las barras a esa cuenta.
  */
-export default function PeriodPicker({ preset, onChange, trailing = null }) {
+export default function PeriodPicker({ preset, onChange, trailing = null, modes = null, cuentaId }) {
+  const options = modes ? MODE_OPTIONS.filter((option) => modes.includes(option.id)) : MODE_OPTIONS;
   const mode = getPeriodMode(preset);
   const year = getPeriodAnchorYear(preset);
   const currentYear = new Date().getFullYear();
@@ -369,6 +374,7 @@ export default function PeriodPicker({ preset, onChange, trailing = null }) {
           sx={{
             ...hubLabelSx,
             ...controlSx,
+            borderRadius: 0,
             gridColumn: 1,
             justifySelf: 'start',
             height: 28,
@@ -388,7 +394,7 @@ export default function PeriodPicker({ preset, onChange, trailing = null }) {
             '& .MuiSelect-icon': { right: 4, fontSize: '1.125rem', color: 'text.secondary' },
           }}
         >
-          {MODE_OPTIONS.map((option) => (
+          {options.map((option) => (
             <MenuItem
               key={option.id}
               value={option.id}
@@ -411,7 +417,7 @@ export default function PeriodPicker({ preset, onChange, trailing = null }) {
         )}
         {trailing && <Box sx={{ gridColumn: 3, justifySelf: 'end', minWidth: 0 }}>{trailing}</Box>}
       </Box>
-      <PeriodBars mode={chartMode} year={year} preset={preset} onChange={onChange} />
+      <PeriodBars mode={chartMode} year={year} preset={preset} onChange={onChange} cuentaId={cuentaId} />
     </Box>
   );
 }

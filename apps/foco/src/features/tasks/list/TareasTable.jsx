@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -6,12 +6,14 @@ import {
   Paper,
   Box,
   Stack,
+  Skeleton,
 } from '@mui/material';
 import { useResponsive } from '@shared/hooks';
 import { isToday, isThisWeek, isThisMonth, addMonths, isBefore } from 'date-fns';
-import TareaDetailPopup from './TareaDetailPopup';
 import TareaActionsPopover from './TareaActionsPopover';
 import { HabitCarouselAhora, HabitCarouselLuego } from '../../habits';
+
+const TareaDetailPopup = React.lazy(() => import('./TareaDetailPopup'));
 import {
   getAgendaBucket,
   getAgendaSortKey,
@@ -103,6 +105,7 @@ const TareasTable = ({
   showCompleted = false,
   onRefreshData,
   showHabitCarousel = true,
+  isFetching = false,
   objetivos = [],
   suppressDetailPopup = false,
   onOpenTarea,
@@ -190,23 +193,25 @@ const TareasTable = ({
     : null;
 
   const renderTaskPopup = () => {
-    if (suppressDetailPopup) return null;
+    if (suppressDetailPopup || !openTarea) return null;
     return (
-      <TareaDetailPopup
-        open={!!openTarea}
-        onClose={() => setOpenTareaId(null)}
-        tarea={openTarea}
-        isMobile={isMobile}
-        agendaView={agendaView}
-        desktopHalfScreen={desktopHalfScreen}
-        objetivos={objetivos}
-        onSubmit={onSubmit}
-        onObjetivosUpdate={onObjetivosUpdate}
-        onDelete={onDelete}
-        updateWithHistory={updateWithHistory}
-        onUpdateEstado={onUpdateEstado}
-        onRefreshData={onRefreshData}
-      />
+      <Suspense fallback={null}>
+        <TareaDetailPopup
+          open={!!openTarea}
+          onClose={() => setOpenTareaId(null)}
+          tarea={openTarea}
+          isMobile={isMobile}
+          agendaView={agendaView}
+          desktopHalfScreen={desktopHalfScreen}
+          objetivos={objetivos}
+          onSubmit={onSubmit}
+          onObjetivosUpdate={onObjetivosUpdate}
+          onDelete={onDelete}
+          updateWithHistory={updateWithHistory}
+          onUpdateEstado={onUpdateEstado}
+          onRefreshData={onRefreshData}
+        />
+      </Suspense>
     );
   };
 
@@ -391,6 +396,30 @@ const TareasTable = ({
             gap: stackTokens.spacing,
           }}
         >
+          {isFetching && periodosOrdenados.length === 0 ? (
+            <Stack spacing={stackTokens.spacing} role="status" aria-label="Cargando tareas">
+              {[0, 1, 2].map((idx) => (
+                <Paper
+                  key={idx}
+                  elevation={0}
+                  sx={{
+                    bgcolor: layoutBg,
+                    borderRadius: 1.5,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    px: 1.5,
+                    py: 1.25,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.25,
+                  }}
+                >
+                  <Skeleton variant="text" width={idx === 0 ? 110 : 80} height={20} animation="wave" />
+                  <Skeleton variant="rounded" width={24} height={18} animation="wave" />
+                </Paper>
+              ))}
+            </Stack>
+          ) : null}
           {periodosOrdenados.map((periodo) => {
             const isExpanded = expandedPeriodo === periodo;
             return (

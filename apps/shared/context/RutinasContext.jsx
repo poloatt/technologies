@@ -8,7 +8,6 @@ import { resolveHabitConfigApplyFrom, getRutinaDayMode, buildHistoricalFranjaMig
 import { getCachedHabitsPreferences, fetchHabitsPreferencesFromApi } from '../hooks/useHabitsPreferences.js';
 import rutinasService from '../services/rutinasService';
 import { UISettingsContext } from './UISettingsContext';
-import { calculateCompletionPercentage } from '../utils/rutinaCalculations';
 import { isHabitCompletedForHistorial, ensureHabitCompletionShape, rutinaItemValuesDiffer } from '../habits/domain/habitCompletionUtils.js';
 import { normalizeTimeOfDay } from '../utils/timeOfDayUtils';
 import { invalidateHabitsPreferencesCache } from '../hooks/useHabitsPreferences.js';
@@ -62,8 +61,11 @@ function collectRutinaHistorialSections(rutina = {}) {
   return [...keys];
 }
 
-/** Integra respuesta de markComplete sin pisar otras secciones/ítems en vuelos concurrentes. */
-function mergeRutinaServerResponse(prev, response) {
+/**
+ * Integra respuesta de markComplete sin pisar otras secciones/ítems en vuelos concurrentes.
+ * `inFlightBySection` preserva valores optimistas de clicks todavía en vuelo.
+ */
+function mergeRutinaServerResponse(prev, response, inFlightBySection = null) {
   if (!prev) return response;
   if (!response || typeof response !== 'object') return prev;
 
@@ -101,8 +103,25 @@ function mergeRutinaServerResponse(prev, response) {
     const prevSection = prev[key] && typeof prev[key] === 'object' && !Array.isArray(prev[key])
       ? prev[key]
       : {};
-    next[key] = { ...prevSection, ...value };
+    const mergedSection = { ...prevSection, ...value };
+    const inFlightSection = inFlightBySection?.[key];
+    if (inFlightSection) {
+      Object.entries(inFlightSection).forEach(([itemId, pendingValue]) => {
+        mergedSection[itemId] = pendingValue;
+      });
+    }
+    next[key] = mergedSection;
   });
+
+  if (inFlightBySection) {
+    Object.entries(inFlightBySection).forEach(([sec, overrides]) => {
+      if (response[sec] !== undefined) return;
+      const baseSection = next[sec] && typeof next[sec] === 'object' && !Array.isArray(next[sec])
+        ? next[sec]
+        : {};
+      next[sec] = { ...baseSection, ...overrides };
+    });
+  }
 
   return next;
 }
@@ -156,6 +175,136 @@ function syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina) {
   });
 }
 
+const RUTINAS_CACHE_KEY = 'attadia_rutinas_v1';
+const INITIAL_RUTINAS_LIMIT = 14;
+const FULL_RUTINAS_LIMIT = 90;
+
+function getCurrentCachedUserId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('cachedUser');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.id || parsed?._id || null;
+  } catch {
+    return null;
+  }
+}
+
+function selectRutinaSnapshot(rutinasWithHist, historial) {
+  const totalRutinas = rutinasWithHist.length;
+  if (totalRutinas === 0) {
+    return { selectedRutina: null, selectedPage: 1, selectedViewDate: null };
+  }
+  const todayStr = toISODateString(getNormalizedToday());
+  const indexToday = rutinasWithHist.findIndex((r) => {
+    try {
+      return toISODateString(parseAPIDate(r.fecha)) === todayStr;
+    } catch {
+      return false;
+    }
+  });
+  const selectedIndex = indexToday >= 0 ? indexToday : 0;
+  const selected = rutinasWithHist[selectedIndex];
+  let selectedViewDate = null;
+  if (selected?.fecha) {
+    try {
+      selectedViewDate = startOfDay(parseAPIDate(selected.fecha));
+    } catch {
+      selectedViewDate = null;
+    }
+  }
+  return {
+    selectedRutina: {
+      ...selected,
+      historial,
+      _page: selectedIndex + 1,
+      _totalPages: totalRutinas,
+    },
+    selectedPage: selectedIndex + 1,
+    selectedViewDate,
+  };
+}
+
+function readRutinasStorageCache() {
+  if (typeof window === 'undefined') return null;
+  const userId = getCurrentCachedUserId();
+  if (!userId) return null;
+  try {
+    const raw = localStorage.getItem(RUTINAS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.userId !== userId || !Array.isArray(parsed.docs) || parsed.docs.length === 0) {
+      return null;
+    }
+    const { historial, rutinasWithHist } = attachHistorial(parsed.docs);
+    const { selectedRutina, selectedPage, selectedViewDate } = selectRutinaSnapshot(rutinasWithHist, historial);
+    return {
+      rutinas: rutinasWithHist,
+      rutina: selectedRutina,
+      currentPage: selectedPage,
+      totalPages: rutinasWithHist.length,
+      viewDate: selectedViewDate,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeRutinasStorageCache(rutinasList) {
+  if (typeof window === 'undefined' || !Array.isArray(rutinasList) || rutinasList.length === 0) return;
+  const userId = getCurrentCachedUserId();
+  if (!userId) return;
+  try {
+    // Guardar solo la ventana reciente sin el historial derivado para carga instantánea (SWR)
+    const compactDocs = rutinasList.slice(0, INITIAL_RUTINAS_LIMIT).map((doc) => {
+      if (!doc || typeof doc !== 'object') return doc;
+      const { historial: _omitHist, _page: _omitPage, _totalPages: _omitTotal, ...rest } = doc;
+      return rest;
+    });
+    localStorage.setItem(RUTINAS_CACHE_KEY, JSON.stringify({
+      userId,
+      docs: compactDocs,
+      ts: Date.now(),
+    }));
+  } catch {
+    // Silenciar errores de cuota/serialización
+  }
+}
+
+function applyInFlightOverridesToList(rutinasList, inFlightMap) {
+  if (!inFlightMap || inFlightMap.size === 0) return rutinasList;
+  const byRutina = new Map();
+  inFlightMap.forEach((entry, key) => {
+    const firstSep = key.indexOf(':');
+    if (firstSep < 0) return;
+    const rutinaId = key.slice(0, firstSep);
+    const rest = key.slice(firstSep + 1);
+    const secondSep = rest.indexOf(':');
+    if (secondSep < 0) return;
+    const section = rest.slice(0, secondSep);
+    const itemId = rest.slice(secondSep + 1);
+    if (!byRutina.has(rutinaId)) byRutina.set(rutinaId, {});
+    const overrides = byRutina.get(rutinaId);
+    if (!overrides[section]) overrides[section] = {};
+    overrides[section][itemId] = entry.value;
+  });
+
+  if (byRutina.size === 0) return rutinasList;
+  return rutinasList.map((r) => {
+    const overrides = r?._id ? byRutina.get(r._id) : null;
+    if (!overrides) return r;
+    const next = { ...r };
+    Object.entries(overrides).forEach(([sec, items]) => {
+      const baseSec = next[sec] && typeof next[sec] === 'object' && !Array.isArray(next[sec])
+        ? next[sec]
+        : {};
+      next[sec] = { ...baseSec, ...items };
+    });
+    return next;
+  });
+}
+
 // Crear el contexto
 const RutinasContext = createContext();
 
@@ -176,26 +325,57 @@ export const RutinasProvider = ({ children }) => {
   const undoScope = resolveUndoScope(location.pathname);
   const undoRecorder = useScopedActionHistory(undoScope);
 
-  // Estados básicos
-  const [rutina, setRutina] = useState(null);
-  const [rutinas, setRutinas] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialCacheRef = React.useRef(undefined);
+  if (initialCacheRef.current === undefined) {
+    initialCacheRef.current = readRutinasStorageCache();
+  }
+  const initialCache = initialCacheRef.current;
+
+  // Estados básicos (hidratados desde caché local SWR si existe para el usuario actual)
+  const [rutina, setRutina] = useState(() => initialCache?.rutina ?? null);
+  const [rutinas, setRutinas] = useState(() => initialCache?.rutinas ?? []);
+  const [loading, setLoading] = useState(() => !initialCache);
   const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [viewDate, setViewDate] = useState(() => startOfDay(getNormalizedToday()));
+  const [currentPage, setCurrentPage] = useState(() => initialCache?.currentPage ?? 1);
+  const [totalPages, setTotalPages] = useState(() => initialCache?.totalPages ?? 1);
+  const [viewDate, setViewDate] = useState(() => initialCache?.viewDate ?? startOfDay(getNormalizedToday()));
   
   const { enqueueSnackbar } = useSnackbar();
   const uiContext = React.useContext(UISettingsContext);
   const autoUpdateHabitPreferences = uiContext?.autoUpdateHabitPreferences || (() => {});
 
-  // Mantener una referencia estable al array de rutinas para evitar dependencias reactivas
-  const rutinasRef = React.useRef([]);
+  // Mantener referencias estables para evitar recrear callbacks en cada toggle
+  const rutinasRef = React.useRef(rutinas);
+  const rutinaRef = React.useRef(rutina);
+  const initialHydratedRutinasRef = React.useRef(initialCache?.rutinas ?? null);
+  const fullHistoryLoadedRef = React.useRef(false);
+  const backgroundHistoryInFlightRef = React.useRef(false);
+  const backgroundHistoryTimerRef = React.useRef(null);
+  // Tracking de marks en vuelo: `${rutinaId}:${section}:${itemId}` -> { seq, value }
+  // Impide que una respuesta vieja del servidor pise un click optimista más nuevo.
+  const inFlightMarksRef = React.useRef(new Map());
+  const markSeqRef = React.useRef(0);
   // Deduplica llamadas concurrentes a fetchRutinas (AgendaCalendarPage + HabitCarouselStrip la disparan al montar)
   const fetchRutinasInFlightRef = React.useRef(null);
   useEffect(() => {
     rutinasRef.current = rutinas;
+    if (rutinas.length > 0 && rutinas !== initialHydratedRutinasRef.current) {
+      writeRutinasStorageCache(rutinas);
+    }
   }, [rutinas]);
+  useEffect(() => {
+    rutinaRef.current = rutina;
+  }, [rutina]);
+  useEffect(() => () => {
+    if (backgroundHistoryTimerRef.current != null) {
+      if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(backgroundHistoryTimerRef.current);
+      } else {
+        clearTimeout(backgroundHistoryTimerRef.current);
+      }
+      backgroundHistoryTimerRef.current = null;
+    }
+  }, []);
 
   // Función para manejo de errores
   const handleError = useCallback((error, context, fallbackMessage) => {
@@ -204,7 +384,62 @@ export const RutinasProvider = ({ children }) => {
     enqueueSnackbar(message, { variant: 'error' });
   }, [enqueueSnackbar]);
 
-  // Cargar rutinas
+  const applyRutinasFromServer = useCallback((rutinaList, { preserveInFlight = false } = {}) => {
+    const mergedList = preserveInFlight
+      ? applyInFlightOverridesToList(rutinaList, inFlightMarksRef.current)
+      : rutinaList;
+
+    // Ordenar rutinas por fecha (más reciente primero)
+    const rutinasOrdenadas = [...mergedList].sort((a, b) => {
+      const da = parseAPIDate(a.fecha);
+      const db = parseAPIDate(b.fecha);
+      return db - da;
+    });
+
+    const { historial, rutinasWithHist } = attachHistorial(rutinasOrdenadas);
+    const totalRutinas = rutinasWithHist.length;
+    setTotalPages(totalRutinas);
+    setRutinas(rutinasWithHist);
+
+    const { selectedRutina, selectedPage, selectedViewDate } = selectRutinaSnapshot(rutinasWithHist, historial);
+    setRutina(selectedRutina);
+    setCurrentPage(selectedPage);
+    if (selectedViewDate) {
+      setViewDate(selectedViewDate);
+    }
+  }, []);
+
+  // Hidratación diferida del historial completo (90 días) sin bloquear el carrusel inicial
+  const scheduleFullHistoryHydration = useCallback(() => {
+    if (fullHistoryLoadedRef.current || backgroundHistoryInFlightRef.current) return;
+    if (backgroundHistoryTimerRef.current != null) return;
+
+    const runFullHistory = async () => {
+      backgroundHistoryTimerRef.current = null;
+      if (fullHistoryLoadedRef.current || backgroundHistoryInFlightRef.current) return;
+      backgroundHistoryInFlightRef.current = true;
+      try {
+        const data = await rutinasService.getRutinas({ limit: FULL_RUTINAS_LIMIT });
+        const rutinaList = Array.isArray(data) ? data : (data?.docs || []);
+        if (!Array.isArray(rutinaList)) return;
+        fullHistoryLoadedRef.current = true;
+        applyRutinasFromServer(rutinaList, { preserveInFlight: true });
+      } catch (err) {
+        if (!err?.cancelado) {
+          console.warn('[RutinasContext] Hidratación lazy de historial falló:', err);
+        }
+      } finally {
+        backgroundHistoryInFlightRef.current = false;
+      }
+    };
+
+    const ric = typeof window !== 'undefined' && window.requestIdleCallback;
+    backgroundHistoryTimerRef.current = ric
+      ? window.requestIdleCallback(runFullHistory, { timeout: 1200 })
+      : setTimeout(runFullHistory, 150);
+  }, [applyRutinasFromServer]);
+
+  // Cargar rutinas (2 etapas: ventana rápida de 14 días para primer render + historial completo lazy)
   const fetchRutinas = useCallback(async (forceReload = false) => {
     if (!forceReload && fetchRutinasInFlightRef.current) {
       return fetchRutinasInFlightRef.current;
@@ -212,62 +447,31 @@ export const RutinasProvider = ({ children }) => {
 
     const run = (async () => {
     try {
-      setLoading(true);
+      // Solo mostrar loading bloqueante en arranque frío (sin datos en caché SWR)
+      if (rutinasRef.current.length === 0) {
+        setLoading(true);
+      }
       setError(null);
-      
-      const data = await rutinasService.getRutinas({ limit: 90 });
+
+      const shouldFetchFull = Boolean(forceReload || fullHistoryLoadedRef.current);
+      const limit = shouldFetchFull ? FULL_RUTINAS_LIMIT : INITIAL_RUTINAS_LIMIT;
+
+      const data = await rutinasService.getRutinas({ limit });
       const rutinaList = Array.isArray(data) ? data : (data.docs || []);
       
       if (!Array.isArray(rutinaList)) {
         setError('Formato de datos incorrecto');
         return;
       }
-      
-      // Ordenar rutinas por fecha (más reciente primero)
-      const rutinasOrdenadas = [...rutinaList].sort((a, b) => {
-        const da = parseAPIDate(a.fecha);
-        const db = parseAPIDate(b.fecha);
-        return db - da;
-      });
 
-      const { historial, rutinasWithHist } = attachHistorial(rutinasOrdenadas);
-      
-      const totalRutinas = rutinasWithHist.length;
-      setTotalPages(totalRutinas);
-      setRutinas(rutinasWithHist);
+      if (shouldFetchFull || rutinaList.length < limit) {
+        fullHistoryLoadedRef.current = true;
+      }
 
-      // Seleccionar rutina de hoy o la más reciente.
-      // La creación del log de hoy la hace useEnsureRutinaForDate / ensureRutinaForDate
-      // (una sola ruta; evita race con POST duplicado).
-      const todayStr = toISODateString(getNormalizedToday());
+      applyRutinasFromServer(rutinaList, { preserveInFlight: true });
 
-      if (rutinasWithHist.length > 0) {
-        const indexToday = rutinasWithHist.findIndex(r => {
-          try {
-            return toISODateString(parseAPIDate(r.fecha)) === todayStr;
-          } catch {
-            return false;
-          }
-        });
-        const selectedIndex = indexToday >= 0 ? indexToday : 0;
-        const selected = rutinasWithHist[selectedIndex];
-        setRutina({
-          ...selected,
-          historial,
-          _page: selectedIndex + 1,
-          _totalPages: totalRutinas
-        });
-        setCurrentPage(selectedIndex + 1);
-        if (selected?.fecha) {
-          try {
-            setViewDate(startOfDay(parseAPIDate(selected.fecha)));
-          } catch {
-            // mantener viewDate
-          }
-        }
-      } else {
-        setRutina(null);
-        setCurrentPage(1);
+      if (!fullHistoryLoadedRef.current) {
+        scheduleFullHistoryHydration();
       }
       
     } catch (error) {
@@ -287,7 +491,7 @@ export const RutinasProvider = ({ children }) => {
     } finally {
       fetchRutinasInFlightRef.current = null;
     }
-  }, [enqueueSnackbar]);
+  }, [enqueueSnackbar, applyRutinasFromServer, scheduleFullHistoryHydration]);
 
   // Cargar una rutina específica por ID
   const getRutinaById = useCallback(async (rutinaId) => {
@@ -298,8 +502,6 @@ export const RutinasProvider = ({ children }) => {
         return null;
       }
 
-      setLoading(true);
-      
       // Verificar si ya tenemos esta rutina en nuestro array (usando ref estable)
       const rutinaEnCache = rutinasRef.current.find(r => r._id === rutinaId);
       
@@ -307,6 +509,7 @@ export const RutinasProvider = ({ children }) => {
       if (rutinaEnCache) {
         rutinaData = rutinaEnCache;
       } else {
+        setLoading(true);
         const response = await rutinasService.getRutinaById(rutinaId);
         rutinaData = response;
       }
@@ -478,39 +681,86 @@ export const RutinasProvider = ({ children }) => {
     });
   }, [rutinas, rutina, undoScope, undoRecorder]);
 
-  // Marcar un ítem como completado
+  // Marcar un ítem como completado (optimista + protegido contra respuestas viejas en vuelo)
   const markItemComplete = useCallback(async (rutinaId, section, data) => {
     if (!rutinaId || !section || !data) {
       console.error('[RutinasContext] Datos incompletos para marcar ítem');
       return;
     }
 
-    const rutinaBefore = rutinas.find((r) => r._id === rutinaId)
-      || (rutina?._id === rutinaId ? rutina : null);
+    const currentList = rutinasRef.current || [];
+    const currentRutina = rutinaRef.current;
+    const rutinaBefore = currentList.find((r) => r._id === rutinaId)
+      || (currentRutina?._id === rutinaId ? currentRutina : null);
+
+    const entries = Object.entries(data);
+    const previousValues = Object.fromEntries(
+      entries.map(([itemId]) => [itemId, rutinaBefore?.[section]?.[itemId]]),
+    );
+
+    const seq = markSeqRef.current + 1;
+    markSeqRef.current = seq;
+    entries.forEach(([itemId, newValue]) => {
+      inFlightMarksRef.current.set(`${rutinaId}:${section}:${itemId}`, { seq, value: newValue });
+    });
+
+    const collectInFlightForRutina = () => {
+      const prefix = `${rutinaId}:`;
+      const overrides = {};
+      let hasAny = false;
+      inFlightMarksRef.current.forEach((entry, key) => {
+        if (!key.startsWith(prefix)) return;
+        const rest = key.slice(prefix.length);
+        const sepIdx = rest.indexOf(':');
+        if (sepIdx < 0) return;
+        const sec = rest.slice(0, sepIdx);
+        const id = rest.slice(sepIdx + 1);
+        if (!overrides[sec]) overrides[sec] = {};
+        overrides[sec][id] = entry.value;
+        hasAny = true;
+      });
+      return hasAny ? overrides : null;
+    };
+
+    // 1) Optimista inmediato: una sola fuente de verdad para Ahora, Luego, Hecho y contadores.
+    setRutinas((prevList) => {
+      if (!Array.isArray(prevList)) return prevList;
+      const updated = prevList.map((r) => {
+        if (!r || r._id !== rutinaId) return r;
+        return {
+          ...r,
+          [section]: {
+            ...((r[section] && typeof r[section] === 'object') ? r[section] : {}),
+            ...data,
+          },
+        };
+      });
+      const { rutinasWithHist } = attachHistorial(updated);
+      syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
+      return rutinasWithHist;
+    });
 
     try {
       const response = await rutinasService.markComplete(rutinaId, section, data);
 
-      // Un solo setRutinas: merge de respuesta (o fallback del check) + completitud.
-      // Evita el segundo pass que reorganizaba buckets/icons tras el mark.
+      // Liberar solo las claves que siguen perteneciendo a este request (no pisar clicks más nuevos).
+      entries.forEach(([itemId]) => {
+        const key = `${rutinaId}:${section}:${itemId}`;
+        if (inFlightMarksRef.current.get(key)?.seq === seq) {
+          inFlightMarksRef.current.delete(key);
+        }
+      });
+
+      const remainingInFlight = collectInFlightForRutina();
+
+      // 2) Reconciliar respuesta del servidor preservando cualquier otro ítem aún en vuelo.
       setRutinas((prevList) => {
         if (!Array.isArray(prevList)) return prevList;
         const updated = prevList.map((r) => {
           if (!r || r._id !== rutinaId) return r;
-          const merged = response && typeof response === 'object'
-            ? mergeRutinaServerResponse(r, response)
-            : {
-              ...r,
-              [section]: {
-                ...((r[section] && typeof r[section] === 'object') ? r[section] : {}),
-                ...data,
-              },
-            };
-          const porcentaje = calculateCompletionPercentage(merged);
-          return {
-            ...merged,
-            completitud: Number.isFinite(porcentaje) ? porcentaje / 100 : merged.completitud,
-          };
+          return response && typeof response === 'object'
+            ? mergeRutinaServerResponse(r, response, remainingInFlight)
+            : r;
         });
         const { rutinasWithHist } = attachHistorial(updated);
         syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
@@ -518,25 +768,54 @@ export const RutinasProvider = ({ children }) => {
       });
 
       if (undoScope && SCOPES_WITH_SECTION_UNDO.has(undoScope)) {
-        Object.entries(data).forEach(([itemId, newValue]) => {
-          const previousValue = rutinaBefore?.[section]?.[itemId];
+        entries.forEach(([itemId, newValue]) => {
           recordRutinaSectionAction(undoRecorder, {
             rutinaId,
             section,
             itemId,
             newValue,
-            previousValue,
+            previousValue: previousValues[itemId],
           });
         });
       }
 
       return response;
     } catch (error) {
+      // Revertir solo los ítems que no hayan sido sobreescritos por un click posterior.
+      const rollbackPatch = {};
+      entries.forEach(([itemId]) => {
+        const key = `${rutinaId}:${section}:${itemId}`;
+        if (inFlightMarksRef.current.get(key)?.seq === seq) {
+          inFlightMarksRef.current.delete(key);
+          rollbackPatch[itemId] = previousValues[itemId];
+        }
+      });
+
+      if (Object.keys(rollbackPatch).length > 0) {
+        setRutinas((prevList) => {
+          if (!Array.isArray(prevList)) return prevList;
+          const updated = prevList.map((r) => {
+            if (!r || r._id !== rutinaId) return r;
+            const nextSection = {
+              ...((r[section] && typeof r[section] === 'object') ? r[section] : {}),
+            };
+            Object.entries(rollbackPatch).forEach(([itemId, prevVal]) => {
+              if (prevVal === undefined) delete nextSection[itemId];
+              else nextSection[itemId] = prevVal;
+            });
+            return { ...r, [section]: nextSection };
+          });
+          const { rutinasWithHist } = attachHistorial(updated);
+          syncCurrentRutinaFromList(rutinasWithHist, rutinaId, setRutina);
+          return rutinasWithHist;
+        });
+      }
+
       console.error('[RutinasContext] Error al marcar ítem:', error);
       enqueueSnackbar('Error al marcar ítem', { variant: 'error' });
       throw error;
     }
-  }, [rutinas, rutina, enqueueSnackbar, undoScope, undoRecorder]);
+  }, [enqueueSnackbar, undoScope, undoRecorder]);
 
   const deferHabitItem = useCallback(async (rutinaId, section, itemId, action, options = {}) => {
     if (!rutinaId || !section || !itemId || !action) return null;

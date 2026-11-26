@@ -60,6 +60,7 @@ describe('habitChainUtils', () => {
       id: 'kitchen',
       stepIndex: 1,
       stepCount: 2,
+      chainIndex: 1,
     });
     expect(ctx).not.toHaveProperty('isLocked');
     expect(ctx).not.toHaveProperty('isNextInChain');
@@ -193,6 +194,44 @@ describe('habitChainUtils', () => {
     expect(rows[0].kind).toBe('stack');
     expect(rows[0].chainId).toBe('morning');
     expect(rows[0].entries.map((e) => e.itemId)).toEqual(['shower']);
+  });
+
+  test('groupEntriesIntoDisplayRows with orderStacksByChain places routines by habitChains order and singles below', () => {
+    const items = [
+      { itemId: 'solo1', section: 'bodyCare' },
+      {
+        itemId: 'cocinar',
+        section: 'nutricion',
+        chain: { id: 'kitchen', stepIndex: 0, stepCount: 2, chainIndex: 1 },
+      },
+      { itemId: 'solo2', section: 'cleaning' },
+      {
+        itemId: 'skincare',
+        section: 'bodyCare',
+        franjaKey: 'NOCHE',
+        chain: { id: 'morning', stepIndex: 1, stepCount: 2, chainIndex: 0 },
+      },
+      {
+        itemId: 'skincare',
+        section: 'bodyCare',
+        franjaKey: 'MAÑANA',
+        chain: { id: 'morning', stepIndex: 1, stepCount: 2, chainIndex: 0 },
+      },
+      {
+        itemId: 'platos',
+        section: 'cleaning',
+        chain: { id: 'kitchen', stepIndex: 1, stepCount: 2, chainIndex: 1 },
+      },
+    ];
+
+    const rows = groupEntriesIntoDisplayRows(items, { orderStacksByChain: true });
+    expect(rows.map((r) => (r.kind === 'stack' ? `stack:${r.chainId}` : `single:${r.entry.itemId}`))).toEqual([
+      'stack:morning',
+      'stack:kitchen',
+      'single:solo1',
+      'single:solo2',
+    ]);
+    expect(rows[0].entries.map((e) => e.franjaKey)).toEqual(['MAÑANA', 'NOCHE']);
   });
 
   test('groupHabitsIntoDisplayRows groups routine habits from manager list', () => {
