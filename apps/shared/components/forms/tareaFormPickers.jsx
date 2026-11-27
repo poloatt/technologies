@@ -5,6 +5,7 @@ import { useTheme } from '@mui/material/styles';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import { taskFormPickerPopoverPaperSx } from './tareaFormTokens';
+import { FONT_SIZE } from '../../tipografia';
 
 const MOBILE_CLOCK_SIZE = 180;
 const MOBILE_NUMBER_SIZE = 24;
@@ -233,7 +234,7 @@ function CompactTimePicker({ value, onChange, minutesStep = 5 }) {
     m: 0,
     cursor: 'pointer',
     font: 'inherit',
-    fontSize: '1.25rem',
+    fontSize: FONT_SIZE['2xl'],
     lineHeight: 1,
     fontWeight: 500,
     color: active ? 'text.primary' : 'text.secondary',
@@ -265,7 +266,7 @@ function CompactTimePicker({ value, onChange, minutesStep = 5 }) {
         >
           {pad2(hours)}
         </Box>
-        <Box component="span" sx={{ color: 'text.secondary', fontSize: '1.25rem', lineHeight: 1 }}>
+        <Box component="span" sx={{ color: 'text.secondary', fontSize: FONT_SIZE['2xl'], lineHeight: 1 }}>
           :
         </Box>
         <Box
@@ -357,7 +358,7 @@ function CompactTimePicker({ value, onChange, minutesStep = 5 }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '50%',
-                fontSize: item.inner ? '0.65rem' : '0.75rem',
+                fontSize: item.inner ? FONT_SIZE.xs : FONT_SIZE.sm,
                 lineHeight: 1,
                 color: isSelected ? 'primary.contrastText' : 'text.primary',
                 bgcolor: isSelected ? 'primary.main' : 'transparent',

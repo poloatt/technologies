@@ -37,6 +37,7 @@ clienteAxios.interceptors.request.use(
       '/api/rutinas',
       '/api/propiedades',
       '/api/cuentas',
+      '/api/contactos',
       '/api/inquilinos',
       '/api/contratos',
       '/api/habitaciones',

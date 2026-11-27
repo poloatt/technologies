@@ -526,7 +526,11 @@ export class MercadoPagoReportService {
         // Ante pendiente, intentar reutilizar lo que ya exista en el cupo
         const reusedPending = await this.reuseExistingReports(beginDate, endDate);
         if (reusedPending?.rows?.length) {
-          return { ...reusedPending, partial: true };
+          return {
+            ...reusedPending,
+            partial: true,
+            missingWithdrawals: !this.settlementHasBankTransfers(reusedPending.rows)
+          };
         }
         return {
           rows: [],
@@ -621,7 +625,11 @@ export class MercadoPagoReportService {
         const reused =
           reusedFallback || (await this.reuseExistingReports(beginDate, endDate));
         if (reused?.rows?.length) {
-          return { ...reused, partial: true };
+          return {
+            ...reused,
+            partial: true,
+            missingWithdrawals: !this.settlementHasBankTransfers(reused.rows)
+          };
         }
         return {
           rows: [],

@@ -6,6 +6,7 @@ import { arDateKey, cuotaEnRangoClave, expandirCuotas } from '@shared/utils/cuot
 import { formatCardPurchaseTitle } from '@shared/utils/mpDisplayUtils';
 import { hubLabelSx } from '../../hub';
 import { formatMonto } from '../transacciones/transaccionesPeriodUtils';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -128,10 +129,10 @@ export default function CreditosMesList({
                   transition: 'transform 120ms ease',
                 }}
               />
-              <Typography sx={{ ...hubLabelSx, flex: 1, color: 'text.primary', fontSize: '0.8125rem' }}>
+              <Typography sx={{ ...hubLabelSx, flex: 1, color: 'text.primary', fontSize: FONT_SIZE.md }}>
                 {mesLabel(grupo.mes)}
               </Typography>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: colorMes }}>
+              <Typography sx={{ fontWeight: 700, fontSize: FONT_SIZE.base, color: colorMes }}>
                 {formatMonto(netoMes, simbolo, showValues)}
               </Typography>
             </Box>
@@ -159,7 +160,7 @@ export default function CreditosMesList({
                       <Typography
                         sx={{
                           fontWeight: 400,
-                          fontSize: '0.875rem',
+                          fontSize: FONT_SIZE.base,
                           lineHeight: 1.3,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -177,7 +178,7 @@ export default function CreditosMesList({
                     <Typography
                       sx={{
                         fontWeight: 400,
-                        fontSize: '0.875rem',
+                        fontSize: FONT_SIZE.base,
                         color: colorSaldo(netoItem, monedaColor),
                         fontVariantNumeric: 'tabular-nums',
                         flexShrink: 0,

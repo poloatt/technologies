@@ -23,6 +23,7 @@ import { config } from '../../config/envConfig.js';
 import { navigateToAppPath, prefetchAppForPath } from '../../utils/navigationUtils';
 import useResponsive from '../../hooks/useResponsive';
 import { isStandalonePwa } from '../../hooks/usePwaInstall';
+import { FONT_SIZE } from '../../tipografia';
 
 // Diálogo de confirmación para eliminar
 const DeleteConfirmDialog = memo(({ open, onClose, onConfirm, itemName }) => (
@@ -169,6 +170,8 @@ export const SystemButtons = memo(({
             >
               <IconButton
                 onClick={e => handleAction(action, e)}
+                onMouseEnter={action.onMouseEnter}
+                onFocus={action.onFocus}
                 size={action.size || size}
                 sx={{
                   color: action.color || 'text.secondary',
@@ -216,7 +219,7 @@ const baseTabSx = {
   px: 1.2,
   py: 0.6,
   fontWeight: 700,
-  fontSize: '0.9rem',
+  fontSize: FONT_SIZE.base,
   color: 'rgba(255,255,255,0.85)',
   borderRadius: 0,
   transition: 'background 0.2s, color 0.2s',
@@ -467,7 +470,7 @@ function HeaderAddButton({ entityConfig, buttonSx }) {
               fontWeight: 600,
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
-              fontSize: '0.65rem',
+              fontSize: FONT_SIZE.xs,
             }}
           >
             Agregar
@@ -509,7 +512,7 @@ function HeaderAddButton({ entityConfig, buttonSx }) {
                     label="Próximamente"
                     size="small"
                     color="warning"
-                    sx={{ ml: 0.5, height: 20, fontSize: '0.65rem' }}
+                    sx={{ ml: 0.5, height: 20, fontSize: FONT_SIZE.xs }}
                   />
                 )}
               </ListItemButton>
@@ -1111,7 +1114,7 @@ function HeaderMultiSelectCancelButton({ onCancel, iconSx }) {
           ...iconSx
         }}
       >
-        <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+        <Typography variant="body2" sx={{ fontSize: FONT_SIZE.sm }}>
           Cancelar
         </Typography>
       </IconButton>

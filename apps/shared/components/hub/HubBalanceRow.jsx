@@ -1,10 +1,8 @@
 import { Box, ButtonBase, Typography } from '@mui/material';
 import { ExpandMoreRounded } from '@mui/icons-material';
-import {
-  HUB_HERO_AMOUNT,
+import { HUB_HERO_AMOUNT,
   getHubHeroAmountSx,
-  hubEyebrowSx,
-} from '../../styles/hubBalanceTypography';
+  hubEyebrowSx, FONT_SIZE } from '../../tipografia';
 
 const CHEVRON_SIZE = '1.125rem';
 
@@ -24,19 +22,23 @@ export default function HubBalanceRow({
   amount,
   color,
   dense = true,
+  prominent = false,
   below,
   mb = 0,
   expanded = false,
   onToggle,
   controlsId,
+  sx,
 }) {
   const expandable = typeof onToggle === 'function';
+  const showAmount = amount != null;
   const content = (
     <>
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'flex-start',
           gap: 0.5,
           minWidth: 0,
           flex: '1 1 auto',
@@ -49,7 +51,7 @@ export default function HubBalanceRow({
             sx={{
               flex: '0 0 auto',
               fontSize: CHEVRON_SIZE,
-              color: expanded ? 'text.primary' : 'text.secondary',
+              color: prominent ? 'text.primary' : (expanded ? 'text.primary' : 'text.secondary'),
               transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
               transition: 'transform 160ms ease, color 160ms ease',
             }}
@@ -57,34 +59,45 @@ export default function HubBalanceRow({
         )}
         <Typography
           noWrap
-          sx={{
-            ...hubEyebrowSx,
-            mb: 0,
-            minWidth: 0,
-            lineHeight: heroLineHeight(dense),
-          }}
+          sx={prominent
+            ? {
+              mb: 0,
+              minWidth: 0,
+              fontSize: FONT_SIZE.base,
+              fontWeight: 600,
+              lineHeight: 1.25,
+              color: 'text.primary',
+            }
+            : {
+              ...hubEyebrowSx,
+              mb: 0,
+              minWidth: 0,
+              lineHeight: heroLineHeight(dense),
+            }}
         >
           {cuenta}
         </Typography>
       </Box>
-      <Box sx={{ flex: '0 0 auto', textAlign: 'right' }}>
-        <Typography sx={{ ...getHubHeroAmountSx(dense), color }}>{amount}</Typography>
-        {below}
-      </Box>
+      {showAmount && (
+        <Box sx={{ flex: '0 0 auto', textAlign: 'right' }}>
+          <Typography sx={{ ...getHubHeroAmountSx(dense), color }}>{amount}</Typography>
+          {below}
+        </Box>
+      )}
     </>
   );
 
   const rowSx = {
     display: 'flex',
     // Centrado vertical; con fecha debajo del monto, la fila arranca arriba.
-    alignItems: below ? 'flex-start' : 'center',
+    alignItems: below && showAmount ? 'flex-start' : 'center',
     justifyContent: 'space-between',
     gap: 1,
     py: 0.375,
     mb,
   };
 
-  if (!expandable) return <Box sx={rowSx}>{content}</Box>;
+  if (!expandable) return <Box sx={{ ...rowSx, ...sx }}>{content}</Box>;
 
   return (
     <ButtonBase
@@ -101,12 +114,13 @@ export default function HubBalanceRow({
         minHeight: 30,
         font: 'inherit',
         color: 'inherit',
-        borderRadius: 1,
+        borderRadius: 0,
         transition: 'background-color 120ms ease',
         '&:hover': { bgcolor: 'action.hover' },
         // Sin aro de foco al hacer click; solo se marca con teclado.
         '&.Mui-focusVisible': { bgcolor: 'action.hover' },
         '&:focus:not(.Mui-focusVisible)': { outline: 'none' },
+        ...sx,
       }}
     >
       {content}

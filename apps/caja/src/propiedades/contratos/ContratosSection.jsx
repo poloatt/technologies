@@ -11,6 +11,7 @@ import {
   habitacionMatchesPropiedad,
 } from '../habitacionConstants';
 import { TIPO_ALQUILER } from './tipoAlquiler';
+import { FONT_SIZE } from '@shared/tipografia';
 
 // --- ContratoPropiedadSection ---
 export const ContratoPropiedadSection = ({
@@ -61,7 +62,7 @@ export const ContratoPropiedadSection = ({
                   className={formData.esPorHabitacion === tipo.valor ? 'selected' : ''}
                   sx={{ 
                     textTransform: 'capitalize',
-                    fontSize: '0.875rem',
+                    fontSize: FONT_SIZE.base,
                     display: formData.esPorHabitacion === tipo.valor ? 'block' : 'none',
                     '.MuiButtonBase-root:hover &': {
                       display: 'block'

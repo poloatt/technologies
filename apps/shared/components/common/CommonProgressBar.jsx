@@ -1,5 +1,7 @@
 import React from 'react';
 import { Box, Typography, LinearProgress } from '@mui/material';
+import { NEGATIVE_COLOR } from '../../config/uiConstants';
+import { FONT_SIZE } from '../../tipografia';
 
 const ProgressBar = ({
   // Datos de progreso
@@ -96,7 +98,7 @@ const ProgressBar = ({
     switch (colorType) {
       case 'success': return '#4caf50';
       case 'warning': return '#ff9800';
-      case 'error': return '#f44336';
+      case 'error': return NEGATIVE_COLOR;
       case 'primary':
       default: return '#ffffff';
     }
@@ -108,7 +110,7 @@ const ProgressBar = ({
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: variant === 'compact' ? 0.25 : 0.5 }}>
           {labels.left && (
             <Typography variant="caption" sx={{ 
-              fontSize: variant === 'compact' ? '0.6rem' : '0.65rem', 
+              fontSize: variant === 'compact' ? FONT_SIZE['2xs'] : FONT_SIZE.xs, 
               color: 'rgba(255, 255, 255, 0.7)',
               lineHeight: variant === 'compact' ? 1.1 : 1.2
             }}>
@@ -117,7 +119,7 @@ const ProgressBar = ({
           )}
           {labels.right && (
             <Typography variant="caption" sx={{ 
-              fontSize: variant === 'compact' ? '0.6rem' : '0.65rem', 
+              fontSize: variant === 'compact' ? FONT_SIZE['2xs'] : FONT_SIZE.xs, 
               color: 'rgba(255, 255, 255, 0.7)',
               lineHeight: variant === 'compact' ? 1.1 : 1.2
             }}>

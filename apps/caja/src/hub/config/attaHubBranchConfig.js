@@ -4,7 +4,6 @@ import {
   getPropiedadesBranchPages,
 } from '@shared/navigation/appNavResolver';
 import {
-  DeudoresHubSection,
   CreditosHubSection,
   DolaresHubSection,
   InversionesHubSection,
@@ -34,11 +33,10 @@ export const CAJA_HUB_BRANCHES = {
       inversiones: InversionesHubSection,
       dolares: DolaresHubSection,
       creditos: CreditosHubSection,
-      deudores: DeudoresHubSection,
     },
-    // Cuentas y Monedas se abren como popup desde el header, no como sección del hub.
+    // Cuentas, Monedas y Contactos se abren como popup desde el header, no como sección del hub.
     // 'dolares', 'inversiones' y 'creditos' ocultos temporalmente del hub (quitar de esta lista para volver a mostrarlos).
-    hubExcludePageIds: ['cuentas', 'monedas', 'dolares', 'inversiones', 'creditos'],
+    hubExcludePageIds: ['cuentas', 'monedas', 'contactos', 'dolares', 'inversiones', 'creditos'],
     getStripPages: getFinanzasBranchPages,
   },
   propiedades: {

@@ -15,7 +15,8 @@ import { navigateToAppPath, isRouteActive, prefetchAppForPath } from '../utils/n
 import { useSidebar } from '../context/SidebarContext';
 import SidebarResizer from './SidebarResizer';
 import { DynamicIcon } from '../components/common/DynamicIcon';
-import { SIDEBAR_CONFIG, TRANSITIONS, UI_COLORS, Z_INDEX, SPACING, getChildPadding, NAV_TYPO } from '../config/uiConstants';
+import { SIDEBAR_CONFIG, TRANSITIONS, UI_COLORS, Z_INDEX, SPACING, getChildPadding } from '../config/uiConstants';
+import { NAV_TYPO } from '../tipografia';
 import { bottomNavigationItems } from './menuStructure';
 
 export default function Sidebar({ moduloActivo, nivel1Activo }) {

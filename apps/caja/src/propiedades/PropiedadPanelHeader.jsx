@@ -7,6 +7,7 @@ import {
 } from '@shared/components/forms/tareaFormUi';
 import { PROPIEDAD_TIPOS, getPropiedadAlias } from './propiedadConstants';
 import PropiedadEstadoChip from './PropiedadEstadoChip';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function PropiedadPanelHeader({
   mode = 'edit',
@@ -50,7 +51,7 @@ export default function PropiedadPanelHeader({
         <>
           <Typography
             sx={{
-              fontSize: '1.375rem',
+              fontSize: FONT_SIZE['3xl'],
               fontWeight: 400,
               lineHeight: 1.35,
               color: 'text.primary',

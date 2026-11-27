@@ -1,25 +1,21 @@
-import { useLocation } from 'react-router-dom';
-import { isPathActive } from '@shared/navigation/appNavResolver';
 import { CajaHubSectionCard } from '../../hub';
 import TransaccionesHubSummary from '../transacciones/TransaccionesHubSummary';
-import { getTransaccionesPath, resolveFinanzasBranch } from '../finanzasDeepLink';
+import { useCajaSetup } from '../../atta/useCajaSetup';
 
 /**
- * Bloque Transacciones en hubs Finanzas, Propiedades e Inventario.
- * El filtro de tipos está dentro del resumen, junto a la línea de flujo que filtra.
+ * Bloque Cuentas del hub. El listado de cada cuenta vive en el cuerpo;
+ * cada saldo ($ en cuenta, U$D, reservas, rendimientos) abre su libro.
+ * El título abre el popup de Cuentas.
  */
 export default function TransaccionesHubSection() {
-  const { pathname } = useLocation();
-  const branchId = resolveFinanzasBranch(pathname);
-  const transaccionesPath = getTransaccionesPath(branchId);
-  const isActive = isPathActive(pathname, transaccionesPath);
+  const { setupId, openSetup } = useCajaSetup();
 
   return (
     <CajaHubSectionCard
-      title="Transacciones"
-      iconKey="moneyBag"
-      path={transaccionesPath}
-      isActive={isActive}
+      title="Cuentas"
+      iconKey="accountBalance"
+      onTitleClick={() => openSetup('cuentas')}
+      isActive={setupId === 'cuentas'}
     >
       <TransaccionesHubSummary />
     </CajaHubSectionCard>

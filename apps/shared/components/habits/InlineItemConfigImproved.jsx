@@ -26,6 +26,7 @@ import {
   TASK_FORM_PILL_BORDER_WIDTH,
   taskFormPillTextSx,
 } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '../../tipografia';
 
 
 
@@ -566,7 +567,7 @@ const InlineItemConfigImproved = ({
               minWidth: HABIT_CADENCE_TAB_COLUMN_MIN_WIDTH,
               py: 0.75,
               px: 1.5,
-              fontSize: '0.8125rem',
+              fontSize: FONT_SIZE.md,
               fontWeight: 600,
               textTransform: 'none',
               color: 'text.secondary',
@@ -595,7 +596,7 @@ const InlineItemConfigImproved = ({
                   onClick={() => handleConfigChange({ frecuencia: Math.max(1, configState.frecuencia - 1) })}
                 />
 
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', minWidth: 24, textAlign: 'center', fontSize: '1.1rem' }}>{configState.frecuencia}</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', minWidth: 24, textAlign: 'center', fontSize: FONT_SIZE.xl }}>{configState.frecuencia}</Typography>
 
                 <CadenceCircleToggle
                   label="+"

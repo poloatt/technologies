@@ -39,18 +39,11 @@ import {
   Remove as RemoveIcon,
   CheckCircle as CheckCircleIcon,
   Pending as PendingIcon,
-  HealthAndSafety,
-  Receipt,
-  DirectionsBus,
-  Fastfood,
-  LocalBar as Cocktail,
-  Checkroom as Shirt,
-  Devices,
-  MoreHoriz,
   Autorenew as AutorenewIcon,
 } from '@mui/icons-material';
 import { CommonDate } from '@shared/components/common/CommonDate';
 import clienteAxios from '@shared/config/axios';
+import { getCategoriasPorTipo } from '../transacciones/categoriasConstants';
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -109,18 +102,18 @@ const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
   '&.Mui-selected': {
     backgroundColor: props => {
       if (props.value === 'INGRESO') return 'rgba(90, 155, 95, 0.15)';
-      if (props.value === 'EGRESO') return 'rgba(177, 87, 87, 0.15)';
+      if (props.value === 'EGRESO') return alpha(theme.palette.error.main, 0.15);
       return 'inherit';
     },
     color: props => {
       if (props.value === 'INGRESO') return '#5a9b5f';
-      if (props.value === 'EGRESO') return '#b15757';
+      if (props.value === 'EGRESO') return theme.palette.error.main;
       return 'inherit';
     },
     '&:hover': {
       backgroundColor: props => {
         if (props.value === 'INGRESO') return 'rgba(90, 155, 95, 0.25)';
-        if (props.value === 'EGRESO') return 'rgba(177, 87, 87, 0.25)';
+        if (props.value === 'EGRESO') return alpha(theme.palette.error.main, 0.25);
         return 'inherit';
       }
     }
@@ -130,16 +123,7 @@ const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
   }
 }));
 
-const CATEGORIAS = [
-  { valor: 'Contabilidad y Facturas', icon: <Receipt sx={{ fontSize: 18 }} />, color: '#7bba7f' },
-  { valor: 'Comida y Mercado', icon: <Fastfood sx={{ fontSize: 18 }} />, color: '#ffb74d' },
-  { valor: 'Salud y Belleza', icon: <HealthAndSafety sx={{ fontSize: 18 }} />, color: '#ef5350' },
-  { valor: 'Ropa', icon: <Shirt sx={{ fontSize: 18 }} />, color: '#ba68c8' },
-  { valor: 'Fiesta', icon: <Cocktail sx={{ fontSize: 18 }} />, color: '#9575cd' },
-  { valor: 'Transporte', icon: <DirectionsBus sx={{ fontSize: 18 }} />, color: '#64b5f6' },
-  { valor: 'Tecnología', icon: <Devices sx={{ fontSize: 18 }} />, color: '#90a4ae' },
-  { valor: 'Otro', icon: <MoreHoriz sx={{ fontSize: 18 }} />, color: '#a1887f' }
-];
+const CATEGORIAS = getCategoriasPorTipo('EGRESO');
 
 const CategoryChip = styled(Chip)(({ theme }) => ({
   borderRadius: 0,
@@ -461,10 +445,12 @@ const TransaccionRecurrenteForm = ({
               },
               gap: 1
             }}>
-              {CATEGORIAS.map((categoria) => (
+              {CATEGORIAS.map((categoria) => {
+                const CatIcon = categoria.Icon;
+                return (
                 <CategoryChip
                   key={categoria.valor}
-                  icon={categoria.icon}
+                  icon={<CatIcon sx={{ fontSize: 18 }} />}
                   onClick={() => handleChange('categoria', categoria.valor)}
                   sx={{ 
                     '& .MuiChip-icon': {
@@ -479,7 +465,8 @@ const TransaccionRecurrenteForm = ({
                     }
                   }}
                 />
-              ))}
+                );
+              })}
             </Box>
           </Box>
 

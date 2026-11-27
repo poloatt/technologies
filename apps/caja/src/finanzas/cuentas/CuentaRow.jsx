@@ -1,12 +1,17 @@
 import React from 'react';
 import { Box, CircularProgress, Skeleton, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { cuentaDetailPath } from '../finanzasDeepLink';
+import { useCajaSetup } from '../../atta/useCajaSetup';
 import getCuentaTipoIcon from './getCuentaTipoIcon';
 import { getHubSubsectionSx } from '@shared/styles/hubSectionStyles';
 import { getHubListRowSx, hubLabelSx, hubValueSx } from '../../hub';
-import { CUENTA_HUB_ROW, getMonedaFromCuenta, saldoReportadoMercadoPago } from './cuentaConstants';
+import {
+  CUENTA_HUB_ROW,
+  getMonedaFromCuenta,
+  getMonedasFromCuenta,
+  isCuentaMultimoneda,
+  saldoReportadoMercadoPago,
+} from './cuentaConstants';
 import { useCuentaBalance } from './useCuentaBalance';
 
 function formatBalance(balance, showValues, loading, simbolo) {
@@ -33,19 +38,21 @@ export function CuentaRowSkeleton() {
   );
 }
 
-function CuentaRow({ cuenta, selected = false, onSelect, branchId = 'finanzas' }) {
-  const navigate = useNavigate();
+function CuentaRow({ cuenta, selected = false, onSelect }) {
+  const { openSetup } = useCajaSetup();
   const { showValues } = useValuesVisibility();
   const cuentaId = cuenta.id || cuenta._id;
-  const { balance, loading } = useCuentaBalance(cuentaId);
+  const { balance, balanceByMonedaId, loading } = useCuentaBalance(cuentaId);
   const saldoMp = saldoReportadoMercadoPago(cuenta);
   const saldo = saldoMp != null ? saldoMp : balance;
   const { simbolo, color } = getMonedaFromCuenta(cuenta);
+  const isMultimoneda = isCuentaMultimoneda(cuenta);
+  const monedasHabilitadas = isMultimoneda ? getMonedasFromCuenta(cuenta) : [];
 
   const handleClick = (e) => {
     e.stopPropagation();
     if (onSelect) onSelect(cuentaId);
-    else navigate(cuentaDetailPath(cuentaId, branchId));
+    else openSetup('cuentas', { cuentaId });
   };
 
   return (
@@ -82,22 +89,46 @@ function CuentaRow({ cuenta, selected = false, onSelect, branchId = 'finanzas' }
       <Typography variant="caption" noWrap sx={{ ...hubLabelSx, flex: 1, textTransform: 'none' }}>
         {cuenta.nombre}
       </Typography>
-      <Typography
-        variant="caption"
-        noWrap
-        sx={{
-          ...hubValueSx,
-          mt: 0,
-          color: saldo >= 0 ? color : 'error.main',
-          opacity: loading && saldoMp == null ? 0.5 : 1,
-          flexShrink: 0,
-        }}
-      >
-        {formatBalance(saldo, showValues, loading && saldoMp == null, simbolo)}
-        {loading && (
-          <CircularProgress size={8} thickness={4} sx={{ ml: 0.5, verticalAlign: 'middle' }} />
-        )}
-      </Typography>
+      {isMultimoneda && monedasHabilitadas.length > 0 ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {monedasHabilitadas.map((moneda) => {
+            const saldoMoneda = balanceByMonedaId[moneda.id] ?? 0;
+            return (
+              <Typography
+                key={moneda.id}
+                variant="caption"
+                noWrap
+                sx={{
+                  ...hubValueSx,
+                  mt: 0,
+                  color: saldoMoneda >= 0 ? moneda.color : 'error.main',
+                  opacity: loading ? 0.5 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                {formatBalance(saldoMoneda, showValues, loading, moneda.simbolo)}
+              </Typography>
+            );
+          })}
+        </Box>
+      ) : (
+        <Typography
+          variant="caption"
+          noWrap
+          sx={{
+            ...hubValueSx,
+            mt: 0,
+            color: saldo >= 0 ? color : 'error.main',
+            opacity: loading && saldoMp == null ? 0.5 : 1,
+            flexShrink: 0,
+          }}
+        >
+          {formatBalance(saldo, showValues, loading && saldoMp == null, simbolo)}
+          {loading && (
+            <CircularProgress size={8} thickness={4} sx={{ ml: 0.5, verticalAlign: 'middle' }} />
+          )}
+        </Typography>
+      )}
     </Box>
   );
 }

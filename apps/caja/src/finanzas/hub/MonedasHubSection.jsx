@@ -1,17 +1,13 @@
 import React, { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { useAPI } from '@shared/hooks/useAPI';
 import { useResponsive } from '@shared/hooks';
-import { isPathActive } from '@shared/navigation/appNavResolver';
 import { CajaHubSectionCard } from '../../hub';
 import MonedaTile from '../monedas/MonedaTile';
 import MonedasCarousel, { MonedaTileSkeleton } from '../monedas/MonedasCarousel';
 import { sortMonedasByOrden } from '../monedas/monedaSortUtils';
 import { MONEDA_TILE } from '../monedas/monedaConstants';
-import { monedaDetailPath } from '../finanzasDeepLink';
-
-const MONEDAS_PATH = '/finanzas/monedas';
+import { useCajaSetup } from '../../atta/useCajaSetup';
 
 /** Bloque compacto Monedas en el hub Finanzas. */
 const hubMonedaRowSx = {
@@ -23,10 +19,9 @@ const hubMonedaRowSx = {
 };
 
 export default function MonedasHubSection() {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { setupId, openSetup } = useCajaSetup();
   const { isMobile } = useResponsive();
-  const isActive = isPathActive(pathname, MONEDAS_PATH);
+  const isActive = setupId === 'monedas';
   const { data, loading } = useAPI('/api/monedas', {
     enableCache: true,
     cacheDuration: 60000,
@@ -42,7 +37,7 @@ export default function MonedasHubSection() {
     <CajaHubSectionCard
       title="Monedas"
       iconKey="currency"
-      path={MONEDAS_PATH}
+      onTitleClick={() => openSetup('monedas')}
       isActive={isActive}
     >
       {loading ? (
@@ -66,7 +61,7 @@ export default function MonedasHubSection() {
               key={moneda.id || moneda._id}
               moneda={moneda}
               variant="compact"
-              onSelect={(id) => navigate(monedaDetailPath(id))}
+              onSelect={() => openSetup('monedas')}
             />
           ))}
         </MonedasCarousel>
@@ -78,7 +73,7 @@ export default function MonedasHubSection() {
               moneda={moneda}
               variant="compact"
               fillRow
-              onSelect={(id) => navigate(monedaDetailPath(id))}
+              onSelect={() => openSetup('monedas')}
             />
           ))}
         </Box>

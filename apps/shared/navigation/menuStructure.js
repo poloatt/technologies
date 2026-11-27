@@ -44,7 +44,7 @@ export const modulos = [
           { id: 'inversiones', title: 'Inversiones', path: '/finanzas/inversiones', icon: 'inversiones' },
           { id: 'dolares', title: 'Dólares', path: '/finanzas/dolares', icon: 'dolares' },
           { id: 'creditos', title: 'Créditos', path: '/finanzas/creditos', icon: 'creditos' },
-          { id: 'deudores', title: 'Deudores', path: '/finanzas/deudores', icon: 'personSearch', isUnderConstruction: true },
+          { id: 'contactos', title: 'Contactos', path: '/finanzas/contactos', icon: 'personSearch' },
         ],
       },
       {

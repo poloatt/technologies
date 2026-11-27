@@ -1,5 +1,6 @@
 import React from 'react';
 import { Typography, Tooltip } from '@mui/material';
+import { FONT_SIZE } from '../../tipografia';
 
 /**
  * Marca compacta de origen Google en filas/eventos de tarea (no hábitos).
@@ -34,7 +35,7 @@ export function GoogleTaskOriginMark({ tarea, sx }) {
           px: 0.4,
           py: 0.05,
           borderRadius: 0.5,
-          fontSize: '0.55rem',
+          fontSize: FONT_SIZE['2xs'],
           fontWeight: 700,
           letterSpacing: 0.2,
           lineHeight: 1.4,

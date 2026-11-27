@@ -17,6 +17,7 @@ import {
   VisibilityOff as HideValuesIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-hot-toast';
+import { FONT_SIZE } from '../tipografia';
 
 export function Login() {
   const { login, loginWithGoogle } = useAuth();
@@ -242,7 +243,7 @@ export function Login() {
                     width: 24, 
                     height: 24, 
                     bgcolor: 'rgba(255, 255, 255, 0.2)',
-                    fontSize: '0.75rem',
+                    fontSize: FONT_SIZE.sm,
                     fontWeight: 'bold',
                     color: 'rgba(255, 255, 255, 0.9)'
                   }}
@@ -284,11 +285,11 @@ export function Login() {
               'Conectando...'
             ) : lastGoogleUser ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, textAlign: 'left' }}>
-                <Typography variant="body2" sx={{ fontSize: '0.875rem', lineHeight: 1.2, fontWeight: 500 }}>
+                <Typography variant="body2" sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.2, fontWeight: 500 }}>
                   Continuar como {friendlyLastGoogleName}
                 </Typography>
                 {lastGoogleUser.email && (
-                  <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.6, lineHeight: 1, mt: 0.25 }}>
+                  <Typography variant="caption" sx={{ fontSize: FONT_SIZE.xs, opacity: 0.6, lineHeight: 1, mt: 0.25 }}>
                     {lastGoogleUser.email}
                   </Typography>
                 )}
@@ -307,7 +308,7 @@ export function Login() {
                 onClick={() => handleGoogleLogin({ forceSelectAccount: true })}
                 sx={{
                   textTransform: 'none',
-                  fontSize: '0.75rem',
+                  fontSize: FONT_SIZE.sm,
                   color: 'rgba(255, 255, 255, 0.6)',
                   '&:hover': {
                     color: 'rgba(255, 255, 255, 0.9)',

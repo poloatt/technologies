@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { lazy, Suspense, useEffect, useState, useCallback } from 'react';
 import { Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { CommonForm } from '@shared/components/common';
@@ -6,9 +6,11 @@ import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
 import { useAPI } from '@shared/hooks/useAPI';
 import { FinanzasSectionNav } from '../finanzas';
-import FinanzasHubPeriodBar from '../finanzas/hub/FinanzasHubPeriodBar';
 import { FinanzasHubPeriodProvider } from '../finanzas/hub/finanzasHubPeriod';
+import FinanzasHubPeriodBar from '../finanzas/hub/FinanzasHubPeriodBar';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
+
+const TransaccionForm = lazy(() => import('../finanzas/transacciones/TransaccionForm'));
 
 export default function Finanzas() {
   const navigate = useNavigate();
@@ -84,11 +86,21 @@ export default function Finanzas() {
   }, [enqueueSnackbar]);
 
   const handleSubmitTransaccion = useCallback(async (data) => {
-    await clienteAxios.post('/api/transacciones', data);
-    enqueueSnackbar('Transacción creada exitosamente', { variant: 'success' });
+    const cuentaId = data.cuenta?._id || data.cuenta?.id || data.cuenta;
+    await clienteAxios.post('/api/transacciones', {
+      descripcion: data.descripcion,
+      monto: parseFloat(data.monto),
+      fecha: data.fecha,
+      categoria: data.categoria,
+      estado: data.estado || 'PAGADO',
+      cuenta: cuentaId,
+      tipo: data.tipo || 'INGRESO',
+      ...(data.moneda ? { moneda: data.moneda } : {}),
+      ...(data.contacto ? { contacto: data.contacto } : {}),
+    });
     setOpenTransaccion(false);
     window.dispatchEvent(new Event('transaccionesRefreshed'));
-  }, [enqueueSnackbar]);
+  }, []);
 
   useEffect(() => {
     const handleHeaderAdd = (e) => {
@@ -127,15 +139,17 @@ export default function Finanzas() {
         initialData={{}}
         isEditing={false}
       />
-      <CommonForm
-        open={openTransaccion}
-        onClose={() => setOpenTransaccion(false)}
-        onSubmit={handleSubmitTransaccion}
-        title="Nueva Transacción"
-        fields={formFieldsTransaccion}
-        initialData={{}}
-        isEditing={false}
-      />
+      {openTransaccion && (
+        <Suspense fallback={null}>
+          <TransaccionForm
+            open={openTransaccion}
+            onClose={() => setOpenTransaccion(false)}
+            onSubmit={handleSubmitTransaccion}
+            initialData={{}}
+            isEditing={false}
+          />
+        </Suspense>
+      )}
 
       <FinanzasHubPeriodProvider>
         <FinanzasHubPeriodBar />

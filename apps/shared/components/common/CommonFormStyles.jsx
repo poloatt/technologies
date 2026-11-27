@@ -1,6 +1,7 @@
 import { styled, alpha } from '../../utils/materialImports';
 import { Dialog, TextField, Box, Chip, ToggleButton, TableContainer, IconButton } from '../../utils/materialImports';
 import { FORM_HEIGHTS } from '../../config/uiConstants';
+import { FONT_SIZE } from '../../tipografia';
 
 export const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -86,7 +87,7 @@ export const StyledToggleButton = styled(ToggleButton)(({ theme, customcolor }) 
     transition: 'color 0.2s ease'
   },
   '& .MuiTypography-root': {
-    fontSize: '0.875rem',
+    fontSize: FONT_SIZE.base,
     transition: 'all 0.2s ease',
     marginLeft: 0
   }
@@ -142,12 +143,12 @@ export const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
   '& .MuiTableCell-root': {
     borderColor: theme.palette.divider,
     padding: theme.spacing(1, 1.5),
-    fontSize: '0.875rem'
+    fontSize: FONT_SIZE.base
   },
   '& .MuiTableHead-root .MuiTableCell-root': {
     backgroundColor: theme.palette.background.paper,
     fontWeight: 600,
-    fontSize: '0.8rem',
+    fontSize: FONT_SIZE.md,
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   }
@@ -168,7 +169,7 @@ export const StyledCuotasTextField = styled(TextField)(({ theme }) => ({
     }
   },
   '& .MuiInputBase-input': {
-    fontSize: '0.875rem',
+    fontSize: FONT_SIZE.base,
     padding: theme.spacing(0.5, 1)
   }
 }));
@@ -176,7 +177,7 @@ export const StyledCuotasTextField = styled(TextField)(({ theme }) => ({
 export const StyledCuotasChip = styled(Chip)(({ theme, customcolor }) => ({
   borderRadius: 0,
   height: 24,
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   backgroundColor: customcolor ? alpha(customcolor, 0.1) : 'transparent',
   color: customcolor || theme.palette.text.secondary,
   border: customcolor ? `1px solid ${customcolor}` : `1px solid ${theme.palette.divider}`

@@ -7,6 +7,7 @@ const PROPIEDAD_HUB = {
   blockRadius: HUB_SUBSECTION.borderRadius,
 };
 import { tareaFormGooglePaperSx } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export { tareaFormGooglePaperSx };
 
@@ -59,7 +60,7 @@ export const propiedadDetailSectionHeaderSx = {
 
 export const propiedadDetailSectionTitleSx = {
   flex: 1,
-  fontSize: '0.875rem',
+  fontSize: FONT_SIZE.base,
   fontWeight: 500,
   lineHeight: 1.45,
 };
@@ -109,14 +110,14 @@ export const propiedadDetailRowIconSx = {
 };
 
 export const propiedadDetailPrimaryTextSx = {
-  fontSize: '0.875rem',
+  fontSize: FONT_SIZE.base,
   fontWeight: 500,
   lineHeight: 1.45,
   color: 'text.primary',
 };
 
 export const propiedadDetailSecondaryTextSx = {
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   lineHeight: 1.35,
   color: 'text.secondary',
   mt: 0.25,
@@ -124,7 +125,7 @@ export const propiedadDetailSecondaryTextSx = {
 
 export const propiedadDetailEmptyTextSx = {
   display: 'block',
-  fontSize: '0.8125rem',
+  fontSize: FONT_SIZE.md,
   color: 'text.disabled',
   py: 0.5,
 };
@@ -135,7 +136,7 @@ export function getPropiedadDetailEstadoPillSx(estadoColor) {
 }
 
 export const propiedadDetailHeaderTitleSx = {
-  fontSize: '1.375rem',
+  fontSize: FONT_SIZE['3xl'],
   fontWeight: 400,
   lineHeight: 1.35,
   color: 'text.primary',
@@ -151,7 +152,7 @@ export const propiedadDetailHeaderMetaSx = {
 };
 
 export const propiedadDetailHeaderSubtitleSx = {
-  fontSize: '0.8125rem',
+  fontSize: FONT_SIZE.md,
   lineHeight: 1.35,
   color: 'text.secondary',
 };
@@ -179,7 +180,7 @@ export const propiedadDetailCloseButtonSx = {
   py: 0.625,
   minWidth: 72,
   fontWeight: 500,
-  fontSize: '0.875rem',
+  fontSize: FONT_SIZE.base,
   color: 'text.secondary',
   '&:hover': { bgcolor: 'action.hover' },
 };
@@ -193,7 +194,7 @@ export const propiedadDetailListRowSx = {
 };
 
 export const propiedadDetailLinkTextSx = {
-  fontSize: '0.8125rem',
+  fontSize: FONT_SIZE.md,
   color: 'primary.main',
   cursor: 'pointer',
   mt: 0.5,

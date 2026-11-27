@@ -15,6 +15,7 @@ import {
   taskEventTimeSx,
 } from '../../styles/taskListStyles';
 import { GoogleTaskOriginMark } from './GoogleTaskOriginMark';
+import { FONT_SIZE } from '../../tipografia';
 
 /**
  * Bloque visual estilo Google Calendar:
@@ -144,7 +145,7 @@ export default function TaskEventBlock({
             >
               {task.titulo}
               {(task.esRecurrente || task.serieId || task.virtual) && (
-                <Typography component="span" sx={{ ml: 0.5, opacity: 0.8, fontSize: '0.55rem' }}>
+                <Typography component="span" sx={{ ml: 0.5, opacity: 0.8, fontSize: FONT_SIZE['2xs'] }}>
                   ↻
                 </Typography>
               )}
@@ -178,7 +179,7 @@ export default function TaskEventBlock({
               </Typography>
             ) : null}
             {(task.esRecurrente || task.serieId || task.virtual) && (
-              <Typography component="span" sx={{ ml: 0.5, opacity: 0.7, fontSize: '0.55rem' }}>
+              <Typography component="span" sx={{ ml: 0.5, opacity: 0.7, fontSize: FONT_SIZE['2xs'] }}>
                 ↻
               </Typography>
             )}

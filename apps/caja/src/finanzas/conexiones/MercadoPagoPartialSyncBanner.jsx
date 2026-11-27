@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AlertTitle, Button, Box } from '@mui/material';
 import { Upload as UploadIcon } from '@mui/icons-material';
 import clienteAxios from '@shared/config/axios';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /**
  * Banner global cuando alguna conexión MP tiene sync parcial (settlement falló o pendiente).
@@ -103,20 +104,20 @@ export default function MercadoPagoPartialSyncBanner({ onImportCsv, conexionId: 
       </AlertTitle>
       {errorMsg}
       {p2pVacia && (
-        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: FONT_SIZE.base }}>
           La sync unificada busca transferencias en payments y en el reporte oficial de retiros
           (activities_withdraw). Si sigue vacío tras re-sync, el token o la app MP aún no expone esos
           movimientos.
         </Box>
       )}
       {showGap && (
-        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: FONT_SIZE.base }}>
           Diferencia saldo MP vs flujo registrado: {gap > 0 ? '+' : ''}
           {gap.toLocaleString('es-AR')}.
         </Box>
       )}
       {conexion?.mercadopago?.reportePendiente && (
-        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+        <Box component="span" display="block" sx={{ mt: 0.5, fontSize: FONT_SIZE.base }}>
           Hay un reporte en generación; la próxima sync puede completarlo automáticamente.
         </Box>
       )}

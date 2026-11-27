@@ -6,6 +6,7 @@ import useResponsive from '../../hooks/useResponsive';
 import CloseIcon from '@mui/icons-material/Close';
 import CommonActions from './CommonActions';
 import { CollapseIconButton } from './SystemButtons';
+import { FONT_SIZE } from '../../tipografia';
 
 export const EstadoChip = ({ estado, tipo = 'PROPIEDAD', sx = {} }) => (
   <Box
@@ -15,7 +16,7 @@ export const EstadoChip = ({ estado, tipo = 'PROPIEDAD', sx = {} }) => (
       gap: 0.5,
       px: 1,
       py: 0.5,
-      fontSize: '0.75rem',
+      fontSize: FONT_SIZE.sm,
       color: getEstadoColor(estado, tipo),
       bgcolor: 'transparent',
       borderRadius: 0,
@@ -58,7 +59,7 @@ export const GeometricModalHeader = ({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         {Icon && <Icon sx={{ fontSize: 32, color: 'primary.main' }} />}
         <Box>
-          <Typography variant="h6" sx={{ fontWeight: 500, fontSize: '1.05rem', color: theme.palette.text.primary }}>
+          <Typography variant="h6" sx={{ fontWeight: 500, fontSize: FONT_SIZE.lg, color: theme.palette.text.primary }}>
             {title}
           </Typography>
           {children}
@@ -204,7 +205,7 @@ export const CollapsibleSection = ({
       <StyledAccordionSummary expandIcon={<CollapseIconButton expanded={expanded} />}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {Icon && <Icon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />}
-          <Typography variant="h6" sx={{ fontSize: '1rem' }}>{title}</Typography>
+          <Typography variant="h6" sx={{ fontSize: FONT_SIZE.lg }}>{title}</Typography>
         </Box>
         {actions && <Box sx={{ ml: 2 }}>{actions}</Box>}
       </StyledAccordionSummary>

@@ -2,11 +2,14 @@ import { useMemo } from 'react';
 import { Box, MenuItem, Select, alpha, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { useAPI } from '@shared/hooks/useAPI';
-import { SUBTLE_STROKE_COLOR } from '@shared/styles/subtleStrokeStyles';
 import { hubLabelSx } from '../../hub';
+import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
+import { cantidadMonedasCuenta, colorSaldoPositivo } from '../cuentas/tiposCuentaSaldos';
 import {
   formatDateKey,
   formatMonto,
+  formatUsdMonto,
+  getCreditosPeriodRange,
   getPeriodAnchorYear,
   getPeriodBuckets,
   getPeriodMode,
@@ -20,6 +23,7 @@ import {
   sumBucketsNeto,
   yearPresetId,
 } from './transaccionesPeriodUtils';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const MODE_OPTIONS = [
   { id: 'year', label: 'Anual', short: 'Anual' },
@@ -36,11 +40,11 @@ const SKELETON_HEIGHTS = [0.5, 0.8, 0.35, 0.65, 0.9, 0.45, 0.7, 0.3, 0.6, 0.85, 
 /** Ancho máximo por columna: las barras se reparten el ancho sin estirarse de más. */
 const COLUMN_MAX = { year: 64, quarter: 84, month: 42 };
 
-/** Mismo lenguaje que los chips del hub: borde sutil, radio 1.5, sin sombra. */
+/** Mismo lenguaje que las tarjetas del hub: esquinas rectas, sin sombra. */
 const controlSx = {
   border: 0,
   outline: 'none',
-  borderRadius: 1.5,
+  borderRadius: 0,
 };
 
 /** Id canónico del corte elegido (los ids históricos `q2` o `month` se normalizan). */
@@ -131,14 +135,23 @@ function YearStepper({ year, canNext, onPrev, onNext }) {
 }
 
 /** Netos por columna: una sola consulta que cubre todas las barras. */
-function useBucketNetos(buckets, cuentaId) {
+function useBucketNetos(buckets, cuentaId, ledger, kinds, yieldSide) {
   const fechaInicio = buckets[0]?.fechaInicio;
   const fechaFin = buckets[buckets.length - 1]?.fechaFin;
+  const skipRequest = kinds === 'none';
   const params = useMemo(
-    () => ({ fechaInicio, fechaFin, estado: 'PAGADO', ...(cuentaId ? { cuenta: cuentaId } : {}) }),
-    [fechaInicio, fechaFin, cuentaId],
+    () => ({
+      fechaInicio,
+      fechaFin,
+      estado: 'PAGADO',
+      ...(cuentaId ? { cuenta: cuentaId } : {}),
+      ...(ledger ? { ledger } : {}),
+      ...(kinds ? { kinds } : {}),
+      ...(yieldSide ? { yieldSide } : {}),
+    }),
+    [fechaInicio, fechaFin, cuentaId, ledger, kinds, yieldSide],
   );
-  const { data, error } = useAPI('/api/transacciones/stats', {
+  const { data, error } = useAPI(skipRequest ? null : '/api/transacciones/stats', {
     params,
     enableCache: true,
     cacheDuration: 60000,
@@ -147,27 +160,56 @@ function useBucketNetos(buckets, cuentaId) {
   const matches = !!data
     && data.fechaInicio === fechaInicio
     && data.fechaFin === fechaFin
-    && (data.ledger || 'flujo') === 'flujo'
-    && !data.kinds
+    && (data.ledger || 'flujo') === (ledger || 'flujo')
+    && (data.kinds || null) === (kinds || null)
+    && (data.yieldSide || null) === (yieldSide || null)
     && (data.cuenta || null) === (cuentaId || null);
 
   return useMemo(() => {
-    if (!matches) return { loading: !error, netos: null, moneda: null };
+    if (skipRequest) {
+      return {
+        loading: false,
+        netos: buckets.map(() => 0),
+        moneda: null,
+        monedasConMovimiento: ledger === 'dolares' ? 1 : 0,
+      };
+    }
+    if (!matches) return { loading: !error, netos: null, moneda: null, monedasConMovimiento: 0 };
+    if (ledger === 'dolares') {
+      return {
+        loading: false,
+        netos: sumBucketsNeto(data.porDiaUsd, buckets),
+        moneda: null,
+        monedasConMovimiento: 1,
+      };
+    }
     // La moneda con más movimiento, la misma que muestra el resumen por defecto.
     const moneda = [...(data.porMoneda ?? [])]
       .sort((a, b) => (b.ingresos + b.egresos) - (a.ingresos + a.egresos))[0] || null;
-    return { loading: false, netos: sumBucketsNeto(moneda?.porDia, buckets), moneda };
-  }, [matches, data, buckets, error]);
+    return {
+      loading: false,
+      netos: sumBucketsNeto(moneda?.porDia, buckets),
+      moneda,
+      monedasConMovimiento: data.porMoneda?.length ?? 0,
+    };
+  }, [skipRequest, matches, data, buckets, error, ledger]);
 }
 
-function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
+function PeriodBars({ mode, year, preset, onChange, cuentaId, positiveColor, ledger, kinds, yieldSide }) {
   const theme = useTheme();
   const { showValues } = useValuesVisibility();
   const buckets = useMemo(() => getPeriodBuckets(mode, year), [mode, year]);
-  const { loading, netos, moneda } = useBucketNetos(buckets, cuentaId);
+  const { loading, netos, moneda, monedasConMovimiento } = useBucketNetos(
+    buckets,
+    cuentaId,
+    ledger,
+    kinds,
+    yieldSide,
+  );
+  const { cuenta } = useCuentaMostrada(cuentaId);
 
   const selectedId = selectedBucketId(preset);
-  const range = getPeriodRange(preset);
+  const range = ledger === 'creditos' ? getCreditosPeriodRange(preset) : getPeriodRange(preset);
   const todayKey = formatDateKey(new Date());
   const isSelected = (bucket) => (
     selectedId
@@ -182,8 +224,18 @@ function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
   const scale = total > 0 ? BAR_AREA / total : 0;
   const zeroY = maxNeg * scale;
   const simbolo = moneda?.simbolo || '$';
-  // Mismos colores que el resto de Caja: positivo en el color de la moneda, negativo en rojo.
-  const positive = moneda?.color || DEFAULT_ACCENT;
+  // Positivo en el gris de la app; si hay una sola moneda, en el color que el usuario eligió para ella.
+  // Con `ledger` (p. ej. inversiones) las monedas son las que tiene ese libro. Sin libro, las
+  // de la cuenta si se conoce, o las que tienen movimientos. Un `positiveColor` explícito
+  // (p. ej. la página de dólares) tiene prioridad. Negativo en rojo.
+  const cuentaDelGrafico = cuentaId && cuenta && String(cuenta.id || cuenta._id) === String(cuentaId)
+    ? cuenta
+    : null;
+  const cantidadMonedas = ledger
+    ? monedasConMovimiento
+    : (cantidadMonedasCuenta(cuentaDelGrafico) ?? monedasConMovimiento);
+  const monedaColor = (!ledger && cuentaDelGrafico?.moneda?.color) || moneda?.color || DEFAULT_ACCENT;
+  const positive = positiveColor || colorSaldoPositivo(cantidadMonedas, monedaColor, theme.palette.text.secondary);
   const negative = theme.palette.error.main;
   const baseline = alpha(theme.palette.text.secondary, 0.3);
   const groupLabel = { year: 'Años', quarter: 'Trimestres', month: 'Meses' }[mode] || 'Meses';
@@ -198,7 +250,7 @@ function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
         display: 'flex',
         justifyContent: 'center',
         gap: 0.25,
-        mt: 1,
+        mt: 0.75,
         mx: 'auto',
         width: '100%',
         maxWidth: columnMax * buckets.length,
@@ -210,8 +262,11 @@ function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
         const future = bucket.fechaInicio > todayKey;
         const current = bucket.fechaInicio <= todayKey && todayKey <= bucket.fechaFin;
         const barHeight = netos && neto !== 0 ? Math.max(Math.abs(neto) * scale, 3) : 0;
+        const formattedNeto = ledger === 'dolares'
+          ? formatUsdMonto(neto, showValues)
+          : formatMonto(neto, simbolo, showValues);
         const title = netos
-          ? `${bucket.label} · ${formatMonto(neto, simbolo, showValues)}`
+          ? `${bucket.label} · ${formattedNeto}`
           : bucket.label;
         const skeletonHeight = SKELETON_HEIGHTS[index % SKELETON_HEIGHTS.length] * BAR_AREA;
         return (
@@ -237,8 +292,8 @@ function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
               pt: 0.75,
               pb: 0.5,
               border: '1px solid',
-              borderColor: selected ? SUBTLE_STROKE_COLOR : 'transparent',
-              borderRadius: 1.5,
+              borderColor: selected ? 'divider' : 'transparent',
+              borderRadius: 0,
               bgcolor: 'transparent',
               cursor: 'pointer',
               font: 'inherit',
@@ -298,7 +353,7 @@ function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
               sx={{
                 ...hubLabelSx,
                 color: future && !selected ? 'text.disabled' : 'inherit',
-                fontSize: '0.625rem',
+                fontSize: FONT_SIZE['2xs'],
                 fontWeight: selected ? 700 : 500,
                 mt: 0.75,
                 textTransform: mode === 'month' ? 'lowercase' : 'uppercase',
@@ -329,7 +384,17 @@ function PeriodBars({ mode, year, preset, onChange, cuentaId }) {
  * un gráfico de barras con el neto de cada corte del tipo elegido. Tocar una barra elige ese corte.
  * `modes` limita los tipos ofrecidos; `cuentaId` acota las barras a esa cuenta.
  */
-export default function PeriodPicker({ preset, onChange, trailing = null, modes = null, cuentaId }) {
+export default function PeriodPicker({
+  preset,
+  onChange,
+  trailing = null,
+  modes = null,
+  cuentaId,
+  positiveColor,
+  ledger = null,
+  kinds = null,
+  yieldSide = null,
+}) {
   const options = modes ? MODE_OPTIONS.filter((option) => modes.includes(option.id)) : MODE_OPTIONS;
   const mode = getPeriodMode(preset);
   const year = getPeriodAnchorYear(preset);
@@ -363,7 +428,7 @@ export default function PeriodPicker({ preset, onChange, trailing = null, modes 
             PaperProps: {
               sx: {
                 mt: 0.5,
-                borderRadius: 1.5,
+                borderRadius: 0,
                 border: '1px solid',
                 borderColor: 'divider',
                 backgroundImage: 'none',
@@ -387,11 +452,11 @@ export default function PeriodPicker({ preset, onChange, trailing = null, modes 
               minHeight: 0,
               height: 26,
               py: 0,
-              pl: 1,
-              pr: '24px !important',
+              pl: 0,
+              pr: '20px !important',
               '&:focus': { bgcolor: 'transparent' },
             },
-            '& .MuiSelect-icon': { right: 4, fontSize: '1.125rem', color: 'text.secondary' },
+            '& .MuiSelect-icon': { right: 0, fontSize: '1.125rem', color: 'text.secondary' },
           }}
         >
           {options.map((option) => (
@@ -399,7 +464,7 @@ export default function PeriodPicker({ preset, onChange, trailing = null, modes 
               key={option.id}
               value={option.id}
               divider={option.id === 'month'}
-              sx={{ fontSize: '0.8125rem', minHeight: 36 }}
+              sx={{ fontSize: FONT_SIZE.md, minHeight: 36 }}
             >
               {option.label}
             </MenuItem>
@@ -417,7 +482,17 @@ export default function PeriodPicker({ preset, onChange, trailing = null, modes 
         )}
         {trailing && <Box sx={{ gridColumn: 3, justifySelf: 'end', minWidth: 0 }}>{trailing}</Box>}
       </Box>
-      <PeriodBars mode={chartMode} year={year} preset={preset} onChange={onChange} cuentaId={cuentaId} />
+      <PeriodBars
+        mode={chartMode}
+        year={year}
+        preset={preset}
+        onChange={onChange}
+        cuentaId={cuentaId}
+        positiveColor={positiveColor}
+        ledger={ledger}
+        kinds={kinds}
+        yieldSide={yieldSide}
+      />
     </Box>
   );
 }

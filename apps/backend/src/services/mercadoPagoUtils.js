@@ -1445,6 +1445,59 @@ export function applyYieldSideFilter(query, side) {
   query.$and.push({ $or: [notYield, yieldMatch] });
 }
 
+/**
+ * ID de operación del Marketplace de inversiones (`point_of_interaction.transaction_data.operation_id`).
+ * MP emite dos pagos distintos por una misma suscripción a FCI (la orden inicial y la captura
+ * al cierre del fondo) que comparten exactamente este `operation_id`.
+ */
+export function investmentOperationIdDePago(pago) {
+  if (!pago || typeof pago !== 'object') return null;
+  const opType = String(pago.operation_type || '').toLowerCase();
+  const poiType = String(pago.point_of_interaction?.type || '').toUpperCase();
+  if (opType !== 'investment' && poiType !== 'INVESTMENT') return null;
+  const opId = pago.point_of_interaction?.transaction_data?.operation_id;
+  return opId ? String(opId).trim() : null;
+}
+
+/**
+ * Deduplica pagos de inversión que comparten `operation_id`.
+ * Conserva el pago aprobado más antiguo (el que coincide con el settlement_report) y devuelve
+ * los IDs descartados por cada pago canónico para limpiar copias ya guardadas en la base.
+ */
+export function deduplicarPagosInversionMp(pagos = []) {
+  const porOp = new Map();
+  for (const pago of pagos || []) {
+    const opId = investmentOperationIdDePago(pago);
+    if (!opId) continue;
+    if (!porOp.has(opId)) porOp.set(opId, []);
+    porOp.get(opId).push(pago);
+  }
+
+  const descartados = new Set();
+  const duplicadosPorCanonico = new Map();
+
+  for (const grupo of porOp.values()) {
+    if (grupo.length < 2) continue;
+    const ordenados = [...grupo].sort((a, b) => {
+      const aAp = a.status === 'approved' ? 0 : 1;
+      const bAp = b.status === 'approved' ? 0 : 1;
+      if (aAp !== bAp) return aAp - bAp;
+      const tA = Date.parse(a.date_created) || Number.MAX_SAFE_INTEGER;
+      const tB = Date.parse(b.date_created) || Number.MAX_SAFE_INTEGER;
+      if (tA !== tB) return tA - tB;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    const [canonico, ...extras] = ordenados;
+    const canonicoId = String(canonico.id);
+    const extraIds = extras.map((e) => String(e.id)).filter((id) => id && id !== canonicoId);
+    for (const id of extraIds) descartados.add(id);
+    if (extraIds.length) duplicadosPorCanonico.set(canonicoId, extraIds);
+  }
+
+  const filtrados = (pagos || []).filter((p) => !descartados.has(String(p?.id)));
+  return { pagos: filtrados, duplicadosPorCanonico };
+}
+
 /** Suma montos de un grupo de kinds. Rendimiento resta los egresos (pérdidas). */
 export function acumularBucketInversiones(kind, tipo, monto, yieldSide) {
   const amount = Number(monto) || 0;
@@ -1556,6 +1609,68 @@ export function resultadoFci({
     ? (Number(rendimientosReserva) || 0) + (Number(rendimientosInversion) || 0)
     : (Number(rendimientos) || 0);
   return reserva + inversion + rendimiento;
+}
+
+/**
+ * Serie diaria en USD para el libro dólares (`[{ fecha, ingresos, egresos }]`).
+ * `ingresos` = comprado + recibido + rendimientos; `egresos` = vendido + enviado + pagos.
+ */
+export function construirPorDiaDolares(rows = []) {
+  const byDay = new Map();
+  for (const row of rows) {
+    const fecha = row?._id?.fecha;
+    if (!fecha) continue;
+    const dolares = acumularBucketDolares(
+      row._id.kind,
+      row.total,
+      row.usd,
+      row.face,
+      row._id.compraventa === true
+    );
+    const ingresos = (dolares.usdComprado || 0) + (dolares.usdRecibido || 0) + (dolares.usdRendimientos || 0);
+    const egresos = (dolares.usdVendido || 0) + (dolares.usdEnviado || 0) + (dolares.usdPagado || 0);
+    if (!ingresos && !egresos) continue;
+    if (!byDay.has(fecha)) byDay.set(fecha, { fecha, ingresos: 0, egresos: 0 });
+    const day = byDay.get(fecha);
+    day.ingresos += ingresos;
+    day.egresos += egresos;
+  }
+  return [...byDay.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+/**
+ * Serie diaria del libro inversiones por moneda (`{ [monedaId]: [{ fecha, ingresos, egresos }] }`).
+ * Usa el signo del libro inversiones (`resultadoFci`): aportes, reservas y rendimientos positivos
+ * suman (`ingresos`); rescates, pagos desde reserva y pérdidas restan (`egresos`).
+ */
+export function construirPorDiaInversiones(rows = []) {
+  const byMoneda = new Map();
+  for (const row of rows) {
+    const fecha = row?._id?.fecha;
+    if (!fecha) continue;
+    const bucket = acumularBucketInversiones(
+      row._id.kind,
+      row._id.tipo,
+      row.total,
+      row._id.yieldSide
+    );
+    const rend = (bucket.rendimientosReserva || 0) + (bucket.rendimientosInversion || 0);
+    const ingresos = (bucket.enviado || 0) + (bucket.ingresado || 0) + (rend > 0 ? rend : 0);
+    const egresos = (bucket.rescatado || 0) + (bucket.rescatadoInversion || 0) + (rend < 0 ? -rend : 0);
+    if (!ingresos && !egresos) continue;
+    const monedaId = row._id.moneda?.toString?.() || row._id.moneda || 'sin-moneda';
+    if (!byMoneda.has(monedaId)) byMoneda.set(monedaId, new Map());
+    const days = byMoneda.get(monedaId);
+    if (!days.has(fecha)) days.set(fecha, { fecha, ingresos: 0, egresos: 0 });
+    const day = days.get(fecha);
+    day.ingresos += ingresos;
+    day.egresos += egresos;
+  }
+  const result = {};
+  for (const [monedaId, days] of byMoneda.entries()) {
+    result[monedaId] = [...days.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  }
+  return result;
 }
 
 /** Fuentes de texto del rendimiento, en el mismo orden que `YIELD_SIDE_FIELDS`. */
@@ -1888,6 +2003,56 @@ function startOfArDay(date) {
  * Si llega un `pendingRange` (tramo pendiente anterior), lo reintenta con sus mismas fechas.
  * Null cuando el objetivo ya está adentro de lo cubierto.
  */
+/** Días sin una sola salida a CBU, con entradas bancarias en el medio, para sospechar un hueco. */
+export const HUECO_RETIROS_MIN_DIAS = 45;
+
+function mismoTramo(a, b) {
+  return a?.beginDate && b?.beginDate
+    && new Date(a.beginDate).getTime() === new Date(b.beginDate).getTime()
+    && new Date(a.endDate).getTime() === new Date(b.endDate).getTime();
+}
+
+/**
+ * Tramos ya cubiertos que probablemente se importaron sin retiros (CVU→CBU): entre dos
+ * salidas bancarias pasan más de `minDias` y en el medio sí entraron transferencias.
+ * Pasa cuando un CSV reutilizado no traía `include_withdraw`. Cada hueco se parte en
+ * tramos iguales de hasta `chunkDays` (lo máximo que arma MP) y se omiten los ya `revisados`.
+ * movimientos: [{ fecha, tipo: 'INGRESO' | 'EGRESO' }] de transferencias bancarias.
+ */
+export function tramosSinRetiros(movimientos = [], {
+  minDias = HUECO_RETIROS_MIN_DIAS,
+  chunkDays = HISTORY_CHUNK_DAYS,
+  revisados = [],
+} = {}) {
+  const movs = (movimientos || [])
+    .map((m) => ({ t: new Date(m.fecha).getTime(), tipo: m.tipo }))
+    .filter((m) => Number.isFinite(m.t))
+    .sort((a, b) => a.t - b.t);
+  const salidas = movs.filter((m) => m.tipo === 'EGRESO').map((m) => m.t);
+  const tramos = [];
+  for (let i = 1; i < salidas.length; i += 1) {
+    const desde = salidas[i - 1];
+    const hasta = salidas[i];
+    if (hasta - desde < minDias * HISTORY_DAY_MS) continue;
+    const huboEntradas = movs.some((m) => m.tipo === 'INGRESO' && m.t > desde && m.t < hasta);
+    if (!huboEntradas) continue;
+    // Partes iguales: un hueco de 63 días son dos reportes de ~32, no uno de 58 y otro de 5.
+    const partes = Math.ceil((hasta - desde) / (chunkDays * HISTORY_DAY_MS));
+    const paso = Math.ceil((hasta - desde) / partes);
+    for (let begin = desde; begin < hasta; begin += paso) {
+      const end = Math.min(hasta, begin + paso);
+      const tramo = {
+        beginDate: new Date(begin).toISOString(),
+        endDate: new Date(end).toISOString(),
+        mesLabel: `${formatHistoryDay(new Date(begin))} – ${formatHistoryDay(new Date(end))}`,
+      };
+      if (!(revisados || []).some((r) => mismoTramo(r, tramo))) tramos.push(tramo);
+    }
+  }
+  // El más reciente primero: es el que más pesa en el saldo de hoy.
+  return tramos.reverse();
+}
+
 export function nextHistoryChunk({
   targetSince,
   coveredUntil = null,

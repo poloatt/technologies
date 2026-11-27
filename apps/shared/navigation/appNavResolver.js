@@ -80,16 +80,16 @@ export function getCajaBranchPages(branchId) {
 
 /**
  * Fuera del chrome de Finanzas (footer = ramas; pages viven en hub + popups).
- * - Inversiones: hub, como Transacciones. Deudores sigue en «Próximamente».
+ * - Inversiones: hub, como Transacciones.
  * - Recurrentes: subpágina de Transacciones.
- * - Monedas / Cuentas: setup contextual desde Transacciones.
+ * - Monedas / Cuentas / Contactos: popup desde el toolbar/header.
  * - Transacciones: destino principal vía hub (no tab de chrome).
  */
 export const FINANZAS_HUB_STRIP_EXCLUDE_PAGE_IDS = [
   'inversiones',
   'dolares',
   'creditos',
-  'deudores',
+  'contactos',
   'recurrente',
   'monedas',
   'cuentas',
@@ -201,7 +201,7 @@ export function resolveCajaToolbarRight(currentPath) {
  * Excluye el hub de la rama y destinos que viven solo en hub / subpages.
  */
 export const CAJA_TOOLBAR_CENTER_EXCLUDE_IDS = {
-  finanzas: ['transacciones', 'inversiones', 'dolares', 'creditos', 'deudores', 'recurrente'],
+  finanzas: ['transacciones', 'inversiones', 'dolares', 'creditos', 'recurrente'],
   propiedades: ['propiedades'],
   inventario: ['inventario', 'vehiculos'],
 };

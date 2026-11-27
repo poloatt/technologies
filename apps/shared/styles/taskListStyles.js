@@ -13,6 +13,7 @@ import {
   taskFormCaptionTextSx,
 } from '../components/forms/tareaFormTokens';
 import { TASK_PILL_HEIGHT_PX } from '../utils/calendar/calendarLayout';
+import { FONT_SIZE } from '../tipografia';
 
 /** Ancho de la barra de acento por estado (borde izquierdo). */
 export const TASK_ACCENT_BAR_WIDTH = 4;
@@ -106,7 +107,7 @@ export function getTaskRowTitleSx(isMobile = false, completed = false) {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    fontSize: isMobile ? '0.8125rem' : TASK_FORM_BODY_FONT_SIZE,
+    fontSize: isMobile ? FONT_SIZE.md : TASK_FORM_BODY_FONT_SIZE,
     lineHeight: 1.25,
     textDecoration: completed ? 'line-through' : 'none',
     opacity: completed ? 0.72 : 1,
@@ -117,7 +118,7 @@ export function getTaskRowTitleSx(isMobile = false, completed = false) {
 export function getTaskRowScheduleSx(isMobile = false) {
   return {
     ...taskFormCaptionTextSx,
-    fontSize: isMobile ? '0.6875rem' : '0.75rem',
+    fontSize: isMobile ? FONT_SIZE.xs : FONT_SIZE.sm,
     lineHeight: 1.2,
     whiteSpace: 'nowrap',
   };
@@ -317,8 +318,8 @@ export const taskEventTitleSx = (timedCompact = false, completed = false, isEven
   ...taskFormBodyTextSx,
   fontWeight: isEvento ? 600 : 500,
   fontSize: timedCompact
-    ? (isEvento ? '0.75rem' : '0.8125rem')
-    : '0.8125rem',
+    ? (isEvento ? FONT_SIZE.sm : FONT_SIZE.md)
+    : FONT_SIZE.md,
   lineHeight: 1.2,
   letterSpacing: '-0.01em',
   display: 'block',
@@ -331,7 +332,7 @@ export const taskEventTitleSx = (timedCompact = false, completed = false, isEven
 
 export const taskEventTimeSx = {
   ...taskFormCaptionTextSx,
-  fontSize: '0.6875rem',
+  fontSize: FONT_SIZE.xs,
   fontWeight: 400,
   opacity: 0.9,
   lineHeight: 1.2,

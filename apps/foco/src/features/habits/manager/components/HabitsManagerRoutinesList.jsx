@@ -14,6 +14,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { getChainDisplayLabel, isGroupedRoutineChain } from '@shared/habits';
 import { HUB_SUBSECTION, hubSectionBg } from '@shared/styles/hubSectionStyles';
+import { FONT_SIZE } from '@shared/tipografia';
 
 function getRoutineListItemSx({ selected = false } = {}) {
   return {
@@ -62,7 +63,7 @@ function RoutineMobileChip({
         variant="body2"
         sx={{
           fontWeight: selected ? 600 : 400,
-          fontSize: '0.8125rem',
+          fontSize: FONT_SIZE.md,
           lineHeight: 1.2,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -76,7 +77,7 @@ function RoutineMobileChip({
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ lineHeight: 1.1, fontSize: '0.62rem' }}
+          sx={{ lineHeight: 1.1, fontSize: FONT_SIZE['2xs'] }}
         >
           {stepCount} háb.
         </Typography>

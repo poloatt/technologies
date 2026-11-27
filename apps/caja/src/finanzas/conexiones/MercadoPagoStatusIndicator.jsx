@@ -7,6 +7,7 @@ import {
   Sync as SyncIcon
 } from '@mui/icons-material';
 import { useMercadoPago } from '../../hooks/useMercadoPago';
+import { FONT_FAMILY } from '@shared/tipografia';
 
 export default function MercadoPagoStatusIndicator({ connectionId, onStatusChange }) {
   const { connectionStatus, getConnectionStatus } = useMercadoPago();
@@ -73,7 +74,7 @@ export default function MercadoPagoStatusIndicator({ connectionId, onStatusChang
       </Tooltip>
       
       {connectionId && (
-        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: FONT_FAMILY.mono }}>
           ID: {connectionId.slice(-8)}
         </Typography>
       )}

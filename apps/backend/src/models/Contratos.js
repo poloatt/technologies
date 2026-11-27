@@ -475,31 +475,54 @@ contratoSchema.pre('save', async function(next) {
         }
       }
       
-      if (estadoActual === 'ACTIVO') {
-        const Transacciones = mongoose.model('Transacciones');
-        const fechaActual = new Date();
-        const fechaFin = this.fechaFin || new Date(fechaActual.getFullYear() + 1, fechaActual.getMonth(), fechaActual.getDate());
-        
-        // Crear transacciones para cada mes del contrato
-        for (let fecha = new Date(this.fechaInicio); fecha <= fechaFin; fecha.setMonth(fecha.getMonth() + 1)) {
-          for (const transaccion of (this.transaccionesRecurrentes || [])) {
-            await Transacciones.create({
-              descripcion: transaccion.concepto,
-              monto: transaccion.monto,
-              fecha: new Date(fecha.getFullYear(), fecha.getMonth(), transaccion.diaVencimiento),
-              categoria: 'ALQUILER',
-              estado: 'PENDIENTE',
-              tipo: 'INGRESO',
-              usuario: this.usuario,
-              moneda: transaccion.moneda,
-              contrato: this._id
-            });
+      if (estadoActual === 'ACTIVO' && (this.transaccionesRecurrentes || []).length > 0) {
+        if (!this.cuenta) {
+          // Las transacciones exigen cuenta: sin ella no se pueden generar cuotas.
+          console.warn('Contrato sin cuenta: no se generan transacciones recurrentes', this._id);
+        } else {
+          const Transacciones = mongoose.model('Transacciones');
+          const fechaActual = new Date();
+          const inicio = new Date(this.fechaInicio);
+          const fechaFin = this.fechaFin || new Date(fechaActual.getFullYear() + 1, fechaActual.getMonth(), fechaActual.getDate());
+
+          // Un mes por vuelta (por índice, sin arrastrar el día) hasta la fecha de fin.
+          let anio = inicio.getFullYear();
+          let mes = inicio.getMonth();
+          while (new Date(anio, mes, 1) <= fechaFin) {
+            const ultimoDia = new Date(anio, mes + 1, 0).getDate();
+            for (const transaccion of this.transaccionesRecurrentes) {
+              const fecha = new Date(anio, mes, Math.min(transaccion.diaVencimiento, ultimoDia), 12);
+              // Idempotente: guardar el contrato otra vez no duplica cuotas ya generadas.
+              const existente = await Transacciones.exists({
+                contrato: this._id,
+                descripcion: transaccion.concepto,
+                fecha,
+              });
+              if (existente) continue;
+              await Transacciones.create({
+                descripcion: transaccion.concepto,
+                monto: transaccion.monto,
+                fecha,
+                categoria: 'Alquiler',
+                estado: 'PENDIENTE',
+                tipo: 'INGRESO',
+                usuario: this.usuario,
+                cuenta: this.cuenta,
+                moneda: transaccion.moneda,
+                contrato: this._id
+              });
+            }
+            mes += 1;
+            if (mes > 11) {
+              mes = 0;
+              anio += 1;
+            }
           }
         }
       }
     } catch (error) {
       console.error('Error al generar transacciones:', error);
-      next(error);
+      return next(error);
     }
   }
   next();

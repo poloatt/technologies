@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Typography } from '@mui/material';
 import EstadoIcon from './EstadoIcon';
 import { getEstadoColor, getEstadoText } from './StatusSystem';
+import { FONT_SIZE } from '../../tipografia';
 
 const CommonHeader = ({
   icon: Icon,
@@ -28,7 +29,7 @@ const CommonHeader = ({
           variant={titleSize}
           sx={{
             fontWeight: titleWeight,
-            fontSize: titleSize === 'subtitle1' ? '0.9rem' : undefined,
+            fontSize: titleSize === 'subtitle1' ? FONT_SIZE.base : undefined,
             lineHeight: titleSize === 'subtitle1' ? 1.2 : undefined
           }}
         >
@@ -49,7 +50,7 @@ const CommonHeader = ({
           gap: 0.5,
           px: 1,
           py: 0.5,
-          fontSize: '0.75rem',
+          fontSize: FONT_SIZE.sm,
           color: getEstadoColor(estado, tipo),
           bgcolor: 'transparent',
           borderRadius: 0,

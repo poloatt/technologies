@@ -30,6 +30,7 @@ import {
   propiedadDetailLinkTextSx,
 } from './propiedadDetailStyles';
 import { SeccionUbicacion } from './SeccionUbicacion';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export { SeccionUbicacion };
 
@@ -89,14 +90,14 @@ export const SeccionInquilinos = ({
   return (
     <Box sx={{ mb: isDetail ? 0 : 2 }}>
       {!isDetail && (
-        <Typography variant="subtitle2" sx={{ fontSize: '0.95rem', fontWeight: 600 }}>
+        <Typography variant="subtitle2" sx={{ fontSize: FONT_SIZE.lg, fontWeight: 600 }}>
           <PeopleIcon sx={{ fontSize: '1.1rem', mr: 1 }} />
           Inquilinos Activos ({activos.length})
         </Typography>
       )}
 
       {activos.length === 0 && (
-        <Typography sx={isDetail ? propiedadDetailEmptyTextSx : { fontSize: '0.875rem', color: 'text.secondary' }}>
+        <Typography sx={isDetail ? propiedadDetailEmptyTextSx : { fontSize: FONT_SIZE.base, color: 'text.secondary' }}>
           Ninguno
         </Typography>
       )}
@@ -104,7 +105,7 @@ export const SeccionInquilinos = ({
       {activos.map((i) => (
         <Box key={i._id} sx={isDetail ? propiedadDetailListRowSx : { display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
           {isDetail ? <PeopleIcon sx={propiedadDetailRowIconSx} /> : null}
-          <Typography sx={{ ...(isDetail ? propiedadDetailPrimaryTextSx : { fontSize: '0.85rem' }), flex: 1 }}>
+          <Typography sx={{ ...(isDetail ? propiedadDetailPrimaryTextSx : { fontSize: FONT_SIZE.base }), flex: 1 }}>
             {i.nombre} {i.apellido}
           </Typography>
           <Tooltip title="Ver detalle inquilino">
@@ -125,7 +126,7 @@ export const SeccionInquilinos = ({
             sx={
               isDetail
                 ? { ...propiedadDetailSecondaryTextSx, mt: 1.25, mb: 0.25, display: 'block', fontWeight: 500 }
-                : { mt: 2, fontSize: '0.85rem', fontWeight: 500 }
+                : { mt: 2, fontSize: FONT_SIZE.base, fontWeight: 500 }
             }
           >
             Finalizados ({finalizados.length})
@@ -138,7 +139,7 @@ export const SeccionInquilinos = ({
               {isDetail ? <PeopleIcon sx={{ ...propiedadDetailRowIconSx, opacity: 0.6 }} /> : null}
               <Typography
                 sx={{
-                  ...(isDetail ? propiedadDetailPrimaryTextSx : { fontSize: '0.85rem' }),
+                  ...(isDetail ? propiedadDetailPrimaryTextSx : { fontSize: FONT_SIZE.base }),
                   flex: 1,
                   color: isDetail ? 'text.secondary' : 'text.secondary',
                 }}
@@ -280,7 +281,7 @@ export const SeccionDocumentos = ({ documentos = [], propiedad, variant }) => {
           {otrosDocumentos.map((doc, idx) => (
             <Box key={doc._id || idx} sx={isDetail ? propiedadDetailListRowSx : { display: 'flex', alignItems: 'center', gap: 1, pl: 1 }}>
               <DescriptionIcon sx={isDetail ? propiedadDetailRowIconSx : { fontSize: '1.1rem', color: 'text.secondary', flexShrink: 0 }} />
-              <Typography sx={{ ...(isDetail ? propiedadDetailPrimaryTextSx : { fontWeight: 500, color: 'text.primary', fontSize: '0.85rem' }), flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Typography sx={{ ...(isDetail ? propiedadDetailPrimaryTextSx : { fontWeight: 500, color: 'text.primary', fontSize: FONT_SIZE.base }), flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {doc.nombre}
               </Typography>
               {doc.url ? (
@@ -311,11 +312,11 @@ export const SeccionDocumentos = ({ documentos = [], propiedad, variant }) => {
                   </Box>
                 ) : null}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ ...(isDetail ? propiedadDetailPrimaryTextSx : { fontWeight: 500, color: 'text.primary', fontSize: '0.85rem' }), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <Typography sx={{ ...(isDetail ? propiedadDetailPrimaryTextSx : { fontWeight: 500, color: 'text.primary', fontSize: FONT_SIZE.base }), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {label}
                   </Typography>
                   {secondary ? (
-                    <Typography sx={isDetail ? propiedadDetailSecondaryTextSx : { color: 'text.secondary', fontSize: '0.7rem', mt: 0.2, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <Typography sx={isDetail ? propiedadDetailSecondaryTextSx : { color: 'text.secondary', fontSize: FONT_SIZE.xs, mt: 0.2, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {secondary}
                     </Typography>
                   ) : null}
@@ -402,11 +403,11 @@ export const SeccionContratos = ({ contratos = [], variant }) => {
             key={contrato._id || idx}
             sx={{ mb: 1.5, p: 1, border: `1px solid ${theme.palette.divider}`, borderRadius: 0, bgcolor: theme.palette.collapse.background }}
           >
-            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', fontSize: '0.95rem' }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', fontSize: FONT_SIZE.lg }}>
               {apellido}
             </Typography>
             {rango ? (
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: FONT_SIZE.md }}>
                 {rango}
               </Typography>
             ) : null}
@@ -428,9 +429,9 @@ export const DocumentosCategoria = ({ alias, icono, documentos }) => {
   const mostrarDocs = expandido ? documentos : documentos.slice(0, 2);
   return (
     <Box sx={{ mb: 0.5 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', fontWeight: 500, mb: 0.25 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: FONT_SIZE.sm, fontWeight: 500, mb: 0.25 }}>
         {alias} {documentos.length > 2 && (
-          <span style={{ color: '#aaa', fontWeight: 400, fontSize: '0.7rem', cursor: 'pointer' }} onClick={() => setExpandido(e => !e)}>
+          <span style={{ color: '#aaa', fontWeight: 400, fontSize: FONT_SIZE.xs, cursor: 'pointer' }} onClick={() => setExpandido(e => !e)}>
             {expandido ? 'ver menos...' : 'ver más...'}
           </span>
         )}
@@ -438,7 +439,7 @@ export const DocumentosCategoria = ({ alias, icono, documentos }) => {
       {mostrarDocs.map((doc, idx) => (
         <Box key={`doc-${doc._id || idx}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: 1, py: 0.25 }}>
           {icono}
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: FONT_SIZE.xs, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {doc.nombre}
           </Typography>
           {doc.esLink ? (
@@ -461,7 +462,7 @@ export const SeccionExpandible = ({ icon, title, expanded, onToggle, children })
   <Box sx={{ mt: 0.25 }}>
     <Box onClick={onToggle} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', '&:hover': { color: 'primary.main' } }}>
       {icon}
-      <Typography variant="body2" sx={{ flex: 1, fontSize: '0.8rem' }}>{title}</Typography>
+      <Typography variant="body2" sx={{ flex: 1, fontSize: FONT_SIZE.md }}>{title}</Typography>
       <IconButton size="small" sx={{ p: 0.25, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
         <OpenInNewIcon sx={{ fontSize: '0.9rem' }} />
       </IconButton>

@@ -1,6 +1,6 @@
 # Finanzas (Atta)
 
-Módulo de dinero: transacciones, cuentas, monedas, recurrente, inversiones, deudores y conexiones bancarias.
+Módulo de dinero: transacciones, cuentas, monedas, recurrente, inversiones, contactos y conexiones bancarias.
 
 ## Estructura
 

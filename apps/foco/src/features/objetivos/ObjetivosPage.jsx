@@ -29,6 +29,7 @@ import { HabitsManagerHost } from '../habits';
 import { useValuesVisibility } from '@shared/context';
 import { useScopedPageHistory, useScopedCRUD } from '@shared/hooks';
 import { useNavigate } from 'react-router-dom';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export function Objetivos() {
   const {
@@ -468,7 +469,7 @@ export function Objetivos() {
               color="primary"
               variant="outlined"
               sx={{
-                fontSize: isMobile ? '0.9rem' : '0.75rem',
+                fontSize: isMobile ? FONT_SIZE.base : FONT_SIZE.sm,
                 height: isMobile ? 32 : 24
               }}
             />

@@ -7,6 +7,7 @@ import inventariosRoutes from './inventariosRoutes.js';
 import habitacionesRoutes from './habitacionesRoutes.js';
 import monedasRoutes from './monedasRoutes.js';
 import cuentasRoutes from './cuentasRoutes.js';
+import contactosRoutes from './contactosRoutes.js';
 import transaccionesRoutes from './transaccionesRoutes.js';
 import transaccionRecurrenteRoutes from './transaccionRecurrenteRoutes.js';
 import objetivosRoutes from './objetivosRoutes.js';
@@ -49,6 +50,7 @@ router.use('/habitaciones', habitacionesRoutes);
 // Rutas de gestión financiera
 router.use('/monedas', monedasRoutes);
 router.use('/cuentas', cuentasRoutes);
+router.use('/contactos', contactosRoutes);
 router.use('/transacciones', transaccionesRoutes);
 router.use('/transaccionesrecurrentes', transaccionRecurrenteRoutes);
 router.use('/bankconnections', bankConnectionRoutes);

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Box, ButtonBase, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { getIconByName } from '@shared/utils/iconConfig';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const ROW_SX = {
   display: 'flex',
@@ -57,7 +58,7 @@ export default function HabitsManagerGroupHabits({
           <AddIcon sx={{ fontSize: '1.1rem', flexShrink: 0 }} />
           <Typography
             variant="body2"
-            sx={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', fontWeight: 500, color: 'inherit' }}
+            sx={{ flex: 1, minWidth: 0, fontSize: FONT_SIZE.md, fontWeight: 500, color: 'inherit' }}
           >
             {addLabel}
           </Typography>
@@ -101,7 +102,7 @@ export default function HabitsManagerGroupHabits({
               sx={{
                 flex: 1,
                 minWidth: 0,
-                fontSize: '0.8125rem',
+                fontSize: FONT_SIZE.md,
                 fontWeight: selected ? 600 : 500,
                 color: selected ? 'text.primary' : 'text.secondary',
                 textDecoration: inactive ? 'line-through' : 'none',

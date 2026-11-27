@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
 import { FinanzasSectionNav } from '../finanzas';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
@@ -9,7 +10,7 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
-import { inversionListQuery } from '../finanzas/transacciones/ledgerKindFilters';
+import { inversionKindsFromVista, inversionListQuery } from '../finanzas/transacciones/ledgerKindFilters';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 
 function getScrollParent(node) {
@@ -34,10 +35,17 @@ function ListSkeleton() {
 
 export default function Inversiones() {
   const { showValues } = useValuesVisibility();
+  const [searchParams] = useSearchParams();
+  const cuentaId = searchParams.get('cuenta') || undefined;
+  const vista = searchParams.get('vista');
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
-  const [enabledKinds, setEnabledKinds] = useState(null);
+  const [enabledKinds, setEnabledKinds] = useState(() => inversionKindsFromVista(vista));
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
   const listQuery = useMemo(() => inversionListQuery(enabledKinds), [enabledKinds]);
+
+  useEffect(() => {
+    setEnabledKinds(inversionKindsFromVista(vista));
+  }, [vista]);
   const sentinelRef = useRef(null);
 
   const {
@@ -52,6 +60,7 @@ export default function Inversiones() {
   } = useTransaccionesList({
     fechaInicio: periodRange.fechaInicio,
     fechaFin: periodRange.fechaFin,
+    cuentaId,
     ledger: 'inversiones',
     estado: 'PAGADO',
     kinds: listQuery.kinds,
@@ -89,6 +98,7 @@ export default function Inversiones() {
     <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
       <FinanzasSectionNav variant="strip" />
       <InversionesResumen
+        cuentaId={cuentaId}
         preset={preset}
         onPresetChange={setPreset}
         enabledKinds={enabledKinds}

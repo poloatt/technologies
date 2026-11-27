@@ -1,4 +1,3 @@
-export { default as CuentaDetailShell } from './CuentaDetailShell';
 export { default as CuentaWalletHeader } from './CuentaWalletHeader';
 export { default as CuentaWalletActions } from './CuentaWalletActions';
 export { default as CuentaRow, CuentaRowSkeleton } from './CuentaRow';

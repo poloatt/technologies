@@ -34,11 +34,21 @@ const cuentaSchema = createSchema({
   moneda: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Monedas',
-    required: true
+    required: function() {
+      return !this.multimoneda;
+    }
   },
   activo: {
     type: Boolean,
     default: true
+  },
+  esDefault: {
+    type: Boolean,
+    default: false
+  },
+  multimoneda: {
+    type: Boolean,
+    default: false
   },
   // Metadata adicional para cuentas específicas (MercadoPago, bancos, etc.)
   metadata: {
@@ -69,6 +79,7 @@ cuentaSchema.pre(['find', 'findOne'], function() {
 
 cuentaSchema.index({ usuario: 1, activo: 1 });
 cuentaSchema.index({ usuario: 1, moneda: 1 });
+cuentaSchema.index({ usuario: 1, tipo: 1, esDefault: 1 });
 
 const Cuentas = mongoose.model('Cuentas', cuentaSchema);
 

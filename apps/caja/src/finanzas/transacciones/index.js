@@ -13,3 +13,8 @@ export {
   toLocalDateKey,
   formatMonto,
 } from './transaccionesPeriodUtils';
+export {
+  CATEGORIAS,
+  getCategoriaMeta,
+  getCategoriasPorTipo,
+} from './categoriasConstants';

@@ -36,6 +36,7 @@ import {
 } from '@shared/styles/rutinaPageStyles';
 import { getHabitIconTokens } from '@shared/styles/habitIconStyles';
 import { getRutinaDragHandleGlyph } from '@shared/styles/rutinaIconTokens';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const postponeIconColumnSx = {
   cursor: 'context-menu',
@@ -391,7 +392,7 @@ const ChecklistItem = ({
                   variant="body2"
                   sx={{
                     ...rutinaChecklistLabelSx(isCompleted),
-                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'right', fontSize: '0.8125rem', width: '100%' } : null),
+                    ...(stackCell ? { whiteSpace: 'normal', textAlign: 'right', fontSize: FONT_SIZE.md, width: '100%' } : null),
                   }}
                 >
                   {primaryText}

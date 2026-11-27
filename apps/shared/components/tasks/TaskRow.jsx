@@ -22,6 +22,7 @@ import {
   getTaskRowCellPadding,
 } from '../../styles/taskListStyles';
 import { ensureTaskListAnimations } from './taskListAnimations';
+import { FONT_SIZE } from '../../tipografia';
 
 ensureTaskListAnimations();
 
@@ -198,7 +199,7 @@ export function TaskRow({
               color="error"
               sx={{
                 fontWeight: 700,
-                fontSize: isMobile ? '0.75rem' : '0.85rem',
+                fontSize: isMobile ? FONT_SIZE.sm : FONT_SIZE.base,
                 lineHeight: 1,
               }}
             >

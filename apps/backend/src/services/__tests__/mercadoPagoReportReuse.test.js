@@ -1,4 +1,6 @@
 import {
+  MercadoPagoReportService,
+  SettlementReportTimeoutError,
   findRecentCoveringReport,
   getSettlementReuseMaxAgeMs
 } from '../mercadoPagoReportService.js';
@@ -52,6 +54,34 @@ describe('findRecentCoveringReport', () => {
     const nuevo = report({ id: 'nuevo', generation_date: '2026-11-26T14:00:00Z' });
     const match = findRecentCoveringReport([viejo, nuevo], beginDate, endDate, { maxAgeMs: 6 * HOUR, now: NOW });
     expect(match?.id).toBe('nuevo');
+  });
+});
+
+describe('fetchSettlementMovements: reuso parcial ante timeout', () => {
+  function serviceCon(reusedRows) {
+    const service = new MercadoPagoReportService({ accessToken: 'x', userId: 1 });
+    service.configureReport = async () => null;
+    service.reuseRecentCoveringReport = async () => null;
+    service.reuseExistingReports = async () => ({ rows: reusedRows, strictMatch: false });
+    service.createReport = async () => ({ data: { id: 99 } });
+    service.completeReport = async () => {
+      throw new SettlementReportTimeoutError('timeout', { beginDate, endDate });
+    };
+    return service;
+  }
+
+  it('marca missingWithdrawals cuando los CSV reutilizados no traen retiros', async () => {
+    const result = await serviceCon([{ transactionType: 'SETTLEMENT' }])
+      .fetchSettlementMovements(beginDate, endDate);
+    expect(result.partial).toBe(true);
+    expect(result.missingWithdrawals).toBe(true);
+  });
+
+  it('no marca missingWithdrawals si el reuso trae salidas a CBU', async () => {
+    const result = await serviceCon([{ transactionType: 'SETTLEMENT' }, { transactionType: 'PAYOUTS' }])
+      .fetchSettlementMovements(beginDate, endDate);
+    expect(result.partial).toBe(true);
+    expect(result.missingWithdrawals).toBe(false);
   });
 });
 

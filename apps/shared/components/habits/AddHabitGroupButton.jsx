@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { hubSectionBg } from '../../styles/hubSectionStyles';
+import { FONT_SIZE } from '../../tipografia';
 
 const addGroupButtonSx = {
   display: 'flex',
@@ -13,7 +14,7 @@ const addGroupButtonSx = {
   borderRadius: 1.5,
   textTransform: 'none',
   fontWeight: 600,
-  fontSize: '0.875rem',
+  fontSize: FONT_SIZE.base,
   color: 'text.secondary',
   border: '1px dashed',
   borderColor: 'divider',

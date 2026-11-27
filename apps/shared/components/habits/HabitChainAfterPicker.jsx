@@ -16,6 +16,7 @@ import { buildHabitManagerSections } from '@shared/habits/form/habitsManagerUtil
 import { normalizeHabitStep, stepsEqual } from '@shared/habits';
 import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
 import HabitGroupTabs from './HabitGroupTabs.jsx';
+import { FONT_SIZE } from '../../tipografia';
 
 function stepKey(section, habitId) {
   return `${section}:${habitId}`;
@@ -26,7 +27,7 @@ const PICKER_SECTION_LABEL_SX = {
   textAlign: 'center',
   px: 1.25,
   pb: 0.25,
-  fontSize: '0.6875rem',
+  fontSize: FONT_SIZE.xs,
   fontWeight: 500,
   letterSpacing: '0.03em',
   color: 'text.secondary',
@@ -228,7 +229,7 @@ function HabitPickRow({
           whiteSpace: 'nowrap',
           flex: 1,
           minWidth: 0,
-          fontSize: '0.8125rem',
+          fontSize: FONT_SIZE.md,
         }}
       >
         {habit.label}

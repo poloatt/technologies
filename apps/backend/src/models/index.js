@@ -2,6 +2,7 @@
 export { Users } from './Users.js';
 export { Monedas, COLORES_MONEDA } from './Monedas.js';
 export { Cuentas } from './Cuentas.js';
+export { Contactos } from './Contactos.js';
 export { Transacciones } from './Transacciones.js';
 export { Propiedades } from './Propiedades.js';
 export { Inquilinos } from './Inquilinos.js';

@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Typography } from '../../utils/materialImports';
 import useResponsive from '../../hooks/useResponsive';
 import FolderIcon from '@mui/icons-material/Folder';
+import { FONT_SIZE } from '../../tipografia';
 
 export function EmptyState() {
   const { theme } = useResponsive();
@@ -28,7 +29,7 @@ export function EmptyState() {
         variant="body2"
         sx={{ 
           mb: 1,
-          fontSize: '0.75rem',
+          fontSize: FONT_SIZE.sm,
           color: 'rgba(255, 255, 255, 0.9)'
         }}
       >

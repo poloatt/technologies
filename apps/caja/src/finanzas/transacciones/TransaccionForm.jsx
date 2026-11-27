@@ -30,20 +30,55 @@ import PendingIcon from '@mui/icons-material/Pending';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import { useSnackbar } from 'notistack';
 import { useRelationalData } from '@shared/hooks/useRelationalData';
-import {
-  HealthAndSafety,
-  Receipt,
-  DirectionsBus,
-  Fastfood,
-  LocalBar as Cocktail,
-  Checkroom as Shirt,
-  Devices,
-  MoreHoriz,
-} from '@mui/icons-material';
+import { CATEGORIAS } from './categoriasConstants';
 import { TransaccionRecurrenteForm } from '../recurrente';
 import clienteAxios from '@shared/config/axios';
 import { getEstadoColor } from '@shared/components/common/StatusSystem';
 import { alpha } from '@mui/material/styles';
+import { getMonedasFromCuenta, isCuentaMultimoneda } from '../cuentas/cuentaConstants';
+import { FONT_SIZE } from '@shared/tipografia';
+
+const AR_TZ = 'America/Argentina/Buenos_Aires';
+const MONTO_MAX = 1_000_000_000_000;
+
+/** YYYY-MM-DD del día en Argentina (el backend interpreta las fechas en esa zona). */
+const arDateKey = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return arDateKey(new Date());
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: AR_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
+
+/** El backend guarda COMPLETADA; el form habla PAGADO. */
+const toFormEstado = (estado) => {
+  if (estado === 'PENDIENTE') return 'PENDIENTE';
+  if (estado === 'CANCELADA' || estado === 'CANCELADO') return 'CANCELADA';
+  return 'PAGADO';
+};
+
+const getId = (value) => (
+  typeof value === 'string' ? value : (value?._id || value?.id || '')
+);
+
+const isCuentaDisponibleParaAlta = (cuenta) => (
+  cuenta?.tipo !== 'MERCADO_PAGO' && cuenta?.activo !== false
+);
+
+const buildInitialFormData = (initialData = {}) => ({
+  tipo: initialData.tipo || 'INGRESO',
+  estado: toFormEstado(initialData.estado || 'PAGADO'),
+  monto: initialData.monto != null && initialData.monto !== '' ? String(initialData.monto) : '',
+  descripcion: initialData.descripcion || '',
+  categoria: initialData.categoria || '',
+  fecha: initialData.fecha ? arDateKey(initialData.fecha) : arDateKey(),
+  cuenta: '',
+  moneda: '',
+  contacto: getId(initialData.contacto) || ''
+});
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -93,14 +128,14 @@ const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
   '&.Mui-selected': {
     backgroundColor: props => {
       if (props.value === 'INGRESO') return 'rgba(90, 155, 95, 0.15)';
-      if (props.value === 'EGRESO') return 'rgba(177, 87, 87, 0.15)';
+      if (props.value === 'EGRESO') return alpha(theme.palette.error.main, 0.15);
       const estadoColor = getEstadoColorForToggle(props.value);
       if (estadoColor) return alpha(estadoColor, 0.15);
       return 'inherit';
     },
     color: props => {
       if (props.value === 'INGRESO') return '#5a9b5f';
-      if (props.value === 'EGRESO') return '#b15757';
+      if (props.value === 'EGRESO') return theme.palette.error.main;
       const estadoColor = getEstadoColorForToggle(props.value);
       if (estadoColor) return estadoColor;
       return 'inherit';
@@ -108,7 +143,7 @@ const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
     '&:hover': {
       backgroundColor: props => {
         if (props.value === 'INGRESO') return 'rgba(90, 155, 95, 0.25)';
-        if (props.value === 'EGRESO') return 'rgba(177, 87, 87, 0.25)';
+        if (props.value === 'EGRESO') return alpha(theme.palette.error.main, 0.25);
         const estadoColor = getEstadoColorForToggle(props.value);
         if (estadoColor) return alpha(estadoColor, 0.25);
         return 'inherit';
@@ -126,17 +161,6 @@ const CategoryGroup = styled(Paper)(({ theme }) => ({
   borderRadius: 0,
   backgroundColor: theme.palette.background.paper
 }));
-
-const CATEGORIAS = [
-  { valor: 'Contabilidad y Facturas', icon: <Receipt sx={{ fontSize: 18 }} />, color: '#7bba7f' },
-  { valor: 'Comida y Mercado', icon: <Fastfood sx={{ fontSize: 18 }} />, color: '#ffb74d' },
-  { valor: 'Salud y Belleza', icon: <HealthAndSafety sx={{ fontSize: 18 }} />, color: '#ef5350' },
-  { valor: 'Ropa', icon: <Shirt sx={{ fontSize: 18 }} />, color: '#ba68c8' },
-  { valor: 'Fiesta', icon: <Cocktail sx={{ fontSize: 18 }} />, color: '#9575cd' },
-  { valor: 'Transporte', icon: <DirectionsBus sx={{ fontSize: 18 }} />, color: '#64b5f6' },
-  { valor: 'Tecnología', icon: <Devices sx={{ fontSize: 18 }} />, color: '#90a4ae' },
-  { valor: 'Otro', icon: <MoreHoriz sx={{ fontSize: 18 }} />, color: '#a1887f' }
-];
 
 const CategoryChip = styled(Chip)(({ theme }) => ({
   borderRadius: 0,
@@ -178,153 +202,189 @@ const StyledTextField = styled(TextField)(({ theme }) => ({
   }
 }));
 
-const TransaccionForm = ({ 
-  open, 
-  onClose, 
+const RELATED_FIELDS = [
+  {
+    type: 'relational',
+    name: 'cuenta',
+    endpoint: '/cuentas',
+    labelField: 'nombre',
+    populate: ['moneda']
+  },
+  {
+    type: 'relational',
+    name: 'contacto',
+    endpoint: '/contactos',
+    labelField: 'nombre'
+  }
+];
+
+const TransaccionForm = ({
+  open,
+  onClose,
   onSubmit,
   initialData = {},
-  isEditing = false 
+  isEditing = false,
+  /** Bloquea el selector de cuenta (alta desde el detalle de una cuenta). */
+  lockCuenta = false,
 }) => {
-  const [formData, setFormData] = useState({
-    tipo: initialData.tipo || 'INGRESO',
-    estado: initialData.estado || 'PENDIENTE',
-    monto: initialData.monto || '',
-    descripcion: initialData.descripcion || '',
-    categoria: initialData.categoria || '',
-    fecha: initialData.fecha ? new Date(initialData.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    cuenta: '',
-    moneda: ''
-  });
+  const [formData, setFormData] = useState(() => buildInitialFormData(initialData));
   const [errors, setErrors] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const { enqueueSnackbar } = useSnackbar();
-  
-  // Definición de campos relacionales antes del hook
-  const relatedFields = [
-    { 
-      type: 'relational',
-      name: 'cuenta',
-      endpoint: '/cuentas',
-      labelField: 'nombre',
-      populate: ['moneda']
-    }
-  ];
 
   const { relatedData, isLoading: isLoadingRelated } = useRelationalData({
     open,
-    relatedFields
+    relatedFields: RELATED_FIELDS
   });
 
   const [selectedCuenta, setSelectedCuenta] = useState(null);
   const [isRecurrente, setIsRecurrente] = useState(false);
 
+  const initialCuentaId = getId(initialData.cuenta);
+  const initialMonedaId = getId(initialData.moneda);
+
+  // Mercado Pago solo se actualiza por sync/CSV y las cuentas inactivas no reciben altas.
+  // La cuenta seleccionada (por ejemplo al editar un registro viejo) siempre se conserva.
+  const cuentaOptions = useMemo(() => {
+    const todas = relatedData?.cuenta || [];
+    const selectedId = getId(selectedCuenta);
+    return todas.filter((cuenta) => (
+      isCuentaDisponibleParaAlta(cuenta) || getId(cuenta) === selectedId
+    ));
+  }, [relatedData?.cuenta, selectedCuenta]);
+
+  const isSelectedMultimoneda = isCuentaMultimoneda(selectedCuenta);
+  const monedasCuenta = useMemo(
+    () => (isSelectedMultimoneda ? getMonedasFromCuenta(selectedCuenta) : []),
+    [isSelectedMultimoneda, selectedCuenta],
+  );
+  const monedaSeleccionada = useMemo(() => {
+    if (isSelectedMultimoneda) {
+      return (
+        monedasCuenta.find((m) => m.id === String(formData.moneda))
+        || monedasCuenta[0]
+        || null
+      );
+    }
+    return selectedCuenta?.moneda || null;
+  }, [isSelectedMultimoneda, monedasCuenta, formData.moneda, selectedCuenta]);
+
+  const categoriasDisponibles = useMemo(
+    () => CATEGORIAS.filter((categoria) => categoria.tipos.includes(formData.tipo)),
+    [formData.tipo],
+  );
+
   // Efecto para reiniciar el formulario cuando se abre
   useEffect(() => {
     if (open) {
-      console.log('Reiniciando formulario con datos:', initialData);
-      setFormData({
-        tipo: initialData.tipo || 'INGRESO',
-        estado: initialData.estado || 'PENDIENTE',
-        monto: initialData.monto || '',
-        descripcion: initialData.descripcion || '',
-        categoria: initialData.categoria || '',
-        fecha: initialData.fecha ? new Date(initialData.fecha).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        cuenta: '',
-        moneda: ''
-      });
+      setFormData(buildInitialFormData(initialData));
       setSelectedCuenta(null);
       setErrors({});
+      setIsRecurrente(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Efecto para manejar la cuenta cuando los datos relacionales están disponibles
   useEffect(() => {
-    const inicializarCuenta = () => {
-      if (!relatedData?.cuenta?.length || !initialData.cuenta) return;
+    if (!open || isLoadingRelated) return;
+    if (!relatedData?.cuenta?.length || !initialCuentaId) return;
 
-      console.log('Inicializando cuenta con:', {
-        initialData,
-        cuentaInicial: initialData.cuenta,
-        cuentasDisponibles: relatedData.cuenta
-      });
+    const cuentaEncontrada = relatedData.cuenta.find((c) => getId(c) === initialCuentaId);
+    if (!cuentaEncontrada) return;
+    // Una cuenta Mercado Pago no admite altas nuevas; solo se conserva al editar.
+    if (!isEditing && !isCuentaDisponibleParaAlta(cuentaEncontrada)) return;
 
-      let cuentaId;
-      if (typeof initialData.cuenta === 'string') {
-        cuentaId = initialData.cuenta;
-      } else if (initialData.cuenta?._id) {
-        cuentaId = initialData.cuenta._id;
-      } else if (initialData.cuenta?.id) {
-        cuentaId = initialData.cuenta.id;
-      }
-
-      console.log('Buscando cuenta con ID:', cuentaId);
-
-      const cuentaEncontrada = relatedData.cuenta.find(c => 
-        c._id === cuentaId || c.id === cuentaId
-      );
-
-      console.log('Cuenta encontrada:', cuentaEncontrada);
-
-      if (cuentaEncontrada) {
-        setSelectedCuenta(cuentaEncontrada);
-        setFormData(prev => ({
-          ...prev,
-          cuenta: cuentaEncontrada._id || cuentaEncontrada.id,
-          moneda: cuentaEncontrada.moneda?._id || cuentaEncontrada.moneda?.id || cuentaEncontrada.moneda
-        }));
-      }
-    };
-
-    if (open && !isLoadingRelated) {
-      inicializarCuenta();
-    }
-  }, [relatedData?.cuenta, initialData.cuenta, open, isLoadingRelated]);
+    setSelectedCuenta(cuentaEncontrada);
+    const multimoneda = isCuentaMultimoneda(cuentaEncontrada);
+    const monedasDisponibles = multimoneda ? getMonedasFromCuenta(cuentaEncontrada) : [];
+    const monedaCuentaId = getId(cuentaEncontrada.moneda);
+    const resolvedMonedaId = multimoneda
+      ? (
+          monedasDisponibles.find((m) => m.id === String(initialMonedaId))?.id
+          || monedasDisponibles[0]?.id
+          || monedaCuentaId
+        )
+      : monedaCuentaId;
+    setFormData((prev) => ({
+      ...prev,
+      cuenta: getId(cuentaEncontrada),
+      moneda: resolvedMonedaId || ''
+    }));
+  }, [relatedData?.cuenta, initialCuentaId, initialMonedaId, open, isLoadingRelated, isEditing]);
 
   const handleChange = useCallback((name, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: null }));
-    }
-  }, [errors]);
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value };
+      // La categoría debe existir para el tipo elegido (ingreso/egreso).
+      if (name === 'tipo' && prev.categoria) {
+        const categoria = CATEGORIAS.find((c) => c.valor === prev.categoria);
+        if (categoria && !categoria.tipos.includes(value)) next.categoria = '';
+      }
+      return next;
+    });
+    setErrors((prev) => (prev[name] ? { ...prev, [name]: null } : prev));
+  }, []);
 
   const handleMontoChange = (event) => {
-    const value = event.target.value;
+    const value = event.target.value.replace(',', '.');
     if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
       handleChange('monto', value);
     }
   };
 
+  const validateForm = () => {
+    const newErrors = {};
+    const monto = Number(formData.monto);
+    if (!formData.tipo) newErrors.tipo = 'Seleccione el tipo';
+    if (!formData.monto) newErrors.monto = 'Ingrese el monto';
+    else if (!Number.isFinite(monto) || monto <= 0) newErrors.monto = 'El monto debe ser mayor a cero';
+    else if (monto > MONTO_MAX) newErrors.monto = 'El monto es demasiado grande';
+    if (!formData.descripcion?.trim()) newErrors.descripcion = 'Ingrese una descripción';
+    if (!formData.categoria) newErrors.categoria = 'Seleccione una categoría';
+    if (!formData.fecha || Number.isNaN(new Date(`${formData.fecha}T12:00:00`).getTime())) {
+      newErrors.fecha = 'Ingrese una fecha válida';
+    }
+    if (!selectedCuenta) newErrors.cuenta = 'Seleccione una cuenta';
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (event) => {
-    event.preventDefault();
-    if (!validateForm()) return;
+    event?.preventDefault?.();
+    if (isSaving || !validateForm()) return;
 
     setIsSaving(true);
     try {
-      // Preparar los datos para enviar
+      const resolvedMoneda = formData.moneda
+        || monedaSeleccionada?.id
+        || monedaSeleccionada?._id
+        || getId(selectedCuenta?.moneda)
+        || '';
       const dataToSubmit = {
         ...formData,
+        descripcion: formData.descripcion.trim(),
         monto: parseFloat(formData.monto),
-        fecha: formData.fecha || new Date().toISOString(),
-        estado: formData.estado || 'PENDIENTE',
-        cuenta: selectedCuenta?.id || selectedCuenta?._id || formData.cuenta
+        estado: formData.estado || 'PAGADO',
+        cuenta: getId(selectedCuenta) || formData.cuenta,
+        contacto: formData.contacto || null,
+        ...(resolvedMoneda ? { moneda: resolvedMoneda } : {}),
       };
 
-      console.log('Cuenta seleccionada:', selectedCuenta);
-      console.log('Datos a enviar:', dataToSubmit);
+      // Los handlers de las páginas deben propagar el error para que el form no se cierre.
       await onSubmit(dataToSubmit);
       enqueueSnackbar(
-        isEditing ? 'Transacción actualizada' : 'Transacción guardada', 
+        isEditing ? 'Transacción actualizada' : 'Transacción guardada',
         { variant: 'success' }
       );
       onClose();
     } catch (error) {
       console.error('Error al guardar:', error);
+      const data = error.response?.data;
+      const detalle = Array.isArray(data?.errors) ? data.errors.join(', ') : null;
       enqueueSnackbar(
-        error.response?.data?.message || error.message || 'Error al guardar', 
+        detalle || data?.message || data?.error || error.message || 'Error al guardar',
         { variant: 'error' }
       );
     } finally {
@@ -332,25 +392,13 @@ const TransaccionForm = ({
     }
   };
 
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.tipo) newErrors.tipo = 'Seleccione el tipo';
-    if (!formData.monto) newErrors.monto = 'Ingrese el monto';
-    if (!formData.descripcion) newErrors.descripcion = 'Ingrese una descripción';
-    if (!formData.categoria) newErrors.categoria = 'Seleccione una categoría';
-    if (!selectedCuenta) newErrors.cuenta = 'Seleccione una cuenta';
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const handleRecurrenteToggle = () => {
-    setIsRecurrente(prev => !prev);
+    setIsRecurrente((prev) => !prev);
   };
 
+  // Solo altas: editar una transacción nunca edita su regla recurrente.
   const handleRecurrenteSubmit = async (recurrenteData) => {
     try {
-      // Preparar datos para enviar
       const datosAEnviar = {
         ...recurrenteData,
         estado: 'ACTIVO', // Estado inicial siempre ACTIVO
@@ -369,30 +417,20 @@ const TransaccionForm = ({
       delete datosAEnviar.fecha;
       delete datosAEnviar.moneda;
 
-      console.log('Enviando datos a transacciones recurrentes:', datosAEnviar);
+      await clienteAxios.post('/api/transaccionesrecurrentes', datosAEnviar);
 
-      let response;
-      if (isEditing) {
-        response = await clienteAxios.put(`/api/transaccionesrecurrentes/${initialData._id}`, datosAEnviar);
-      } else {
-        response = await clienteAxios.post('/api/transaccionesrecurrentes', datosAEnviar);
-      }
-
-      enqueueSnackbar(
-        isEditing ? 'Transacción recurrente actualizada' : 'Transacción recurrente guardada', 
-        { variant: 'success' }
-      );
+      enqueueSnackbar('Transacción recurrente guardada', { variant: 'success' });
       onClose();
     } catch (error) {
       console.error('Error al guardar transacción recurrente:', error);
       enqueueSnackbar(
-        error.response?.data?.message || error.message || 'Error al guardar', 
+        error.response?.data?.message || error.message || 'Error al guardar',
         { variant: 'error' }
       );
     }
   };
 
-  if (isRecurrente) {
+  if (isRecurrente && !isEditing) {
     return (
       <TransaccionRecurrenteForm
         open={open}
@@ -403,18 +441,18 @@ const TransaccionForm = ({
         onSubmit={handleRecurrenteSubmit}
         initialData={{
           ...formData,
-          cuenta: selectedCuenta?._id || selectedCuenta?.id || formData.cuenta,
+          cuenta: getId(selectedCuenta) || formData.cuenta,
           fechaInicio: formData.fecha,
-          diaDelMes: new Date(formData.fecha).getDate().toString()
+          diaDelMes: String(Number(formData.fecha.slice(8, 10)) || new Date().getDate())
         }}
         relatedData={{
-          cuentas: relatedData?.cuenta || [],
+          cuentas: cuentaOptions,
           propiedades: []
         }}
-        isEditing={isEditing}
+        isEditing={false}
         onSwitchToSimple={(data) => {
           setIsRecurrente(false);
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             ...data
           }));
@@ -510,9 +548,17 @@ const TransaccionForm = ({
               error={!!errors.monto}
               helperText={errors.monto}
               InputProps={{
-                startAdornment: selectedCuenta?.moneda && (
+                startAdornment: monedaSeleccionada?.simbolo && (
                   <InputAdornment position="start">
-                    {selectedCuenta.moneda.simbolo}
+                    <Box
+                      component="span"
+                      sx={{
+                        color: monedaSeleccionada.color || 'inherit',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {monedaSeleccionada.simbolo}
+                    </Box>
                   </InputAdornment>
                 )
               }}
@@ -542,35 +588,62 @@ const TransaccionForm = ({
                   Pendiente
                 </Typography>
               </ToggleButton>
+              {formData.estado === 'CANCELADA' && (
+                <ToggleButton value="CANCELADA">
+                  <Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>
+                    Cancelada
+                  </Typography>
+                </ToggleButton>
+              )}
             </ToggleButtonGroup>
           </Box>
 
-          {/* Descripción */}
-          <StyledTextField
-            fullWidth
-            label="Descripción"
-            value={formData.descripcion || ''}
-            onChange={(e) => handleChange('descripcion', e.target.value)}
-            error={!!errors.descripcion}
-            helperText={errors.descripcion}
-            sx={{ mb: 2 }}
-            InputLabelProps={{
-              shrink: true
-            }}
-          />
+          {/* Descripción y Fecha */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+            <StyledTextField
+              fullWidth
+              label="Descripción"
+              value={formData.descripcion || ''}
+              onChange={(e) => handleChange('descripcion', e.target.value)}
+              error={!!errors.descripcion}
+              helperText={errors.descripcion}
+              InputLabelProps={{
+                shrink: true
+              }}
+            />
+            <StyledTextField
+              type="date"
+              label="Fecha"
+              value={formData.fecha || ''}
+              onChange={(e) => handleChange('fecha', e.target.value)}
+              error={!!errors.fecha}
+              helperText={errors.fecha}
+              sx={{ minWidth: { sm: 170 } }}
+              InputLabelProps={{
+                shrink: true
+              }}
+            />
+          </Box>
 
           {/* Cuenta */}
           <Autocomplete
             key={`cuenta-${open}-${selectedCuenta?.id || 'new'}`}
             value={selectedCuenta}
+            disabled={lockCuenta}
             onChange={(event, newValue) => {
-              console.log('Cuenta seleccionada:', newValue);
               setSelectedCuenta(newValue);
+              setErrors((prev) => (prev.cuenta ? { ...prev, cuenta: null } : prev));
               if (newValue) {
+                const monedasOpciones = isCuentaMultimoneda(newValue)
+                  ? getMonedasFromCuenta(newValue)
+                  : [];
+                const nextMonedaId = isCuentaMultimoneda(newValue)
+                  ? (monedasOpciones[0]?.id || newValue.moneda?._id || newValue.moneda?.id || newValue.moneda || '')
+                  : (newValue.moneda?._id || newValue.moneda?.id || newValue.moneda || '');
                 setFormData(prev => ({
                   ...prev,
                   cuenta: newValue._id || newValue.id,
-                  moneda: newValue.moneda?._id || newValue.moneda?.id || newValue.moneda
+                  moneda: nextMonedaId
                 }));
               } else {
                 setFormData(prev => ({
@@ -580,7 +653,7 @@ const TransaccionForm = ({
                 }));
               }
             }}
-            options={relatedData?.cuenta || []}
+            options={cuentaOptions}
             getOptionLabel={(option) => `${option?.nombre || ''} - ${option?.tipo || ''}`}
             loading={isLoadingRelated}
             renderInput={(params) => (
@@ -618,13 +691,117 @@ const TransaccionForm = ({
                   <Box>
                     <Typography variant="subtitle2">{option.nombre}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {option.moneda?.simbolo} - {option.tipo}
+                      {isCuentaMultimoneda(option)
+                        ? `${getMonedasFromCuenta(option).map((m) => m.simbolo).join(' · ') || 'Multimoneda'} - ${option.tipo}`
+                        : `${option.moneda?.simbolo || '$'} - ${option.tipo}`}
                     </Typography>
                   </Box>
                 </Box>
               );
             }}
           />
+
+          {/* Selector de Moneda para cuentas multimoneda (p. ej. Efectivo) */}
+          {isSelectedMultimoneda && monedasCuenta.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Moneda
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {monedasCuenta.map((moneda) => {
+                  const selected = String(formData.moneda) === moneda.id;
+                  return (
+                    <Box
+                      key={moneda.id}
+                      component="button"
+                      type="button"
+                      onClick={() => handleChange('moneda', moneda.id)}
+                      aria-pressed={selected}
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        px: 1.25,
+                        py: 0.625,
+                        border: '1px solid',
+                        borderColor: selected ? moneda.color : 'divider',
+                        bgcolor: selected ? alpha(moneda.color || '#75AADB', 0.14) : 'background.paper',
+                        color: selected ? moneda.color : 'text.primary',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        fontSize: FONT_SIZE.md,
+                        fontWeight: selected ? 700 : 500,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          bgcolor: moneda.color || '#75AADB',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span>{moneda.simbolo}</span>
+                      <span>{moneda.codigo}</span>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          )}
+
+          {/* Selector opcional de Contacto */}
+          {(relatedData?.contacto?.length > 0 || formData.contacto) && (
+            <Autocomplete
+              options={relatedData?.contacto || []}
+              value={
+                (relatedData?.contacto || []).find((c) => getId(c) === formData.contacto) || null
+              }
+              onChange={(_, newValue) => {
+                const nextId = getId(newValue);
+                setFormData((prev) => {
+                  const next = { ...prev, contacto: nextId };
+                  if (newValue && !prev.categoria) {
+                    const suggested =
+                      (prev.tipo === 'INGRESO'
+                        ? newValue.categoriaIngreso
+                        : newValue.categoriaEgreso) || newValue.categoriaDefault;
+                    const valid = suggested && CATEGORIAS.some(
+                      (c) => c.valor === suggested && c.tipos.includes(prev.tipo)
+                    );
+                    if (valid) next.categoria = suggested;
+                  }
+                  return next;
+                });
+              }}
+              getOptionLabel={(option) => option?.nombre || ''}
+              isOptionEqualToValue={(option, value) => getId(option) === getId(value)}
+              renderInput={(params) => (
+                <StyledTextField
+                  {...params}
+                  label="Contacto (opcional)"
+                  placeholder="Sin contacto"
+                  sx={{ mt: 2 }}
+                />
+              )}
+              renderOption={(props, option) => {
+                const { key, ...otherProps } = props;
+                return (
+                  <Box component="li" key={key || getId(option)} {...otherProps}>
+                    <Box>
+                      <Typography variant="subtitle2">{option.nombre}</Typography>
+                      {option.categoriaDefault && (
+                        <Typography variant="caption" color="text.secondary">
+                          {option.categoriaDefault}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                );
+              }}
+            />
+          )}
 
           {/* Categorías */}
           <Box sx={{ mt: 2 }}>
@@ -642,6 +819,11 @@ const TransaccionForm = ({
                   {formData.categoria}
                 </Typography>
               )}
+              {errors.categoria && (
+                <Typography variant="caption" color="error">
+                  {errors.categoria}
+                </Typography>
+              )}
             </Box>
             <Box sx={{ 
               display: 'grid',
@@ -651,10 +833,14 @@ const TransaccionForm = ({
               },
               gap: 1
             }}>
-              {CATEGORIAS.map((categoria) => (
+              {categoriasDisponibles.map((categoria) => {
+                const CatIcon = categoria.Icon;
+                return (
                 <CategoryChip
                   key={categoria.valor}
-                  icon={categoria.icon}
+                  icon={<CatIcon sx={{ fontSize: 18 }} />}
+                  title={categoria.valor}
+                  aria-label={categoria.valor}
                   onClick={() => handleChange('categoria', categoria.valor)}
                   sx={{ 
                     '& .MuiChip-icon': {
@@ -669,11 +855,13 @@ const TransaccionForm = ({
                     }
                   }}
                 />
-              ))}
+                );
+              })}
             </Box>
           </Box>
 
-          {/* Switch Recurrente */}
+          {/* Switch Recurrente: solo al crear (editar no modifica reglas recurrentes) */}
+          {!isEditing && (
           <Box sx={{ 
             mt: 2,
             display: 'flex',
@@ -708,6 +896,7 @@ const TransaccionForm = ({
               }}
             />
           </Box>
+          )}
         </Box>
       </DialogContent>
 

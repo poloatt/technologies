@@ -9,10 +9,7 @@ import {
 import { alpha } from '@mui/material/styles';
   import { useSidebar } from '../context/SidebarContext';
   import { useUISettings } from '../context/UISettingsContext';
-  import { AutorenewOutlined } from '@mui/icons-material';
   import { useLocation, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-  import { Dialog } from '../utils/materialImports';
   // import { MercadoPagoConnectButton, BankConnectionForm } from '../../../caja/src/finance/bankconnections'; // Comentado: import cruzado
   import { getBreadcrumbs } from './breadcrumbUtils';
 import { getIconByKey, icons } from './menuIcons';
@@ -20,7 +17,8 @@ import { modulos } from './menuStructure';
 import { Breadcrumbs } from '../utils/materialImports';
 import useResponsive from '../hooks/useResponsive';
 import { useNavigationState } from '../utils/navigationUtils';
-import { HEADER_CONFIG, NAV_TYPO } from '../config/uiConstants';
+import { HEADER_CONFIG } from '../config/uiConstants';
+import { NAV_TYPO } from '../tipografia';
 import { isUnifiedToolbarPath } from './unifiedBarPaths';
 import { getCenteredSectionSx } from './alignmentUtils';
 import { DynamicIcon } from '../components/common/DynamicIcon';
@@ -37,8 +35,6 @@ import { DynamicIcon } from '../components/common/DynamicIcon';
   
     const location = useLocation();
     const navigate = useNavigate();
-    const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-    const [isBankConnectionFormOpen, setIsBankConnectionFormOpen] = useState(false);
     const { isMobile, isTablet, isMobileOrTablet, isDesktop } = useResponsive();
     // Hook de medición reutilizable (inicial izquierda = collapsedWidth por el MenuButton)
     const { leftWidthRef, rightWidthRef, leftWidth, rightWidth } = useAnchorWidths(
@@ -299,23 +295,6 @@ import { DynamicIcon } from '../components/common/DynamicIcon';
           {/* Acciones y botones del lado derecho - solo en desktop */}
           {isDesktop && (
             <>
-              {/* Botones de acción (sync, etc.) - antes del AppsButton */}
-              <Box sx={{ display: 'flex', alignItems: 'center', marginRight: `${collapsedWidth}px` }}>
-                  <SystemButtons
-                    actions={[
-                     !showEntityToolbarNavigation && location.pathname.includes('/cuentas') ? {
-                       key: 'sync',
-                       icon: <AutorenewOutlined sx={{ fontSize: 20, color: 'white' }} />,
-                       label: 'Sincronizar',
-                       tooltip: 'Sincronizar nueva cuenta',
-                       onClick: () => setIsSyncModalOpen(true),
-                       disabled: false
-                     } : null,
-                    ]}
-                    direction="row"
-                    size="small"
-                  />
-              </Box>
               {/* AppsButton fijo - simétrico con MenuButton */}
               <Box sx={{ 
                   position: 'absolute',
@@ -347,19 +326,6 @@ import { DynamicIcon } from '../components/common/DynamicIcon';
                 <SystemButtons.AppsButton />
               </Box>
             )}
-          {/* Diálogos modales para sincronizar y agregar cuenta */}
-          <Dialog open={isSyncModalOpen} onClose={() => setIsSyncModalOpen(false)} maxWidth="xs" fullWidth>
-            <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Sincronizar nueva cuenta</Typography>
-              {/* <MercadoPagoConnectButton
-                onSuccess={() => setIsSyncModalOpen(false)}
-                onError={() => setIsSyncModalOpen(false)}
-              /> */}
-            </Box>
-          </Dialog>
-          {/* <Dialog open={isBankConnectionFormOpen} onClose={() => setIsBankConnectionFormOpen(false)} maxWidth="xs" fullWidth>
-            <BankConnectionForm onClose={() => setIsBankConnectionFormOpen(false)} />
-          </Dialog> */}
         </Toolbar>
       </AppBar>
     );

@@ -5,6 +5,7 @@ import {
   TareaFormSecondaryLine,
   tareaFormRowIconSx,
 } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /**
  * Filas expandibles estilo Google Calendar (sin contenedor tipo acordeón).
@@ -57,7 +58,7 @@ export default function PropiedadDetailSections({ sections = [] }) {
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography
                   component="span"
-                  sx={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.45 }}
+                  sx={{ display: 'block', fontSize: FONT_SIZE.base, fontWeight: 500, lineHeight: 1.45 }}
                 >
                   {section.title}
                 </Typography>

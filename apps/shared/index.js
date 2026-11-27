@@ -34,6 +34,9 @@ export * from './navigation/index.js';
 // Pages
 export * from './pages/index.js';
 
+// Tipografía
+export * from './tipografia/index.js';
+
 // Styles (importar CSS)
 import './index.css';
 

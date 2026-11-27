@@ -47,7 +47,7 @@ div[class*="SnackbarContent-message"],
 
 /* Colores por tipo - Exactos del Footer */
 .snackbar-success div { border-color: #4caf50 !important; }
-.snackbar-error div { border-color: #f44336 !important; }
+.snackbar-error div { border-color: #b83838 !important; }
 .snackbar-warning div { border-color: #ff9800 !important; }
 .snackbar-info div { border-color: #2196f3 !important; }
 

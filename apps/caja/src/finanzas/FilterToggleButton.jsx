@@ -14,10 +14,10 @@ export default function FilterToggleButton({ label, amount, amountColor, selecte
       onClick={onClick}
       sx={getFilterToggleButtonSx()}
     >
-      <Typography sx={{ ...filterToggleAmountSx, color: amountColor }}>
+      <Typography noWrap sx={{ ...filterToggleAmountSx, color: amountColor }}>
         {amount}
       </Typography>
-      <Typography component="span" sx={getFilterToggleFloatingLabelSx(selected)}>
+      <Typography component="span" noWrap sx={getFilterToggleFloatingLabelSx(selected)}>
         {label}
       </Typography>
     </Box>

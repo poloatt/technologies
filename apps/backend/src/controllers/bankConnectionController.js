@@ -316,7 +316,11 @@ class BankConnectionController extends BaseController {
               timeZone: 'America/Argentina/Buenos_Aires',
             })
           : 'la fecha pedida';
-        if (resultado.historialCompleto || historial.completo) {
+        if (historial.revision?.beginDate) {
+          message = historial.revision.pendiente
+            ? `La revisión de ${historial.revision.mesLabel} (tramo sin retiros a CBU) quedó pendiente. Reintentá más tarde.`
+            : `Se volvió a importar ${historial.revision.mesLabel}, que había quedado sin retiros a CBU.`;
+        } else if (resultado.historialCompleto || historial.completo) {
           message = `El historial ya llega hasta el ${objetivoTxt}.`;
         } else if (historial.cuotaAgotada) {
           message = `Cupo de Mercado Pago agotado en ${historial.mesLabel}. Ese mes queda pendiente y no se crearon más reportes.`;
@@ -732,6 +736,8 @@ class BankConnectionController extends BaseController {
           }
 
           let current = conexion;
+          const REVISIONES_POR_CORRIDA = 3;
+          let revisiones = 0;
           for (let step = 0; step < 240; step += 1) {
             const before = current.mercadopago?.historial?.cubiertoHasta
               ? new Date(current.mercadopago.historial.cubiertoHasta).getTime()
@@ -753,8 +759,14 @@ class BankConnectionController extends BaseController {
               pendiente: Boolean(historial?.pendiente),
             });
             if (!syncResult || syncResult.exito === false || syncResult.historialCompleto) break;
-            if (!historial || historial.completo || historial.cuotaAgotada || historial.pendiente) break;
-            if (!Number.isFinite(after) || (before != null && after >= before)) break;
+            if (!historial || historial.cuotaAgotada || historial.pendiente) break;
+            // Una revisión de tramo sin retiros no mueve el cursor: seguir con el recorrido.
+            // Cada revisión gasta un reporte MP; el resto queda para la próxima corrida.
+            const revision = Boolean(historial.revision?.beginDate);
+            if (revision) revisiones += 1;
+            if (revisiones >= REVISIONES_POR_CORRIDA) break;
+            if (!revision && historial.completo) break;
+            if (!revision && (!Number.isFinite(after) || (before != null && after >= before))) break;
             current = await BankConnection.findById(conexionId);
             if (!current) break;
           }

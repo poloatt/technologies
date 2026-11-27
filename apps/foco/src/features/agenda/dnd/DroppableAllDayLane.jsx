@@ -5,6 +5,7 @@ import { alpha, useTheme } from '@mui/material/styles';
 import { format } from 'date-fns';
 import { allDayDropId } from '@shared/utils/calendar/calendarDragUtils';
 import { useCalendarDragPreview } from './CalendarDragPreviewContext';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function DroppableAllDayLane({ day, children, sx, minHeight = 28 }) {
   const theme = useTheme();
@@ -40,7 +41,7 @@ export default function DroppableAllDayLane({ day, children, sx, minHeight = 28 
             position: 'absolute',
             right: 4,
             top: 2,
-            fontSize: '0.65rem',
+            fontSize: FONT_SIZE.xs,
             fontWeight: 700,
             color: 'primary.main',
             pointerEvents: 'none',

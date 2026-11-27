@@ -19,6 +19,7 @@ import {
   taskFormFixedSelectPillSx,
   taskFormPillIconSx,
 } from './tareaFormTokens';
+import { FONT_SIZE } from '../../tipografia';
 
 const GRID_COLUMNS = 6;
 
@@ -50,7 +51,7 @@ function HabitIconPickerGrid({
             sx={{
               display: 'block',
               fontWeight: 600,
-              fontSize: '0.68rem',
+              fontSize: FONT_SIZE.xs,
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
               mb: 0.75,

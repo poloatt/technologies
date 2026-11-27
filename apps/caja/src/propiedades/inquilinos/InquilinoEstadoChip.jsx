@@ -1,6 +1,7 @@
 import React from 'react';
 import { Typography } from '@mui/material';
 import { getEstadoColor, getEstadoText } from '@shared/components/common/StatusSystem';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function InquilinoEstadoChip({ estado = 'PENDIENTE' }) {
   const color = getEstadoColor(estado, 'INQUILINO');
@@ -14,7 +15,7 @@ export default function InquilinoEstadoChip({ estado = 'PENDIENTE' }) {
         px: 1.25,
         py: 0.25,
         borderRadius: '16px',
-        fontSize: '0.75rem',
+        fontSize: FONT_SIZE.sm,
         fontWeight: 500,
         lineHeight: 1.35,
         bgcolor: `${color}22`,

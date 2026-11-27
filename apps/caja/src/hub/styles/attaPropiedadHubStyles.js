@@ -1,5 +1,6 @@
 import { alpha } from '@mui/material/styles';
 import { HUB_SECTION, hubSectionBg } from '@shared/styles/hubSectionStyles';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /** Bloque de propiedad dentro del cuerpo de sección (sin tarjeta anidada). */
 export function getPropiedadHubBlockSx({ isLast = false } = {}) {
@@ -31,7 +32,7 @@ export const propiedadHubIconSx = {
 };
 
 export const propiedadHubTitleSx = {
-  fontSize: '0.875rem',
+  fontSize: FONT_SIZE.base,
   fontWeight: 500,
   lineHeight: 1.45,
   color: 'text.primary',
@@ -39,7 +40,7 @@ export const propiedadHubTitleSx = {
 };
 
 export const propiedadHubSubtitleSx = {
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   lineHeight: 1.35,
   color: 'text.secondary',
   display: 'block',
@@ -61,7 +62,7 @@ export function getPropiedadEstadoChipSx(estadoColor) {
       px: 1.25,
       py: 0.375,
       borderRadius: '16px',
-      fontSize: '0.75rem',
+      fontSize: FONT_SIZE.sm,
       fontWeight: 500,
       lineHeight: 1.35,
       color: estadoColor,
@@ -84,7 +85,7 @@ export const propiedadHubEmptySx = {
   display: 'block',
   px: 0.125,
   py: 0.75,
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   color: 'text.disabled',
 };
 

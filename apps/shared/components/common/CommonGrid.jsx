@@ -14,6 +14,7 @@ import {
 import CommonActions from '../common/CommonActions';
 import { KeyboardArrowDown as ExpandIcon } from '@mui/icons-material';
 import { getStatusIconComponent, getEstadoColor, getEstadoText } from '../common/StatusSystem';
+import { FONT_SIZE } from '../../tipografia';
 
 const EstadoChip = ({ estado, tipo = 'PROPIEDAD', sx = {} }) => (
   <Box
@@ -23,7 +24,7 @@ const EstadoChip = ({ estado, tipo = 'PROPIEDAD', sx = {} }) => (
       gap: 0.5,
       px: 1,
       py: 0.5,
-      fontSize: '0.75rem',
+      fontSize: FONT_SIZE.sm,
       color: getEstadoColor(estado, tipo),
       bgcolor: 'transparent',
       borderRadius: 0,

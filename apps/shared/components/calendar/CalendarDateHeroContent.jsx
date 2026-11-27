@@ -3,6 +3,7 @@ import { Box, Chip, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { startOfDay } from 'date-fns';
 import { formatCalendarDayHeader } from '../../utils/focoNavigationUtils';
+import { FONT_SIZE } from '../../tipografia';
 
 /** Pill de % de rutina — tipografía Google Calendar; `subtle` = blanco brilloso suave, `completed` = 100% logrado. */
 export function RutinaCompletionPctChip({
@@ -45,7 +46,7 @@ export function RutinaCompletionPctChip({
         '& .MuiChip-label': {
           px: 0.75,
           py: 0,
-          fontSize: '0.8125rem',
+          fontSize: FONT_SIZE.md,
           fontWeight: completed ? 600 : 400,
           lineHeight: 1.2,
         },
@@ -122,7 +123,7 @@ export default function CalendarDateHeroContent({
         <Typography
           component="span"
           sx={{
-            fontSize: { xs: '1.5rem', sm: '2rem' },
+            fontSize: { xs: FONT_SIZE['3xl'], sm: FONT_SIZE['5xl'] },
             fontWeight: 400,
             lineHeight: 1,
             color: 'text.primary',
@@ -204,8 +205,8 @@ export default function CalendarDateHeroContent({
           component="span"
           sx={{
             fontSize: compact
-              ? { xs: '1.35rem', sm: '1.5rem' }
-              : { xs: '1.75rem', sm: '2rem' },
+              ? { xs: FONT_SIZE['2xl'], sm: FONT_SIZE['3xl'] }
+              : { xs: FONT_SIZE['4xl'], sm: FONT_SIZE['5xl'] },
             fontWeight: 400,
             lineHeight: 1,
             color: 'text.primary',

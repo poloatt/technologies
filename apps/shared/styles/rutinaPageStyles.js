@@ -30,6 +30,7 @@ import {
   getCollapseHubHeaderTopRowSx,
   getCollapseSectionShellSx,
 } from './collapseSectionStyles';
+import { FONT_SIZE } from '../tipografia';
 
 /** Ancho máximo del contenido de la página Rutinas (alineado con TareaForm / hub Foco). */
 export const RUTINA_PAGE_MAX_WIDTH = 900;
@@ -540,14 +541,14 @@ export const rutinaChainConnectorSx = {
 };
 
 export const rutinaChainChipSx = {
-  fontSize: '0.65rem',
+  fontSize: FONT_SIZE.xs,
   height: 18,
   ml: 0.5,
   verticalAlign: 'middle',
 };
 
 export const rutinaRoutineChipSx = {
-  fontSize: '0.65rem',
+  fontSize: FONT_SIZE.xs,
   height: 18,
   mt: 0.25,
   alignSelf: 'flex-end',

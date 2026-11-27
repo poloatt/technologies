@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   resolveFinanzasBranch,
-  getCuentasPath,
   getTransaccionesPath,
 } from './finanzasDeepLink';
 
@@ -14,7 +13,6 @@ export function useFinanzasBranch() {
     const branchId = resolveFinanzasBranch(pathname);
     return {
       branchId,
-      cuentasPath: getCuentasPath(branchId),
       transaccionesPath: getTransaccionesPath(branchId),
     };
   }, [pathname]);

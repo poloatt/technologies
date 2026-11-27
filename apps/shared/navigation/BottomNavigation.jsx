@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
-import { NAV_TYPO, SPACING } from '../config/uiConstants';
+import { SPACING } from '../config/uiConstants';
+import { NAV_TYPO } from '../tipografia';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isCajaBranchActive, resolveBottomNavItems } from './appNavResolver';
 import { DynamicIcon } from '../components/common/DynamicIcon';

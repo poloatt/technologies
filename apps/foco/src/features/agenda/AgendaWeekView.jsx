@@ -25,6 +25,7 @@ import AgendaCalendarContextBar from './AgendaCalendarContextBar';
 import AgendaAllDayLane from './AgendaAllDayLane';
 import { useAgendaSwipeNavigate } from './useAgendaSwipeNavigate';
 import CalendarDndContext from './dnd/CalendarDndContext';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function AgendaWeekView({
   weekDays = [],
@@ -115,7 +116,7 @@ export default function AgendaWeekView({
                   variant="caption"
                   sx={{
                     textTransform: 'uppercase',
-                    fontSize: '0.65rem',
+                    fontSize: FONT_SIZE.xs,
                     fontWeight: 600,
                     letterSpacing: '0.06em',
                     color: today ? 'primary.main' : 'text.secondary',
@@ -139,7 +140,7 @@ export default function AgendaWeekView({
                     variant="subtitle1"
                     sx={{
                       fontWeight: today || active ? 700 : 500,
-                      fontSize: '1.05rem',
+                      fontSize: FONT_SIZE.lg,
                       lineHeight: 1,
                     }}
                   >
@@ -226,7 +227,7 @@ export default function AgendaWeekView({
                     pt: 0.25,
                   }}
                 >
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: FONT_SIZE.xs }}>
                     {formatHourLabel(hour)}
                   </Typography>
                 </Box>

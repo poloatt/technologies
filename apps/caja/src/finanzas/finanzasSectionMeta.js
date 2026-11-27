@@ -37,8 +37,8 @@ export const FINANZAS_SECTION_META = {
     description: 'Compras con tarjeta y cuotas del mes',
     accent: '#5C6BC0',
   },
-  deudores: {
-    description: 'Préstamos, deudas y cobros pendientes',
+  contactos: {
+    description: 'Personas, comercios y contrapartes con las que transferís, pagás o cobrás',
     accent: '#F44336',
   },
   propiedades: {

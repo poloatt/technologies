@@ -39,6 +39,7 @@ import GoogleWalletConnectButton from './GoogleWalletConnectButton';
 import UalaConnectButton from './UalaConnectButton';
 import WiseConnectButton from './WiseConnectButton';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -141,7 +142,7 @@ const AccountTypeSelector = ({ onSelect }) => (
                 }}
               >
                 <AccountBalanceIcon sx={{ color: 'white', fontSize: 28, mr: 2 }} />
-                <Typography sx={{ color: 'white', fontWeight: 600, fontSize: 16 }}>
+                <Typography sx={{ color: 'white', fontWeight: 600, fontSize: FONT_SIZE.lg }}>
                   Cuenta bancaria
                 </Typography>
               </Box>
@@ -168,7 +169,7 @@ const AccountTypeSelector = ({ onSelect }) => (
                 }}
               >
                 <AccountBalanceWalletIcon sx={{ color: 'white', fontSize: 28, mr: 2 }} />
-                <Typography sx={{ color: 'white', fontWeight: 600, fontSize: 16 }}>
+                <Typography sx={{ color: 'white', fontWeight: 600, fontSize: FONT_SIZE.lg }}>
                   Billetera digital
                 </Typography>
               </Box>

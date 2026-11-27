@@ -33,12 +33,17 @@ export const INVERSION_TYPE_FILTERS = [
   },
   {
     id: 'invest',
-    label: 'Inversiones',
+    label: 'Invertido',
     kinds: ['INVESTMENT_IN', 'INVESTMENT_OUT', 'INVESTMENT_YIELD', 'YIELD'],
     yieldSide: 'inversion',
   },
   { id: 'yield', label: 'Rendimientos', kinds: ['INVESTMENT_YIELD', 'YIELD'] },
 ];
+
+/** `reserve`, `invest` o `yield` dejan solo ese botón. Otra cosa muestra el libro entero. */
+export function inversionKindsFromVista(vista) {
+  return INVERSION_TYPE_FILTERS.some((option) => option.id === vista) ? [vista] : null;
+}
 
 /**
  * Listado de un botón de Inversiones.
@@ -46,6 +51,7 @@ export const INVERSION_TYPE_FILTERS = [
  * Inversiones trae lo invertido y lo rescatado, más el rendimiento y las pérdidas del fondo.
  * Rendimientos trae ganancias y pérdidas, de las dos cuentas.
  */
+
 export function inversionListQuery(enabledIds) {
   if (enabledIds == null) return { kinds: undefined, yieldSide: undefined };
   const selected = INVERSION_TYPE_FILTERS.filter((option) => enabledIds.includes(option.id));

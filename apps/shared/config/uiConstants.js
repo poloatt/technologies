@@ -113,8 +113,18 @@ export const TRANSITIONS = {
 };
 
 // ===== COLORS AND BORDERS =====
+/** Rojo oscuro centralizado para valores negativos, gráficos en negativo y errores. */
+export const NEGATIVE_COLOR = '#b83838';
+export const NEGATIVE_COLOR_LIGHT = '#cf5656';
+export const NEGATIVE_COLOR_DARK = '#8c2626';
+
+/** Gris neutro estándar de la app (coincide con `theme.palette.text.secondary`). */
+export const APP_GRAY = '#a6a7ab';
+
 export const UI_COLORS = {
   border: '1.5px solid #232323',
+  negative: NEGATIVE_COLOR,
+  appGray: APP_GRAY,
   backgroundActive: {
     parent: '#323232',
     child: '#232323'
@@ -156,25 +166,6 @@ export const ICON_SIZES = {
   small: 'small',
   medium: 'medium',
   large: 'large'
-};
-
-// ===== NAVIGATION TYPOGRAPHY TOKENS =====
-// Best practice: evitar hardcodes repetidos en componentes de navegación.
-// Usamos variants de MUI y solo dejamos tamaños puntuales cuando el layout lo exige (ej: bottom nav).
-export const NAV_TYPO = {
-  // Texto en items de sidebar / navegación principal
-  itemVariant: 'body2',     // ~0.875rem por defecto en MUI
-  // Texto pequeño auxiliar (chips, captions)
-  captionVariant: 'caption', // ~0.75rem por defecto en MUI
-  // Título principal en Header (ruta/página)
-  headerTitleVariant: 'subtitle2',
-  headerTitleSx: { fontWeight: 600, lineHeight: 1.2, letterSpacing: '0.01em' },
-  // Labels en Chips dentro de navegación (footer/rutinas)
-  chipLabelSx: { typography: 'caption', lineHeight: 1.1, letterSpacing: '0.01em' },
-  // Bottom navigation suele necesitar un poco más chico para evitar overflow
-  bottomNavLabelSx: { fontSize: '0.75rem', lineHeight: 1.1, letterSpacing: '0.01em' },
-  // Usado en lugares donde body2 queda grande pero no queremos hardcodes sueltos
-  compactBodySx: { fontSize: '0.8rem', lineHeight: 1.2, letterSpacing: '0.01em' }
 };
 
 // ===== BORDER RADIUS =====

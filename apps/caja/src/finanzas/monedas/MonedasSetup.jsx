@@ -1,38 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Button, Box, Tooltip, IconButton, Typography } from '@mui/material';
-import {
-  FinanzasSectionNav,
-  MonedaTile,
-  MonedasCarousel,
-  MonedasSortableList,
-  MonedaTileSkeleton,
-  COLORES_MONEDA,
-  normalizeMoneda,
-  sortMonedasByOrden,
-  monedaDetailPath,
-} from '../finanzas';
-import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
-import { CommonDetails, CommonForm } from '@shared/components/common';
-import { AddOutlined as AddIcon, RefreshOutlined as RefreshIcon } from '@mui/icons-material';
+import { Box, Typography } from '@mui/material';
+import MonedaTile from './MonedaTile';
+import { MonedaTileSkeleton } from './MonedasCarousel';
+import MonedasSortableList from './MonedasSortableList';
+import { COLORES_MONEDA, getDefaultColorForMoneda } from './monedaConstants';
+import { sortMonedasByOrden } from './monedaSortUtils';
+import { normalizeMoneda } from './index';
+import { CommonForm } from '@shared/components/common';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
 import { EmptyState } from '@shared/components/common';
 import { useAPI, useResponsive } from '@shared/hooks';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 /**
- * Catálogo de monedas.
- * @param {{ embedded?: boolean }} props embedded = setup popup (sin strip de sección).
+ * Setup de monedas: se muestra solo dentro del popup (sin página propia).
  */
-export function Monedas({ embedded = false } = {}) {
+export function MonedasSetup() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingMoneda, setEditingMoneda] = useState(null);
   const { enqueueSnackbar, closeSnackbar } = useSnackbar();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [embeddedSelectedId, setEmbeddedSelectedId] = useState(null);
-  const selectedMonedaId = embedded ? embeddedSelectedId : searchParams.get('id');
+  const [selectedMonedaId, setSelectedMonedaId] = useState(null);
   const { isDesktop } = useResponsive();
 
   // Usar nuestro hook personalizado para cargar monedas - Optimizaciones
@@ -85,28 +72,15 @@ export function Monedas({ embedded = false } = {}) {
   // Escuchar el evento del botón "+" del Header
   useEffect(() => {
     const handleHeaderAdd = (e) => {
-      if (
-        (e.detail?.path && e.detail.path === location.pathname) ||
-        e.detail?.type === 'moneda' ||
-        e.detail?.type === 'monedas'
-      ) {
+      if (e.detail?.type === 'moneda' || e.detail?.type === 'monedas') {
         setEditingMoneda(null);
         setIsFormOpen(true);
       }
     };
-    
+
     window.addEventListener('headerAddButtonClicked', handleHeaderAdd);
     return () => window.removeEventListener('headerAddButtonClicked', handleHeaderAdd);
-  }, [location.pathname]);
-
-  // Abrir formulario tras redirección si openAdd está en el estado
-  useEffect(() => {
-    if (location.state?.openAdd) {
-      setEditingMoneda(null);
-      setIsFormOpen(true);
-      window.history.replaceState({}, document.title);
-    }
-  }, [location]);
+  }, []);
 
   const handleFormSubmit = useCallback(async (formData) => {
     try {
@@ -134,7 +108,7 @@ export function Monedas({ embedded = false } = {}) {
           codigo: formData.codigo?.trim() || '',
           nombre: formData.nombre?.trim() || '',
           simbolo: formData.simbolo?.trim() || '',
-          color: formData.color || COLORES_MONEDA.CELESTE_ARGENTINA.value,
+          color: formData.color || getDefaultColorForMoneda(formData.codigo),
           activa: typeof formData.activa === 'boolean' ? formData.activa : true
         };
         
@@ -147,7 +121,7 @@ export function Monedas({ embedded = false } = {}) {
           codigo: formData.codigo?.trim() || '',
           nombre: formData.nombre?.trim() || '',
           simbolo: formData.simbolo?.trim() || '',
-          color: formData.color || COLORES_MONEDA.CELESTE_ARGENTINA.value,
+          color: formData.color || getDefaultColorForMoneda(formData.codigo),
           activa: true
         };
         
@@ -159,6 +133,8 @@ export function Monedas({ embedded = false } = {}) {
       setIsFormOpen(false);
       setEditingMoneda(null);
       await refetchMonedas();
+      window.dispatchEvent(new Event('monedasRefreshed'));
+      window.dispatchEvent(new Event('cuentasRefreshed'));
     } catch (error) {
       console.error('Error al guardar moneda:', error);
       enqueueSnackbar('Error al guardar moneda: ' + (error.response?.data?.message || error.message), { variant: 'error' });
@@ -178,7 +154,7 @@ export function Monedas({ embedded = false } = {}) {
       codigo: moneda.codigo || '',
       nombre: moneda.nombre || '',
       simbolo: moneda.simbolo || '',
-      color: moneda.color || COLORES_MONEDA.CELESTE_ARGENTINA.value,
+      color: moneda.color || getDefaultColorForMoneda(moneda.codigo),
       activa: typeof moneda.activa === 'boolean' ? moneda.activa : true
     };
     
@@ -205,6 +181,8 @@ export function Monedas({ embedded = false } = {}) {
       closeSnackbar(loadingMsg);
       enqueueSnackbar('Moneda eliminada exitosamente', { variant: 'success' });
       await refetchMonedas();
+      window.dispatchEvent(new Event('monedasRefreshed'));
+      window.dispatchEvent(new Event('cuentasRefreshed'));
     } catch (error) {
       enqueueSnackbar('Error al eliminar la moneda: ' + (error.response?.data?.message || error.message), { variant: 'error' });
     }
@@ -245,6 +223,8 @@ export function Monedas({ embedded = false } = {}) {
       
       // Recargar datos
       await refetchMonedas();
+      window.dispatchEvent(new Event('monedasRefreshed'));
+      window.dispatchEvent(new Event('cuentasRefreshed'));
     } catch (error) {
       enqueueSnackbar('Error al cambiar el estado de la moneda: ' + (error.response?.data?.message || error.message), { variant: 'error' });
     }
@@ -255,6 +235,8 @@ export function Monedas({ embedded = false } = {}) {
       await clienteAxios.put('/api/monedas/reorder', { order });
       enqueueSnackbar('Orden de monedas actualizado', { variant: 'success' });
       await refetchMonedas();
+      window.dispatchEvent(new Event('monedasRefreshed'));
+      window.dispatchEvent(new Event('cuentasRefreshed'));
     } catch (error) {
       enqueueSnackbar(
         'Error al guardar el orden: ' + (error.response?.data?.message || error.message),
@@ -272,19 +254,13 @@ export function Monedas({ embedded = false } = {}) {
         variant="full"
         fullWidth={isDesktop}
         selected={selectedMonedaId === monedaId}
-        onSelect={(id) => {
-          if (embedded) {
-            setEmbeddedSelectedId(id);
-            return;
-          }
-          navigate(monedaDetailPath(id), { replace: true });
-        }}
+        onSelect={setSelectedMonedaId}
         onEdit={handleEdit}
         onDelete={handleDelete}
         onToggleActive={handleToggleActive}
       />
     );
-  }, [embedded, isDesktop, selectedMonedaId, navigate, handleEdit, handleDelete, handleToggleActive]);
+  }, [isDesktop, selectedMonedaId, handleEdit, handleDelete, handleToggleActive]);
 
   const formFields = [
     {
@@ -326,18 +302,10 @@ export function Monedas({ embedded = false } = {}) {
     setIsFormOpen(true);
   };
 
-  const listLayout = embedded || isDesktop ? 'column' : 'carousel';
-
   const listBody = isLoading ? (
-    listLayout === 'column' ? (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.625, width: '100%' }}>
-        <MonedaTileSkeleton count={4} width="100%" />
-      </Box>
-    ) : (
-      <MonedasCarousel>
-        <MonedaTileSkeleton count={4} />
-      </MonedasCarousel>
-    )
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.625, width: '100%' }}>
+      <MonedaTileSkeleton count={4} width="100%" />
+    </Box>
   ) : monedas.length === 0 ? (
     <EmptyState
       onAdd={openCreate}
@@ -346,7 +314,7 @@ export function Monedas({ embedded = false } = {}) {
     />
   ) : (
     <>
-      {embedded && monedas.length > 1 ? (
+      {monedas.length > 1 ? (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Arrastrá el asa para reordenar. El orden se usa en balances y listados.
         </Typography>
@@ -354,54 +322,15 @@ export function Monedas({ embedded = false } = {}) {
       <MonedasSortableList
         monedas={monedas}
         onReorder={handleReorderMonedas}
-        layout={listLayout}
+        layout="column"
         renderTile={renderMonedaTile}
       />
     </>
   );
 
   return (
-    <Box sx={embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx}>
-      {!embedded && <FinanzasSectionNav variant="strip" />}
-      {embedded ? (
-        listBody
-      ) : (
-        <CommonDetails
-          action={
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Tooltip title="Recargar datos">
-                <IconButton
-                  size="small"
-                  onClick={() => {
-                    const loadingMsg = enqueueSnackbar('Recargando datos...', {
-                      variant: 'info',
-                      persist: true,
-                    });
-                    refetchMonedas().then(() => {
-                      closeSnackbar(loadingMsg);
-                      enqueueSnackbar('Datos actualizados', { variant: 'success' });
-                    });
-                  }}
-                  sx={{ bgcolor: 'background.paper', borderRadius: 1 }}
-                >
-                  <RefreshIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                size="small"
-                onClick={openCreate}
-                sx={{ borderRadius: 1, textTransform: 'none' }}
-              >
-                Nueva Moneda
-              </Button>
-            </Box>
-          }
-        >
-          {listBody}
-        </CommonDetails>
-      )}
+    <Box sx={{ px: 1.5, py: 1.25 }}>
+      {listBody}
 
       <CommonForm
         open={isFormOpen}
@@ -419,4 +348,4 @@ export function Monedas({ embedded = false } = {}) {
   );
 }
 
-export default Monedas;
+export default MonedasSetup;

@@ -22,6 +22,7 @@ import { CircularProgress } from '@mui/material';
 import { CuotasProvider } from '@shared/context/CuotasContext';
 import { CommonDate } from '@shared/components/common/CommonDate';
 import { getDocumentId } from '../habitacionConstants';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -355,7 +356,7 @@ const ContratoForm = ({
             ) : (
               <Description sx={{ color: 'primary.main', fontSize: 20 }} />
             )}
-            <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
+            <Typography variant="h6" sx={{ fontSize: FONT_SIZE.xl }}>
               {initialData._id ? 'Editar' : 'Nuevo'} Contrato
             </Typography>
           </Box>

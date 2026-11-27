@@ -9,17 +9,8 @@ import {
   hubHeaderActionSx,
   hubHeaderIconSx,
 } from '@shared/styles/hubSectionStyles';
+import { FONT_SIZE, FONT_WEIGHT, LETTER_SPACING, LINE_HEIGHT } from '@shared/tipografia';
 import { cajaSwitchSx } from './attaPropiedadHubStyles';
-
-// Escala tipográfica de saldos hub: vive en shared para todas las apps.
-export {
-  HUB_EYEBROW_FONT_SIZE,
-  HUB_HERO_AMOUNT,
-  getHubHeroAmountSx,
-  hubEyebrowSx,
-  hubNumericSx,
-  hubSupportAmountSx,
-} from '@shared/styles/hubBalanceTypography';
 
 export {
   HUB_SECTION_CARD_BODY_MIN_HEIGHT as CAJA_HUB_CARD_BODY_MIN_HEIGHT,
@@ -72,26 +63,26 @@ export function getHubListRowSx({ selected } = {}) {
 }
 
 export const hubLabelSx = {
-  fontWeight: 600,
+  fontWeight: FONT_WEIGHT.semibold,
   lineHeight: 1.15,
-  fontSize: '0.6875rem',
-  letterSpacing: '0.02em',
+  fontSize: FONT_SIZE.xs,
+  letterSpacing: LETTER_SPACING.wider,
   color: 'text.secondary',
   textTransform: 'uppercase',
 };
 
 export const hubValueSx = {
-  fontWeight: 700,
-  fontSize: '0.8125rem',
-  lineHeight: 1.2,
+  fontWeight: FONT_WEIGHT.bold,
+  fontSize: FONT_SIZE.md,
+  lineHeight: LINE_HEIGHT.snug,
   mt: 0.125,
 };
 
 export const hubPeriodSx = {
   display: 'block',
-  fontSize: '0.6875rem',
-  fontWeight: 600,
-  letterSpacing: '0.02em',
+  fontSize: FONT_SIZE.xs,
+  fontWeight: FONT_WEIGHT.semibold,
+  letterSpacing: LETTER_SPACING.wider,
   color: 'text.secondary',
   textTransform: 'uppercase',
   mb: 0.375,

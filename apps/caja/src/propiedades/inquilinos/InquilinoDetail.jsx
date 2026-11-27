@@ -32,6 +32,7 @@ import {
   propiedadDetailFooterActionSx,
   propiedadDetailCloseButtonSx,
 } from '../propiedadDetailStyles';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const InquilinoDetail = ({
   open,
@@ -139,7 +140,7 @@ const InquilinoDetail = ({
         <TareaFormHeader onClose={onClose}>
           <Typography
             sx={{
-              fontSize: '1.375rem',
+              fontSize: FONT_SIZE['3xl'],
               fontWeight: 400,
               lineHeight: 1.35,
               color: 'text.primary',

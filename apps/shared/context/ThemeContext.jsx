@@ -1,5 +1,12 @@
 import { createTheme } from '@mui/material/styles';
+import {
+  APP_GRAY,
+  NEGATIVE_COLOR,
+  NEGATIVE_COLOR_DARK,
+  NEGATIVE_COLOR_LIGHT,
+} from '../config/uiConstants';
 import { SUBTLE_STROKE_COLOR } from '../styles/subtleStrokeStyles';
+import { FONT_SIZE, FONT_WEIGHT, muiTypography } from '../tipografia';
 
 const theme = createTheme({
   palette: {
@@ -9,6 +16,12 @@ const theme = createTheme({
     },
     secondary: {
       main: '#cccccc',
+    },
+    error: {
+      main: NEGATIVE_COLOR,
+      light: NEGATIVE_COLOR_LIGHT,
+      dark: NEGATIVE_COLOR_DARK,
+      contrastText: '#ffffff',
     },
     background: {
       default: '#181818',
@@ -23,40 +36,14 @@ const theme = createTheme({
     },
     text: {
       primary: '#e6e6e6',
-      secondary: '#a6a7ab',
+      secondary: APP_GRAY,
     },
     divider: '#232323',
     section: {
       background: '#181818'
     },
   },
-  typography: {
-    fontFamily: [
-      'Inter',
-      '-apple-system',
-      'BlinkMacSystemFont',
-      'Segoe UI',
-      'sans-serif',
-    ].join(','),
-    h4: {
-      fontWeight: 600,
-      fontSize: '1.5rem',
-    },
-    h6: {
-      fontWeight: 600,
-      fontSize: '1rem',
-    },
-    subtitle1: {
-      fontSize: '0.813rem',
-      fontWeight: 500,
-    },
-    body1: {
-      fontSize: '0.813rem',
-    },
-    body2: {
-      fontSize: '0.75rem',
-    },
-  },
+  typography: muiTypography,
   shape: {
     borderRadius: 6,
   },
@@ -117,7 +104,7 @@ const theme = createTheme({
     MuiListItemText: {
       styleOverrides: {
         primary: {
-          fontSize: '0.813rem',
+          fontSize: FONT_SIZE.md,
         },
       },
     },
@@ -143,7 +130,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           textTransform: 'none',
-          fontWeight: 500,
+          fontWeight: FONT_WEIGHT.medium,
           padding: '6px 12px',
           '&:hover': {
             backgroundColor: 'transparent'
@@ -164,7 +151,7 @@ const theme = createTheme({
     MuiMenuItem: {
       styleOverrides: {
         root: {
-          fontSize: '0.813rem',
+          fontSize: FONT_SIZE.md,
           minHeight: 32,
           padding: '4px 12px',
         },
@@ -199,8 +186,8 @@ const theme = createTheme({
         root: {
           padding: '12px 16px',
           '& .MuiTypography-root': {
-            fontSize: '1rem',
-            fontWeight: 600
+            fontSize: FONT_SIZE.lg,
+            fontWeight: FONT_WEIGHT.semibold
           }
         }
       }
@@ -234,14 +221,14 @@ const theme = createTheme({
           padding: '8px 12px',
           height: '20px',
           lineHeight: '20px',
-          fontSize: '0.813rem'
+          fontSize: FONT_SIZE.md
         }
       }
     },
     MuiInputLabel: {
       styleOverrides: {
         root: {
-          fontSize: '0.813rem',
+          fontSize: FONT_SIZE.md,
           transform: 'translate(14px, 12px) scale(1)',
           '&.Mui-focused, &.MuiFormLabel-filled': {
             transform: 'translate(14px, -9px) scale(0.75)'
@@ -257,7 +244,7 @@ const theme = createTheme({
     MuiInputBase: {
       styleOverrides: {
         root: {
-          fontSize: '0.813rem',
+          fontSize: FONT_SIZE.md,
           backgroundColor: 'transparent',
           '& .MuiInputAdornment-root': {
             marginTop: '0 !important',

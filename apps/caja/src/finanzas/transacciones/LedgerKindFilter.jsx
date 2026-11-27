@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Checkbox, Popover, Typography } from '@mui/material';
 import { FilterList as FilterListIcon } from '@mui/icons-material';
 import { toggleAllKinds, toggleKindId } from './ledgerKindFilters';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function LedgerKindFilter({ options, enabledIds, onChange }) {
   const [anchor, setAnchor] = useState(null);
@@ -101,7 +102,7 @@ function FilterRow({ label, checked, indeterminate = false, onChange }) {
         onChange={onChange}
         sx={{ p: 0.5 }}
       />
-      <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'text.primary' }}>
+      <Typography sx={{ fontSize: FONT_SIZE.md, fontWeight: 600, color: 'text.primary' }}>
         {label}
       </Typography>
     </Box>

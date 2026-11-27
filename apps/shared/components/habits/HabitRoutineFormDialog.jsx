@@ -15,6 +15,7 @@ import {
   TareaFormHeaderTitleRow,
   taskFormTitleFieldSx,
 } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '../../tipografia';
 
 export default function HabitRoutineFormDialog({
   open,
@@ -67,7 +68,7 @@ export default function HabitRoutineFormDialog({
       }}
     >
       <TareaFormHeader onClose={onClose} closeLabel="Cancelar">
-        <Typography variant="h6" sx={{ fontWeight: 400, fontSize: '1.125rem', pr: 4 }}>
+        <Typography variant="h6" sx={{ fontWeight: 400, fontSize: FONT_SIZE.xl, pr: 4 }}>
           {isEdit ? 'Editar rutina' : 'Nueva rutina'}
         </Typography>
       </TareaFormHeader>

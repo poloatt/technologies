@@ -1,4 +1,5 @@
 import { alpha } from '@mui/material/styles';
+import { FONT_SIZE } from '../tipografia';
 
 /** Scroll de página hub (Foco hub, Rutinas) — scrollbar, altura viewport y padding inferior. */
 export function hubPageScrollSx({
@@ -171,7 +172,7 @@ export const hubGridItemSx = {
 
 /** Celdas de subsección (chips, métricas, tiles) dentro del cuerpo de tarjeta hub. */
 export const HUB_SUBSECTION = {
-  borderRadius: 1.5,
+  borderRadius: HUB_SECTION.sectionRadius,
 };
 
 /**
@@ -194,13 +195,13 @@ export const hubExpandButtonSx = {
   width: '100%',
   mt: 0.1,
   py: 0.25,
-  borderRadius: 1.5,
+  borderRadius: HUB_SECTION.sectionRadius,
   color: 'text.secondary',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   gap: 0.25,
-  fontSize: '0.6875rem',
+  fontSize: FONT_SIZE.xs,
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.02em',
@@ -216,8 +217,8 @@ export const hubSectionSeeMoreSx = {
   width: '100%',
   mt: 0.5,
   py: 0.75,
-  borderRadius: 1,
-  fontSize: '0.8125rem',
+  borderRadius: HUB_SECTION.sectionRadius,
+  fontSize: FONT_SIZE.md,
   color: 'text.secondary',
   '&:hover': {
     bgcolor: (theme) =>

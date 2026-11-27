@@ -5,6 +5,7 @@ import { Users } from '../models/index.js';
 import bcrypt from 'bcryptjs';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { initializeSampleData } from './initData.js';
+import { ensureEfectivoAccount } from '../services/efectivoAccountService.js';
 
 // Importar configuración según el entorno
 let config;
@@ -191,6 +192,7 @@ if (config.google.clientId && config.google.clientSecret) {
           console.log('Programando inicialización de datos para nuevo usuario:', user._id);
           setImmediate(async () => {
             try {
+              await ensureEfectivoAccount(user._id);
               await initializeSampleData(user._id);
               console.log('Datos de ejemplo inicializados para usuario:', user._id);
             } catch (error) {

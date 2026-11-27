@@ -5,11 +5,12 @@ import { formatFecha } from '@shared/utils/contratoUtils';
 import TipoPropiedadIcon from '../TipoPropiedadIcon';
 import { propiedadDetailPrimaryTextSx } from '../propiedadDetailStyles';
 import { formatContratoDuration } from './inquilinoDetailUtils';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function InquilinoPropiedadSection({ contrato }) {
   if (!contrato?.propiedad || !contrato.fechaInicio || !contrato.fechaFin) {
     return (
-      <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled', py: 0.5 }}>
+      <Typography sx={{ fontSize: FONT_SIZE.md, color: 'text.disabled', py: 0.5 }}>
         Sin propiedad asociada
       </Typography>
     );

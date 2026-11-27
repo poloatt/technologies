@@ -11,6 +11,7 @@ import {
   propiedadDetailSecondaryTextSx,
   propiedadDetailEmptyTextSx,
 } from './propiedadDetailStyles';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /** Sección: Ubicación (archivo propio para evitar ciclo ContratosSection ↔ SeccionesPropiedad). */
 export default function SeccionUbicacion({ propiedad, variant }) {
@@ -82,7 +83,7 @@ export default function SeccionUbicacion({ propiedad, variant }) {
             variant="body2"
             sx={{
               fontWeight: 500,
-              fontSize: '0.7rem',
+              fontSize: FONT_SIZE.xs,
               lineHeight: 1,
               m: 0,
               overflow: 'hidden',
@@ -99,7 +100,7 @@ export default function SeccionUbicacion({ propiedad, variant }) {
             variant="caption"
             sx={{
               fontWeight: 400,
-              fontSize: '0.68rem',
+              fontSize: FONT_SIZE.xs,
               color: 'text.secondary',
               lineHeight: 1,
               m: 0,
@@ -116,7 +117,7 @@ export default function SeccionUbicacion({ propiedad, variant }) {
       {propiedad.metrosCuadrados ? (
         <Typography
           variant="body2"
-          sx={{ fontWeight: 500, fontSize: '0.7rem', color: 'text.secondary', textAlign: 'right', minWidth: 60 }}
+          sx={{ fontWeight: 500, fontSize: FONT_SIZE.xs, color: 'text.secondary', textAlign: 'right', minWidth: 60 }}
         >
           {propiedad.metrosCuadrados}m²
         </Typography>

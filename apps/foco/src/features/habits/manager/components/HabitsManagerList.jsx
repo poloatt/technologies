@@ -27,6 +27,7 @@ import {
   getRutinaDragHandleGlyph,
   getRutinaHabitIconTokens,
 } from '@shared/styles/rutinaIconTokens';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const MOBILE_MOSAIC_GAP = 0.15;
 
@@ -300,7 +301,7 @@ function HabitsManagerMobileMosaic({
                 px: 0.5,
                 py: 0.125,
                 fontWeight: 600,
-                fontSize: '0.62rem',
+                fontSize: FONT_SIZE['2xs'],
                 letterSpacing: '0.03em',
                 lineHeight: 1,
                 pointerEvents: 'none',
@@ -384,7 +385,7 @@ function HabitsManagerStackGroup({
             px: 1,
             pt: 0.75,
             pb: 0.25,
-            fontSize: '0.65rem',
+            fontSize: FONT_SIZE.xs,
             fontWeight: 600,
             letterSpacing: '0.02em',
             overflow: 'hidden',
@@ -484,7 +485,7 @@ function HabitsManagerSectionGroup({
           variant="body2"
           sx={{
             fontWeight: 600,
-            fontSize: '0.8125rem',
+            fontSize: FONT_SIZE.md,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',

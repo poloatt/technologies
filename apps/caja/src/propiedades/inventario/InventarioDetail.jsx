@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { Inventory2Outlined as InventoryIcon } from '@mui/icons-material';
 import { useResponsive } from '@shared/hooks';
+import { FONT_SIZE } from '@shared/tipografia';
 
 
 const InventarioDetail = ({ 
@@ -44,7 +45,7 @@ const InventarioDetail = ({
           }
         }}
       >
-        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem', color: 'text.primary' }}>
+        <DialogTitle sx={{ fontWeight: 600, fontSize: FONT_SIZE.xl, color: 'text.primary' }}>
           Inventario del contrato
         </DialogTitle>
         <DialogContent>
@@ -53,8 +54,8 @@ const InventarioDetail = ({
               {inventario.items.map((item, idx) => (
                 <ListItem key={idx} sx={{ px: 0, py: 0.5 }}>
                   <ListItemText
-                    primary={<Typography sx={{ fontSize: '0.95rem', color: 'text.primary' }}>{item.nombre}</Typography>}
-                    secondary={item.descripcion ? <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{item.descripcion}</Typography> : null}
+                    primary={<Typography sx={{ fontSize: FONT_SIZE.lg, color: 'text.primary' }}>{item.nombre}</Typography>}
+                    secondary={item.descripcion ? <Typography sx={{ fontSize: FONT_SIZE.md, color: 'text.secondary' }}>{item.descripcion}</Typography> : null}
                   />
                 </ListItem>
               ))}
@@ -134,14 +135,14 @@ const InventarioDetail = ({
                       <Chip 
                         label={`Cantidad: ${item.cantidad || 1}`} 
                         size="small" 
-                        sx={{ borderRadius: 0, fontSize: '0.7rem' }}
+                        sx={{ borderRadius: 0, fontSize: FONT_SIZE.xs }}
                       />
                       {item.estado && (
                         <Chip 
                           label={item.estado} 
                           size="small" 
                           color={item.estado === 'BUENO' ? 'success' : item.estado === 'REGULAR' ? 'warning' : 'error'}
-                          sx={{ borderRadius: 0, fontSize: '0.7rem' }}
+                          sx={{ borderRadius: 0, fontSize: FONT_SIZE.xs }}
                         />
                       )}
                     </Box>

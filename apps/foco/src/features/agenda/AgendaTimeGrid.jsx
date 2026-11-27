@@ -20,6 +20,7 @@ import {
 } from '@shared/utils/calendar/agendaCalendarUtils';
 import DraggableTimedEvent from './dnd/DraggableTimedEvent';
 import DroppableDayColumn from './dnd/DroppableDayColumn';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /** Línea “ahora” estilo Google Calendar (punto + trazo) — px, igual que slots/eventos. */
 function NowIndicator() {
@@ -203,7 +204,7 @@ export default function AgendaTimeGrid({
               <Typography
                 variant="caption"
                 sx={{
-                  fontSize: '0.6875rem',
+                  fontSize: FONT_SIZE.xs,
                   fontWeight: 500,
                   color: 'text.secondary',
                   letterSpacing: '0.02em',

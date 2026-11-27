@@ -18,16 +18,16 @@ import { SidebarProvider } from '@shared/context/SidebarContext';
 import { UISettingsProvider } from '@shared/context/UISettingsContext';
 import { useAuth } from '@shared/context/AuthContext';
 
+import CajaSetupHost from './atta/CajaSetupHost';
+import LegacySetupRedirect from './atta/LegacySetupRedirect';
+
 // Páginas Caja (lazy)
 const Finanzas = React.lazy(() => import('./pages/Finanzas'));
 const Propiedades = React.lazy(() => import('./pages/Propiedades'));
 const Transacciones = React.lazy(() => import('./pages/Transacciones'));
-const Cuentas = React.lazy(() => import('./pages/Cuentas'));
-const Monedas = React.lazy(() => import('./pages/Monedas'));
 const Inquilinos = React.lazy(() => import('./pages/Inquilinos'));
 const Contratos = React.lazy(() => import('./pages/Contratos'));
 const Inventario = React.lazy(() => import('./pages/Inventario'));
-const Deudores = React.lazy(() => import('./pages/Deudores'));
 const Recurrente = React.lazy(() => import('./pages/Recurrente'));
 const Inversiones = React.lazy(() => import('./pages/Inversiones'));
 const Dolares = React.lazy(() => import('./pages/Dolares'));
@@ -39,6 +39,16 @@ const MercadoPagoCallbackPage = React.lazy(() =>
 const Perfil = React.lazy(() => import('@shared/pages/Perfil'));
 const Configuracion = React.lazy(() => import('@shared/pages/Configuracion'));
 const Preferencias = React.lazy(() => import('@shared/pages/Preferencias'));
+
+/** Layout compartido + host único de los popups setup (Cuentas / Monedas / Contactos). */
+function CajaLayout() {
+  return (
+    <>
+      <Layout />
+      <CajaSetupHost />
+    </>
+  );
+}
 
 function App() {
   const { user, loading } = useAuth();
@@ -73,19 +83,21 @@ function App() {
                 <Route path="/" element={<Navigate to="/finanzas" replace />} />
 
                 <Route element={<PrivateRoute />}>
-                  <Route element={<Layout />}>
+                  <Route element={<CajaLayout />}>
                     <Route path="/finanzas" element={<Finanzas />} />
                     <Route path="/finanzas/transacciones" element={<Transacciones />} />
-                    <Route path="/finanzas/cuentas" element={<Cuentas />} />
-                    <Route path="/finanzas/monedas" element={<Monedas />} />
+                    {/* Cuentas / Monedas / Contactos son popups (?setup=...); estas rutas solo redirigen. */}
+                    <Route path="/finanzas/cuentas" element={<LegacySetupRedirect setup="cuentas" to="/finanzas" />} />
+                    <Route path="/finanzas/monedas" element={<LegacySetupRedirect setup="monedas" to="/finanzas" />} />
                     <Route path="/finanzas/inversiones" element={<Inversiones />} />
                     <Route path="/finanzas/dolares" element={<Dolares />} />
                     <Route path="/finanzas/creditos" element={<Creditos />} />
-                    <Route path="/finanzas/deudores" element={<Deudores />} />
+                    <Route path="/finanzas/contactos" element={<LegacySetupRedirect setup="contactos" to="/finanzas" />} />
+                    <Route path="/finanzas/deudores" element={<LegacySetupRedirect setup="contactos" to="/finanzas" />} />
                     <Route path="/finanzas/recurrente" element={<Recurrente />} />
 
                     <Route path="/propiedades" element={<Propiedades />} />
-                    <Route path="/propiedades/cuentas" element={<Cuentas />} />
+                    <Route path="/propiedades/cuentas" element={<LegacySetupRedirect setup="cuentas" to="/propiedades" />} />
                     <Route path="/propiedades/transacciones" element={<Transacciones />} />
                     <Route path="/propiedades/inquilinos" element={<Inquilinos />} />
                     <Route path="/propiedades/contratos" element={<Contratos />} />
@@ -94,7 +106,7 @@ function App() {
                       element={<Navigate to="/propiedades" replace />}
                     />
                     <Route path="/propiedades/inventario" element={<Inventario />} />
-                    <Route path="/propiedades/inventario/cuentas" element={<Cuentas />} />
+                    <Route path="/propiedades/inventario/cuentas" element={<LegacySetupRedirect setup="cuentas" to="/propiedades/inventario" />} />
                     <Route path="/propiedades/inventario/transacciones" element={<Transacciones />} />
                     <Route path="/propiedades/inventario/en-propiedades" element={<Inventario />} />
                     <Route path="/propiedades/inventario/sin-ubicacion" element={<Inventario />} />

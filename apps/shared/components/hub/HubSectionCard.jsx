@@ -12,6 +12,8 @@ export default function HubSectionCard({
   title,
   iconKey,
   path,
+  /** Sustituye la navegación por `path` (p.ej. abrir un popup en vez de ir a una página). */
+  onTitleClick,
   isActive,
   children,
   cardSx,
@@ -31,7 +33,7 @@ export default function HubSectionCard({
         title={title}
         iconKey={iconKey}
         isActive={isActive}
-        onTitleClick={() => navigate(path)}
+        onTitleClick={onTitleClick || (() => navigate(path))}
         headerSx={headerSx}
         action={action}
       />

@@ -38,6 +38,7 @@ import { useResponsive } from '@shared/hooks';
 import { useValuesVisibility } from '@shared/context';
 import { getEstadoColor } from '@shared/components/common/StatusSystem';
 import { isTaskCompleted } from '@shared/utils/agendaRules';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const ObjetivoItem = ({ 
   objetivo, 
@@ -253,7 +254,7 @@ const ObjetivoItem = ({
               backgroundColor: 'grey.800',
               '& .MuiChip-label': {
                 px: 1,
-                fontSize: '0.75rem'
+                fontSize: FONT_SIZE.sm
               }
             }}
           />
@@ -280,7 +281,7 @@ const ObjetivoItem = ({
             borderColor: 'divider',
             boxShadow: 'none',
             '& .MuiMenuItem-root': {
-              fontSize: '0.875rem',
+              fontSize: FONT_SIZE.base,
               py: 1,
               px: 2,
               '&:hover': {

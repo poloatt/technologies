@@ -9,6 +9,7 @@ import {
   TASK_HORIZON_GROUP_ARIA,
 } from '@shared/copy/agendaTerminology';
 import { TAREAS_TOOLBAR_CENTER_ROW_HEIGHT } from '@shared/navigation/tareasToolbarLayout';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const OPTIONS = ['ahora', 'luego'].map((value) => ({
   value,
@@ -58,7 +59,7 @@ export default function AgendaToolbarCenter() {
             <Typography
               component="span"
               sx={{
-                fontSize: isMobile ? '0.7rem' : '0.75rem',
+                fontSize: isMobile ? FONT_SIZE.xs : FONT_SIZE.sm,
                 lineHeight: 1,
                 color: alpha(theme.palette.text.secondary, 0.35),
                 fontWeight: 300,
@@ -80,7 +81,7 @@ export default function AgendaToolbarCenter() {
               p: 0,
               m: 0,
               font: 'inherit',
-              fontSize: isMobile ? '0.7rem' : '0.75rem',
+              fontSize: isMobile ? FONT_SIZE.xs : FONT_SIZE.sm,
               lineHeight: 1.2,
               fontWeight: agendaView === option.value ? 700 : 400,
               color: agendaView === option.value ? 'text.primary' : inactiveColor,

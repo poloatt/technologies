@@ -7,6 +7,7 @@ const COLORES_MONEDA = {
   TEAL: '#008080',             // Teal
   DARK_TEAL: '#006666',        // Dark teal
   DARK_GREEN: '#006400',       // Dark green
+  VERDE_DOLAR: '#6E8F6B',      // Verde dólar (baja saturación, tono billete)
   VIOLETA_OSCURO: '#4B0082'    // Violeta oscuro
 };
 
@@ -74,7 +75,11 @@ const monedaSchema = createSchema({
   color: {
     type: String,
     enum: Object.values(COLORES_MONEDA),
-    default: COLORES_MONEDA.CELESTE_ARGENTINA
+    default: function() {
+      return this.codigo?.toUpperCase() === 'USD'
+        ? COLORES_MONEDA.VERDE_DOLAR
+        : COLORES_MONEDA.CELESTE_ARGENTINA;
+    }
   },
   activa: {
     type: Boolean,

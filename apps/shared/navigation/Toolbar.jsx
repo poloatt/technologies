@@ -3,7 +3,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Box, IconButton, Tooltip, Typography } from '../utils/materialImports';
-import { FORM_HEIGHTS, TOOLBAR_CONFIG, NAV_TYPO } from '../config/uiConstants';
+import { FORM_HEIGHTS, TOOLBAR_CONFIG } from '../config/uiConstants';
+import { NAV_TYPO, FONT_SIZE } from '../tipografia';
 import CenteredTrack from '../components/common/CenteredTrack.jsx';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getIconByKey, icons } from './menuIcons';
@@ -128,7 +129,7 @@ export default function Toolbar({
                     color: 'text.primary',
                   }}
                   textSx={{
-                    fontSize: '0.75rem'
+                    fontSize: FONT_SIZE.sm
                   }}
                 />
               </Tooltip>
@@ -332,34 +333,6 @@ export default function Toolbar({
           ))}
           {/* Children */}
           {!isMobile && children}
-
-          {/* Botón de sincronización de MercadoPago en Cuentas */}
-          {(currentPath === '/finanzas/cuentas'
-            || currentPath === '/propiedades/cuentas'
-            || currentPath === '/propiedades/inventario/cuentas') && (
-            <Tooltip title="Sincronizar">
-              <IconButton
-                size="small"
-                onClick={() => window.dispatchEvent(new CustomEvent('openMercadoPagoConnect'))}
-                sx={{
-                  mr: 0.5,
-                  color: 'primary.main',
-                  '&:hover': {
-                    backgroundColor: 'primary.main',
-                    color: 'white',
-                    transform: 'scale(1.05)',
-                  },
-                  transition: 'all 0.2s ease-in-out'
-                }}
-              >
-                {React.createElement(icons.sync || (() => (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.69 2.79l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm-6.77.23L3.77 5.69C2.46 7.97 2 9.43 2 11c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.96.69-2.79z"/>
-                  </svg>
-                )), { sx: { fontSize: 18 } })}
-              </IconButton>
-            </Tooltip>
-          )}
 
           {/* Acciones modulares por ruta (lado derecho) */}
           {RightComp && (

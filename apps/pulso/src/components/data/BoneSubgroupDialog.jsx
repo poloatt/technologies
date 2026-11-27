@@ -12,6 +12,7 @@ import {
   TareaFormSecondaryLine,
 } from '@shared/components/forms/tareaFormUi';
 import { RecordOrigin } from '@attadia/robin/ui';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const DONE_TIPOS = new Set(['ESTUDIO', 'REVISION']);
 
@@ -229,7 +230,7 @@ export default function BoneSubgroupDialog({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', px: 1, py: 1, flexShrink: 0, borderBottom: 1, borderColor: 'divider' }}>
-        <Typography variant="h6" sx={{ flex: 1, fontSize: '1.05rem', fontWeight: 500, pl: 1 }}>
+        <Typography variant="h6" sx={{ flex: 1, fontSize: FONT_SIZE.lg, fontWeight: 500, pl: 1 }}>
           {subgroup?.label}
         </Typography>
         <IconButton aria-label="Cerrar" onClick={onClose} sx={taskFormHeaderActionIconSx()}>

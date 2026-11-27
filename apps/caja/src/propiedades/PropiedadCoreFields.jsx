@@ -18,10 +18,11 @@ import {
   propiedadDetailPrimaryTextSx,
 } from './propiedadDetailStyles';
 import { getDocumentId } from './propiedadFormUtils';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const fieldSx = {
   ...tareaFormStandardFieldSx,
-  '& .MuiInputBase-input': { fontSize: '0.875rem', py: 0.5 },
+  '& .MuiInputBase-input': { fontSize: FONT_SIZE.base, py: 0.5 },
   '& .MuiInput-underline:before': { borderBottomColor: 'divider' },
 };
 
@@ -50,14 +51,14 @@ export default function PropiedadCoreFields({
       <>
         {data?.descripcion ? (
           <TareaFormRow icon={NotesIcon} showDivider align="flex-start">
-            <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+            <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
               {data.descripcion}
             </Typography>
           </TareaFormRow>
         ) : null}
 
         <TareaFormRow icon={TareaFormIcons.folder} showDivider>
-          <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+          <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
             {resolveCuentaLabel(data, cuentaOptions)}
           </Typography>
         </TareaFormRow>
@@ -77,7 +78,7 @@ export default function PropiedadCoreFields({
 
         {data?.metrosCuadrados ? (
           <TareaFormRow icon={SquareFootIcon}>
-            <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+            <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
               {data.metrosCuadrados} m²
             </Typography>
           </TareaFormRow>

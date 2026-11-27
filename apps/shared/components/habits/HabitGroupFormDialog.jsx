@@ -14,6 +14,7 @@ import {
   TareaFormFooter,
   HabitFormTitleField,
 } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '../../tipografia';
 
 export default function HabitGroupFormDialog({
   open,
@@ -76,7 +77,7 @@ export default function HabitGroupFormDialog({
       }}
     >
       <TareaFormHeader onClose={onClose} closeLabel="Cancelar">
-        <Typography variant="h6" sx={{ fontWeight: 400, fontSize: '1.125rem', pr: 4 }}>
+        <Typography variant="h6" sx={{ fontWeight: 400, fontSize: FONT_SIZE.xl, pr: 4 }}>
           {isEdit ? 'Editar grupo' : 'Nuevo grupo'}
         </Typography>
       </TareaFormHeader>

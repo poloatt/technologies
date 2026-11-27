@@ -17,15 +17,48 @@ export function saldoReportadoMercadoPago(cuenta) {
   return Number(valor);
 }
 
+export function isCuentaMultimoneda(cuenta) {
+  return Boolean(cuenta?.multimoneda || (cuenta?.esDefault && cuenta?.tipo === 'EFECTIVO'));
+}
+
 export function getMonedaFromCuenta(cuenta) {
-  if (!cuenta?.moneda) return { simbolo: '$', color: '#2196F3' };
-  if (typeof cuenta.moneda === 'object') {
+  const primera = Array.isArray(cuenta?.monedas) && cuenta.monedas.length > 0
+    ? cuenta.monedas[0]
+    : cuenta?.moneda;
+  if (!primera) return { simbolo: '$', color: '#75AADB', codigo: '' };
+  if (typeof primera === 'object') {
     return {
-      simbolo: cuenta.moneda.simbolo || '$',
-      color: cuenta.moneda.color || '#2196F3',
+      id: primera.id || primera._id,
+      codigo: primera.codigo || '',
+      nombre: primera.nombre || '',
+      simbolo: primera.simbolo || '$',
+      color: primera.color || '#75AADB',
     };
   }
-  return { simbolo: '$', color: '#2196F3' };
+  return { simbolo: '$', color: '#75AADB', codigo: '' };
+}
+
+/**
+ * Devuelve las monedas habilitadas para una cuenta multimoneda (p. ej. Efectivo),
+ * normalizadas con símbolo y color. Si `cuenta.monedas` viene del backend se usa
+ * directamente; si no, cae al catálogo de monedas activas recibido como fallback.
+ */
+export function getMonedasFromCuenta(cuenta, monedasCatalog = []) {
+  const source = Array.isArray(cuenta?.monedas) && cuenta.monedas.length > 0
+    ? cuenta.monedas
+    : monedasCatalog.filter((m) => m && m.activa !== false);
+
+  return source
+    .filter((m) => m && m.activa !== false)
+    .map((m) => ({
+      id: String(m.id || m._id),
+      _id: String(m.id || m._id),
+      codigo: m.codigo || '',
+      nombre: m.nombre || m.codigo || 'Moneda',
+      simbolo: m.simbolo || '$',
+      color: m.color || '#75AADB',
+      orden: m.orden ?? 0,
+    }));
 }
 
 export function normalizeCuenta(cuenta) {
@@ -36,5 +69,8 @@ export function normalizeCuenta(cuenta) {
     nombre: cuenta.nombre || 'Sin nombre',
     tipo: cuenta.tipo || 'OTRO',
     moneda: cuenta.moneda,
+    monedas: Array.isArray(cuenta.monedas) ? cuenta.monedas : [],
+    esDefault: Boolean(cuenta.esDefault),
+    multimoneda: isCuentaMultimoneda(cuenta),
   };
 }

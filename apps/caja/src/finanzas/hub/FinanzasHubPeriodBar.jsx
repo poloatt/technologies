@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import { hubEyebrowSx } from '../../hub';
+import { hubEyebrowSx } from '@shared/tipografia';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import {
   FLUJO_PERIOD_MODES,
@@ -23,16 +23,7 @@ export default function FinanzasHubPeriodBar() {
   const span = formatPeriodSpan(range.fechaInicio, range.fechaFin);
 
   return (
-    <Box
-      sx={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 2,
-        bgcolor: 'background.default',
-        pt: 0.5,
-        pb: 1.5,
-      }}
-    >
+    <Box sx={{ pt: 1, mb: 1.5 }}>
       <PeriodControl
         preset={hubPeriod.preset}
         onChange={hubPeriod.setPreset}

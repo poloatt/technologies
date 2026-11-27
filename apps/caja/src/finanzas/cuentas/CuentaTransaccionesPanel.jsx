@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -8,18 +8,18 @@ import {
 } from '@mui/material';
 import {
   AccountBalanceOutlined as AccountBalanceIcon,
+  Add as AddIcon,
   Sync as SyncIcon,
   Upload as UploadIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useSnackbar } from 'notistack';
 import { useAPI } from '@shared/hooks/useAPI';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import clienteAxios from '@shared/config/axios';
-import { TransaccionTable } from '../transacciones';
+import { TransaccionTable, TransaccionForm } from '../transacciones';
 import { MercadoPagoPartialSyncAlert } from '../conexiones/MercadoPagoPartialSyncBanner';
 import MercadoPagoSyncDialog from '../conexiones/MercadoPagoSyncDialog';
-import { getCuentasPath } from '../finanzasDeepLink';
+import { useCajaSetup } from '../../atta/useCajaSetup';
 import { useCuentaBalance } from './useCuentaBalance';
 import CuentaWalletHeader from './CuentaWalletHeader';
 
@@ -29,21 +29,31 @@ export default function CuentaTransaccionesPanel({
   embedded = false,
   branchId = 'finanzas',
 }) {
-  const navigate = useNavigate();
+  const { closeCuenta } = useCajaSetup();
   const { enqueueSnackbar } = useSnackbar();
   const { showValues } = useValuesVisibility();
   const [importing, setImporting] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+  const [editing, setEditing] = useState(null);
 
   const cuentaId = cuenta?.id || cuenta?._id;
   const isMercadoPago = cuenta?.tipo === 'MERCADO_PAGO';
+  // Mercado Pago se actualiza solo por sincronización o CSV; el resto admite altas manuales.
+  const permiteAltaManual = !isMercadoPago && cuenta?.activo !== false;
 
-  const { balance: saldoCalculado, loading: saldoCalculadoLoading } = useCuentaBalance(cuentaId);
+  const {
+    balance: saldoCalculado,
+    balanceByMonedaId,
+    loading: saldoCalculadoLoading,
+  } = useCuentaBalance(cuentaId);
 
   const { data: transaccionesData, loading, refetch } = useAPI(
     cuentaId ? `/api/transacciones/by-cuenta/${cuentaId}` : null,
     {
-      params: { limit: 500, sort: '-fecha', estado: 'PAGADO' },
+      // Sin filtro de estado: los pendientes también se ven (no suman al saldo hasta marcarse pagados).
+      params: { limit: 500, sort: '-fecha' },
       dependencies: [cuentaId],
       enableCache: false,
     }
@@ -65,7 +75,7 @@ export default function CuentaTransaccionesPanel({
   const conexion = conexionesData?.docs?.[0];
 
   const handleClose = () => {
-    navigate(getCuentasPath(branchId), { replace: true });
+    closeCuenta();
   };
 
   const handleSync = () => {
@@ -89,6 +99,7 @@ export default function CuentaTransaccionesPanel({
       );
       enqueueSnackbar('CSV importado correctamente', { variant: 'success' });
       await refetch();
+      window.dispatchEvent(new Event('contactosRefreshed'));
       onRefresh?.();
     } catch (err) {
       enqueueSnackbar(err.response?.data?.message || 'Error importando CSV', { variant: 'error' });
@@ -97,15 +108,77 @@ export default function CuentaTransaccionesPanel({
     }
   };
 
+  const selfDispatchRef = useRef(false);
+
+  // Tras cualquier cambio: refresca la lista y avisa para recalcular saldos (header, Cuentas, hub).
+  const notifyChange = useCallback(async () => {
+    await refetch();
+    selfDispatchRef.current = true;
+    window.dispatchEvent(new Event('transaccionesRefreshed'));
+  }, [refetch]);
+
+  useEffect(() => {
+    const handleExternalRefresh = () => {
+      if (selfDispatchRef.current) {
+        selfDispatchRef.current = false;
+        return;
+      }
+      refetch();
+    };
+    window.addEventListener('transaccionesRefreshed', handleExternalRefresh);
+    return () => window.removeEventListener('transaccionesRefreshed', handleExternalRefresh);
+  }, [refetch]);
+
   const handleDelete = useCallback(async (transaccion) => {
     try {
       await clienteAxios.delete(`/api/transacciones/${transaccion._id || transaccion.id}`);
-      await refetch();
-      onRefresh?.();
-    } catch {
-      enqueueSnackbar('Error al eliminar transacción', { variant: 'error' });
+      await notifyChange();
+    } catch (err) {
+      enqueueSnackbar(err.response?.data?.message || 'Error al eliminar transacción', { variant: 'error' });
     }
-  }, [refetch, onRefresh, enqueueSnackbar]);
+  }, [notifyChange, enqueueSnackbar]);
+
+  const handleChangeEstado = useCallback(async (transaccion, estado) => {
+    try {
+      await clienteAxios.patch(`/api/transacciones/${transaccion._id || transaccion.id}/estado`, { estado });
+      await notifyChange();
+    } catch (err) {
+      enqueueSnackbar(err.response?.data?.message || 'Error al cambiar el estado', { variant: 'error' });
+    }
+  }, [notifyChange, enqueueSnackbar]);
+
+  const handleAdd = useCallback(() => {
+    setEditing(null);
+    setFormKey((prev) => prev + 1);
+    setFormOpen(true);
+  }, []);
+
+  const handleEdit = useCallback((transaccion) => {
+    setEditing({ ...transaccion, cuenta: cuentaId });
+    setFormKey((prev) => prev + 1);
+    setFormOpen(true);
+  }, [cuentaId]);
+
+  // Propaga los errores para que el form quede abierto; el aviso de éxito lo muestra el form.
+  const handleFormSubmit = useCallback(async (formData) => {
+    const body = {
+      descripcion: formData.descripcion,
+      monto: parseFloat(formData.monto),
+      fecha: formData.fecha,
+      categoria: formData.categoria,
+      estado: formData.estado || 'PAGADO',
+      tipo: formData.tipo,
+      cuenta: cuentaId,
+      ...(formData.moneda ? { moneda: formData.moneda } : {}),
+      ...(formData.contacto !== undefined ? { contacto: formData.contacto || null } : {}),
+    };
+    if (editing) {
+      await clienteAxios.put(`/api/transacciones/${editing._id || editing.id}`, body);
+    } else {
+      await clienteAxios.post('/api/transacciones', body);
+    }
+    await notifyChange();
+  }, [cuentaId, editing, notifyChange]);
 
   if (!cuenta) return null;
 
@@ -120,6 +193,7 @@ export default function CuentaTransaccionesPanel({
         cuenta={cuenta}
         conexion={conexion}
         saldoCalculado={saldoCalculado}
+        balanceByMonedaId={balanceByMonedaId}
         saldoCalculadoLoading={saldoCalculadoLoading}
         importing={importing}
         onSync={handleSync}
@@ -148,7 +222,21 @@ export default function CuentaTransaccionesPanel({
         </Box>
       )}
 
-      <Box sx={{ flex: 1, overflow: 'auto', px: isMercadoPago && conexion?.mercadopago?.syncParcial ? 0 : 0 }}>
+      {permiteAltaManual && (
+        <Box sx={{ px: 2, pt: 1.5, pb: 0.5, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleAdd}
+            sx={{ borderRadius: 0 }}
+          >
+            Agregar movimiento
+          </Button>
+        </Box>
+      )}
+
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress size={28} />
@@ -159,6 +247,11 @@ export default function CuentaTransaccionesPanel({
             <Typography variant="body2" color="text.secondary">
               No hay transacciones en esta cuenta.
             </Typography>
+            {permiteAltaManual && (
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                Cargá el primer movimiento con &quot;Agregar movimiento&quot;.
+              </Typography>
+            )}
             {isMercadoPago && (
               <>
                 <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1, mb: 2 }}>
@@ -193,13 +286,26 @@ export default function CuentaTransaccionesPanel({
         ) : (
           <TransaccionTable
             transacciones={transacciones}
+            onEdit={handleEdit}
             onDelete={handleDelete}
+            onChangeEstado={handleChangeEstado}
             showValues={showValues}
             variant="accountDetail"
           />
         )}
       </Box>
       <MercadoPagoSyncDialog open={syncOpen} onClose={() => setSyncOpen(false)} onSuccess={handleSynced} />
+      {formOpen && (
+        <TransaccionForm
+          key={formKey}
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          onSubmit={handleFormSubmit}
+          initialData={editing || { cuenta: cuentaId }}
+          isEditing={!!editing}
+          lockCuenta
+        />
+      )}
     </Wrapper>
   );
 }

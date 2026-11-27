@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { getDocumentId, getPropiedadDisplayLabel } from '../habitacionConstants';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const InquilinoForm = ({
   open,
@@ -140,7 +141,7 @@ const InquilinoForm = ({
                 alignItems: 'center',
                 gap: '4px',
                 padding: '2px 4px',
-                fontSize: '0.75rem',
+                fontSize: FONT_SIZE.sm,
                 color: '#2196f3',
                 height: '20px',
                 mb: 0.5

@@ -2,7 +2,7 @@ import { BaseController } from './BaseController.js';
 import { TransaccionRecurrente } from '../models/TransaccionRecurrente.js';
 import { Transacciones } from '../models/Transacciones.js';
 import mongoose from 'mongoose';
-import { addMonths, setDate, isBefore, isAfter } from 'date-fns';
+import { addMonths, setDate, isBefore, isAfter, getDaysInMonth } from 'date-fns';
 
 class TransaccionRecurrenteController extends BaseController {
   constructor() {
@@ -85,7 +85,9 @@ class TransaccionRecurrenteController extends BaseController {
         categoria: transaccionRecurrente.categoria,
         cuenta: transaccionRecurrente.cuenta,
         usuario: transaccionRecurrente.usuario,
-        estado: 'PENDIENTE'
+        estado: 'PENDIENTE',
+        // La moneda la asigna el middleware del modelo a partir de la cuenta.
+        origen: { tipo: 'MANUAL', metadata: { recurrenteId: String(transaccionRecurrente._id) } }
       });
 
       await nuevaTransaccion.save();
@@ -107,8 +109,12 @@ class TransaccionRecurrenteController extends BaseController {
           break;
       }
 
-      // Ajustar al día del mes especificado
-      proximaFecha = setDate(proximaFecha, transaccionRecurrente.diaDelMes);
+      // Frecuencia desconocida: se asume mensual para no dejar la fecha indefinida.
+      if (!proximaFecha) proximaFecha = addMonths(proximaGeneracion, 1);
+
+      // Ajustar al día del mes especificado (sin pasarse al mes siguiente: 31 en un mes de 30 días)
+      const diaDelMes = Number(transaccionRecurrente.diaDelMes) || proximaFecha.getDate();
+      proximaFecha = setDate(proximaFecha, Math.min(diaDelMes, getDaysInMonth(proximaFecha)));
 
       // Actualizar la transacción recurrente
       transaccionRecurrente.ultimaGeneracion = proximaGeneracion;

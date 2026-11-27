@@ -34,10 +34,14 @@ import {
 } from '@shared/utils/mpDisplayUtils';
 import { getEstadoColor, getStatusIconComponent } from '@shared/components/common/StatusSystem';
 import { dolarSignedAmount } from './ledgerKindFilters';
+import TransaccionCategoriaInline from './TransaccionCategoriaInline';
 import {
   EditOutlined as EditIcon,
   DeleteOutlined as DeleteIcon,
+  CheckCircleOutline as CheckCircleOutlineIcon,
+  PendingOutlined as PendingOutlinedIcon,
   AccountBalanceOutlined as AccountIcon,
+  PersonOutline as PersonIcon,
   Receipt,
   Fastfood,
   HealthAndSafety,
@@ -51,6 +55,7 @@ import {
   AccountBalanceWalletOutlined,
   SwapHorizRounded,
 } from '@mui/icons-material';
+import { FONT_SIZE } from '@shared/tipografia';
 
 function DetailRow({ label, value, icon = null }) {
   if (value == null || value === '') return null;
@@ -79,7 +84,7 @@ function DetailRow({ label, value, icon = null }) {
       </Typography>
       <Box
         sx={{
-          fontSize: '0.8125rem',
+          fontSize: FONT_SIZE.md,
           color: 'text.primary',
           textAlign: 'right',
           fontWeight: 500,
@@ -90,6 +95,12 @@ function DetailRow({ label, value, icon = null }) {
       </Box>
     </Box>
   );
+}
+
+/** Un registro sin `origen.tipo` (legacy) cuenta como manual. */
+function esRegistroManual(transaccion) {
+  const tipo = transaccion?.origen?.tipo;
+  return !tipo || tipo === 'MANUAL';
 }
 
 function positionSign(kind, tipo) {
@@ -116,6 +127,7 @@ const TransaccionTable = ({
   transacciones,
   onEdit,
   onDelete,
+  onChangeEstado,
   showValues = true,
   variant = 'default',
   inColor,
@@ -230,13 +242,13 @@ const TransaccionTable = ({
     <TableContainer
       sx={{
         width: '100%',
-        overflowX: 'auto',
+        overflowX: 'hidden',
         backgroundColor: 'transparent',
         '& .MuiTableCell-root': {
           border: 'none',
           py: isAccountDetail ? 1.25 : 1,
-          px: 1.5,
-          fontSize: '0.875rem',
+          px: isMobile ? 0.5 : 1.5,
+          fontSize: FONT_SIZE.base,
           lineHeight: 1.25,
           whiteSpace: 'normal',
         },
@@ -249,7 +261,7 @@ const TransaccionTable = ({
         },
       }}
     >
-      <Table size="small" sx={{ minWidth: isMobile ? 'unset' : 420 }}>
+      <Table size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
         <TableBody>
           {transacciones.map((transaccion) => {
             const rowId = transaccion.id || transaccion._id;
@@ -352,10 +364,14 @@ const TransaccionTable = ({
                           <Typography
                             sx={{
                               fontWeight: 450,
-                              fontSize: '0.75rem',
+                              fontSize: FONT_SIZE.sm,
                               color: 'text.secondary',
                               lineHeight: 1.15,
                               whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              minWidth: 0,
+                              flex: '0 1 auto',
                             }}
                           >
                             {title}
@@ -365,11 +381,13 @@ const TransaccionTable = ({
                               variant="caption"
                               sx={{
                                 color: 'text.disabled',
-                                fontSize: '0.6875rem',
+                                fontSize: FONT_SIZE.xs,
                                 lineHeight: 1.15,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
+                                minWidth: 0,
+                                flex: '0 999 auto',
                               }}
                             >
                               {metaLine}
@@ -379,7 +397,7 @@ const TransaccionTable = ({
                         <Typography
                           sx={{
                             fontWeight: yieldRow ? 650 : 500,
-                            fontSize: '0.75rem',
+                            fontSize: FONT_SIZE.sm,
                             color: dolarColor || (yieldRow ? getMontoColor(transaccion) : 'text.disabled'),
                             fontVariantNumeric: 'tabular-nums',
                             lineHeight: 1.15,
@@ -432,7 +450,7 @@ const TransaccionTable = ({
                             <Typography
                               sx={{
                                 fontWeight: 560,
-                                fontSize: '0.875rem',
+                                fontSize: FONT_SIZE.base,
                                 color: 'text.primary',
                                 lineHeight: 1.3,
                                 overflow: 'hidden',
@@ -450,7 +468,7 @@ const TransaccionTable = ({
                             <Typography
                               sx={{
                                 fontWeight: 650,
-                                fontSize: '0.875rem',
+                                fontSize: FONT_SIZE.base,
                                 color: getMontoColor(transaccion),
                                 fontVariantNumeric: 'tabular-nums',
                                 whiteSpace: 'nowrap',
@@ -485,7 +503,7 @@ const TransaccionTable = ({
                             label={transaccion.tipo === 'INGRESO' ? 'Ingreso' : 'Egreso'}
                             sx={{
                               height: 20,
-                              fontSize: '0.65rem',
+                              fontSize: FONT_SIZE.xs,
                               fontWeight: 600,
                               borderRadius: 1,
                               bgcolor:
@@ -497,6 +515,22 @@ const TransaccionTable = ({
                               '& .MuiChip-label': { px: 0.75 },
                             }}
                           />
+                          {(transaccion.estado === 'PENDIENTE' || transaccion.estado === 'CANCELADA') && (
+                            <Chip
+                              size="small"
+                              label={transaccion.estado === 'PENDIENTE' ? 'Pendiente' : 'Cancelada'}
+                              variant="outlined"
+                              sx={{
+                                height: 20,
+                                fontSize: FONT_SIZE.xs,
+                                fontWeight: 600,
+                                borderRadius: 1,
+                                borderColor: 'divider',
+                                color: 'text.secondary',
+                                '& .MuiChip-label': { px: 0.75 },
+                              }}
+                            />
+                          )}
                           {mpOrigen && (
                             <Chip
                               size="small"
@@ -504,7 +538,7 @@ const TransaccionTable = ({
                               variant="outlined"
                               sx={{
                                 height: 20,
-                                fontSize: '0.65rem',
+                                fontSize: FONT_SIZE.xs,
                                 fontWeight: 600,
                                 borderRadius: 1,
                                 borderColor: 'divider',
@@ -583,10 +617,37 @@ const TransaccionTable = ({
                               value={transaccion.cuenta.nombre}
                             />
                           )}
-                          {!internal && transaccion.categoria && (
-                            <DetailRow label="Categoría" value={transaccion.categoria} />
+                          {!internal && (
+                            <TransaccionCategoriaInline transaccion={transaccion} />
                           )}
-                          {!internal && counterparty?.name && (
+                          {!internal && transaccion.contacto?.nombre && (
+                            <DetailRow
+                              label="Contacto"
+                              icon={<PersonIcon sx={{ fontSize: 14 }} />}
+                              value={
+                                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                  <span>{transaccion.contacto.nombre}</span>
+                                  {!transaccion.contacto.categoriaDefault &&
+                                    !transaccion.contacto.categoriaIngreso &&
+                                    !transaccion.contacto.categoriaEgreso && (
+                                      <Chip
+                                        label="Sin categoría"
+                                        size="small"
+                                        variant="outlined"
+                                        color="warning"
+                                        sx={{
+                                          height: 16,
+                                          fontSize: '0.6rem',
+                                          borderRadius: 0.5,
+                                          '& .MuiChip-label': { px: 0.5 },
+                                        }}
+                                      />
+                                    )}
+                                </Box>
+                              }
+                            />
+                          )}
+                          {!internal && counterparty?.name && counterparty.name !== transaccion.contacto?.nombre && (
                             <DetailRow
                               label={counterparty.label || 'Contraparte'}
                               value={
@@ -641,7 +702,14 @@ const TransaccionTable = ({
                           )}
                         </Box>
 
-                        {(onEdit || onDelete) && (
+                        {(() => {
+                          // Los movimientos sincronizados (Mercado Pago, bancos) son de solo lectura.
+                          const manual = esRegistroManual(transaccion);
+                          const pendiente = transaccion.estado === 'PENDIENTE';
+                          const puedeCambiarEstado = Boolean(onChangeEstado) && manual
+                            && (pendiente || transaccion.estado === 'COMPLETADA' || transaccion.estado === 'PAGADO');
+                          return (manual && (onEdit || onDelete)) || puedeCambiarEstado;
+                        })() && (
                           <Box
                             sx={{
                               display: 'flex',
@@ -653,7 +721,37 @@ const TransaccionTable = ({
                               borderColor: 'divider',
                             }}
                           >
-                            {onEdit && (
+                            {onChangeEstado && esRegistroManual(transaccion)
+                              && (transaccion.estado === 'PENDIENTE' || transaccion.estado === 'COMPLETADA' || transaccion.estado === 'PAGADO')
+                              && (
+                              <Tooltip
+                                title={transaccion.estado === 'PENDIENTE' ? 'Marcar como pagado' : 'Marcar como pendiente'}
+                                arrow
+                              >
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onChangeEstado(
+                                      transaccion,
+                                      transaccion.estado === 'PENDIENTE' ? 'COMPLETADA' : 'PENDIENTE',
+                                    );
+                                  }}
+                                  sx={{
+                                    color: 'text.secondary',
+                                    '&:hover': {
+                                      color: 'success.main',
+                                      bgcolor: theme.palette.success.main + '14',
+                                    },
+                                  }}
+                                >
+                                  {transaccion.estado === 'PENDIENTE'
+                                    ? <CheckCircleOutlineIcon sx={{ fontSize: 18 }} />
+                                    : <PendingOutlinedIcon sx={{ fontSize: 18 }} />}
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            {onEdit && esRegistroManual(transaccion) && (
                               <Tooltip title="Editar" arrow>
                                 <IconButton
                                   size="small"
@@ -673,7 +771,7 @@ const TransaccionTable = ({
                                 </IconButton>
                               </Tooltip>
                             )}
-                            {onDelete && (
+                            {onDelete && esRegistroManual(transaccion) && (
                               <Tooltip title="Eliminar" arrow>
                                 <IconButton
                                   size="small"

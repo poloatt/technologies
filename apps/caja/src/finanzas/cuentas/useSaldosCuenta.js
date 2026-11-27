@@ -12,6 +12,11 @@ const EMPTY = {
   rendimientosPeriodo: 0,
   dolares: 0,
   credito: 0,
+  ingresosPeriodo: 0,
+  egresosPeriodo: 0,
+  flujoPeriodo: 0,
+  multimoneda: false,
+  porMoneda: [],
 };
 
 /**

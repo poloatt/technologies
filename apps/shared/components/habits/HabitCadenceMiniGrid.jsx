@@ -14,6 +14,7 @@ import {
 } from '@shared/habits';
 import { getNormalizedToday, parseAPIDate } from '@shared/utils/dateUtils';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
+import { FONT_SIZE } from '../../tipografia';
 
 const WEEKDAY_ORDER = [...DIAS_SEMANA.slice(1), DIAS_SEMANA[0]];
 const DIA_LETRA = { 0: 'D', 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S' };
@@ -57,7 +58,7 @@ function cellSx(theme, {
     justifyContent: 'center',
     typography: 'caption',
     fontWeight: active || done ? 700 : 500,
-    fontSize: '0.65rem',
+    fontSize: FONT_SIZE.xs,
     lineHeight: 1,
     boxSizing: 'border-box',
     outline: today ? `2px solid ${alpha(theme.palette.info.main, 0.55)}` : 'none',
@@ -89,7 +90,7 @@ function pillSx(theme, { active = false, done = false } = {}) {
     color,
     typography: 'caption',
     fontWeight: active || done ? 600 : 500,
-    fontSize: '0.7rem',
+    fontSize: FONT_SIZE.xs,
     lineHeight: 1.2,
   };
 }

@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Box, Divider } from '@mui/material';
-import { AutorenewOutlined } from '@mui/icons-material';
+import { VisibilityOffOutlined, VisibilityOutlined } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SystemButtons } from '@shared/components/common/SystemButtons';
+import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { getIconByKey } from '@shared/navigation/menuIcons';
 import { useEntityActions } from '@shared/components/common/CommonActions';
 import {
@@ -10,13 +11,16 @@ import {
   resolveCajaToolbarCenterChildren,
 } from '@shared/navigation/appNavResolver';
 import { matchCajaSection } from './attaToolbarPaths';
-import { MercadoPagoSyncDialog } from '../finanzas/conexiones';
-import { CAJA_TOOLBAR_SETUP_PAGES } from './cajaToolbarSetups';
-import CajaSetupHost, { commonButtonSx } from './CajaSetupHost';
+import {
+  CAJA_TOOLBAR_SETUP_PAGES,
+  preloadCajaToolbarSetup,
+} from './cajaToolbarSetups';
+import { commonButtonSx } from './CajaSetupHost';
+import { useCajaSetup } from './useCajaSetup';
 
 /**
  * Cluster central Caja (centrado como Foco):
- * children del parent | sync | +
+ * children del parent | visibilidad de montos | +
  */
 export default function CajaToolbarCenter() {
   const navigate = useNavigate();
@@ -24,9 +28,8 @@ export default function CajaToolbarCenter() {
   const section = matchCajaSection(pathname);
   const { getEntityConfig, showAddButton } = useEntityActions();
   const entityConfig = getEntityConfig();
-  const [openSetupId, setOpenSetupId] = useState(null);
-  const [syncOpen, setSyncOpen] = useState(false);
-
+  const { showValues, toggleValuesVisibility } = useValuesVisibility();
+  const { setupId, openSetup } = useCajaSetup();
   const childPages = useMemo(
     () => resolveCajaToolbarCenterChildren(pathname),
     [pathname],
@@ -36,10 +39,10 @@ export default function CajaToolbarCenter() {
     if (!section) return [];
 
     return childPages.map((page) => {
-      const isActive = isCajaPageActive(pathname, page);
+      const opensSetup = !!CAJA_TOOLBAR_SETUP_PAGES[page.id];
+      const isActive = opensSetup ? setupId === page.id : isCajaPageActive(pathname, page);
       const Icon = getIconByKey(page.iconKey);
       const disabled = page.isUnderConstruction;
-      const opensSetup = !!CAJA_TOOLBAR_SETUP_PAGES[page.id];
 
       return {
         key: page.id,
@@ -57,34 +60,41 @@ export default function CajaToolbarCenter() {
             '&:hover': { bgcolor: 'action.selected' },
           }),
         },
+        onMouseEnter: opensSetup && !disabled ? () => preloadCajaToolbarSetup(page.id) : undefined,
+        onFocus: opensSetup && !disabled ? () => preloadCajaToolbarSetup(page.id) : undefined,
         onClick: disabled
           ? undefined
           : () => {
-            if (opensSetup) setOpenSetupId(page.id);
+            if (opensSetup) openSetup(page.id);
             else navigate(page.path);
           },
       };
     });
-  }, [childPages, navigate, pathname, section]);
+  }, [childPages, navigate, openSetup, pathname, section, setupId]);
 
-  const utilityActions = useMemo(() => {
-    if (section !== 'finanzas') return [];
-    return [{
-      key: 'syncCuentas',
-      icon: <AutorenewOutlined />,
-      label: 'Sincronizar',
-      tooltip: 'Sincronizar cuenta',
-      color: 'primary.main',
+  const utilityActions = useMemo(() => ([
+    {
+      key: 'toggleValuesVisibility',
+      icon: showValues ? <VisibilityOutlined /> : <VisibilityOffOutlined />,
+      label: showValues ? 'Ocultar montos' : 'Mostrar montos',
+      tooltip: showValues ? 'Ocultar montos' : 'Mostrar montos',
+      color: showValues ? 'text.secondary' : 'primary.main',
       hoverColor: 'primary.main',
-      buttonSx: commonButtonSx,
-      onClick: () => setSyncOpen(true),
-    }];
-  }, [section]);
+      buttonSx: {
+        ...commonButtonSx,
+        ...(!showValues && {
+          bgcolor: 'action.selected',
+          '&:hover': { bgcolor: 'action.selected' },
+        }),
+      },
+      onClick: toggleValuesVisibility,
+    },
+  ]), [showValues, toggleValuesVisibility]);
 
   if (!section) return null;
 
   const hasChildren = childActions.length > 0;
-  const hasUtilities = utilityActions.length > 0 || (showAddButton && entityConfig);
+  const hasUtilities = utilityActions.length > 0 || !!(showAddButton && entityConfig);
   if (!hasChildren && !hasUtilities) return null;
 
   return (
@@ -119,11 +129,6 @@ export default function CajaToolbarCenter() {
           </Box>
         )}
       </Box>
-      <CajaSetupHost
-        openSetupId={openSetupId}
-        onCloseSetup={() => setOpenSetupId(null)}
-      />
-      <MercadoPagoSyncDialog open={syncOpen} onClose={() => setSyncOpen(false)} />
     </>
   );
 }

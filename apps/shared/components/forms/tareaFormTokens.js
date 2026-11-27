@@ -1,19 +1,20 @@
 import { alpha } from '@mui/material/styles';
+import { FONT_SIZE } from '../../tipografia';
 
 /** Shared Google Calendar / Tasks–inspired form tokens (dark theme). */
 
-export const TASK_FORM_TITLE_FONT_SIZE = '1.375rem';
+export const TASK_FORM_TITLE_FONT_SIZE = FONT_SIZE['3xl'];
 export const TASK_FORM_TITLE_LINE_HEIGHT = 1.35;
 export const TASK_FORM_TITLE_FONT_WEIGHT = 400;
 
-export const TASK_FORM_BODY_FONT_SIZE = '0.875rem';
+export const TASK_FORM_BODY_FONT_SIZE = FONT_SIZE.base;
 export const TASK_FORM_BODY_LINE_HEIGHT = 1.45;
 
-export const TASK_FORM_PILL_FONT_SIZE = '0.8125rem';
+export const TASK_FORM_PILL_FONT_SIZE = FONT_SIZE.md;
 export const TASK_FORM_PILL_LINE_HEIGHT = 1.35;
 export const TASK_FORM_PILL_FONT_WEIGHT = 400;
 
-export const TASK_FORM_CAPTION_FONT_SIZE = '0.75rem';
+export const TASK_FORM_CAPTION_FONT_SIZE = FONT_SIZE.sm;
 export const TASK_FORM_CAPTION_LINE_HEIGHT = 1.35;
 
 export const TASK_FORM_BUTTON_FONT_SIZE = TASK_FORM_BODY_FONT_SIZE;
@@ -77,7 +78,7 @@ export const taskFormCaptionTextSx = {
 /** Small type label floating above the title (Evento / Tarea). */
 export const taskFormTipoFloatingLabelSx = {
   ...taskFormCaptionTextSx,
-  fontSize: '0.6875rem',
+  fontSize: FONT_SIZE.xs,
   fontWeight: 500,
   letterSpacing: '0.03em',
   lineHeight: 1.2,

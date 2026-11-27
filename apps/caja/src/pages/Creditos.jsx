@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
 import { FinanzasSectionNav } from '../finanzas';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
@@ -33,6 +34,8 @@ function ListSkeleton() {
 
 export default function Creditos() {
   const { showValues } = useValuesVisibility();
+  const [searchParams] = useSearchParams();
+  const cuentaId = searchParams.get('cuenta') || undefined;
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
   const periodRange = useMemo(() => getCreditosPeriodRange(preset), [preset]);
   const sentinelRef = useRef(null);
@@ -49,6 +52,7 @@ export default function Creditos() {
   } = useTransaccionesList({
     fechaInicio: periodRange.fechaInicio,
     fechaFin: periodRange.fechaFin,
+    cuentaId,
     ledger: 'creditos',
     estado: 'PAGADO',
     pageSize: 200,
@@ -79,7 +83,7 @@ export default function Creditos() {
   return (
     <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
       <FinanzasSectionNav variant="strip" />
-      <CreditosResumen preset={preset} onPresetChange={setPreset} />
+      <CreditosResumen cuentaId={cuentaId} preset={preset} onPresetChange={setPreset} />
 
       {loading ? (
         <ListSkeleton />

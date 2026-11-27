@@ -5,13 +5,19 @@ import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { formatFinanzasMonto } from '@shared/utils/formatFinanzasMonto';
 import { formatRelativeSyncTime } from '@shared/utils/mpDisplayUtils';
 import getCuentaTipoIcon from './getCuentaTipoIcon';
-import { getMonedaFromCuenta } from './cuentaConstants';
+import {
+  getMonedaFromCuenta,
+  getMonedasFromCuenta,
+  isCuentaMultimoneda,
+} from './cuentaConstants';
 import CuentaWalletActions from './CuentaWalletActions';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function CuentaWalletHeader({
   cuenta,
   conexion,
   saldoCalculado,
+  balanceByMonedaId = {},
   syncing = false,
   importing = false,
   onSync,
@@ -22,6 +28,8 @@ export default function CuentaWalletHeader({
   const { showValues } = useValuesVisibility();
   const { simbolo, color } = getMonedaFromCuenta(cuenta);
   const isMercadoPago = cuenta?.tipo === 'MERCADO_PAGO';
+  const isMultimoneda = isCuentaMultimoneda(cuenta);
+  const monedasHabilitadas = isMultimoneda ? getMonedasFromCuenta(cuenta) : [];
 
   const saldoMp = cuenta?.mercadopago?.disponibleRetiro ?? (isMercadoPago ? cuenta?.saldo : null);
   const saldoMpNumero = saldoMp == null || Number.isNaN(Number(saldoMp)) ? null : Number(saldoMp);
@@ -65,19 +73,66 @@ export default function CuentaWalletHeader({
             </Typography>
           </Box>
 
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 600,
-              color: heroColor,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.2,
-            }}
-          >
-            {showValues
-              ? formatFinanzasMonto(heroBalance, { simbolo })
-              : '****'}
-          </Typography>
+          {isMultimoneda && monedasHabilitadas.length > 0 ? (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 0.75 }}>
+              {monedasHabilitadas.map((moneda) => {
+                const saldoMoneda = balanceByMonedaId[moneda.id] ?? 0;
+                const saldoColor = saldoMoneda >= 0 ? moneda.color : 'error.main';
+                return (
+                  <Box
+                    key={moneda.id}
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minWidth: 96,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          bgcolor: moneda.color,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                        {moneda.codigo}
+                      </Typography>
+                    </Box>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        fontWeight: 600,
+                        color: saldoColor,
+                        letterSpacing: '-0.02em',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {showValues
+                        ? formatFinanzasMonto(saldoMoneda, { simbolo: moneda.simbolo })
+                        : '****'}
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          ) : (
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 600,
+                color: heroColor,
+                letterSpacing: '-0.02em',
+                lineHeight: 1.2,
+              }}
+            >
+              {showValues
+                ? formatFinanzasMonto(heroBalance, { simbolo })
+                : '****'}
+            </Typography>
+          )}
 
           {isMercadoPago && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75, mt: 1 }}>
@@ -87,7 +142,7 @@ export default function CuentaWalletHeader({
                   size="small"
                   color={estadoChip.color}
                   variant="outlined"
-                  sx={{ height: 22, fontSize: '0.7rem' }}
+                  sx={{ height: 22, fontSize: FONT_SIZE.xs }}
                 />
               )}
               {ultimaSync && (

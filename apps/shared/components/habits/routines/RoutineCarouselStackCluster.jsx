@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Tooltip } from '@mui/material';
 import { hubSectionShellSx } from '../../../styles/hubSectionStyles';
 import HubSectionHeader from '../../hub/HubSectionHeader';
+import { FONT_SIZE } from '../../../tipografia';
 
 /**
  * Cluster de hábitos de una rutina en carrusel.
@@ -62,7 +63,7 @@ export default function RoutineCarouselStackCluster({
           title={label}
           headerSx={compact ? { minHeight: 22, height: 22, maxHeight: 22, px: 1 } : { px: 1 }}
           titleSx={{
-            ...(compact ? { fontSize: '0.75rem' } : null),
+            ...(compact ? { fontSize: FONT_SIZE.sm } : null),
             maxWidth: 160,
           }}
         />

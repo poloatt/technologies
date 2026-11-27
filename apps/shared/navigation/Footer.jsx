@@ -6,8 +6,9 @@ import SignalWifiStatusbar4BarIcon from '@mui/icons-material/SignalWifiStatusbar
 import SignalWifiOffIcon from '@mui/icons-material/SignalWifiOff';
 import { useState, useEffect } from 'react';
 import clienteAxios from '../config/axios';
+import { NEGATIVE_COLOR } from '../config/uiConstants';
 import { useLocation } from 'react-router-dom';
-import { NAV_TYPO } from '../config/uiConstants';
+import { NAV_TYPO } from '../tipografia';
 
 const CAJA_HUB_PATHS = ['/finanzas', '/propiedades'];
 
@@ -113,7 +114,7 @@ export default function Footer({ isDesktop = false, isSidebarOpen = false }) {
           icon={
             connectionStatus.backend ? 
               <SignalWifiStatusbar4BarIcon sx={{ color: '#4caf50', fontSize: 16 }} /> : 
-              <SignalWifiOffIcon sx={{ color: '#f44336', fontSize: 16 }} />
+              <SignalWifiOffIcon sx={{ color: NEGATIVE_COLOR, fontSize: 16 }} />
           }
           label={connectionStatus.backend ? 'Conectado al backend' : 'Sin conexión al backend'}
           size="small"
@@ -132,7 +133,7 @@ export default function Footer({ isDesktop = false, isSidebarOpen = false }) {
           icon={
             connectionStatus.database ? 
               <CloudDoneIcon sx={{ color: '#4caf50', fontSize: 16 }} /> : 
-              <CloudOffIcon sx={{ color: '#f44336', fontSize: 16 }} />
+              <CloudOffIcon sx={{ color: NEGATIVE_COLOR, fontSize: 16 }} />
           }
           label={connectionStatus.database ? 'Base de datos conectada' : 'Sin conexión a la base de datos'}
           size="small"

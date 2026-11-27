@@ -24,6 +24,7 @@ import CuotaInlineEditor from './CuotaInlineEditor';
 import { useCuotasContext } from '@shared/context/CuotasContext';
 import { calcularEstadoCuotasContrato, formatMontoAbreviado } from '@shared/utils/contratoUtils';
 import { getEstadoColor } from '@shared/components/common/StatusSystem';
+import { FONT_SIZE } from '@shared/tipografia';
 
 // Subcomponente: Muestra mensaje cuando no hay cuotas configuradas
 const CuotasSinConfigurar = ({ contrato, compact, noBorder, sx, estadoContrato }) => {
@@ -40,7 +41,7 @@ const CuotasSinConfigurar = ({ contrato, compact, noBorder, sx, estadoContrato }
         ...sx
       }}>
         <Typography variant="caption" sx={{
-          fontSize: compact ? '0.6rem' : '0.65rem',
+          fontSize: compact ? FONT_SIZE['2xs'] : FONT_SIZE.xs,
           color: getEstadoColor('MANTENIMIENTO', 'CONTRATO'),
           fontWeight: 600,
           fontStyle: 'italic',
@@ -51,10 +52,10 @@ const CuotasSinConfigurar = ({ contrato, compact, noBorder, sx, estadoContrato }
           Contrato de mantenimiento
         </Typography>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-          <Typography variant="caption" sx={{ fontSize: compact ? '0.55rem' : '0.6rem', color: 'text.secondary' }}>
+          <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: 'text.secondary' }}>
             Monto total: {contrato?.cuenta?.moneda?.simbolo || contrato?.moneda?.simbolo || '$'} {formatMontoAbreviado(contrato.precioTotal || 0)}
           </Typography>
-          <Typography variant="caption" sx={{ fontSize: compact ? '0.55rem' : '0.6rem', color: 'text.secondary' }}>
+          <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: 'text.secondary' }}>
             {contrato.fechaInicio && contrato.fechaFin ?
               `${new Date(contrato.fechaInicio).toLocaleDateString('es-ES', {
                 day: '2-digit', month: 'short', year: 'numeric'
@@ -91,17 +92,17 @@ const CuotasSinConfigurar = ({ contrato, compact, noBorder, sx, estadoContrato }
       ...sx
     }}>
       <Typography variant="caption" sx={{
-        fontSize: compact ? '0.6rem' : '0.65rem',
+        fontSize: compact ? FONT_SIZE['2xs'] : FONT_SIZE.xs,
         color: color,
         fontStyle: 'italic'
       }}>
         {mensaje}
       </Typography>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-        <Typography variant="caption" sx={{ fontSize: compact ? '0.55rem' : '0.6rem', color: 'text.secondary' }}>
+        <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: 'text.secondary' }}>
           Monto total: {contrato?.cuenta?.moneda?.simbolo || contrato?.moneda?.simbolo || '$'} {formatMontoAbreviado(contrato.precioTotal || 0)}
         </Typography>
-        <Typography variant="caption" sx={{ fontSize: compact ? '0.55rem' : '0.6rem', color: 'text.secondary' }}>
+        <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: 'text.secondary' }}>
           {contrato.fechaInicio && contrato.fechaFin ?
             `${new Date(contrato.fechaInicio).toLocaleDateString('es-ES', {
               day: '2-digit', month: 'short', year: 'numeric'
@@ -120,10 +121,10 @@ const CuotasSinConfigurar = ({ contrato, compact, noBorder, sx, estadoContrato }
 const ResumenCuotas = ({ cuotasPagadas, cuotasTotales, montoPagado, montoTotal, simboloMoneda, porcentajePagado, compact }) => (
   <>
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5, px: SECTION_PADDING_X }}>
-      <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+      <Typography variant="caption" sx={{ fontSize: FONT_SIZE.xs, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
         {cuotasPagadas}/{cuotasTotales} días
       </Typography>
-      <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+      <Typography variant="caption" sx={{ fontSize: FONT_SIZE.xs, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
         {simboloMoneda} {formatMontoAbreviado(montoPagado)}/{formatMontoAbreviado(montoTotal)}
       </Typography>
     </Box>
@@ -268,7 +269,7 @@ const EstadoFinanzasContrato = ({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: 1 }}>
             <MoneyIcon sx={{ fontSize: '1.2rem', color: 'error.main', flexShrink: 0 }} />
-            <Typography variant="caption" sx={{ fontSize: compact ? '0.6rem' : '0.65rem', color: 'error.main', fontWeight: 600 }}>
+            <Typography variant="caption" sx={{ fontSize: compact ? FONT_SIZE['2xs'] : FONT_SIZE.xs, color: 'error.main', fontWeight: 600 }}>
               {cuotasVencidas} cuota{cuotasVencidas > 1 ? 's' : ''} vencida{cuotasVencidas > 1 ? 's' : ''}
             </Typography>
           </Box>
@@ -346,7 +347,7 @@ const EstadoFinanzasContrato = ({
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, pl: 1 }}>
                 <MoneyIcon sx={{ fontSize: '1.2rem', color: 'text.secondary', flexShrink: 0, mt: 0.1 }} />
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.1 }}>
-                  <Typography variant="caption" sx={{ fontSize: compact ? '0.6rem' : '0.65rem', color: 'text.secondary', fontWeight: 600 }}>
+                  <Typography variant="caption" sx={{ fontSize: compact ? FONT_SIZE['2xs'] : FONT_SIZE.xs, color: 'text.secondary', fontWeight: 600 }}>
                     {pagadas} cuota{pagadas !== 1 ? 's' : ''} pagada{pagadas !== 1 ? 's' : ''}
                     {pendientes > 0 && (
                       <span style={{ color: '#888', fontWeight: 400 }}>
@@ -355,7 +356,7 @@ const EstadoFinanzasContrato = ({
                     )}
                   </Typography>
                   {proximaCuota && (
-                    <Typography variant="caption" sx={{ fontSize: compact ? '0.55rem' : '0.6rem', color: '#888', fontWeight: 400 }}>
+                    <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: '#888', fontWeight: 400 }}>
                       próxima cuota {proximaCuota.index} en {proximaCuota.diasRestantes} días
                     </Typography>
                   )}

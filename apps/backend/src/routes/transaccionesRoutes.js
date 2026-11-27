@@ -10,6 +10,7 @@ router.use(checkAuth);
 // Rutas adicionales (deben ir antes de las rutas con parámetros)
 router.get('/stats', transaccionesController.getStats);
 router.get('/saldos', transaccionesController.getSaldos);
+router.get('/saldos-totales', transaccionesController.getSaldosTotales);
 router.get('/resumen', transaccionesController.getResumen);
 
 // Rutas base del controlador

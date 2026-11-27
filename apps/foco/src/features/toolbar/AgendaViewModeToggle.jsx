@@ -6,6 +6,7 @@ import {
   TAREAS_TOOLBAR_CENTER_ROW_HEIGHT,
   TAREAS_TOOLBAR_OPTION_MIN_WIDTH,
 } from '@shared/navigation/tareasToolbarLayout';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const OPTIONS = [
   { value: 'week', label: 'Semana', minWidth: { xs: '2.65rem', sm: '3.1rem' } },
@@ -59,7 +60,7 @@ export default function AgendaViewModeToggle() {
             <Typography
               component="span"
               sx={{
-                fontSize: isMobile ? '0.7rem' : '0.75rem',
+                fontSize: isMobile ? FONT_SIZE.xs : FONT_SIZE.sm,
                 lineHeight: 1,
                 width: '0.35rem',
                 textAlign: 'center',
@@ -84,7 +85,7 @@ export default function AgendaViewModeToggle() {
               p: 0,
               m: 0,
               font: 'inherit',
-              fontSize: isMobile ? '0.7rem' : '0.75rem',
+              fontSize: isMobile ? FONT_SIZE.xs : FONT_SIZE.sm,
               lineHeight: 1.2,
               minWidth: option.minWidth,
               textAlign: 'center',

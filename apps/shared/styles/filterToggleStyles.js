@@ -1,5 +1,6 @@
 import { alpha } from '@mui/material/styles';
 import { HUB_SECTION } from './hubSectionStyles';
+import { FONT_SIZE, FONT_WEIGHT, LETTER_SPACING } from '../tipografia';
 
 /**
  * Filtro por botones: sin radio, sin fondo y sin divisor.
@@ -8,7 +9,13 @@ import { HUB_SECTION } from './hubSectionStyles';
 export const filterToggleRowSx = {
   display: 'flex',
   alignItems: 'stretch',
-  gap: 1.5,
+  gap: 1,
+};
+
+/** Separación estándar sobre la fila de filtros en subpáginas de resumen. */
+export const filterTogglePageRowSx = {
+  ...filterToggleRowSx,
+  mt: 1.75,
 };
 
 /**
@@ -29,6 +36,7 @@ export function getFilterToggleButtonSx() {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'flex-start',
+    gap: 0.375,
     flex: '1 1 0',
     minWidth: 0,
     m: 0,
@@ -49,16 +57,16 @@ export const filterToggleAmountSx = {
   m: 0,
   p: 0,
   width: '100%',
-  fontWeight: 600,
-  fontSize: '0.875rem',
-  lineHeight: 1,
+  fontWeight: FONT_WEIGHT.semibold,
+  fontSize: FONT_SIZE.md,
+  lineHeight: 1.15,
   letterSpacing: '-0.005em',
   fontVariantNumeric: 'tabular-nums',
   textAlign: 'center',
 };
 
 /**
- * Etiqueta chica, pegada al monto. El brillo marca la selección.
+ * Etiqueta chica, debajo del monto. El brillo marca la selección.
  * El mismo aire vale en el hub y en la página.
  */
 export function getFilterToggleFloatingLabelSx(selected) {
@@ -69,10 +77,10 @@ export function getFilterToggleFloatingLabelSx(selected) {
     textAlign: 'center',
     m: 0,
     p: 0,
-    fontWeight: 500,
-    fontSize: '0.6875rem',
-    lineHeight: 1,
-    letterSpacing: '0.06em',
+    fontWeight: FONT_WEIGHT.medium,
+    fontSize: FONT_SIZE['2xs'],
+    lineHeight: 1.15,
+    letterSpacing: LETTER_SPACING.widest,
     textTransform: 'uppercase',
     pointerEvents: 'none',
     userSelect: 'none',

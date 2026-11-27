@@ -16,6 +16,7 @@ import {
 import { resolveHabitBadgeChrome } from '@shared/habits/presentation';
 import { VALID_TIME_OF_DAY } from '@shared/utils/timeOfDayUtils';
 import { getNormalizedToday, parseAPIDate, toISODateString } from '@shared/utils/dateUtils';
+import { FONT_SIZE } from '../../tipografia';
 
 const FRANJA_ICONS = {
   MAÑANA: { filled: WbSunnyIcon, outlined: WbSunnyOutlinedIcon },
@@ -379,7 +380,7 @@ export const HabitCounterBadge = ({
           '& .MuiBadge-badge': {
             minWidth: size === 'small' ? 12 : 14,
             height: size === 'small' ? 12 : 14,
-            fontSize: size === 'small' ? '0.6rem' : '0.65rem',
+            fontSize: size === 'small' ? FONT_SIZE['2xs'] : FONT_SIZE.xs,
             fontWeight: 600,
             padding: size === 'small' ? '1px 3px' : '2px 4px',
             bgcolor: 'transparent',

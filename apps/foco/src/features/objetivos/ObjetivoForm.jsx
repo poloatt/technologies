@@ -39,6 +39,7 @@ import {
   TareaFormAttachmentsSection,
   useTareaFormAttachments,
 } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const TareaForm = React.lazy(() => import('../tasks/form/TareaForm'));
 
@@ -304,7 +305,7 @@ const ObjetivoForm = ({ open, onClose, onSubmit, initialData = null, isEditing, 
                     <Typography
                       sx={{
                         flex: 1,
-                        fontSize: '0.875rem',
+                        fontSize: FONT_SIZE.base,
                         color: tarea.completada ? 'text.secondary' : 'text.primary',
                         textDecoration: tarea.completada ? 'line-through' : 'none',
                       }}

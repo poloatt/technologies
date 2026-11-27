@@ -9,6 +9,7 @@ import { HabitacionTileSkeleton } from './HabitacionTile';
 import PropiedadHubBlock from './PropiedadHubBlock';
 import { PROPIEDADES_HUB_PROPIEDAD_PREVIEW_COUNT } from './propiedadesHubConstants';
 import { normalizeDocId } from './propiedadesHubUtils';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const PATH = '/propiedades';
 
@@ -60,7 +61,7 @@ export default function PropiedadesHubSection({ showHabitaciones = true }) {
       {loading ? (
         <PropiedadesHubSkeleton showHabitaciones={showHabitaciones} />
       ) : propiedades.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem', px: 0.25 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: FONT_SIZE.md, px: 0.25 }}>
           Sin propiedades
         </Typography>
       ) : (

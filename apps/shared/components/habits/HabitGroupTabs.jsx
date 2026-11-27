@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Box, IconButton, Tab, Tabs, TabScrollButton, Tooltip, useTheme } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import { FONT_SIZE } from '../../tipografia';
 
 /**
  * Flecha de las pestañas de grupo: además de desplazar la barra, selecciona
@@ -31,7 +32,7 @@ const BASE_TABS_SX = {
     minHeight: 40,
     py: 1,
     px: 1.5,
-    fontSize: '0.8125rem',
+    fontSize: FONT_SIZE.md,
     fontWeight: 600,
     textTransform: 'none',
   },

@@ -1,5 +1,6 @@
 import { 
   Monedas, 
+  COLORES_MONEDA,
   Propiedades, 
   Habitaciones, 
   Inquilinos, 
@@ -11,6 +12,7 @@ import {
   Inventarios,
   Users 
 } from '../models/index.js';
+import { ensureEfectivoAccount } from '../services/efectivoAccountService.js';
 
 export const initializeMonedas = async () => {
   try {
@@ -19,6 +21,7 @@ export const initializeMonedas = async () => {
         codigo: 'USD',
         nombre: 'Dólar Estadounidense',
         simbolo: '$',
+        color: COLORES_MONEDA.VERDE_DOLAR,
         tasaCambio: 1,
         activa: true,
         esGlobal: true
@@ -51,6 +54,9 @@ export const initializeMonedas = async () => {
 export const initializeSampleData = async (userId) => {
   try {
     console.log('Iniciando creación de datos de ejemplo...');
+
+    // Garantizar siempre la cuenta Efectivo por defecto para el usuario
+    await ensureEfectivoAccount(userId);
     
     // Verificar si ya existen datos
     const existingProperties = await Propiedades.countDocuments({ usuario: userId });

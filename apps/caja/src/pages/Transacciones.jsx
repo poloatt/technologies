@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Box, Button, Chip, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
+import { Box, Button, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
 import BranchFinanzasSectionNav from '../finanzas/BranchFinanzasSectionNav';
-import { cuentaDetailPath } from '../finanzas/finanzasDeepLink';
+import { useCajaSetup } from '../atta/useCajaSetup';
 import { useFinanzasBranch } from '../finanzas/useFinanzasBranch';
 import TransaccionTable from '../finanzas/transacciones/TransaccionTable';
 import TransaccionesFlujoVisual from '../finanzas/transacciones/TransaccionesFlujoVisual';
@@ -10,11 +10,10 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
-import { FLUJO_TYPE_FILTERS, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
 import clienteAxios from '@shared/config/axios';
 import { useSnackbar } from 'notistack';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
 
 const loadTransaccionForm = () => import('../finanzas/transacciones/TransaccionForm');
@@ -73,13 +72,11 @@ export function Transacciones() {
   const [editingTransaccion, setEditingTransaccion] = useState(null);
   const { showValues } = useValuesVisibility();
   const location = useLocation();
-  const navigate = useNavigate();
+  const { openSetup } = useCajaSetup();
   const [searchParams] = useSearchParams();
   const cuentaFilterId = searchParams.get('cuenta');
   const { branchId } = useFinanzasBranch();
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
-  const [enabledKinds, setEnabledKinds] = useState(null);
-  const [cuentaFiltrada, setCuentaFiltrada] = useState(null);
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
   const sentinelRef = useRef(null);
 
@@ -96,7 +93,6 @@ export function Transacciones() {
     fechaInicio: periodRange.fechaInicio,
     fechaFin: periodRange.fechaFin,
     cuentaId: cuentaFilterId || undefined,
-    kinds: kindsQueryFor(FLUJO_TYPE_FILTERS, enabledKinds),
   });
 
   useEffect(() => {
@@ -115,23 +111,6 @@ export function Transacciones() {
       if (timeoutId != null) window.clearTimeout(timeoutId);
     };
   }, []);
-
-  useEffect(() => {
-    if (!cuentaFilterId) {
-      setCuentaFiltrada(null);
-      return undefined;
-    }
-    let active = true;
-    setCuentaFiltrada(null);
-    clienteAxios.get(`/api/cuentas/${cuentaFilterId}`)
-      .then((response) => {
-        if (active) setCuentaFiltrada(response.data);
-      })
-      .catch(() => {
-        if (active) setCuentaFiltrada(null);
-      });
-    return () => { active = false; };
-  }, [cuentaFilterId]);
 
   useEffect(() => {
     if (!transaccionesError) return;
@@ -157,54 +136,49 @@ export function Transacciones() {
     }
   }, [enqueueSnackbar]);
 
+  // Propaga los errores: TransaccionForm muestra el mensaje y queda abierto con los datos cargados.
+  // El snackbar de éxito lo muestra el form (un único aviso).
   const handleFormSubmit = useCallback(async (formData) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
+    }
+
+    const cuentaId = formData.cuenta?._id || formData.cuenta?.id || formData.cuenta;
+    if (!cuentaId) {
+      throw new Error('La cuenta seleccionada no existe');
+    }
+
+    const datosAEnviar = {
+      descripcion: formData.descripcion,
+      monto: parseFloat(formData.monto),
+      fecha: formData.fecha,
+      categoria: formData.categoria,
+      estado: formData.estado || 'PAGADO',
+      cuenta: cuentaId,
+      tipo: formData.tipo || 'INGRESO',
+      ...(formData.moneda ? { moneda: formData.moneda } : {}),
+      ...(formData.contacto !== undefined ? { contacto: formData.contacto || null } : {}),
+    };
+
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No hay sesión activa. Por favor, inicia sesión nuevamente.');
-      }
-
-      const cuentaId = formData.cuenta?._id || formData.cuenta?.id || formData.cuenta;
-      if (!cuentaId) {
-        throw new Error('La cuenta seleccionada no existe');
-      }
-
-      const datosAEnviar = {
-        descripcion: formData.descripcion,
-        monto: parseFloat(formData.monto),
-        fecha: formData.fecha || new Date().toISOString(),
-        categoria: formData.categoria,
-        estado: formData.estado || 'PENDIENTE',
-        cuenta: cuentaId,
-        tipo: formData.tipo || 'INGRESO',
-        moneda: formData.moneda
-      };
-
       if (editingTransaccion) {
-        await clienteAxios.put(`/api/transacciones/${editingTransaccion._id}`, datosAEnviar);
-        enqueueSnackbar('Transacción actualizada exitosamente', { variant: 'success' });
+        await clienteAxios.put(`/api/transacciones/${editingTransaccion._id || editingTransaccion.id}`, datosAEnviar);
       } else {
         await clienteAxios.post('/api/transacciones', datosAEnviar);
-        enqueueSnackbar('Transacción creada exitosamente', { variant: 'success' });
       }
-
-      setIsFormOpen(false);
-      setEditingTransaccion(null);
-      setFormKey(prev => prev + 1);
-      window.dispatchEvent(new Event('transaccionesRefreshed'));
     } catch (error) {
-      console.error('Error completo:', error);
       if (error.response?.status === 401) {
         enqueueSnackbar('Sesión expirada. Por favor, inicia sesión nuevamente.', {
           variant: 'error',
           autoHideDuration: 5000
         });
         window.location.href = '/#/login';
-        return;
       }
-      const mensajeError = error.response?.data?.message || error.message || 'Error al guardar la transacción';
-      enqueueSnackbar(mensajeError, { variant: 'error' });
+      throw error;
     }
+
+    window.dispatchEvent(new Event('transaccionesRefreshed'));
   }, [enqueueSnackbar, editingTransaccion]);
 
   const handleDelete = useCallback(async (transaccion) => {
@@ -215,7 +189,19 @@ export function Transacciones() {
       window.dispatchEvent(new Event('transaccionesRefreshed'));
     } catch (error) {
       console.error('Error al eliminar transacción:', error);
-      enqueueSnackbar('Error al eliminar la transacción', { variant: 'error' });
+      enqueueSnackbar(error.response?.data?.message || 'Error al eliminar la transacción', { variant: 'error' });
+    }
+  }, [enqueueSnackbar]);
+
+  const handleChangeEstado = useCallback(async (transaccion, estado) => {
+    const id = transaccion?._id || transaccion?.id;
+    try {
+      await clienteAxios.patch(`/api/transacciones/${id}/estado`, { estado });
+      enqueueSnackbar(estado === 'PENDIENTE' ? 'Marcada como pendiente' : 'Marcada como pagada', { variant: 'success' });
+      window.dispatchEvent(new Event('transaccionesRefreshed'));
+    } catch (error) {
+      console.error('Error al cambiar estado:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Error al cambiar el estado', { variant: 'error' });
     }
   }, [enqueueSnackbar]);
 
@@ -287,37 +273,11 @@ export function Transacciones() {
   return (
     <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
       <BranchFinanzasSectionNav branchId={branchId} variant="strip" />
-      {cuentaFilterId && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, px: 0.5 }}>
-          <Chip
-            label={cuentaFiltrada?.nombre ? `Cuenta: ${cuentaFiltrada.nombre}` : 'Cuenta'}
-            size="small"
-            onDelete={() => navigate(location.pathname.split('?')[0], { replace: true })}
-            variant="outlined"
-          />
-          <Typography
-            component="button"
-            variant="caption"
-            onClick={() => navigate(cuentaDetailPath(cuentaFilterId, branchId))}
-            sx={{
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              color: 'primary.main',
-              textDecoration: 'underline',
-            }}
-          >
-            Ver detalle
-          </Typography>
-        </Box>
-      )}
       <TransaccionesFlujoVisual
         density="page"
         cuentaId={cuentaFilterId}
         preset={preset}
         onPresetChange={setPreset}
-        enabledKinds={enabledKinds}
-        onKindsChange={setEnabledKinds}
       />
 
       {transaccionesLoading ? (
@@ -336,7 +296,7 @@ export function Transacciones() {
           buttonText={cuentaFilterId ? 'Ir a Cuentas' : 'Nueva Transacción'}
           onButtonClick={
             cuentaFilterId
-              ? () => navigate(cuentaDetailPath(cuentaFilterId, branchId))
+              ? () => openSetup('cuentas', { cuentaId: cuentaFilterId })
               : handleOpenForm
           }
         />
@@ -346,6 +306,7 @@ export function Transacciones() {
             transacciones={transaccionesFiltradas}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onChangeEstado={handleChangeEstado}
             showVisibilityToggle={true}
             showValues={showValues}
           />
@@ -367,7 +328,7 @@ export function Transacciones() {
             open={isFormOpen}
             onClose={() => setIsFormOpen(false)}
             onSubmit={handleFormSubmit}
-            initialData={editingTransaccion || {}}
+            initialData={editingTransaccion || (cuentaFilterId ? { cuenta: cuentaFilterId } : {})}
             isEditing={!!editingTransaccion}
           />
         </Suspense>

@@ -11,6 +11,7 @@ import {
   Button,
 } from '@mui/material';
 import { CommonForm, CommonActions } from '@shared/components/common';
+import { AccountListGroup, AccountListRow } from '@shared/components/hub';
 import { 
   AccountBalanceOutlined as BankIcon,
   CreditCardOutlined as CardIcon,
@@ -21,27 +22,23 @@ import { useSnackbar } from 'notistack';
 import { EmptyState } from '@shared/components/common';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { useAPI } from '@shared/hooks/useAPI';
-import {
-  BankConnectionForm,
-  BranchFinanzasSectionNav,
-  MercadoPagoPartialSyncBanner,
-  CuentaTransaccionesPanel,
-  CuentaDetailShell,
-  cuentaDetailPath,
-  useFinanzasBranch,
-} from '../finanzas';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { useResponsive } from '@shared/hooks';
+import { BankConnectionForm, MercadoPagoPartialSyncBanner } from '../conexiones';
+import CuentaTransaccionesPanel from './CuentaTransaccionesPanel';
+import { useCajaSetup } from '../../atta/useCajaSetup';
 import { formatFinanzasMonto } from '@shared/utils/formatFinanzasMonto';
-import { formatDateKey } from '../finanzas/transacciones/transaccionesPeriodUtils';
-import { saldoReportadoMercadoPago } from '../finanzas/cuentas/cuentaConstants';
-import { cajaPageLayoutSx } from '../navigation/cajaPageLayoutSx';
+import { formatDateKey } from '../transacciones/transaccionesPeriodUtils';
+import {
+  getMonedasFromCuenta,
+  isCuentaMultimoneda,
+  saldoReportadoMercadoPago,
+} from './cuentaConstants';
+import { useFinanzasBranch } from '../useFinanzasBranch';
 
 /**
- * Listado / gestión de cuentas.
- * @param {{ embedded?: boolean }} props embedded = setup popup (sin strip de sección).
+ * Setup de cuentas: se muestra solo dentro del popup (sin página propia).
+ * Lista de cuentas y, con `?setupCuenta=ID`, el detalle de la cuenta en el mismo popup.
  */
-export function Cuentas({ embedded = false } = {}) {
+export function CuentasSetup() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [expandedMonedas, setExpandedMonedas] = useState([]);
   const { showValues } = useValuesVisibility();
@@ -49,21 +46,19 @@ export function Cuentas({ embedded = false } = {}) {
   const [editingCuenta, setEditingCuenta] = useState(null);
   const [balances, setBalances] = useState({});
   const [balancesPorMoneda, setBalancesPorMoneda] = useState({});
+  const [balancesPorCuentaMoneda, setBalancesPorCuentaMoneda] = useState({});
   const [deletingId, setDeletingId] = useState(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [isBankConnectionFormOpen, setIsBankConnectionFormOpen] = useState(false);
   const [isProcessingPago, setIsProcessingPago] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const selectedCuentaId = searchParams.get('cuenta');
-  const { isMobile } = useResponsive();
-  const { branchId, cuentasPath } = useFinanzasBranch();
+  const { cuentaId: selectedCuentaId, openSetup, closeCuenta } = useCajaSetup();
+  const { branchId } = useFinanzasBranch();
 
   // Función para restablecer los balances
   const resetBalance = useCallback(() => {
     setBalances({});
     setBalancesPorMoneda({});
+    setBalancesPorCuentaMoneda({});
     console.log('Balances restablecidos');
     return Promise.resolve();
   }, []);
@@ -107,6 +102,7 @@ export function Cuentas({ embedded = false } = {}) {
     console.log('Iniciando carga de balances para todas las cuentas');
     const balancesTemp = {};
     const balancesPorMonedaTemp = {};
+    const balancesPorCuentaMonedaTemp = {};
     
     // Preparar los grupos por moneda para acumular balances
     monedas.forEach(moneda => {
@@ -127,20 +123,39 @@ export function Cuentas({ embedded = false } = {}) {
           const response = await clienteAxios.get(`/api/transacciones/balance/${cuentaId}`, {
             params: { fechaFin: today, estado: 'PAGADO' },
           });
-          return { cuenta, cuentaId, balance: response.data?.balance ?? 0 };
+          return {
+            cuenta,
+            cuentaId,
+            balance: response.data?.balance ?? 0,
+            porMoneda: Array.isArray(response.data?.porMoneda) ? response.data.porMoneda : [],
+          };
         } catch (error) {
           console.error(`Error al cargar balance para cuenta ${cuenta.nombre}:`, error);
-          return { cuenta, cuentaId, balance: 0 };
+          return { cuenta, cuentaId, balance: 0, porMoneda: [] };
         }
       }),
     );
 
     for (const item of resultados) {
       if (!item) continue;
-      const { cuenta, cuentaId, balance } = item;
+      const { cuenta, cuentaId, balance, porMoneda } = item;
       const reportado = saldoReportadoMercadoPago(cuenta);
       const saldo = reportado != null ? reportado : balance;
       balancesTemp[cuentaId] = saldo;
+
+      if (isCuentaMultimoneda(cuenta)) {
+        const mapMonedas = {};
+        for (const entry of porMoneda) {
+          if (!entry?.monedaId) continue;
+          const mId = String(entry.monedaId);
+          mapMonedas[mId] = entry.balance ?? 0;
+          if (balancesPorMonedaTemp[mId] !== undefined) {
+            balancesPorMonedaTemp[mId] += entry.balance ?? 0;
+          }
+        }
+        balancesPorCuentaMonedaTemp[cuentaId] = mapMonedas;
+        continue;
+      }
 
       let monedaId = null;
       if (typeof cuenta.moneda === 'object' && cuenta.moneda) {
@@ -156,6 +171,7 @@ export function Cuentas({ embedded = false } = {}) {
 
     setBalances(balancesTemp);
     setBalancesPorMoneda(balancesPorMonedaTemp);
+    setBalancesPorCuentaMoneda(balancesPorCuentaMonedaTemp);
   }, [cuentas, monedas]);
 
   const handleRefreshCuenta = useCallback(() => {
@@ -184,48 +200,37 @@ export function Cuentas({ embedded = false } = {}) {
   // Escuchar el evento del botón "+" del Header
   useEffect(() => {
     const handleHeaderAdd = (e) => {
-      if (
-        (e.detail?.path && e.detail.path === location.pathname) ||
-        e.detail?.type === 'cuenta' ||
-        e.detail?.type === 'cuentas'
-      ) {
+      if (e.detail?.type === 'cuenta' || e.detail?.type === 'cuentas') {
         setEditingCuenta(null);
         setIsFormOpen(true);
       }
     };
-    
+
     window.addEventListener('headerAddButtonClicked', handleHeaderAdd);
     return () => window.removeEventListener('headerAddButtonClicked', handleHeaderAdd);
-  }, [location.pathname]);
+  }, []);
 
-  // Refetch si el sync se completó desde el toolbar (Cuentas puede estar embebida o no).
+  // Refetch si el sync, transacciones o cambios de monedas se completaron.
   useEffect(() => {
     const handleCuentasRefreshed = () => {
       refetchCuentas();
     };
+    const handleMonedasRefreshed = () => {
+      refetchMonedas();
+      refetchCuentas();
+    };
+    const handleTransaccionesRefreshed = () => {
+      fetchBalancesCuentas();
+    };
     window.addEventListener('cuentasRefreshed', handleCuentasRefreshed);
-    return () => window.removeEventListener('cuentasRefreshed', handleCuentasRefreshed);
-  }, [refetchCuentas]);
-
-  // Abrir formulario tras redirección si openAdd está en el estado
-  useEffect(() => {
-    if (location.state?.openAdd) {
-      setEditingCuenta(null);
-      setIsFormOpen(true);
-      window.history.replaceState({}, document.title);
-    }
-  }, [location]);
-
-  useEffect(() => {
-    if (!selectedCuentaId || isLoading || !isMobile) return undefined;
-    const timer = setTimeout(() => {
-      document.getElementById(`cuenta-row-${selectedCuentaId}`)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [selectedCuentaId, isLoading, cuentas, isMobile]);
+    window.addEventListener('monedasRefreshed', handleMonedasRefreshed);
+    window.addEventListener('transaccionesRefreshed', handleTransaccionesRefreshed);
+    return () => {
+      window.removeEventListener('cuentasRefreshed', handleCuentasRefreshed);
+      window.removeEventListener('monedasRefreshed', handleMonedasRefreshed);
+      window.removeEventListener('transaccionesRefreshed', handleTransaccionesRefreshed);
+    };
+  }, [refetchCuentas, refetchMonedas, fetchBalancesCuentas]);
 
   const handleCreateMoneda = async (data) => {
     try {
@@ -496,6 +501,22 @@ export function Cuentas({ embedded = false } = {}) {
     }
   };
 
+  const cuentasMultimoneda = useMemo(
+    () =>
+      cuentas
+        .filter((cuenta) => isCuentaMultimoneda(cuenta))
+        .map((cuenta) => {
+          const cuentaId = cuenta.id || cuenta._id;
+          return {
+            ...cuenta,
+            id: cuentaId,
+            _id: cuentaId,
+            monedasHabilitadas: getMonedasFromCuenta(cuenta, monedas),
+          };
+        }),
+    [cuentas, monedas],
+  );
+
   // Memoizar la función para evitar recálculos innecesarios
   const cuentasAgrupadasPorMoneda = useMemo(() => {
     // Preparar un objeto para almacenar las cuentas agrupadas por moneda
@@ -533,8 +554,10 @@ export function Cuentas({ embedded = false } = {}) {
       balance: 0
     };
     
-    // Luego asignar cada cuenta a su grupo de moneda correspondiente
+    // Luego asignar cada cuenta monomoneda a su grupo de moneda correspondiente
     cuentas.forEach(cuenta => {
+      if (isCuentaMultimoneda(cuenta)) return;
+
       // Normalizar el id de la cuenta
       const cuentaId = cuenta.id || cuenta._id;
       
@@ -579,6 +602,13 @@ export function Cuentas({ embedded = false } = {}) {
 
   const selectedCuenta = useMemo(() => {
     if (!selectedCuentaId) return null;
+    const foundMulti = cuentasMultimoneda.find((c) => (c._id || c.id) === selectedCuentaId);
+    if (foundMulti) {
+      return {
+        ...foundMulti,
+        monedas: foundMulti.monedasHabilitadas,
+      };
+    }
     for (const grupo of Object.values(cuentasAgrupadasPorMoneda)) {
       const found = grupo.cuentas.find((c) => (c._id || c.id) === selectedCuentaId);
       if (found) {
@@ -590,9 +620,12 @@ export function Cuentas({ embedded = false } = {}) {
       }
     }
     return null;
-  }, [cuentasAgrupadasPorMoneda, selectedCuentaId]);
+  }, [cuentasMultimoneda, cuentasAgrupadasPorMoneda, selectedCuentaId]);
 
-  const showGlobalPartialBanner = !selectedCuentaId || selectedCuenta?.tipo !== 'MERCADO_PAGO';
+  // Si el id de la URL ya no existe (cuenta eliminada o link viejo), volver a la lista.
+  useEffect(() => {
+    if (selectedCuentaId && !isLoading && !selectedCuenta) closeCuenta();
+  }, [selectedCuentaId, isLoading, selectedCuenta, closeCuenta]);
 
   // Función para iniciar el pago de prueba
   const handlePagoPrueba = async () => {
@@ -623,12 +656,7 @@ export function Cuentas({ embedded = false } = {}) {
 
   const handleCuentaRowClick = (cuenta) => {
     const cuentaRowId = cuenta._id || cuenta.id;
-    if (embedded) {
-      // En setup: editar, no abrir el panel de transacciones.
-      handleEdit(cuenta);
-      return;
-    }
-    navigate(cuentaDetailPath(cuentaRowId, branchId), { replace: true });
+    openSetup('cuentas', { cuentaId: cuentaRowId });
   };
 
   const cuentasList = (
@@ -638,7 +666,7 @@ export function Cuentas({ embedded = false } = {}) {
           message="Cargando cuentas..."
           submessage="Un momento mientras preparamos tus datos."
         />
-      ) : monedas.length === 0 ? (
+      ) : monedas.length === 0 && cuentas.length === 0 ? (
         <EmptyState
           message="Falta configurar monedas"
           submessage="Creá al menos una moneda para poder agregar cuentas."
@@ -651,45 +679,67 @@ export function Cuentas({ embedded = false } = {}) {
         />
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          {cuentasMultimoneda.length > 0 && (() => {
+            const visibles = cuentasMultimoneda;
+            return (
+              <AccountListGroup
+                title="Multimoneda"
+                rightContent={(
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    {visibles[0].monedasHabilitadas.length === 1
+                      ? '1 moneda'
+                      : `${visibles[0].monedasHabilitadas.length} monedas`}
+                  </Typography>
+                )}
+              >
+                {visibles.map((cuenta) => {
+                  const cuentaRowId = cuenta._id || cuenta.id;
+                  const saldosCuenta = balancesPorCuentaMoneda[cuentaRowId] || {};
+                  const monedasHabilitadas = cuenta.monedasHabilitadas || [];
+                  const balanceItems = monedasHabilitadas.map((moneda) => {
+                    const saldoMoneda = saldosCuenta[moneda.id] ?? 0;
+                    return {
+                      id: moneda.id,
+                      title: `${moneda.nombre} (${moneda.codigo})`,
+                      color: saldoMoneda >= 0 ? (moneda.color || '#75AADB') : 'error.main',
+                      formatted: showValues
+                        ? formatFinanzasMonto(saldoMoneda, { simbolo: moneda.simbolo })
+                        : '****',
+                    };
+                  });
+                  return (
+                    <AccountListRow
+                      key={cuentaRowId}
+                      id={`cuenta-row-${cuentaRowId}`}
+                      icon={getTipoIcon(cuenta.tipo)}
+                      nombre={cuenta.nombre || 'Efectivo'}
+                      tipoLabel={cuenta.tipo ? cuenta.tipo.replace('_', ' ') : 'EFECTIVO'}
+                      onClick={() => handleCuentaRowClick(cuenta)}
+                      balances={balanceItems}
+                      actions={cuenta.esDefault ? undefined : (
+                        <CommonActions
+                          onEdit={() => handleEdit(cuenta)}
+                          onDelete={() => handleDelete(cuenta)}
+                          itemName={`la cuenta ${cuenta.nombre}`}
+                        />
+                      )}
+                    />
+                  );
+                })}
+              </AccountListGroup>
+            );
+          })()}
           {Object.entries(cuentasAgrupadasPorMoneda).map(([monedaId, grupo]) => {
             if (!grupo.moneda) return null;
 
-            const cuentasVisibles = grupo.cuentas.filter((cuenta) => {
-              if (embedded) return true;
-              if (!isMobile || !selectedCuentaId) return true;
-              const id = cuenta._id || cuenta.id;
-              return id !== selectedCuentaId;
-            });
-
+            const cuentasVisibles = grupo.cuentas;
             if (cuentasVisibles.length === 0) return null;
 
             return (
-              <Box
+              <AccountListGroup
                 key={monedaId}
-                sx={{
-                  border: 1,
-                  borderColor: 'divider',
-                  bgcolor: 'background.paper',
-                  overflow: 'hidden',
-                }}
-              >
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 1,
-                    px: 1.5,
-                    py: 0.75,
-                    borderBottom: 1,
-                    borderColor: 'divider',
-                    bgcolor: (theme) =>
-                      theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  }}
-                >
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                    {grupo.moneda.nombre} ({grupo.moneda.simbolo})
-                  </Typography>
+                title={`${grupo.moneda.nombre} (${grupo.moneda.simbolo})`}
+                rightContent={(
                   <Typography
                     variant="caption"
                     sx={{
@@ -701,79 +751,40 @@ export function Cuentas({ embedded = false } = {}) {
                       ? formatFinanzasMonto(grupo.balance, { simbolo: grupo.moneda.simbolo })
                       : '****'}
                   </Typography>
-                </Box>
-
-                <Box>
-                  {cuentasVisibles.map((cuenta) => {
-                    const cuentaRowId = cuenta._id || cuenta.id;
-                    const isSelected = !embedded && selectedCuentaId === cuentaRowId;
-                    const saldo = balances[cuentaRowId] ?? cuenta.saldo ?? 0;
-                    return (
-                      <Box
-                        key={cuentaRowId}
-                        id={`cuenta-row-${cuentaRowId}`}
-                        onClick={() => handleCuentaRowClick(cuenta)}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 1,
-                          px: 1.5,
-                          py: 1,
-                          borderBottom: 1,
-                          borderColor: 'divider',
-                          cursor: 'pointer',
-                          bgcolor: isSelected ? 'action.selected' : 'transparent',
-                          '&:last-child': { borderBottom: 0 },
-                          '&:hover': {
-                            bgcolor: isSelected ? 'action.selected' : 'action.hover',
-                          },
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
-                          {getTipoIcon(cuenta.tipo)}
-                          <Typography variant="body2" noWrap>
-                            {cuenta.nombre || 'Sin nombre'}
-                          </Typography>
-                          <Chip
-                            label={cuenta.tipo ? cuenta.tipo.replace('_', ' ') : 'OTRO'}
-                            size="small"
-                            variant="outlined"
-                            color={cuenta.tipo ? 'default' : 'warning'}
-                            sx={{
-                              height: 20,
-                              flexShrink: 0,
-                              '& .MuiChip-label': { px: 1, fontSize: '0.7rem' },
-                            }}
-                          />
-                        </Box>
-
-                        <Box
-                          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: saldo >= 0 ? grupo.moneda.color || '#75AADB' : 'error.main',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {showValues
-                              ? formatFinanzasMonto(saldo, { simbolo: grupo.moneda.simbolo })
-                              : '****'}
-                          </Typography>
-                          <CommonActions
-                            onEdit={() => handleEdit(cuenta)}
-                            onDelete={() => handleDelete(cuenta)}
-                            itemName={`la cuenta ${cuenta.nombre}`}
-                          />
-                        </Box>
-                      </Box>
-                    );
-                  })}
-                </Box>
-              </Box>
+                )}
+              >
+                {cuentasVisibles.map((cuenta) => {
+                  const cuentaRowId = cuenta._id || cuenta.id;
+                  const saldo = balances[cuentaRowId] ?? cuenta.saldo ?? 0;
+                  return (
+                    <AccountListRow
+                      key={cuentaRowId}
+                      id={`cuenta-row-${cuentaRowId}`}
+                      icon={getTipoIcon(cuenta.tipo)}
+                      nombre={cuenta.nombre || 'Sin nombre'}
+                      tipoLabel={cuenta.tipo ? cuenta.tipo.replace('_', ' ') : 'OTRO'}
+                      tipoWarning={!cuenta.tipo}
+                      onClick={() => handleCuentaRowClick(cuenta)}
+                      balances={[
+                        {
+                          id: grupo.moneda.id,
+                          color: saldo >= 0 ? grupo.moneda.color || '#75AADB' : 'error.main',
+                          formatted: showValues
+                            ? formatFinanzasMonto(saldo, { simbolo: grupo.moneda.simbolo })
+                            : '****',
+                        },
+                      ]}
+                      actions={(
+                        <CommonActions
+                          onEdit={() => handleEdit(cuenta)}
+                          onDelete={() => handleDelete(cuenta)}
+                          itemName={`la cuenta ${cuenta.nombre}`}
+                        />
+                      )}
+                    />
+                  );
+                })}
+              </AccountListGroup>
             );
           })}
         </Box>
@@ -782,33 +793,17 @@ export function Cuentas({ embedded = false } = {}) {
   );
 
   return (
-    <Box sx={embedded ? { px: 1.5, py: 1.25 } : cajaPageLayoutSx}>
-      {!embedded && <BranchFinanzasSectionNav branchId={branchId} variant="strip" />}
-      {showGlobalPartialBanner && (
+    <Box sx={selectedCuenta ? undefined : { px: 1.5, py: 1.25 }}>
+      {!selectedCuenta && (
         <MercadoPagoPartialSyncBanner onImportCsv={() => refetchCuentas()} />
       )}
-      {!embedded && isMobile && selectedCuenta && (
+      {selectedCuenta && (
         <CuentaTransaccionesPanel
           cuenta={selectedCuenta}
           onRefresh={handleRefreshCuenta}
           embedded
           branchId={branchId}
         />
-      )}
-      {!embedded && (
-        <CuentaDetailShell
-          open={!isMobile && !!selectedCuenta}
-          onClose={() => navigate(cuentasPath, { replace: true })}
-        >
-          {!isMobile && selectedCuenta && (
-            <CuentaTransaccionesPanel
-              cuenta={selectedCuenta}
-              onRefresh={handleRefreshCuenta}
-              embedded
-              branchId={branchId}
-            />
-          )}
-        </CuentaDetailShell>
       )}
       <BankConnectionForm
         open={isBankConnectionFormOpen}
@@ -844,7 +839,7 @@ export function Cuentas({ embedded = false } = {}) {
         isEditing={!!editingCuenta}
       />
 
-      {cuentasList}
+      {!selectedCuenta && cuentasList}
 
       {/* Diálogo de confirmación para eliminar */}
       <Dialog
@@ -871,4 +866,4 @@ export function Cuentas({ embedded = false } = {}) {
   );
 }
 
-export default Cuentas; 
+export default CuentasSetup;

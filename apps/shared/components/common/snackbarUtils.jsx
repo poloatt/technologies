@@ -1,5 +1,7 @@
 import React, { createRef } from 'react';
 import { SnackbarProvider, useSnackbar } from 'notistack';
+import { NEGATIVE_COLOR } from '../../config/uiConstants';
+import { FONT_SIZE } from '../../tipografia';
 
 /**
  * Referencia al proveedor SnackbarProvider para usar en utilidades globales
@@ -45,14 +47,14 @@ export const SnackbarUtilsConfigurator = () => {
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         color: 'rgba(255, 255, 255, 0.9)',
         fontWeight: 400,
-        fontSize: '0.75rem',
+        fontSize: FONT_SIZE.sm,
         lineHeight: 1,
         padding: '0 8px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-start',
         border: variant === 'success' ? '1px solid #4caf50' :
-                variant === 'error' ? '1px solid #f44336' :
+                variant === 'error' ? `1px solid ${NEGATIVE_COLOR}` :
                 variant === 'warning' ? '1px solid #ff9800' :
                 variant === 'info' ? '1px solid #2196f3' : '1px solid rgba(255, 255, 255, 0.1)',
         borderRadius: 0,

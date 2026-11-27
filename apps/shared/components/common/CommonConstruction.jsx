@@ -23,6 +23,7 @@ import {
   Settings as SettingsIcon,
   Person as PersonFilledIcon
 } from '@mui/icons-material';
+import { FONT_SIZE } from '../../tipografia';
 
 export function UnderConstruction() {
   const { theme } = useResponsive();
@@ -47,7 +48,7 @@ export function UnderConstruction() {
     datacorporal: WeightFilledIcon,
     tareas: TaskFilledIcon,
     recurrente: AutorenewFilledIcon,
-    deudores: PersonFilledIcon
+    contactos: PersonFilledIcon
   };
 
   const IconComponent = routeIcons[currentPath] || BuildingFilledIcon;
@@ -153,7 +154,7 @@ export function UnderConstruction() {
             textAlign: 'center',
             color: theme.palette.secondary.main,
             letterSpacing: '0.02em',
-            fontSize: '0.85rem'
+            fontSize: FONT_SIZE.base
           }}
         >
           Este módulo pronto estará habilitado

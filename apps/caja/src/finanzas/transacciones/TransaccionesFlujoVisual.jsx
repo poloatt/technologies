@@ -1,37 +1,35 @@
-import { useEffect, useId, useState } from 'react';
-import { Box, Skeleton, Typography, useTheme } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Box, Typography, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { hubEyebrowSx, hubLabelSx, hubSupportAmountSx } from '../../hub';
-import HubBalanceDivider from '../hub/HubBalanceDivider';
-import { HubBalanceBreakdown, HubBalanceRow } from '@shared/components/hub';
+import { hubEyebrowSx, hubSupportAmountSx, FONT_SIZE } from '@shared/tipografia';
+import FinanzasPagePeriodHeader, { finanzasPageSummarySectionSx } from '../FinanzasPagePeriodHeader';
+import { HubAccountBlock } from '@shared/components/hub';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAPI } from '@shared/hooks/useAPI';
 import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
 import { useSaldosCuenta } from '../cuentas/useSaldosCuenta';
+import { getBloquesSaldos, getItemsMultimoneda } from '../cuentas/tiposCuentaSaldos';
+import { DEFAULT_USD_COLOR } from '../monedas/monedaConstants';
 import {
-  CREDITOS_PATH,
-  DOLARES_PATH,
-  INVERSIONES_PATH,
-  cuentaDetailPath,
-  getCuentasPath,
+  creditosCuentaPath,
+  dolaresCuentaPath,
+  getTransaccionesPath,
+  inversionesVistaPath,
   resolveFinanzasBranch,
+  transaccionesCuentaFilterPath,
 } from '../finanzasDeepLink';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import {
   DEFAULT_PERIOD_PRESET,
   FLUJO_PERIOD_MODES,
-  fillDailySeries,
   formatMonto,
   formatPeriodSpan,
   formatSaldoFuente,
-  formatSaldosCorte,
   formatUsdMonto,
   getPeriodRange,
 } from './transaccionesPeriodUtils';
 import { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
 import PeriodControl from './PeriodPicker';
-import LedgerKindFilter from './LedgerKindFilter';
-import { FLUJO_TYPE_FILTERS, kindsQueryFor } from './ledgerKindFilters';
 
 const EMPTY_MONEDA = {
   monedaId: null,
@@ -45,63 +43,6 @@ const EMPTY_MONEDA = {
 };
 
 export { PeriodControl };
-
-/**
- * Ingresos y egresos del período, que componen el flujo neto de arriba.
- * El filtro de tipos vive acá porque afecta al flujo, no a los saldos.
- */
-function FlujoPeriodoLine({ moneda, simbolo, showValues, loading, error, filter }) {
-  let content;
-  if (loading) {
-    content = <Skeleton height={18} width="70%" sx={{ borderRadius: 0.5 }} />;
-  } else if (error) {
-    content = (
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        No se pudo cargar el período
-      </Typography>
-    );
-  } else if (!moneda.ingresos && !moneda.egresos) {
-    content = (
-      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        Sin movimientos pagos en este período
-      </Typography>
-    );
-  } else {
-    const items = [
-      { id: 'ingresos', label: 'Ingresos', valor: moneda.ingresos },
-      { id: 'egresos', label: 'Egresos', valor: moneda.egresos },
-    ];
-    content = (
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.25 }}>
-        {items.map((item) => (
-          <Typography
-            key={item.id}
-            variant="caption"
-            noWrap
-            sx={{ ...hubSupportAmountSx, mt: 0, color: item.color || 'text.primary' }}
-          >
-            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 500, mr: 0.5 }}>
-              {item.label}
-            </Box>
-            {formatMonto(item.valor, simbolo, showValues)}
-          </Typography>
-        ))}
-      </Box>
-    );
-  }
-
-  return (
-    <Box component="section" aria-label="Flujo del período" sx={{ mt: 1.25 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.375 }}>
-        <Typography variant="caption" noWrap sx={{ ...hubEyebrowSx, mb: 0 }}>
-          Flujo del período
-        </Typography>
-        {filter}
-      </Box>
-      {content}
-    </Box>
-  );
-}
 
 function MonedaControl({ monedas, activaId, onChange }) {
   if (monedas.length < 2) return null;
@@ -130,7 +71,7 @@ function MonedaControl({ monedas, activaId, onChange }) {
               py: 0.375,
               cursor: 'pointer',
               font: 'inherit',
-              fontSize: '0.75rem',
+              fontSize: FONT_SIZE.sm,
               fontWeight: 600,
             }}
           >
@@ -176,76 +117,16 @@ export function ProportionTrack({ label, amount, value, max, color, dense }) {
   );
 }
 
-function FlujoSpark({ series, positive, negative }) {
-  const rawId = useId().replace(/:/g, '');
-  const aboveId = `flujo-above-${rawId}`;
-  const belowId = `flujo-below-${rawId}`;
-  if (!series.length) return null;
-
-  const width = 100;
-  const height = 32;
-  const mid = height / 2;
-  const maxAbs = Math.max(1, ...series.map((point) => Math.abs(point.neto)));
-  const coords = series.map((point, index) => {
-    const x = series.length === 1 ? width / 2 : (index / (series.length - 1)) * width;
-    const y = mid - (point.neto / maxAbs) * (mid - 1.5);
-    return [x, y];
-  });
-  const line = coords
-    .map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`)
-    .join(' ');
-  const area = `${line} L${width} ${mid} L0 ${mid} Z`;
-
-  return (
-    <Box sx={{ mt: 1.75 }} aria-hidden>
-      <Typography variant="caption" sx={{ ...hubLabelSx, display: 'block', mb: 0.5 }}>
-        Día a día
-      </Typography>
-      <Box sx={{ height: 56 }}>
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          width="100%"
-          height="100%"
-          preserveAspectRatio="none"
-        >
-          <defs>
-            <clipPath id={aboveId}>
-              <rect x="0" y="0" width={width} height={mid} />
-            </clipPath>
-            <clipPath id={belowId}>
-              <rect x="0" y={mid} width={width} height={mid} />
-            </clipPath>
-          </defs>
-          <line
-            x1="0"
-            y1={mid}
-            x2={width}
-            y2={mid}
-            stroke="currentColor"
-            strokeOpacity="0.2"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
-          <path d={area} fill={positive} fillOpacity="0.9" clipPath={`url(#${aboveId})`} />
-          <path d={area} fill={negative} fillOpacity="0.9" clipPath={`url(#${belowId})`} />
-        </svg>
-      </Box>
-    </Box>
-  );
-}
-
 /**
- * Tarjeta de la cuenta Mercado Pago: flujo neto del período arriba, saldos al cierre
- * (dinero en cuenta con saldo real de MP si hay lectura reciente) y la línea de ingresos y egresos.
- * `compact` entra en la tarjeta del hub. `page` va arriba del listado y suma el spark diario.
+ * Tarjeta de la cuenta Mercado Pago: flujo neto del período arriba y saldos al cierre
+ * (dinero en cuenta con saldo real de MP si hay lectura reciente).
+ * `compact` entra en la tarjeta del hub. `page` va arriba del listado de movimientos.
  */
 export default function TransaccionesFlujoVisual({
   density = 'page',
   cuentaId,
   preset = DEFAULT_PERIOD_PRESET,
   onPresetChange,
-  enabledKinds,
-  onKindsChange,
 }) {
   const theme = useTheme();
   const { showValues } = useValuesVisibility();
@@ -255,26 +136,23 @@ export default function TransaccionesFlujoVisual({
     onPresetChange,
   });
   const [monedaElegida, setMonedaElegida] = useState(null);
-  const [localKinds, setLocalKinds] = useState(null);
-  const controlledKinds = typeof onKindsChange === 'function';
-  const kindSelection = controlledKinds ? enabledKinds : localKinds;
-  const setKindSelection = controlledKinds ? onKindsChange : setLocalKinds;
   const range = getPeriodRange(activePreset);
   const span = formatPeriodSpan(range.fechaInicio, range.fechaFin);
 
   // Hoy solo hay conexión con Mercado Pago: la tarjeta lleva el nombre de esa cuenta,
   // así que flujo y saldos se acotan a ella para que rótulo y números coincidan.
-  const { cuenta: cuentaMostrada, nombre: cuentaNombre } = useCuentaMostrada(cuentaId);
+  const { cuenta: cuentaMostrada, nombre: cuentaNombre, hubNombre } = useCuentaMostrada(cuentaId);
   const scopeCuentaId = cuentaId || cuentaMostrada?.id || cuentaMostrada?._id || undefined;
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const branchId = resolveFinanzasBranch(pathname);
-  const cuentaPath = scopeCuentaId ? cuentaDetailPath(scopeCuentaId, branchId) : getCuentasPath(branchId);
+  const transaccionesPath = scopeCuentaId
+    ? transaccionesCuentaFilterPath(scopeCuentaId, branchId)
+    : getTransaccionesPath(branchId);
 
   const { stats, loading, error, periodLabel, refetch } = useTransaccionesPeriodStats({
     preset: activePreset,
     cuentaId: scopeCuentaId,
-    kinds: kindsQueryFor(FLUJO_TYPE_FILTERS, kindSelection),
   });
 
   useEffect(() => {
@@ -289,13 +167,9 @@ export default function TransaccionesFlujoVisual({
   const accent = activa.color || '#4CAF50';
   const expense = theme.palette.error.main;
   const extras = monedas.length - 1;
-  const serie = fillDailySeries(activa.porDia, stats.fechaInicio, stats.fechaFin);
 
-  // El desglose arranca desplegado: los saldos son lo primero que se quiere ver.
-  const [saldosOpen, setSaldosOpen] = useState(true);
-  const saldosId = `saldos-${useId().replace(/:/g, '')}`;
   const { saldos, loading: saldosLoading, error: saldosError } = useSaldosCuenta({
-    enabled: true,
+    enabled: dense,
     cuentaId: scopeCuentaId,
     preset: activePreset,
   });
@@ -303,147 +177,119 @@ export default function TransaccionesFlujoVisual({
   const { data: monedasData } = useAPI('/api/monedas', { enableCache: true, cacheDuration: 60000 });
   const monedasDocs = monedasData?.docs ?? (Array.isArray(monedasData) ? monedasData : []);
   const pesosColor = monedasDocs.find((m) => saldos?.monedaId && String(m._id || m.id) === saldos.monedaId)?.color || accent;
-  const usdColor = monedasDocs.find((m) => m.codigo === 'USD')?.color || accent;
+  const usdColor = monedasDocs.find((m) => m.codigo === 'USD')?.color || DEFAULT_USD_COLOR;
   const saldoColor = (valor, positivo) => {
     if (valor < 0) return expense;
     return valor > 0 ? positivo : undefined;
   };
-  const saldosItems = saldos ? [
-    {
-      id: 'cuenta',
-      label: 'Dinero en cuenta',
-      valor: saldos.dineroEnCuenta,
-      destino: cuentaPath,
-      title: formatSaldoFuente(saldos.dineroEnCuentaFuente, saldos.dineroEnCuentaActualizadoEn, range.fechaFin),
-    },
-    { id: 'dolares', label: 'Saldo en U$D', valor: saldos.dolares, destino: DOLARES_PATH, usd: true },
-    { id: 'credito', label: 'Deuda de tarjeta', valor: saldos.credito, destino: CREDITOS_PATH },
-    { id: 'reservado', label: 'Reservado', valor: saldos.reservado, destino: INVERSIONES_PATH },
-    { id: 'invertido', label: 'Invertido', valor: saldos.invertido, destino: INVERSIONES_PATH },
-    {
-      id: 'rendimientos',
-      label: 'Rendimientos del período',
-      valor: saldos.rendimientosPeriodo,
-      destino: INVERSIONES_PATH,
-    },
-  ].map((item) => ({
-    id: item.id,
-    label: item.label,
-    amount: item.usd ? formatUsdMonto(item.valor, showValues) : formatMonto(item.valor, simbolo, showValues),
-    color: saldoColor(item.valor, item.usd ? usdColor : pesosColor),
-    title: item.title,
-    onClick: () => navigate(item.destino),
-  })) : [];
-
-  // Arriba va el flujo neto del período (no es un saldo); los saldos viven en el desglose.
-  let heroAmount;
-  if (loading) {
-    heroAmount = <Skeleton component="span" width={dense ? 96 : 140} sx={{ display: 'inline-block' }} />;
-  } else if (error) {
-    heroAmount = '—';
-  } else {
-    heroAmount = formatMonto(activa.balance, simbolo, showValues);
+  // Los bloques dependen del tipo de la cuenta que describen los saldos (ver tiposCuentaSaldos).
+  const destinos = {
+    transacciones: transaccionesPath,
+    dolares: dolaresCuentaPath(scopeCuentaId),
+    creditos: creditosCuentaPath(scopeCuentaId),
+    reservado: inversionesVistaPath('reserve', scopeCuentaId),
+    invertido: inversionesVistaPath('invest', scopeCuentaId),
+    rendimientos: inversionesVistaPath('yield', scopeCuentaId),
+  };
+  let saldosItems = [];
+  if (saldos?.multimoneda) {
+    // Multimoneda: un saldo por moneda con su propio símbolo y color; nunca se suman entre sí.
+    saldosItems = getItemsMultimoneda(saldos, monedasDocs).map((item) => ({
+      id: item.id,
+      label: item.label,
+      amount: formatMonto(item.valor, item.simbolo, showValues),
+      color: saldoColor(item.valor, item.color || accent),
+      onClick: () => navigate(destinos.transacciones),
+    }));
+  } else if (saldos) {
+    saldosItems = getBloquesSaldos(saldos.tipo).map((bloque) => {
+      const valor = saldos[bloque.campo];
+      return {
+        id: bloque.id,
+        label: bloque.label,
+        amount: bloque.usd ? formatUsdMonto(valor, showValues) : formatMonto(valor, simbolo, showValues),
+        color: saldoColor(valor, bloque.usd ? usdColor : pesosColor),
+        title: bloque.fuenteTitulo
+          ? formatSaldoFuente(saldos.dineroEnCuentaFuente, saldos.dineroEnCuentaActualizadoEn, range.fechaFin)
+          : undefined,
+        onClick: () => navigate(destinos[bloque.destino]),
+      };
+    });
   }
+
   // Con selector propio en un hub, el rango no aparece en otro lado: va acá.
   // El hub Finanzas (barra compartida) y la página ya lo muestran junto al selector.
   const heroCaption = dense && showPeriodControl ? `Flujo neto · ${span}` : 'Flujo neto del período';
 
   const body = (
-    <>
-      <HubBalanceRow
-        cuenta={cuentaNombre}
-        amount={heroAmount}
-        color={!loading && !error && activa.balance < 0 ? expense : undefined}
-        dense={dense}
-        expanded={saldosOpen}
-        onToggle={() => setSaldosOpen((open) => !open)}
-        controlsId={saldosId}
-        below={(
-          <Typography
-            variant="caption"
-            sx={{ ...hubEyebrowSx, display: 'block', mb: 0, mt: 0, textAlign: 'right' }}
-          >
-            {heroCaption}
-          </Typography>
-        )}
-      />
-      <HubBalanceBreakdown
-        id={saldosId}
-        open={saldosOpen}
-        items={saldosItems}
-        loading={saldosLoading}
-        error={Boolean(saldosError)}
-        caption={formatSaldosCorte(range.fechaFin)}
-      />
-      <FlujoPeriodoLine
-        moneda={activa}
-        simbolo={simbolo}
-        showValues={showValues}
-        loading={loading}
-        error={Boolean(error)}
-        filter={(
-          <LedgerKindFilter
-            options={FLUJO_TYPE_FILTERS}
-            enabledIds={kindSelection}
-            onChange={setKindSelection}
-          />
-        )}
-      />
-      {dense && <HubBalanceDivider />}
-      {!dense && !loading && !error && (
-        <FlujoSpark series={serie} positive={accent} negative={expense} />
-      )}
-    </>
+    <HubAccountBlock
+      cuenta={dense ? hubNombre : cuentaNombre}
+      amount={formatMonto(activa.balance, simbolo, showValues)}
+      isNegative={activa.balance < 0}
+      caption={heroCaption}
+      dense={dense}
+      loading={loading}
+      error={Boolean(error)}
+      breakdownItems={saldosItems}
+      breakdownLoading={saldosLoading}
+      breakdownError={Boolean(saldosError)}
+      showDivider={dense}
+    />
   );
 
   return (
     <Box
       component="section"
       aria-label={`Flujo de ${periodLabel}`}
-      sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
+      sx={dense ? undefined : finanzasPageSummarySectionSx}
     >
-      {(showPeriodControl || !dense || extras > 0) && (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'row',
-            flexWrap: 'nowrap',
-            alignItems: 'flex-start',
-            justifyContent: showPeriodControl ? 'flex-start' : 'flex-end',
-            gap: 1,
-            minHeight: 28,
-            width: '100%',
-          }}
-        >
-          {showPeriodControl && (
-            <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-              <PeriodControl
-                preset={activePreset}
-                onChange={changePreset}
-                modes={FLUJO_PERIOD_MODES}
-                cuentaId={scopeCuentaId}
-              />
-            </Box>
-          )}
-          {dense && extras > 0 && (
-            <Typography
-              variant="caption"
-              sx={{ ...hubEyebrowSx, mb: 0, flex: '0 0 auto', whiteSpace: 'nowrap' }}
-            >
-              {activa.codigo} +{extras}
-            </Typography>
-          )}
+      {!dense ? (
+        <FinanzasPagePeriodHeader
+          title="Movimientos"
+          subtitle={cuentaId ? cuentaNombre : null}
+          preset={activePreset}
+          onChange={changePreset}
+          span={span}
+          modes={FLUJO_PERIOD_MODES}
+          cuentaId={scopeCuentaId}
+          extra={!loading && !error ? (
+            <MonedaControl monedas={monedas} activaId={activa.monedaId} onChange={setMonedaElegida} />
+          ) : null}
+        />
+      ) : (showPeriodControl || extras > 0) && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.375, mb: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'row',
+              flexWrap: 'nowrap',
+              alignItems: 'flex-start',
+              justifyContent: showPeriodControl ? 'flex-start' : 'flex-end',
+              gap: 1,
+              minHeight: 28,
+              width: '100%',
+            }}
+          >
+            {showPeriodControl && (
+              <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+                <PeriodControl
+                  preset={activePreset}
+                  onChange={changePreset}
+                  modes={FLUJO_PERIOD_MODES}
+                  cuentaId={scopeCuentaId}
+                />
+              </Box>
+            )}
+            {extras > 0 && (
+              <Typography
+                variant="caption"
+                sx={{ ...hubEyebrowSx, mb: 0, flex: '0 0 auto', whiteSpace: 'nowrap' }}
+              >
+                {activa.codigo} +{extras}
+              </Typography>
+            )}
+          </Box>
         </Box>
-        {!dense && (
-          <Typography variant="caption" sx={{ ...hubEyebrowSx, mb: 0 }}>
-            {span}
-          </Typography>
-        )}
-        {!dense && !loading && !error && (
-          <MonedaControl monedas={monedas} activaId={activa.monedaId} onChange={setMonedaElegida} />
-        )}
-      </Box>
       )}
       {body}
     </Box>

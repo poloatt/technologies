@@ -1,8 +1,9 @@
 import { Box, Skeleton, Typography, useTheme } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
-import { hubEyebrowSx } from '../../hub';
+import { hubEyebrowSx } from '@shared/tipografia';
 import HubBalanceDivider from '../hub/HubBalanceDivider';
-import { HubBalanceRow } from '@shared/components/hub';
+import FinanzasPagePeriodHeader, { finanzasPageSummarySectionSx } from '../FinanzasPagePeriodHeader';
+import { HubBalanceLead, HubBalanceRow } from '@shared/components/hub';
 import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl, ProportionTrack } from '../transacciones/TransaccionesFlujoVisual';
@@ -21,11 +22,12 @@ const EMPTY_MONEDA = {
 
 export default function CreditosResumen({
   density = 'page',
+  cuentaId,
   preset = DEFAULT_PERIOD_PRESET,
   onPresetChange,
 }) {
   const { showValues } = useValuesVisibility();
-  const { nombre: cuentaNombre } = useCuentaMostrada();
+  const { nombre: cuentaNombre, hubNombre } = useCuentaMostrada(cuentaId);
   const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
     density,
     preset,
@@ -35,6 +37,7 @@ export default function CreditosResumen({
   const span = formatCreditosPeriodSpan(activePreset, range.fechaInicio, range.fechaFin);
   const { stats, loading, error } = useTransaccionesPeriodStats({
     preset: activePreset,
+    cuentaId,
     ledger: 'creditos',
   });
 
@@ -53,7 +56,11 @@ export default function CreditosResumen({
   if (loading) {
     body = (
       <Box>
-        <Skeleton height={dense ? 22 : 36} width={140} sx={{ mb: 1, borderRadius: 0.5 }} />
+        <Skeleton
+          height={dense ? 22 : 34}
+          width={dense ? 140 : 120}
+          sx={{ mb: 1, borderRadius: 0.5, ...(dense ? null : { mx: 'auto' }) }}
+        />
       </Box>
     );
   } else if (error) {
@@ -65,20 +72,30 @@ export default function CreditosResumen({
   } else {
     body = (
       <>
-      <HubBalanceRow
-        cuenta={cuentaNombre}
-        amount={formatMonto(saldo, simbolo, showValues)}
-        color={resultadoColor}
-        dense={dense}
-        below={dense && (showPeriodControl || activePreset === 'ytg') ? (
-          // En el hub el período va junto al selector; acá solo YTG, que no cierra en diciembre.
-          <Typography variant="caption" sx={{ ...hubEyebrowSx, display: 'block', mb: 0, textAlign: 'right' }}>
-            {span}
-          </Typography>
-        ) : null}
-      />
-      {dense && <HubBalanceDivider />}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.75 : 1.25, mt: dense ? 0 : 1.5 }}>
+      {dense ? (
+        <>
+          <HubBalanceRow
+            cuenta={hubNombre}
+            amount={formatMonto(saldo, simbolo, showValues)}
+            color={resultadoColor}
+            dense
+            below={(showPeriodControl || activePreset === 'ytg') ? (
+              // En el hub el período va junto al selector; acá solo YTG, que no cierra en diciembre.
+              <Typography variant="caption" sx={{ ...hubEyebrowSx, display: 'block', mb: 0, textAlign: 'right' }}>
+                {span}
+              </Typography>
+            ) : null}
+          />
+          <HubBalanceDivider />
+        </>
+      ) : (
+        <HubBalanceLead
+          amount={formatMonto(saldo, simbolo, showValues)}
+          color={resultadoColor}
+          dense={false}
+        />
+      )}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.75 : 1.25, mt: dense ? 0 : 1.75 }}>
         <ProportionTrack
           label="Pagado"
           amount={`+${formatMonto(pagado, simbolo, showValues)}`}
@@ -103,22 +120,30 @@ export default function CreditosResumen({
   return (
     <Box
       component="section"
-      aria-label="Créditos del período"
-      sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
+      aria-label="Tarjeta del período"
+      sx={dense ? undefined : finanzasPageSummarySectionSx}
     >
-      {(showPeriodControl || !dense) && (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
-        {showPeriodControl && (
+      {!dense ? (
+        <FinanzasPagePeriodHeader
+          title="Tarjeta"
+          subtitle={cuentaId ? cuentaNombre : null}
+          preset={activePreset}
+          onChange={changePreset}
+          span={span}
+          cuentaId={cuentaId}
+          ledger="creditos"
+        />
+      ) : showPeriodControl && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.375, mb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minHeight: 28 }}>
-            <PeriodControl preset={activePreset} onChange={changePreset} />
+            <PeriodControl
+              preset={activePreset}
+              onChange={changePreset}
+              cuentaId={cuentaId}
+              ledger="creditos"
+            />
           </Box>
-        )}
-        {!dense && (
-          <Typography variant="caption" sx={{ ...hubEyebrowSx, mb: 0 }}>
-            {span}
-          </Typography>
-        )}
-      </Box>
+        </Box>
       )}
       {body}
     </Box>

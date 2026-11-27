@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { Box, Skeleton, Typography } from '@mui/material';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
 import { useAPI } from '@shared/hooks/useAPI';
-import { filterToggleRowSx, getFilterToggleHubRowSx } from '@shared/styles/filterToggleStyles';
-import { hubEyebrowSx } from '../../hub';
+import { filterTogglePageRowSx, getFilterToggleHubRowSx } from '@shared/styles/filterToggleStyles';
+import { hubEyebrowSx } from '@shared/tipografia';
 import FilterToggleButton from '../FilterToggleButton';
 import HubBalanceDivider from '../hub/HubBalanceDivider';
-import { HubBalanceRow } from '@shared/components/hub';
+import FinanzasPagePeriodHeader, { finanzasPageSummarySectionSx } from '../FinanzasPagePeriodHeader';
+import { HubBalanceLead, HubBalanceRow } from '@shared/components/hub';
 import { useCuentaMostrada } from '../cuentas/useCuentaMostrada';
 import { useSectionPeriod } from '../hub/finanzasHubPeriod';
 import { PeriodControl } from '../transacciones/TransaccionesFlujoVisual';
 import { useTransaccionesPeriodStats } from '../transacciones/useTransaccionesPeriodStats';
-import { focusKindId } from '../transacciones/ledgerKindFilters';
+import { DEFAULT_USD_COLOR } from '../monedas/monedaConstants';
+import { DOLAR_TYPE_FILTERS, focusKindId, kindsQueryFor } from '../transacciones/ledgerKindFilters';
 import {
   DEFAULT_PERIOD_PRESET,
   formatPeriodSpan,
@@ -33,13 +35,14 @@ function formatUsd(monto, showValues, signed = true) {
 
 export default function DolaresResumen({
   density = 'page',
+  cuentaId,
   preset = DEFAULT_PERIOD_PRESET,
   onPresetChange,
   enabledKinds,
   onKindsChange,
 }) {
   const { showValues } = useValuesVisibility();
-  const { nombre: cuentaNombre } = useCuentaMostrada();
+  const { nombre: cuentaNombre, hubNombre } = useCuentaMostrada(cuentaId);
   const { dense, activePreset, changePreset, showPeriodControl } = useSectionPeriod({
     density,
     preset,
@@ -53,6 +56,7 @@ export default function DolaresResumen({
   const span = formatPeriodSpan(range.fechaInicio, range.fechaFin);
   const { stats, loading, error } = useTransaccionesPeriodStats({
     preset: activePreset,
+    cuentaId,
     ledger: 'dolares',
   });
 
@@ -73,14 +77,19 @@ export default function DolaresResumen({
     .filter((group) => selectedIds.includes(group.id))
     .reduce((acc, group) => acc + group.neto, 0);
   const { data: monedasData } = useAPI('/api/monedas');
-  const usdColor = (monedasData?.docs || []).find((moneda) => moneda.codigo === 'USD')?.color;
-  const resultadoColor = netoUsd < 0 ? 'error.main' : (usdColor || '#006400');
+  const usdColor = (monedasData?.docs || []).find((moneda) => moneda.codigo === 'USD')?.color || DEFAULT_USD_COLOR;
+  const resultadoColor = netoUsd < 0 ? 'error.main' : usdColor;
+  const chartKinds = kindsQueryFor(DOLAR_TYPE_FILTERS, kindSelection);
 
   let body;
   if (loading) {
     body = (
       <Box>
-        <Skeleton height={dense ? 22 : 36} width={140} sx={{ mb: 1, borderRadius: 0.5 }} />
+        <Skeleton
+          height={dense ? 22 : 34}
+          width={dense ? 140 : 120}
+          sx={{ mb: 1, borderRadius: 0.5, ...(dense ? null : { mx: 'auto' }) }}
+        />
         <Skeleton height={22} sx={{ borderRadius: 1 }} />
       </Box>
     );
@@ -93,23 +102,33 @@ export default function DolaresResumen({
   } else {
     body = (
       <>
-        <HubBalanceRow
-          cuenta={cuentaNombre}
-          amount={formatUsd(netoUsd, showValues)}
-          color={resultadoColor}
-          dense={dense}
-          below={dense && showPeriodControl ? (
-            // En el hub Finanzas el período se muestra una sola vez, junto al selector.
-            <Typography
-              variant="caption"
-              sx={{ ...hubEyebrowSx, display: 'block', mb: 0, textAlign: 'right' }}
-            >
-              {span}
-            </Typography>
-          ) : null}
-        />
-        {dense && <HubBalanceDivider />}
-        <Box sx={dense ? getFilterToggleHubRowSx() : { ...filterToggleRowSx, mt: 1.5 }}>
+        {dense ? (
+          <>
+            <HubBalanceRow
+              cuenta={hubNombre}
+              amount={formatUsd(netoUsd, showValues)}
+              color={resultadoColor}
+              dense
+              below={showPeriodControl ? (
+                // En el hub Finanzas el período se muestra una sola vez, junto al selector.
+                <Typography
+                  variant="caption"
+                  sx={{ ...hubEyebrowSx, display: 'block', mb: 0, textAlign: 'right' }}
+                >
+                  {span}
+                </Typography>
+              ) : null}
+            />
+            <HubBalanceDivider />
+          </>
+        ) : (
+          <HubBalanceLead
+            amount={formatUsd(netoUsd, showValues)}
+            color={resultadoColor}
+            dense={false}
+          />
+        )}
+        <Box sx={dense ? getFilterToggleHubRowSx() : filterTogglePageRowSx}>
           {groups.map((group) => (
             <FilterToggleButton
               key={group.id}
@@ -129,32 +148,44 @@ export default function DolaresResumen({
     <Box
       component="section"
       aria-label="Dólares del período"
-      sx={dense ? undefined : { mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
+      sx={dense ? undefined : finanzasPageSummarySectionSx}
     >
-      {(showPeriodControl || !dense) && (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 0.375 : 0.5, mb: dense ? 1 : 1.5 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: showPeriodControl ? 'flex-start' : 'flex-end',
-            gap: 0.5,
-            width: '100%',
-            minHeight: 28,
-          }}
-        >
-          {showPeriodControl && (
+      {!dense ? (
+        <FinanzasPagePeriodHeader
+          title="Dólares"
+          subtitle={cuentaId ? cuentaNombre : null}
+          preset={activePreset}
+          onChange={changePreset}
+          span={span}
+          cuentaId={cuentaId}
+          positiveColor={usdColor}
+          ledger="dolares"
+          kinds={chartKinds}
+        />
+      ) : showPeriodControl && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.375, mb: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'flex-start',
+              gap: 0.5,
+              width: '100%',
+              minHeight: 28,
+            }}
+          >
             <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-              <PeriodControl preset={activePreset} onChange={changePreset} />
+              <PeriodControl
+                preset={activePreset}
+                onChange={changePreset}
+                cuentaId={cuentaId}
+                positiveColor={usdColor}
+                ledger="dolares"
+                kinds={chartKinds}
+              />
             </Box>
-          )}
+          </Box>
         </Box>
-        {!dense && (
-          <Typography variant="caption" sx={{ ...hubEyebrowSx, mb: 0 }}>
-            {span}
-          </Typography>
-        )}
-      </Box>
       )}
       {body}
     </Box>

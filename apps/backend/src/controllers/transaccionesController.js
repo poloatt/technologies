@@ -1,5 +1,5 @@
 import { BaseController } from './BaseController.js';
-import { Transacciones, Cuentas } from '../models/index.js';
+import { Transacciones, Cuentas, Contactos } from '../models/index.js';
 import mongoose from 'mongoose';
 import { arMonthBounds, formatArDateKey, parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
@@ -13,6 +13,8 @@ import {
   acumularBucketDolares,
   acumularBucketInversiones,
   calcularSaldosMercadoPago,
+  construirPorDiaDolares,
+  construirPorDiaInversiones,
   rendimientosDelPeriodo,
   resolverDineroEnCuenta,
   applyMovementKindFilter,
@@ -21,8 +23,66 @@ import {
   buildListLedgerMatch,
   resultadoFci,
 } from '../services/mercadoPagoUtils.js';
+import {
+  ESTRATEGIA_GENERICA,
+  calcularSaldosGenericos,
+  calcularSaldosGenericosPorMoneda,
+  resolverEstrategiaSaldos,
+} from '../services/saldos/estrategiasSaldos.js';
+import { esCuentaMultimoneda, getEnabledMonedasForUser } from '../services/efectivoAccountService.js';
+import {
+  CAMPOS_ALTA_MANUAL,
+  CAMPOS_EDICION_EXTERNO,
+  CAMPOS_EDICION_MANUAL,
+  TIPOS_TRANSACCION,
+  clampPagination,
+  esTransaccionManual,
+  normalizarEstadoManual,
+  parseFechaManual,
+  parseMontoManual,
+  pick,
+} from '../utils/transaccionManual.js';
 
 const STATS_TZ = 'America/Argentina/Buenos_Aires';
+
+const MSG_CUENTA_MP_MANUAL = 'Las cuentas de Mercado Pago se actualizan solo por sincronización o importación de CSV';
+
+/** Busca la cuenta del usuario. Devuelve `{ cuenta }` o `{ status, message }`. */
+async function buscarCuentaDelUsuario(cuentaId, userId) {
+  if (!cuentaId || !mongoose.Types.ObjectId.isValid(cuentaId)) {
+    return { status: 400, message: 'ID de cuenta inválido' };
+  }
+  const cuenta = await Cuentas.findOne({ _id: cuentaId, usuario: userId });
+  if (!cuenta) {
+    return { status: 404, message: 'La cuenta seleccionada no existe o no pertenece al usuario' };
+  }
+  return { cuenta };
+}
+
+/**
+ * En cuentas multimoneda la moneda elegida debe estar habilitada para el usuario.
+ * Devuelve un mensaje de error o null.
+ */
+async function validarMonedaMultimoneda(cuenta, monedaId, userId) {
+  if (!esCuentaMultimoneda(cuenta) || !monedaId) return null;
+  const monedaStr = String(monedaId?._id || monedaId?.id || monedaId);
+  if (!mongoose.Types.ObjectId.isValid(monedaStr)) return 'Moneda inválida';
+  const habilitadas = await getEnabledMonedasForUser(userId);
+  if (!habilitadas.some((m) => m.id === monedaStr)) {
+    return 'La moneda no está habilitada para esta cuenta';
+  }
+  return null;
+}
+
+function respuestaError(res, error) {
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({
+      message: 'Error de validación',
+      errors: Object.values(error.errors).map((e) => e.message),
+    });
+  }
+  return res.status(500).json({ message: error.message });
+}
 
 /** Aplica un rango inclusivo de días Argentina. Devuelve un mensaje si el rango es inválido. */
 function applyFechaRange(query, fechaInicio, fechaFin) {
@@ -89,6 +149,7 @@ class TransaccionesController extends BaseController {
     // Bind de los métodos al contexto de la instancia
     this.getStats = this.getStats.bind(this);
     this.getSaldos = this.getSaldos.bind(this);
+    this.getSaldosTotales = this.getSaldosTotales.bind(this);
     this.getBalance = this.getBalance.bind(this);
     this.getByCuenta = this.getByCuenta.bind(this);
     this.create = this.create.bind(this);
@@ -112,7 +173,7 @@ class TransaccionesController extends BaseController {
       fecha: { $gte: inicio, $lte: fin },
       'origen.metadata.movementKind': 'REFUND',
       'origen.metadata.paymentMethodType': 'credit_card',
-    }).select('monto').lean();
+    }).select('monto fecha moneda').populate('moneda').lean();
     const pagado = reembolsos.reduce((acc, doc) => acc + (Number(doc.monto) || 0), 0);
 
     const pagosResumen = await this.Model.find({
@@ -132,19 +193,7 @@ class TransaccionesController extends BaseController {
     const mesCorriente = formatArDateKey(new Date()).slice(0, 7);
     let cuotasPagadas = 0;
 
-    for (const doc of docs) {
-      const partes = expandirCuotas({
-        fecha: doc.fecha,
-        monto: doc.monto,
-        installments: doc.origen?.metadata?.installments,
-        installmentAmount: doc.origen?.metadata?.installmentAmount,
-      }).filter((cuota) => cuotaEnRangoClave(cuota.due, inicioClave, finClave));
-      const suma = partes.reduce((acc, cuota) => acc + (Number(cuota.amount) || 0), 0);
-      cuotasPagadas += partes.reduce((acc, cuota) => (
-        arDateKey(cuota.due).slice(0, 7) <= mesCorriente ? acc + (Number(cuota.amount) || 0) : acc
-      ), 0);
-      if (!suma) continue;
-      cuotas += suma;
+    const ensureMoneda = (doc) => {
       const monedaDoc = doc.moneda && doc.moneda.codigo ? doc.moneda : null;
       const monedaId = (monedaDoc?._id || doc.moneda)?.toString?.() || 'sin-moneda';
       if (!porMonedaMap.has(monedaId)) {
@@ -158,16 +207,55 @@ class TransaccionesController extends BaseController {
           cuotas: 0,
           pagado: 0,
           balance: 0,
-          porDia: [],
+          dias: new Map(),
         });
       }
-      const entry = porMonedaMap.get(monedaId);
+      return porMonedaMap.get(monedaId);
+    };
+
+    const addDia = (entry, fecha, campo, monto) => {
+      if (!fecha || !monto) return;
+      if (!entry.dias.has(fecha)) entry.dias.set(fecha, { fecha, ingresos: 0, egresos: 0 });
+      entry.dias.get(fecha)[campo] += monto;
+    };
+
+    for (const doc of docs) {
+      const partes = expandirCuotas({
+        fecha: doc.fecha,
+        monto: doc.monto,
+        installments: doc.origen?.metadata?.installments,
+        installmentAmount: doc.origen?.metadata?.installmentAmount,
+      }).filter((cuota) => cuotaEnRangoClave(cuota.due, inicioClave, finClave));
+      const suma = partes.reduce((acc, cuota) => acc + (Number(cuota.amount) || 0), 0);
+      cuotasPagadas += partes.reduce((acc, cuota) => (
+        arDateKey(cuota.due).slice(0, 7) <= mesCorriente ? acc + (Number(cuota.amount) || 0) : acc
+      ), 0);
+      if (!suma) continue;
+      cuotas += suma;
+      const entry = ensureMoneda(doc);
       entry.egresos += suma;
       entry.cuotas += suma;
       entry.balance -= suma;
+      for (const cuota of partes) {
+        addDia(entry, arDateKey(cuota.due), 'egresos', Number(cuota.amount) || 0);
+      }
     }
 
-    const porMoneda = [...porMonedaMap.values()];
+    for (const doc of reembolsos) {
+      const monto = Number(doc.monto) || 0;
+      if (!monto || !doc.fecha) continue;
+      const entry = ensureMoneda(doc);
+      addDia(entry, formatArDateKey(doc.fecha), 'ingresos', monto);
+    }
+
+    const porMoneda = [...porMonedaMap.values()].map(({ dias, ...rest }) => ({
+      ...rest,
+      porDia: [...dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    }));
+    const porDia = porMoneda.flatMap((m) => m.porDia.map((day) => ({
+      monedaId: m.monedaId,
+      ...day,
+    })));
     const pagadoTotal = pagado + pagadoResumen + cuotasPagadas;
     if (pagadoTotal && porMoneda[0]) porMoneda[0].pagado = pagadoTotal;
     return {
@@ -192,8 +280,9 @@ class TransaccionesController extends BaseController {
       estado,
       cuenta: cuenta || null,
       kinds: kindsRaw || null,
+      yieldSide: null,
       porMoneda,
-      porDia: [],
+      porDia,
       ingresosMensuales: 0,
       egresosMensuales: cuotas,
       balanceTotal: -cuotas,
@@ -207,7 +296,15 @@ class TransaccionesController extends BaseController {
         return res.status(401).json({ error: 'Usuario no autenticado' });
       }
 
-      const { fechaInicio, fechaFin, estado = 'PAGADO', cuenta, ledger: ledgerRaw, kinds: kindsRaw } = req.query;
+      const {
+        fechaInicio,
+        fechaFin,
+        estado = 'PAGADO',
+        cuenta,
+        ledger: ledgerRaw,
+        kinds: kindsRaw,
+        yieldSide,
+      } = req.query;
       const ledger = normalizeLedger(ledgerRaw);
       const defaults = arMonthBounds();
       const inicio = fechaInicio ? parseArDay(fechaInicio) : defaults.inicio;
@@ -230,6 +327,7 @@ class TransaccionesController extends BaseController {
       const estadoFilter = buildEstadoFilter(estado);
       if (estadoFilter) query.estado = estadoFilter;
       applyMovementKindFilter(query, ledger, kindsRaw);
+      applyYieldSideFilter(query, yieldSide);
 
       if (ledger === 'creditos') {
         const payload = await this.statsCreditos({
@@ -247,6 +345,13 @@ class TransaccionesController extends BaseController {
                 kind: '$origen.metadata.movementKind',
                 tipo: '$tipo',
                 moneda: '$moneda',
+                fecha: {
+                  $dateToString: {
+                    format: '%Y-%m-%d',
+                    date: '$fecha',
+                    timezone: STATS_TZ,
+                  },
+                },
                 compraventa: { $eq: ['$origen.metadata.compraventa', true] },
                 yieldSide: {
                   $cond: [
@@ -465,9 +570,14 @@ class TransaccionesController extends BaseController {
       }
       const rendimientos = rendimientosReserva + rendimientosInversion;
 
+      const porDiaUsd = ledger === 'dolares' ? construirPorDiaDolares(kinds) : [];
+      const porDiaInversiones = ledger === 'inversiones' ? construirPorDiaInversiones(kinds) : null;
+
       const porMoneda = [...porMonedaMap.values()]
         .map((m) => {
-          const porDia = [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+          const porDia = ledger === 'inversiones'
+            ? (porDiaInversiones?.[m.monedaId] || [])
+            : [...m.dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
           const neto = resultadoFci(m);
           return {
             monedaId: m.monedaId,
@@ -535,8 +645,10 @@ class TransaccionesController extends BaseController {
         estado,
         cuenta: cuenta || null,
         kinds: kindsRaw || null,
+        yieldSide: yieldSide || null,
         porMoneda,
         porDia,
+        porDiaUsd,
         // Compatibilidad con consumidores antiguos
         ingresosMensuales: ingresos,
         egresosMensuales: egresos,
@@ -625,6 +737,53 @@ class TransaccionesController extends BaseController {
       }
       const monedaPesosId = cuentaMp?.moneda?._id ?? cuentaMp?.moneda ?? null;
 
+      // Cuentas que no son Mercado Pago: saldo y flujo con ingresos/egresos de la cuenta.
+      if (resolverEstrategiaSaldos(cuentaMp?.tipo) === ESTRATEGIA_GENERICA) {
+        const filasGenericas = await this.Model.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: {
+                tipo: '$tipo',
+                moneda: '$moneda',
+                enPeriodo: inicioPeriodo ? { $gte: ['$fecha', inicioPeriodo] } : { $literal: true },
+              },
+              total: { $sum: { $ifNull: ['$monto', 0] } },
+            },
+          },
+        ]);
+        // Multimoneda (p. ej. Efectivo): un saldo por moneda, sin sumar monedas distintas.
+        // Los campos de nivel superior son solo los de la moneda principal.
+        const multimoneda = esCuentaMultimoneda(cuentaMp);
+        let porMoneda = [];
+        if (multimoneda) {
+          const habilitadas = await getEnabledMonedasForUser(req.user.id);
+          porMoneda = calcularSaldosGenericosPorMoneda(filasGenericas, {
+            monedasIds: habilitadas.map((moneda) => moneda.id),
+          });
+        }
+        const monedaCuenta = monedaPesosId
+          ? String(monedaPesosId)
+          : (porMoneda[0]?.monedaId ?? null);
+        // Sin moneda principal no hay nada que informar arriba: evita sumar todas las monedas.
+        const saldosGenericos = multimoneda && !monedaCuenta
+          ? calcularSaldosGenericos([])
+          : calcularSaldosGenericos(filasGenericas, { monedaId: monedaCuenta });
+        return res.json({
+          ...saldosGenericos,
+          multimoneda,
+          porMoneda,
+          dineroEnCuentaLedger: saldosGenericos.dineroEnCuenta,
+          dineroEnCuentaFuente: 'ledger',
+          dineroEnCuentaActualizadoEn: null,
+          tipo: cuentaMp.tipo,
+          fechaInicio: fechaInicio || null,
+          fechaFin: fechaFin || null,
+          cuenta: { id: cuentaMp._id, nombre: cuentaMp.nombre },
+          monedaId: monedaCuenta,
+        });
+      }
+
       const kindField = '$origen.metadata.movementKind';
       const usdAmount = {
         $convert: { input: '$origen.metadata.usdAmount', to: 'double', onError: 0, onNull: 0 },
@@ -707,7 +866,7 @@ class TransaccionesController extends BaseController {
                 moneda: '$moneda',
                 compraventa: { $eq: ['$origen.metadata.compraventa', true] },
                 flujo: esFlujo,
-                enPeriodo: inicioPeriodo ? { $gte: ['$fecha', inicioPeriodo] } : true,
+                enPeriodo: inicioPeriodo ? { $gte: ['$fecha', inicioPeriodo] } : { $literal: true },
                 side: {
                   $switch: {
                     branches: [
@@ -759,6 +918,8 @@ class TransaccionesController extends BaseController {
         dineroEnCuentaActualizadoEn: dineroEnCuenta.actualizadoEn,
         rendimientosPeriodo: rendimientosDelPeriodo(rows, { monedaPesosId }),
         credito: creditoSaldo,
+        // Sin cuenta, el cálculo legacy es el de Mercado Pago.
+        tipo: cuentaMp?.tipo ?? 'MERCADO_PAGO',
         fechaInicio: fechaInicio || null,
         fechaFin: fechaFin || null,
         cuenta: cuentaMp ? { id: cuentaMp._id, nombre: cuentaMp.nombre } : null,
@@ -770,10 +931,83 @@ class TransaccionesController extends BaseController {
     }
   }
 
+  // GET /api/transacciones/saldos-totales?fechaFin
+  // Saldo real por moneda sumando todas las cuentas del usuario (incluido Efectivo) al cierre
+  // del período. Mercado Pago aporta dinero en cuenta (saldo real si hay lectura reciente),
+  // reservado e invertido en pesos y sus dólares; el crédito (tarjeta) no se resta porque
+  // todavía no salió del dinero. Devuelve las monedas habilitadas en el orden del usuario.
+  async getSaldosTotales(req, res) {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Usuario no autenticado' });
+      }
+      const { fechaFin } = req.query;
+      const usuario = new mongoose.Types.ObjectId(req.user.id);
+      const [cuentas, monedas] = await Promise.all([
+        Cuentas.find({ usuario, activo: { $ne: false } }).lean(),
+        getEnabledMonedasForUser(req.user.id),
+      ]);
+      const usdId = monedas.find((moneda) => String(moneda.codigo).toUpperCase() === 'USD')?.id ?? null;
+
+      const totales = new Map();
+      const sumar = (monedaId, valor) => {
+        if (!monedaId) return;
+        const key = String(monedaId);
+        totales.set(key, (totales.get(key) || 0) + (Number(valor) || 0));
+      };
+
+      for (const cuenta of cuentas) {
+        let status = 200;
+        let saldos = null;
+        const captura = {
+          status(code) { status = code; return captura; },
+          json(body) { saldos = body; return captura; },
+        };
+        await this.getSaldos(
+          { user: { id: req.user.id }, query: { cuenta: String(cuenta._id), fechaFin } },
+          captura,
+        );
+        if (status !== 200 || !saldos) {
+          if (status === 400) return res.status(400).json(saldos);
+          continue;
+        }
+
+        if (resolverEstrategiaSaldos(cuenta.tipo) === ESTRATEGIA_GENERICA) {
+          if (saldos.multimoneda) {
+            for (const item of saldos.porMoneda || []) sumar(item.monedaId, item.dineroEnCuenta);
+          } else {
+            sumar(saldos.monedaId, saldos.dineroEnCuenta);
+          }
+        } else {
+          sumar(
+            saldos.monedaId,
+            (saldos.dineroEnCuenta || 0) + (saldos.reservado || 0) + (saldos.invertido || 0),
+          );
+          sumar(usdId, saldos.dolares);
+        }
+      }
+
+      const porMoneda = monedas.map((moneda) => ({
+        monedaId: moneda.id,
+        codigo: moneda.codigo,
+        simbolo: moneda.simbolo,
+        color: moneda.color,
+        balance: Math.round((totales.get(moneda.id) || 0) * 100) / 100,
+      }));
+
+      res.json({ fechaFin: fechaFin || null, porMoneda });
+    } catch (error) {
+      console.error('Error en getSaldosTotales transacciones:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   // GET /api/transacciones/balance/:cuentaId?estado&fechaFin
   getBalance = async (req, res) => {
     try {
       const { estado = 'PAGADO', fechaFin } = req.query;
+      const propia = await buscarCuentaDelUsuario(req.params.cuentaId, req.user?.id);
+      if (!propia.cuenta) return res.status(propia.status).json({ error: propia.message });
       const balance = await this.Model.getBalance(req.params.cuentaId, { estado, fechaFin });
       res.json(balance);
     } catch (error) {
@@ -797,9 +1031,12 @@ class TransaccionesController extends BaseController {
         kinds: kindsRaw,
       } = req.query;
 
+      const propia = await buscarCuentaDelUsuario(req.params.cuentaId, req.user?.id);
+      if (!propia.cuenta) return res.status(propia.status).json({ error: propia.message });
+
       const ledger = normalizeLedger(ledgerRaw);
       const query = {
-        cuenta: req.params.cuentaId,
+        cuenta: propia.cuenta._id,
         ...buildListLedgerMatch(ledger),
       };
       applyMovementKindFilter(query, ledger, kindsRaw);
@@ -812,11 +1049,13 @@ class TransaccionesController extends BaseController {
       if (fechaError) return res.status(400).json({ error: fechaError });
 
       const options = {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        ...clampPagination({ page, limit }, { defaultLimit: 10, maxLimit: 500 }),
         // Desempate por _id: sin él, fechas iguales se paginan de forma inestable y se repiten filas.
         sort: sort === '-fecha' ? { fecha: -1, _id: -1 } : sort,
-        populate: ['moneda']
+        populate: [
+          'moneda',
+          { path: 'contacto', select: 'nombre tipo categoriaDefault categoriaIngreso categoriaEgreso origen' },
+        ]
       };
 
       const result = await this.Model.paginate(query, options);
@@ -826,76 +1065,305 @@ class TransaccionesController extends BaseController {
     }
   };
 
+  // Valida id de ruta y devuelve la transacción del usuario (o responde 400/404).
+  async buscarPropia(req, res) {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: 'ID de transacción inválido' });
+      return null;
+    }
+    const transaccion = await this.Model.findOne({ _id: id, usuario: req.user.id });
+    if (!transaccion) {
+      res.status(404).json({ message: 'Transacción no encontrada' });
+      return null;
+    }
+    return transaccion;
+  }
+
+  // GET /api/transacciones/:id
+  getById = async (req, res) => {
+    try {
+      const transaccion = await this.buscarPropia(req, res);
+      if (!transaccion) return undefined;
+      return res.json(transaccion);
+    } catch (error) {
+      console.error('Error en getById transacciones:', error);
+      return res.status(500).json({ message: error.message });
+    }
+  };
+
   // POST /api/transacciones
   create = async (req, res) => {
     try {
-      console.log('Creando transacción con datos:', req.body);
-      
-      // Validar que el ID de la cuenta sea válido
-      if (!mongoose.Types.ObjectId.isValid(req.body.cuenta)) {
-        return res.status(400).json({ message: 'ID de cuenta inválido' });
+      const body = req.body || {};
+
+      const propia = await buscarCuentaDelUsuario(body.cuenta, req.user.id);
+      if (!propia.cuenta) return res.status(propia.status).json({ message: propia.message });
+      const { cuenta } = propia;
+      if (cuenta.tipo === 'MERCADO_PAGO') {
+        return res.status(400).json({ message: MSG_CUENTA_MP_MANUAL });
       }
 
-      // Validar que la cuenta exista y pertenezca al usuario
-      const cuenta = await Cuentas.findOne({
-        _id: req.body.cuenta,
-        usuario: req.user.id
-      });
+      // Solo campos del alta manual: `usuario`, `origen`, comisiones, etc. no vienen del cliente.
+      const datos = pick(body, CAMPOS_ALTA_MANUAL);
 
-      if (!cuenta) {
-        console.error('Cuenta no encontrada:', {
-          cuentaId: req.body.cuenta,
-          userId: req.user.id
-        });
-        return res.status(404).json({ message: 'La cuenta seleccionada no existe o no pertenece al usuario' });
+      if (typeof datos.descripcion !== 'string' || !datos.descripcion.trim()) {
+        return res.status(400).json({ message: 'La descripción es obligatoria' });
+      }
+      if (!TIPOS_TRANSACCION.includes(datos.tipo)) {
+        return res.status(400).json({ message: 'El tipo debe ser INGRESO o EGRESO' });
       }
 
-      // Crear la transacción - el middleware se encargará de asignar la moneda
+      const monto = parseMontoManual(datos.monto);
+      if (monto.error) return res.status(400).json({ message: monto.error });
+      datos.monto = monto.value;
+
+      if (datos.fecha !== undefined) {
+        const fecha = parseFechaManual(datos.fecha);
+        if (fecha.error) return res.status(400).json({ message: fecha.error });
+        datos.fecha = fecha.value;
+      }
+
+      const estado = normalizarEstadoManual(datos.estado, 'PENDIENTE');
+      if (!estado) return res.status(400).json({ message: 'Estado no válido' });
+      datos.estado = estado;
+
+      const errorMoneda = await validarMonedaMultimoneda(cuenta, datos.moneda, req.user.id);
+      if (errorMoneda) return res.status(400).json({ message: errorMoneda });
+
+      // `moneda` es requerida y la validación corre antes del middleware: se resuelve acá.
+      // Cuenta monomoneda: siempre la de la cuenta. Multimoneda: la elegida (ya validada) o la principal.
+      const monedaCuenta = cuenta.moneda?._id || cuenta.moneda;
+      if (!esCuentaMultimoneda(cuenta) || !datos.moneda) {
+        if (monedaCuenta) datos.moneda = monedaCuenta;
+        else delete datos.moneda;
+      }
+
+      if (datos.contacto !== undefined) {
+        if (!datos.contacto) {
+          datos.contacto = null;
+        } else {
+          const contactoId = String(datos.contacto?._id || datos.contacto?.id || datos.contacto);
+          if (!mongoose.Types.ObjectId.isValid(contactoId)) {
+            return res.status(400).json({ message: 'ID de contacto inválido' });
+          }
+          const contactoValido = await Contactos.findOne({ _id: contactoId, usuario: req.user.id }).select('_id');
+          if (!contactoValido) {
+            return res.status(404).json({ message: 'Contacto no encontrado' });
+          }
+          datos.contacto = contactoValido._id;
+        }
+      }
+
+      // El middleware respeta la moneda en cuentas multimoneda y asigna la de la cuenta en las demás.
       const transaccion = new this.Model({
-        ...req.body,
+        ...datos,
+        categoriaManual: Boolean(datos.categoria),
+        origen: { tipo: 'MANUAL' },
         usuario: req.user.id,
-        cuenta: cuenta._id
-        // No asignamos moneda aquí - lo hace el middleware
+        cuenta: cuenta._id,
       });
 
       await transaccion.save();
-      await transaccion.populate(['moneda', 'cuenta']);
-      
-      res.status(201).json(transaccion);
+      await transaccion.populate([
+        'moneda',
+        'cuenta',
+        { path: 'contacto', select: 'nombre tipo categoriaDefault categoriaIngreso categoriaEgreso origen' },
+      ]);
+
+      return res.status(201).json(transaccion);
     } catch (error) {
       console.error('Error al crear transacción:', error);
-      if (error.name === 'ValidationError') {
-        return res.status(400).json({ 
-          message: 'Error de validación', 
-          errors: Object.values(error.errors).map(e => e.message)
+      return respuestaError(res, error);
+    }
+  };
+
+  // PUT /api/transacciones/:id
+  update = async (req, res) => {
+    try {
+      const transaccion = await this.buscarPropia(req, res);
+      if (!transaccion) return undefined;
+
+      const body = req.body || {};
+
+      // Movimientos sincronizados (Mercado Pago, bancos): solo se permite recategorizar o vincular contacto.
+      if (!esTransaccionManual(transaccion)) {
+        const permitidos = new Set(CAMPOS_EDICION_EXTERNO);
+        const extra = Object.keys(body).filter((key) => !permitidos.has(key));
+        if (extra.length > 0 || (body.categoria === undefined && body.contacto === undefined)) {
+          return res.status(403).json({
+            message: 'Los movimientos sincronizados solo permiten cambiar la categoría o el contacto',
+          });
+        }
+        const patch = {};
+        if (body.categoria !== undefined) {
+          patch.categoria = body.categoria;
+          patch.categoriaManual = true;
+        }
+        if (body.contacto !== undefined) {
+          if (!body.contacto) {
+            patch.contacto = null;
+          } else {
+            const contactoId = String(body.contacto?._id || body.contacto?.id || body.contacto);
+            if (!mongoose.Types.ObjectId.isValid(contactoId)) {
+              return res.status(400).json({ message: 'ID de contacto inválido' });
+            }
+            const contactoValido = await Contactos.findOne({ _id: contactoId, usuario: req.user.id }).select('_id');
+            if (!contactoValido) {
+              return res.status(404).json({ message: 'Contacto no encontrado' });
+            }
+            patch.contacto = contactoValido._id;
+          }
+        }
+        transaccion.set(patch);
+        await transaccion.save();
+        await transaccion.populate([
+          'moneda',
+          'cuenta',
+          { path: 'contacto', select: 'nombre tipo categoriaDefault categoriaIngreso categoriaEgreso origen' },
+        ]);
+        return res.json(transaccion);
+      }
+
+      const datos = pick(body, CAMPOS_EDICION_MANUAL);
+      const updates = {};
+
+      if (datos.descripcion !== undefined) {
+        if (typeof datos.descripcion !== 'string' || !datos.descripcion.trim()) {
+          return res.status(400).json({ message: 'La descripción es obligatoria' });
+        }
+        updates.descripcion = datos.descripcion;
+      }
+      if (datos.categoria !== undefined) {
+        updates.categoria = datos.categoria;
+        updates.categoriaManual = true;
+      }
+      if (datos.contacto !== undefined) {
+        if (!datos.contacto) {
+          updates.contacto = null;
+        } else {
+          const contactoId = String(datos.contacto?._id || datos.contacto?.id || datos.contacto);
+          if (!mongoose.Types.ObjectId.isValid(contactoId)) {
+            return res.status(400).json({ message: 'ID de contacto inválido' });
+          }
+          const contactoValido = await Contactos.findOne({ _id: contactoId, usuario: req.user.id }).select('_id');
+          if (!contactoValido) {
+            return res.status(404).json({ message: 'Contacto no encontrado' });
+          }
+          updates.contacto = contactoValido._id;
+        }
+      }
+      if (datos.tipo !== undefined) {
+        if (!TIPOS_TRANSACCION.includes(datos.tipo)) {
+          return res.status(400).json({ message: 'El tipo debe ser INGRESO o EGRESO' });
+        }
+        updates.tipo = datos.tipo;
+      }
+      if (datos.monto !== undefined) {
+        const monto = parseMontoManual(datos.monto);
+        if (monto.error) return res.status(400).json({ message: monto.error });
+        updates.monto = monto.value;
+      }
+      if (datos.fecha !== undefined) {
+        const fecha = parseFechaManual(datos.fecha);
+        if (fecha.error) return res.status(400).json({ message: fecha.error });
+        updates.fecha = fecha.value;
+      }
+      if (datos.estado !== undefined) {
+        const estado = normalizarEstadoManual(datos.estado);
+        if (!estado) return res.status(400).json({ message: 'Estado no válido' });
+        updates.estado = estado;
+      }
+
+      // Cuenta final: la nueva (validada) o la actual. La moneda siempre sale de la cuenta final.
+      const cuentaActualId = String(transaccion.cuenta?._id || transaccion.cuenta);
+      const cuentaNuevaId = datos.cuenta ? String(datos.cuenta?._id || datos.cuenta?.id || datos.cuenta) : null;
+      const cambiaCuenta = Boolean(cuentaNuevaId) && cuentaNuevaId !== cuentaActualId;
+
+      const propia = await buscarCuentaDelUsuario(cambiaCuenta ? cuentaNuevaId : cuentaActualId, req.user.id);
+      if (!propia.cuenta) return res.status(propia.status).json({ message: propia.message });
+      const cuentaFinal = propia.cuenta;
+      if (cambiaCuenta) {
+        if (cuentaFinal.tipo === 'MERCADO_PAGO') {
+          return res.status(400).json({ message: MSG_CUENTA_MP_MANUAL });
+        }
+        updates.cuenta = cuentaFinal._id;
+      }
+
+      if (esCuentaMultimoneda(cuentaFinal)) {
+        const monedaExistente = transaccion.moneda?._id || transaccion.moneda;
+        const monedaElegida = datos.moneda ?? (cambiaCuenta ? null : monedaExistente);
+        if (monedaElegida) {
+          const errorMoneda = await validarMonedaMultimoneda(cuentaFinal, monedaElegida, req.user.id);
+          if (errorMoneda) return res.status(400).json({ message: errorMoneda });
+          updates.moneda = monedaElegida?._id || monedaElegida?.id || monedaElegida;
+        } else if (cuentaFinal.moneda?._id) {
+          updates.moneda = cuentaFinal.moneda._id;
+        }
+      } else if (cuentaFinal.moneda?._id) {
+        updates.moneda = cuentaFinal.moneda._id;
+      }
+
+      transaccion.set(updates);
+      // save() (no findByIdAndUpdate) para que corran validaciones y el middleware de moneda.
+      await transaccion.save();
+      await transaccion.populate([
+        'moneda',
+        'cuenta',
+        { path: 'contacto', select: 'nombre tipo categoriaDefault categoriaIngreso categoriaEgreso origen' },
+      ]);
+
+      return res.json(transaccion);
+    } catch (error) {
+      console.error('Error al actualizar transacción:', error);
+      return respuestaError(res, error);
+    }
+  };
+
+  // DELETE /api/transacciones/:id
+  delete = async (req, res) => {
+    try {
+      const transaccion = await this.buscarPropia(req, res);
+      if (!transaccion) return undefined;
+
+      if (!esTransaccionManual(transaccion)) {
+        return res.status(403).json({
+          message: 'Los movimientos sincronizados no se pueden eliminar. Se corrigen en el próximo sync.',
         });
       }
-      res.status(500).json({ message: error.message });
+
+      await this.Model.deleteOne({ _id: transaccion._id });
+      return res.json({ message: 'Transacción eliminada correctamente' });
+    } catch (error) {
+      console.error('Error al eliminar transacción:', error);
+      return res.status(500).json({ message: error.message });
     }
   };
 
   // PATCH /api/transacciones/:id/estado
   updateEstado = async (req, res) => {
     try {
-      const { estado } = req.body;
-      
-      if (!['PENDIENTE', 'COMPLETADA', 'CANCELADA'].includes(estado)) {
+      const estado = normalizarEstadoManual(req.body?.estado, null);
+      if (!estado) {
         return res.status(400).json({ message: 'Estado no válido' });
       }
 
-      const transaccion = await this.Model.findOneAndUpdate(
-        { _id: req.params.id, usuario: req.user.id },
-        { estado },
-        { new: true, runValidators: true }
-      );
+      const transaccion = await this.buscarPropia(req, res);
+      if (!transaccion) return undefined;
 
-      if (!transaccion) {
-        return res.status(404).json({ message: 'Transacción no encontrada' });
+      if (!esTransaccionManual(transaccion)) {
+        return res.status(403).json({
+          message: 'El estado de los movimientos sincronizados lo define la fuente',
+        });
       }
 
-      res.json(transaccion);
+      transaccion.estado = estado;
+      await transaccion.save();
+      await transaccion.populate(['moneda', 'cuenta']);
+      return res.json(transaccion);
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      console.error('Error al actualizar estado:', error);
+      return respuestaError(res, error);
     }
   };
 
@@ -903,17 +1371,16 @@ class TransaccionesController extends BaseController {
   getResumen = async (req, res) => {
     try {
       const { fechaInicio, fechaFin } = req.query;
-      const query = { 
-        usuario: req.user.id,
-        estado: 'COMPLETADA',
+      // En aggregate Mongoose no castea: el usuario debe ser ObjectId.
+      const query = {
+        usuario: new mongoose.Types.ObjectId(req.user.id),
         ...buildLedgerMatch('flujo'),
       };
+      const estadoFilter = buildEstadoFilter('PAGADO');
+      if (estadoFilter) query.estado = estadoFilter;
 
-      if (fechaInicio || fechaFin) {
-        query.fecha = {};
-        if (fechaInicio) query.fecha.$gte = new Date(fechaInicio);
-        if (fechaFin) query.fecha.$lte = new Date(fechaFin);
-      }
+      const fechaError = applyFechaRange(query, fechaInicio, fechaFin);
+      if (fechaError) return res.status(400).json({ error: fechaError });
 
       const resumen = await this.Model.aggregate([
         { $match: query },
@@ -965,6 +1432,7 @@ class TransaccionesController extends BaseController {
         fechaInicio,
         fechaFin,
         cuenta,
+        contacto,
         ledger: ledgerRaw,
         kinds: kindsRaw,
         yieldSide,
@@ -981,17 +1449,26 @@ class TransaccionesController extends BaseController {
       if (estado) query.estado = buildEstadoFilter(estado);
       if (tipo) query.tipo = tipo;
       if (categoria) query.categoria = categoria;
+      if (contacto) {
+        if (!mongoose.Types.ObjectId.isValid(contacto)) {
+          return res.status(400).json({ error: 'ID de contacto inválido' });
+        }
+        query.contacto = new mongoose.Types.ObjectId(contacto);
+      }
       const fechaError = applyLedgerFechaRange(query, ledger, fechaInicio, fechaFin);
       if (fechaError) return res.status(400).json({ error: fechaError });
       const cuentaError = applyCuentaFilter(query, cuenta);
       if (cuentaError) return res.status(400).json({ error: cuentaError });
 
       const options = {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        ...clampPagination({ page, limit }, { defaultLimit: 10, maxLimit: 200 }),
         // Desempate por _id: sin él, fechas iguales se paginan de forma inestable y se repiten filas.
         sort: sort === '-fecha' ? { fecha: -1, _id: -1 } : sort,
-        populate: ['moneda', 'cuenta'],
+        populate: [
+          'moneda',
+          'cuenta',
+          { path: 'contacto', select: 'nombre tipo categoriaDefault categoriaIngreso categoriaEgreso origen' },
+        ],
         lean: true, // Para mejor rendimiento
         leanWithId: true, // Agrega 'id' además de '_id'
       };
@@ -1009,6 +1486,10 @@ class TransaccionesController extends BaseController {
         cuenta: doc.cuenta ? {
           ...doc.cuenta,
           id: doc.cuenta._id.toString()
+        } : null,
+        contacto: doc.contacto ? {
+          ...doc.contacto,
+          id: doc.contacto._id.toString()
         } : null
       }));
 

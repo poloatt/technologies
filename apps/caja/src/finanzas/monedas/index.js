@@ -1,3 +1,5 @@
+import { getDefaultColorForMoneda } from './monedaConstants';
+
 export { default as MonedaTile } from './MonedaTile';
 export { default as MonedasCarousel } from './MonedasCarousel';
 export { default as MonedasSortableList } from './MonedasSortableList';
@@ -5,6 +7,8 @@ export { sortMonedasByOrden, arrayMove, getMonedaId } from './monedaSortUtils';
 export { MonedaTileSkeleton } from './MonedasCarousel';
 export {
   COLORES_MONEDA,
+  DEFAULT_USD_COLOR,
+  getDefaultColorForMoneda,
   MONEDA_TILE,
   monedaCarouselSx,
   monedaTileCardSx,
@@ -20,7 +24,7 @@ export function normalizeMoneda(moneda) {
     codigo: moneda.codigo || '—',
     nombre: moneda.nombre || '—',
     simbolo: moneda.simbolo || '$',
-    color: moneda.color || '#75AADB',
+    color: moneda.color || getDefaultColorForMoneda(moneda.codigo),
     activa: typeof moneda.activa === 'boolean' ? moneda.activa : true,
   };
 }

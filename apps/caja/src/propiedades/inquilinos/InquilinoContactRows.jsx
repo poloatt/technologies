@@ -7,6 +7,7 @@ import {
 } from '@mui/icons-material';
 import { TareaFormRow } from '@shared/components/forms/tareaFormUi';
 import { propiedadDetailEmptyTextSx } from '../propiedadDetailStyles';
+import { FONT_SIZE } from '@shared/tipografia';
 
 export default function InquilinoContactRows({ inquilino }) {
   const { email, telefono, dni, nacionalidad, ocupacion } = inquilino || {};
@@ -24,7 +25,7 @@ export default function InquilinoContactRows({ inquilino }) {
     <>
       {email ? (
         <TareaFormRow icon={EmailIcon} showDivider>
-          <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+          <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
             {email}
           </Typography>
         </TareaFormRow>
@@ -32,7 +33,7 @@ export default function InquilinoContactRows({ inquilino }) {
 
       {telefono ? (
         <TareaFormRow icon={PhoneIcon} showDivider>
-          <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+          <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
             {telefono}
           </Typography>
         </TareaFormRow>
@@ -40,7 +41,7 @@ export default function InquilinoContactRows({ inquilino }) {
 
       {dni ? (
         <TareaFormRow icon={BadgeIcon} showDivider>
-          <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+          <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
             DNI {dni}
           </Typography>
         </TareaFormRow>
@@ -48,7 +49,7 @@ export default function InquilinoContactRows({ inquilino }) {
 
       {nacionalidad || ocupacion ? (
         <TareaFormRow icon={BadgeIcon} showDivider>
-          <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.45, color: 'text.primary' }}>
+          <Typography sx={{ fontSize: FONT_SIZE.base, lineHeight: 1.45, color: 'text.primary' }}>
             {[nacionalidad, ocupacion].filter(Boolean).join(' · ')}
           </Typography>
         </TareaFormRow>

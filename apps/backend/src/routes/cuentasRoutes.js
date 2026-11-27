@@ -15,6 +15,8 @@ router.route('/')
   .get(cuentasController.getAll)
   .post(cuentasController.create);
 
+router.get('/select-options', cuentasController.getSelectOptions);
+
 router.route('/:id')
   .get([checkOwnership(Cuentas)], cuentasController.getById)
   .put([checkOwnership(Cuentas)], cuentasController.update)

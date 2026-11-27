@@ -6,6 +6,7 @@ import { CajaHubSectionCard } from '../../hub';
 import { INVENTARIO_HUB_PATHS, INVENTARIO_UBICACION } from './inventarioHubConstants';
 import InventarioHubItemsPreview from './InventarioHubItemsPreview';
 import { useInventarioHubItems } from './useInventarioHubItems';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /** Card Inventario en el hub Finanzas → /propiedades/inventario */
 export default function InventarioHubSection() {
@@ -33,7 +34,7 @@ export default function InventarioHubSection() {
       {loading ? (
         <InventarioHubItemsPreview loading items={[]} />
       ) : totalCount === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem', px: 0.25 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: FONT_SIZE.md, px: 0.25 }}>
           Sin ítems registrados
         </Typography>
       ) : (

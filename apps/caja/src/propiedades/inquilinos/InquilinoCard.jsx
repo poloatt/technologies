@@ -40,6 +40,7 @@ import { formatFecha } from '@shared/utils/contratoUtils';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PropiedadDetail from '../PropiedadDetail';
 import AgregarContratoButton from '../contratos/AgregarContratoButton';
+import { FONT_SIZE } from '@shared/tipografia';
 
 // Componentes estilizados siguiendo la estética geométrica
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -63,7 +64,7 @@ const StyledAvatar = styled(Avatar)(({ theme }) => ({
   width: 48,
   height: 48,
   backgroundColor: theme.palette.primary.main,
-  fontSize: '1rem',
+  fontSize: FONT_SIZE.lg,
   fontWeight: 600
 }));
 

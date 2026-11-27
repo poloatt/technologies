@@ -3,17 +3,14 @@ import {
   Box,
   Dialog,
   IconButton,
-  Tooltip,
   Typography,
 } from '@mui/material';
-import { ArrowBack, OpenInNewOutlined } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { ArrowBack } from '@mui/icons-material';
 import useResponsive from '../../hooks/useResponsive';
 import {
   emergentWindowBodySx,
   emergentWindowHalfPaperSx,
   emergentWindowHeaderSx,
-  emergentWindowIconButtonSx,
   emergentWindowPaperSx,
   emergentWindowTitleSx,
 } from '../../styles/emergentWindowStyles';
@@ -27,13 +24,11 @@ export default function EmergentWindow({
   onClose,
   title,
   subtitle,
-  fullPagePath = null,
   headerActions = null,
   halfScreen = false,
   bodySx,
   children,
 }) {
-  const navigate = useNavigate();
   const { isMobile } = useResponsive();
   const useHalf = halfScreen && !isMobile;
 
@@ -75,23 +70,8 @@ export default function EmergentWindow({
             </Typography>
           ) : null}
         </Box>
-        {(fullPagePath || headerActions) ? (
+        {headerActions ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-            {fullPagePath ? (
-              <Tooltip title="Ir a la página">
-                <IconButton
-                  aria-label="Ir a la página"
-                  size="small"
-                  onClick={() => {
-                    navigate(fullPagePath);
-                    onClose?.();
-                  }}
-                  sx={emergentWindowIconButtonSx}
-                >
-                  <OpenInNewOutlined />
-                </IconButton>
-              </Tooltip>
-            ) : null}
             {headerActions}
           </Box>
         ) : null}

@@ -5,6 +5,7 @@ import {
   hubLabelSx,
   hubValueSx,
 } from '../../hub';
+import { FONT_FAMILY, FONT_SIZE } from '@shared/tipografia';
 
 export const COLORES_MONEDA = {
   CELESTE_ARGENTINA: { value: '#75AADB', label: 'Celeste Argentina' },
@@ -12,8 +13,18 @@ export const COLORES_MONEDA = {
   TEAL: { value: '#008080', label: 'Teal' },
   DARK_TEAL: { value: '#006666', label: 'Dark Teal' },
   DARK_GREEN: { value: '#006400', label: 'Dark Green' },
+  VERDE_DOLAR: { value: '#6E8F6B', label: 'Verde Dólar' },
   VIOLETA_OSCURO: { value: '#4B0082', label: 'Violeta Oscuro' },
 };
+
+/** Color predeterminado para USD (verde billete desaturado). */
+export const DEFAULT_USD_COLOR = COLORES_MONEDA.VERDE_DOLAR.value;
+
+export function getDefaultColorForMoneda(codigo) {
+  return String(codigo || '').toUpperCase() === 'USD'
+    ? DEFAULT_USD_COLOR
+    : COLORES_MONEDA.CELESTE_ARGENTINA.value;
+}
 
 /** Dimensiones balanceadas hub / página (alineadas con FINANZAS_HUB). */
 export const MONEDA_TILE = {
@@ -50,8 +61,8 @@ export const monedaSymbolSx = {
   border: '1px solid',
   borderColor: 'divider',
   color: 'text.primary',
-  fontFamily: 'monospace',
-  fontSize: '0.75rem',
+  fontFamily: FONT_FAMILY.mono,
+  fontSize: FONT_SIZE.sm,
   fontWeight: 600,
   display: 'flex',
   alignItems: 'center',

@@ -17,6 +17,7 @@ import {
 } from '@shared/utils/calendar/calendarDragUtils';
 import { CalendarDragPreviewProvider } from './CalendarDragPreviewContext';
 import { useCalendarDragEnd } from './useCalendarDragEnd';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /**
  * @param {'vertical'|'none'} [axisLock='vertical']
@@ -112,7 +113,7 @@ export default function CalendarDndContext({
                     borderRadius: 1,
                     bgcolor: alpha(theme.palette.primary.main, 0.92),
                     color: theme.palette.primary.contrastText,
-                    fontSize: '0.7rem',
+                    fontSize: FONT_SIZE.xs,
                     fontWeight: 700,
                     letterSpacing: 0.2,
                     boxShadow: 2,

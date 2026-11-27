@@ -22,6 +22,7 @@ import {
 import { HABIT_CHAIN_COPY } from '@shared/copy/agendaTerminology';
 import { resolveHabitDisplayIcon } from '@shared/utils/habitOutlineIcons';
 import HabitCadenceMiniGrid from './HabitCadenceMiniGrid';
+import { FONT_SIZE } from '../../tipografia';
 
 function ActionButton({
   icon,
@@ -45,7 +46,7 @@ function ActionButton({
         justifyContent: 'flex-start',
         textTransform: 'none',
         fontWeight: 600,
-        fontSize: '0.78rem',
+        fontSize: FONT_SIZE.sm,
         py: 0.65,
         px: 1,
         borderRadius: 1.25,
@@ -203,7 +204,7 @@ export default function HabitItemPostponeMenu({
                   display: 'block',
                   mt: 0.1,
                   color: alpha(theme.palette.text.secondary, 0.85),
-                  fontSize: '0.68rem',
+                  fontSize: FONT_SIZE.xs,
                 }}
               >
                 {sectionLabel}

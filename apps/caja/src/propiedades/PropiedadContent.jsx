@@ -57,6 +57,7 @@ import {
   SEPARATOR_WIDTH,
   formatCompactNumber,
 } from './propiedadSectionLayout';
+import { FONT_SIZE } from '@shared/tipografia';
 
 // Componente Paper estilizado minimalista con fondo del tema
 const GeometricPaper = styled(Paper)(({ theme }) => ({
@@ -102,7 +103,7 @@ const GeometricChip = styled(Chip)(({ theme, customcolor }) => ({
   backgroundColor: customcolor || theme.palette.action.selected,
   color: theme.palette.text.primary,
   fontWeight: 500,
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   height: 24,
   '& .MuiChip-icon': {
     fontSize: '0.9rem',
@@ -149,7 +150,7 @@ const EntitySectionRow = ({
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          fontSize: showLargeCurrency ? '1.2rem' : undefined,
+          fontSize: showLargeCurrency ? FONT_SIZE['2xl'] : undefined,
           lineHeight: showLargeCurrency ? 1 : undefined,
           textAlign: showLargeCurrency ? 'center' : 'left',
           m: 0
@@ -162,7 +163,7 @@ const EntitySectionRow = ({
           variant="caption"
           sx={{
             color: 'text.secondary',
-            fontSize: '0.65rem',
+            fontSize: FONT_SIZE.xs,
             lineHeight: 1.1,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -188,7 +189,7 @@ const EstadoChip = ({ estado, tipo = 'PROPIEDAD', sx = {} }) => (
       gap: 0.5,
       px: 1,
       py: 0.5,
-      fontSize: '0.75rem',
+      fontSize: FONT_SIZE.sm,
       color: getEstadoColor(estado, tipo),
       bgcolor: 'transparent',
       borderRadius: 0,
@@ -212,7 +213,7 @@ const EntityHeader = ({ title, estado, tipoEntidad = 'PROPIEDAD', icon: Icon, ic
         <Icon sx={{ fontSize: '1.2rem', color: iconColor, flexShrink: 0, mt: 0.2 }} />
       )}
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1rem', color: 'text.primary', lineHeight: 1.2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: FONT_SIZE.lg, color: 'text.primary', lineHeight: 1.2 }}>
           {title}
         </Typography>
         {estado && <EstadoChip estado={estado} tipo={tipoEntidad} />}
@@ -231,7 +232,7 @@ const EntityHeader = ({ title, estado, tipoEntidad = 'PROPIEDAD', icon: Icon, ic
 const PrimarySectionHeader = ({ icon: Icon, title }) => (
   <Box sx={{ display: 'flex', alignItems: 'center', gap: SECTION_GAP, mb: SECTION_GAP, pl: SECTION_PADDING_X, minHeight: ROW_MIN_HEIGHT }}>
     {Icon && <Icon sx={{ fontSize: '1.1rem', color: 'primary.main', flexShrink: 0 }} />}
-    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.95rem', letterSpacing: 0.1 }}>
+    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: FONT_SIZE.lg, letterSpacing: 0.1 }}>
       {title}
     </Typography>
   </Box>
@@ -269,7 +270,7 @@ const SECTION_CONFIGS = {
               variant="body2"
               sx={{
                 fontWeight: 500,
-                fontSize: '0.9rem',
+                fontSize: FONT_SIZE.base,
                 lineHeight: 1,
                 m: 0,
                 color: 'text.primary'
@@ -281,7 +282,7 @@ const SECTION_CONFIGS = {
               variant="caption"
               sx={{
                 fontWeight: 400,
-                fontSize: '0.65rem',
+                fontSize: FONT_SIZE.xs,
                 color: 'rgba(255,255,255,0.7)',
                 lineHeight: 1,
                 m: 0,
@@ -306,7 +307,7 @@ const SECTION_CONFIGS = {
               variant="body2"
               sx={{
                 fontWeight: 500,
-                fontSize: '0.9rem',
+                fontSize: FONT_SIZE.base,
                 lineHeight: 1,
                 m: 0,
                 color: 'text.primary'
@@ -318,7 +319,7 @@ const SECTION_CONFIGS = {
               variant="caption"
               sx={{
                 fontWeight: 400,
-                fontSize: '0.65rem',
+                fontSize: FONT_SIZE.xs,
                 color: 'rgba(255,255,255,0.7)',
                 lineHeight: 1,
                 m: 0,
@@ -343,7 +344,7 @@ const SECTION_CONFIGS = {
               variant="h5"
               sx={{
                 fontWeight: 600,
-                fontSize: '1.2rem',
+                fontSize: FONT_SIZE['2xl'],
                 lineHeight: 1,
                 m: 0,
                 color: 'text.primary'
@@ -355,7 +356,7 @@ const SECTION_CONFIGS = {
               variant="caption"
               sx={{
                 fontWeight: 400,
-                fontSize: '0.65rem',
+                fontSize: FONT_SIZE.xs,
                 color: 'rgba(255,255,255,0.7)',
                 lineHeight: 1,
                 m: 0,
@@ -512,7 +513,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
       <Box sx={{ minHeight: '40px', bgcolor: theme.palette.collapse.background, p: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.5 }}>
           <PeopleIcon sx={{ fontSize: '1.2rem', color: 'text.secondary', flexShrink: 0 }} />
-          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '0.85rem' }}>
+          <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: FONT_SIZE.base }}>
             {friendly}
           </Typography>
         </Box>
@@ -571,7 +572,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
               variant="h5"
               sx={{
                 fontWeight: 600,
-                fontSize: '1.4rem',
+                fontSize: FONT_SIZE['3xl'],
                 lineHeight: 1,
                 m: 0,
                 color: 'text.primary'
@@ -583,7 +584,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
               variant="caption"
               sx={{
                 fontWeight: 400,
-                fontSize: '0.65rem',
+                fontSize: FONT_SIZE.xs,
                 color: 'rgba(255,255,255,0.7)',
                 lineHeight: 1,
                 m: 0,
@@ -606,7 +607,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
               variant="h5"
               sx={{
                 fontWeight: 600,
-                fontSize: '1.4rem',
+                fontSize: FONT_SIZE['3xl'],
                 lineHeight: 1,
                 m: 0,
                 color: 'text.primary'
@@ -618,7 +619,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
               variant="caption"
               sx={{
                 fontWeight: 400,
-                fontSize: '0.65rem',
+                fontSize: FONT_SIZE.xs,
                 color: 'rgba(255,255,255,0.7)',
                 lineHeight: 1,
                 m: 0,
@@ -656,7 +657,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                 variant="body2"
                 sx={{
                   fontWeight: 500,
-                  fontSize: '0.7rem',
+                  fontSize: FONT_SIZE.xs,
                   lineHeight: 1,
                   m: 0,
                   overflow: 'hidden',
@@ -671,7 +672,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                 variant="caption"
                 sx={{
                   fontWeight: 400,
-                  fontSize: '0.65rem',
+                  fontSize: FONT_SIZE.xs,
                   color: 'rgba(255,255,255,0.7)',
                   lineHeight: 1,
                   m: 0,
@@ -694,7 +695,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                 variant="body2"
                 sx={{
                   fontWeight: 500,
-                  fontSize: '0.7rem',
+                  fontSize: FONT_SIZE.xs,
                   lineHeight: 1,
                   m: 0,
                   overflow: 'hidden',
@@ -709,7 +710,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                 variant="caption"
                 sx={{
                   fontWeight: 400,
-                  fontSize: '0.65rem',
+                  fontSize: FONT_SIZE.xs,
                   color: 'rgba(255,255,255,0.7)',
                   lineHeight: 1,
                   m: 0,
@@ -756,7 +757,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                   variant="body2"
                   sx={{
                     fontWeight: 500,
-                    fontSize: '0.7rem',
+                    fontSize: FONT_SIZE.xs,
                     lineHeight: 1,
                     m: 0,
                     overflow: 'hidden',
@@ -773,7 +774,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                   variant="caption"
                   sx={{
                     fontWeight: 400,
-                    fontSize: '0.68rem',
+                    fontSize: FONT_SIZE.xs,
                     color: 'text.secondary',
                     lineHeight: 1,
                     m: 0,
@@ -794,7 +795,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
               variant="body2"
               sx={{
                 fontWeight: 500,
-                fontSize: '0.7rem',
+                fontSize: FONT_SIZE.xs,
                 color: 'text.secondary',
                 textAlign: 'right',
                 minWidth: 60
@@ -936,7 +937,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                   sx={{ 
                     cursor: 'pointer',
                     textDecoration: 'underline',
-                    fontSize: '0.65rem',
+                    fontSize: FONT_SIZE.xs,
                     '&:hover': {
                       color: 'primary.light'
                     }
@@ -957,7 +958,7 @@ const SectionRenderer = ({ section, isCollapsed = false, onContratoDetail = null
                   sx={{ 
                     cursor: 'pointer',
                     textDecoration: 'underline',
-                    fontSize: '0.65rem',
+                    fontSize: FONT_SIZE.xs,
                     '&:hover': {
                       color: 'primary.light'
                     }
@@ -1276,7 +1277,7 @@ const EntityCard = ({
                 variant="body2" 
                 sx={{ 
                   fontWeight: 500,
-                  fontSize: isCompact ? '0.6rem' : '0.7rem',
+                  fontSize: isCompact ? FONT_SIZE['2xs'] : FONT_SIZE.xs,
                   lineHeight: 1,
                   m: 0,
                   overflow: 'hidden',
@@ -1287,7 +1288,7 @@ const EntityCard = ({
                 {config.getTitle(item)}
               </Typography>
               {config.getSubtitle && (
-                <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
+                <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: 'text.secondary' }}>
                   {config.getSubtitle(item)}
                 </Typography>
               )}
@@ -1295,11 +1296,11 @@ const EntityCard = ({
           ) : (
             // Vista hover
             <>
-              <Typography variant="body2" sx={{ fontSize: isCompact ? '0.65rem' : '0.7rem', fontWeight: 600, color: 'primary.main' }}>
+              <Typography variant="body2" sx={{ fontSize: FONT_SIZE.xs, fontWeight: 600, color: 'primary.main' }}>
                 {config.getTitle(item)}
               </Typography>
               {config.getHoverInfo && (
-                <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'warning.main' }}>
+                <Typography variant="caption" sx={{ fontSize: FONT_SIZE['2xs'], color: 'warning.main' }}>
                   {config.getHoverInfo(item)}
                 </Typography>
               )}
@@ -1347,7 +1348,7 @@ const EntityGrid = ({
                   justifyContent: 'center'
                 }}>
                   {index === 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: FONT_SIZE['2xs'] }}>
                       {emptyMessage}
                     </Typography>
                   )}
@@ -1364,7 +1365,7 @@ const EntityGrid = ({
         p: 1.5, 
         textAlign: 'center'
       }}>
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: FONT_SIZE.sm }}>
           {emptyMessage}
         </Typography>
       </Box>
@@ -1448,7 +1449,7 @@ const EntityGrid = ({
         >
           <Typography 
             sx={{ 
-              fontSize: '0.9rem', 
+              fontSize: FONT_SIZE.base, 
               color: 'text.secondary',
               transform: 'rotate(90deg)',
               userSelect: 'none',
@@ -1631,7 +1632,7 @@ const PropiedadContent = ({
             p: 1.5, 
             textAlign: 'center'
           }}>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: FONT_SIZE.sm }}>
               Tipo de vista no reconocido: {type}
             </Typography>
           </Box>

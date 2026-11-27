@@ -16,6 +16,7 @@ import {
   Refresh as RefreshIcon,
   AttachMoney
 } from '@mui/icons-material';
+import { NEGATIVE_COLOR } from '@shared/config/uiConstants';
 import { 
   StyledTableContainer, 
   StyledCuotasTextField, 
@@ -28,6 +29,7 @@ import { useResponsive } from '@shared/hooks';
 import { calcularAlquilerMensualPromedio, calcularEstadoCuota, generarCuotasMensuales } from '@shared/utils/contratoUtils';
 import { useCuotasContext } from '@shared/context/CuotasContext';
 import CuotaInlineEditor from './CuotaInlineEditor';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const ContratoCuotasSection = ({
   formData,
@@ -122,7 +124,7 @@ const ContratoCuotasSection = ({
   const getEstadoColor = (estado) => {
     switch (estado) {
       case 'PAGADO': return '#4caf50';
-      case 'VENCIDO': return '#f44336';
+      case 'VENCIDO': return NEGATIVE_COLOR;
       default: return '#ff9800';
     }
   };
@@ -163,7 +165,7 @@ const ContratoCuotasSection = ({
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <AttachMoney sx={{ color: 'primary.main', fontSize: '1.2rem' }} />
-          <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 500 }}>
+          <Typography variant="h6" sx={{ fontSize: FONT_SIZE.lg, fontWeight: 500 }}>
             Cuotas Mensuales
           </Typography>
         </Box>

@@ -26,6 +26,10 @@
     "./pulso/*": "./pulso/*",
     "./habits/*": "./habits/*",
     "./styles/*": "./styles/*",
+    "./tipografia": {
+      "import": "./tipografia/index.js"
+    },
+    "./tipografia/*": "./tipografia/*",
     "./layouts/*": "./layouts/*",
     "./navigation/*": "./navigation/*",
     "./config/*": "./config/*",
@@ -44,6 +48,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
     "@mui/icons-material": "^5.15.10",
     "@mui/material": "^5.15.10",
     "@mui/x-date-pickers": "^5.0.20",

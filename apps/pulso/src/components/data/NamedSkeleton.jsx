@@ -4,6 +4,7 @@ import { FigureBackButton, FigureHelpButton } from '@shared/components/common/Fi
 import { boneMatchesGroup, isNeckBone } from './boneGroups';
 import { loadSkin, makeSkin, paintSkin } from './skinShell';
 import { loadSkeleton } from './skeletonBin';
+import { FONT_SIZE } from '@shared/tipografia';
 const POINT_ZONES = {
   cabeza: ['cabeza', 'ojos'],
   pecho: ['pecho', 'abdomen', 'sangre'],
@@ -576,7 +577,7 @@ export default function NamedSkeleton({
                 position: 'absolute',
                 whiteSpace: 'nowrap',
                 color: 'text.secondary',
-                fontSize: 10,
+                fontSize: FONT_SIZE['2xs'],
                 lineHeight: 1.2,
               }}
             >

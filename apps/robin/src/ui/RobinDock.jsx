@@ -5,6 +5,7 @@ import clienteAxios from '@shared/config/axios';
 import { FOOTER_CONFIG } from '@shared/config/uiConstants';
 import { useScopedActionHistory, useUndoScope } from '@shared/hooks/useScopedUndo';
 import { originLabel, originTitle } from '../origin.js';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp,image/gif,text/plain,text/csv,application/json';
 
@@ -33,7 +34,7 @@ export function RecordOrigin({ origen, sx }) {
       sx={{
         ml: 0.75,
         color: 'text.secondary',
-        fontSize: '0.65rem',
+        fontSize: FONT_SIZE.xs,
         letterSpacing: 0.2,
         ...sx,
       }}
@@ -225,7 +226,7 @@ export function RobinDock({ surface = 'data', context = null }) {
                 bgcolor: 'transparent',
                 color: 'text.secondary',
                 font: 'inherit',
-                fontSize: '0.75rem',
+                fontSize: FONT_SIZE.sm,
               }}
             >
               {models.map((item) => (
@@ -284,7 +285,7 @@ export function RobinDock({ surface = 'data', context = null }) {
               type="button"
               aria-label="Adjuntar archivo"
               onClick={() => fileRef.current?.click()}
-              sx={{ border: 0, bgcolor: 'transparent', color: 'text.secondary', cursor: 'pointer', font: 'inherit', fontSize: '0.75rem' }}
+              sx={{ border: 0, bgcolor: 'transparent', color: 'text.secondary', cursor: 'pointer', font: 'inherit', fontSize: FONT_SIZE.sm }}
             >
               Archivo
             </Box>
@@ -307,7 +308,7 @@ export function RobinDock({ surface = 'data', context = null }) {
                 bgcolor: 'transparent',
                 color: 'text.primary',
                 font: 'inherit',
-                fontSize: '0.875rem',
+                fontSize: FONT_SIZE.base,
               }}
             />
             <Box
@@ -315,7 +316,7 @@ export function RobinDock({ surface = 'data', context = null }) {
               type="button"
               onClick={send}
               disabled={busy || (!draft.trim() && files.length === 0)}
-              sx={{ border: 0, bgcolor: 'transparent', color: 'text.primary', cursor: 'pointer', font: 'inherit', fontSize: '0.75rem' }}
+              sx={{ border: 0, bgcolor: 'transparent', color: 'text.primary', cursor: 'pointer', font: 'inherit', fontSize: FONT_SIZE.sm }}
             >
               Enviar
             </Box>
@@ -346,7 +347,7 @@ export function RobinDock({ surface = 'data', context = null }) {
             color: 'text.primary',
             cursor: 'pointer',
             font: 'inherit',
-            fontSize: '0.8rem',
+            fontSize: FONT_SIZE.md,
             px: 1.25,
             py: 0.5,
           }}

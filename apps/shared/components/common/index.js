@@ -14,6 +14,7 @@ export { default as CommonProgressBar } from './CommonProgressBar.jsx';
 export { default as DynamicIcon } from './DynamicIcon.jsx';
 export { default as EmptyState } from './EmptyState.jsx';
 export { default as EstadoIcon } from './EstadoIcon.jsx';
+export { default as PageTitle } from './PageTitle.jsx';
 export { default as PageContainer } from './PageContainer.jsx';
 export { default as SplitScreen } from './SplitScreen.jsx';
 export { default as CollapseChevron } from './CollapseChevron.jsx';

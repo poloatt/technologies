@@ -5,6 +5,7 @@ import { alpha, useTheme } from '@mui/material/styles';
 import { format } from 'date-fns';
 import { dayDropId } from '@shared/utils/calendar/calendarDragUtils';
 import { useCalendarDragPreview } from './CalendarDragPreviewContext';
+import { FONT_SIZE } from '@shared/tipografia';
 
 function TimedDropPreview({ preview }) {
   const theme = useTheme();
@@ -32,7 +33,7 @@ function TimedDropPreview({ preview }) {
     >
       <Typography
         sx={{
-          fontSize: '0.65rem',
+          fontSize: FONT_SIZE.xs,
           fontWeight: 700,
           color: theme.palette.primary.main,
           lineHeight: 1.2,

@@ -68,6 +68,7 @@ import {
   TASK_FORM_HORIZONTAL_PX,
   TASK_FORM_BODY_FONT_SIZE,
 } from '@shared/components/forms/tareaFormUi';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const SYNC_DIRECTION_LABELS = {
   bidirectional: 'Bidireccional',
@@ -722,7 +723,7 @@ const GoogleTasksConfig = ({ open, onClose }) => {
             <Typography
               variant="subtitle1"
               component="div"
-              sx={{ ...tareaFormBodyTextSx, fontWeight: 700, fontSize: '1rem', lineHeight: 1.3 }}
+              sx={{ ...tareaFormBodyTextSx, fontWeight: 700, fontSize: FONT_SIZE.lg, lineHeight: 1.3 }}
             >
               Google Sync
             </Typography>

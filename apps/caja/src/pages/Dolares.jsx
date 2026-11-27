@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress, Skeleton, Typography } from '@shared/utils/materialImports';
 import { useAPI } from '@shared/hooks/useAPI';
 import { FinanzasSectionNav } from '../finanzas';
@@ -10,8 +11,10 @@ import {
   DEFAULT_PERIOD_PRESET,
   getPeriodRange,
 } from '../finanzas/transacciones/transaccionesPeriodUtils';
+import { DEFAULT_USD_COLOR } from '../finanzas/monedas/monedaConstants';
 import { DOLAR_TYPE_FILTERS, dolarSignedAmount, kindsQueryFor } from '../finanzas/transacciones/ledgerKindFilters';
 import { useValuesVisibility } from '@shared/context/ValuesVisibilityContext';
+import { FONT_SIZE } from '@shared/tipografia';
 
 function getScrollParent(node) {
   let current = node?.parentElement;
@@ -47,8 +50,10 @@ function ListSkeleton() {
 
 export default function Dolares() {
   const { showValues } = useValuesVisibility();
+  const [searchParams] = useSearchParams();
+  const cuentaId = searchParams.get('cuenta') || undefined;
   const { data: monedasData } = useAPI('/api/monedas');
-  const usdColor = (monedasData?.docs || []).find((moneda) => moneda.codigo === 'USD')?.color;
+  const usdColor = (monedasData?.docs || []).find((moneda) => moneda.codigo === 'USD')?.color || DEFAULT_USD_COLOR;
   const [preset, setPreset] = useState(DEFAULT_PERIOD_PRESET);
   const [enabledKinds, setEnabledKinds] = useState(null);
   const periodRange = useMemo(() => getPeriodRange(preset), [preset]);
@@ -66,6 +71,7 @@ export default function Dolares() {
   } = useTransaccionesList({
     fechaInicio: periodRange.fechaInicio,
     fechaFin: periodRange.fechaFin,
+    cuentaId,
     ledger: 'dolares',
     estado: 'PAGADO',
     kinds: kindsQueryFor(DOLAR_TYPE_FILTERS, enabledKinds),
@@ -98,6 +104,7 @@ export default function Dolares() {
     <Box sx={{ ...cajaPageLayoutSx, position: 'relative', minHeight: '80vh', bgcolor: 'background.default' }}>
       <FinanzasSectionNav variant="strip" />
       <DolaresResumen
+        cuentaId={cuentaId}
         preset={preset}
         onPresetChange={setPreset}
         enabledKinds={enabledKinds}
@@ -128,10 +135,10 @@ export default function Dolares() {
       ) : (
         <Box sx={{ mt: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 650, letterSpacing: '0.04em', color: 'text.secondary' }}>
+            <Typography sx={{ fontSize: FONT_SIZE.sm, fontWeight: 650, letterSpacing: '0.04em', color: 'text.secondary' }}>
               {`${transacciones.length} movimientos`}
             </Typography>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', color: totalColor, fontVariantNumeric: 'tabular-nums' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: FONT_SIZE.base, color: totalColor, fontVariantNumeric: 'tabular-nums' }}>
               {formatUsdTotal(totalListado, showValues)}
             </Typography>
           </Box>

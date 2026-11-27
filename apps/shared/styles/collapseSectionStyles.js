@@ -18,6 +18,7 @@ import {
   RUTINA_CHEVRON,
 } from './rutinaIconTokens';
 import { taskFormHeaderActionIconSx } from '../components/forms/tareaFormTokens';
+import { FONT_SIZE } from '../tipografia';
 
 /** Tokens compartidos para secciones colapsables (tareas, rutinas, hubs). */
 
@@ -106,12 +107,12 @@ export const collapseSubsectionHeadingSx = {
   color: 'text.secondary',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  fontSize: '0.7rem',
+  fontSize: FONT_SIZE.xs,
 };
 
 export const collapseSubsectionHeadingLgSx = {
   ...collapseSubsectionHeadingSx,
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   py: 0.75,
 };
 
@@ -152,7 +153,7 @@ export function getCollapseSectionTitleSx(isMobile = false) {
   return {
     ...taskGroupTitleSx,
     lineHeight: 1,
-    fontSize: '0.8125rem',
+    fontSize: FONT_SIZE.md,
     display: 'flex',
     alignItems: 'center',
     minWidth: 0,
@@ -252,7 +253,7 @@ export const collapseHubTitleSx = {
   ...hubSectionTitleSx,
   textTransform: 'none',
   letterSpacing: 0,
-  fontSize: { xs: '0.875rem', md: '0.8125rem' },
+  fontSize: { xs: FONT_SIZE.base, md: FONT_SIZE.md },
   lineHeight: 1.3,
 };
 

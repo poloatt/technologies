@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { Box, Chip, IconButton } from '@mui/material';
 import { HabitsManagerHost } from '../../habits';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const TareaForm = React.lazy(() => import('../form/TareaForm'));
 const GoogleTasksConfig = React.lazy(() => import('../google/GoogleTasksConfig'));
@@ -83,7 +84,7 @@ export default function TareasPageOverlays({
             color="primary"
             variant="outlined"
             sx={{
-              fontSize: isMobile ? '0.9rem' : '0.75rem',
+              fontSize: isMobile ? FONT_SIZE.base : FONT_SIZE.sm,
               height: isMobile ? 32 : 24,
             }}
           />

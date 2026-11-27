@@ -109,7 +109,17 @@ const bankConnectionSchema = createSchema({
       completo: { type: Boolean, default: false },
       tramosVacios: { type: Number, default: 0 },
       inicioActividad: String,
-      actualizadoEn: Date
+      actualizadoEn: Date,
+      // Tramos ya cubiertos que se volvieron a pedir porque habían quedado sin retiros (CBU).
+      revisados: [{ _id: false, beginDate: String, endDate: String, revisadoEn: Date }],
+      // Última revisión de esta sync (solo presente cuando la sync fue una revisión).
+      revision: {
+        beginDate: String,
+        endDate: String,
+        mesLabel: String,
+        pendiente: Boolean,
+        cuotaAgotada: Boolean
+      }
     },
     // Diagnóstico de cobertura (P2P / CBU / reconciliación)
     diagnostico: {

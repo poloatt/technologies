@@ -3,6 +3,7 @@ import { Box, ButtonBase, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import DraggableAllDayEvent from './dnd/DraggableAllDayEvent';
 import DroppableAllDayLane from './dnd/DroppableAllDayLane';
+import { FONT_SIZE } from '@shared/tipografia';
 
 /**
  * Franja “todo el día” estilo Google Calendar: muestra hasta maxVisible y “+N más”.
@@ -64,7 +65,7 @@ export default function AgendaAllDayLane({
             },
           }}
         >
-          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem' }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: FONT_SIZE.xs }}>
             {expanded ? 'Menos' : `${hiddenCount} más`}
           </Typography>
         </ButtonBase>

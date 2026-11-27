@@ -4,6 +4,7 @@ import { PersonAddOutlined as PersonAddIcon } from '@mui/icons-material';
 import { TareaFormRow } from './tareaFormLayout';
 import { TareaFormIcons } from './tareaFormIcons';
 import { tareaFormRowContentGutterSx } from './tareaFormTokens';
+import { FONT_SIZE } from '../../tipografia';
 
 function ownerId(entry) {
   if (entry == null) return '';
@@ -65,7 +66,7 @@ export default function TareaFormOwnersRow({
             key={id}
             size="small"
             label={ownerLabel(entry, currentUserId)}
-            sx={{ height: 24, fontSize: '0.75rem' }}
+            sx={{ height: 24, fontSize: FONT_SIZE.sm }}
           />
         ))}
         {!readOnly && typeof onAddOwner === 'function' ? (
@@ -79,7 +80,7 @@ export default function TareaFormOwnersRow({
           </IconButton>
         ) : null}
         {chips.length === 0 ? (
-          <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+          <Box component="span" sx={{ fontSize: FONT_SIZE.sm, color: 'text.secondary' }}>
             Sin owners
           </Box>
         ) : null}

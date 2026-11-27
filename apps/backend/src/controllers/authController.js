@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import config from '../config/config.js';
 import { initializeSampleData } from '../config/initData.js';
+import { ensureEfectivoAccount } from '../services/efectivoAccountService.js';
 import {
   setRefreshTokenCookie,
   clearRefreshTokenCookie,
@@ -110,6 +111,7 @@ export const authController = {
       // Ejecutar en background para no bloquear la respuesta
       setImmediate(async () => {
         try {
+          await ensureEfectivoAccount(user._id);
           await initializeSampleData(user._id);
         } catch (error) {
           console.error('Error al inicializar datos de ejemplo:', error);

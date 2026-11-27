@@ -11,6 +11,7 @@ import { getNormalizedToday } from '@shared/utils/dateUtils';
 import CalendarDatePickerPopover from './CalendarDatePickerPopover';
 import { useAgendaCalendarDatePicker } from './useAgendaCalendarDatePicker';
 import { DATE_HEADER_MIN_HEIGHT } from '@shared/utils/calendar/calendarLayout';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const weekNavColumnSx = {
   display: 'flex',
@@ -72,7 +73,7 @@ export default function AgendaWeekHeaderNavColumn({ selectedDate }) {
               px: 0.5,
               py: 0,
               lineHeight: 1.2,
-              fontSize: '0.7rem',
+              fontSize: FONT_SIZE.xs,
               color: viewingToday ? 'text.disabled' : 'text.secondary',
               '&.Mui-disabled': { color: 'text.disabled' },
             }}

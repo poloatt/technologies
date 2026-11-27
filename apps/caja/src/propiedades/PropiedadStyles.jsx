@@ -1,6 +1,7 @@
 import { styled } from '@mui/material/styles';
 import { Card, Box, Dialog, TextField, Chip, Typography } from '@mui/material';
 import { FORM_HEIGHTS } from '@shared/config/uiConstants';
+import { FONT_SIZE } from '@shared/tipografia';
 
 // Componente estilizado para las tarjetas con estilo angular
 export const StyledCard = styled(Card, {
@@ -28,7 +29,7 @@ export const StyledStatusChip = styled(Box)(({ theme, customcolor }) => ({
   alignItems: 'center',
   gap: 4,
   padding: '2px 6px',
-  fontSize: '0.75rem',
+  fontSize: FONT_SIZE.sm,
   color: customcolor || theme.palette.text.secondary,
   height: 24,
   marginLeft: theme.spacing(1),
@@ -125,7 +126,7 @@ export const CategoryChip = styled(Chip)(({ theme, customcolor }) => ({
 
 // Título de sección estilizado
 export const StyledSectionTitle = styled(Typography)(({ theme }) => ({
-  fontSize: '1rem',
+  fontSize: FONT_SIZE.lg,
   fontWeight: 600,
   color: theme.palette.text.primary,
   marginBottom: theme.spacing(1),
@@ -142,7 +143,7 @@ export const StatusChip = ({ children, customcolor, ...props }) => {
         alignItems: 'center',
         gap: 1,
         padding: '2px 6px',
-        fontSize: '0.75rem',
+        fontSize: FONT_SIZE.sm,
         color: customcolor || 'text.secondary',
         height: 24,
         marginLeft: 1,

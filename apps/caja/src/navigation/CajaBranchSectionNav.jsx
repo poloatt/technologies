@@ -4,7 +4,6 @@ import {
   Card,
   CardActionArea,
   Chip,
-  Divider,
   Grid,
   Typography,
 } from '@mui/material';
@@ -88,21 +87,9 @@ export default function CajaBranchSectionNav({
     return pages.filter((page) => !exclude.has(page.id));
   }, [pages, isStrip, hubExcludePageIds]);
 
-  const { activePages, comingSoonPages } = useMemo(() => {
-    const active = [];
-    const soon = [];
-    const source = isStrip ? pages : hubPages;
-    source.forEach((page) => {
-      if (page.isUnderConstruction) soon.push(page);
-      else active.push(page);
-    });
-    return { activePages: active, comingSoonPages: soon };
-  }, [pages, hubPages, isStrip]);
-
   const usesHubCardLayout = !isStrip && (
     branchId === 'finanzas' || branchId === 'propiedades' || branchId === 'inventario'
   );
-  const splitComingSoonHub = usesHubCardLayout && comingSoonPages.length > 0;
   // Página principal (Finanzas): en desktop las secciones van en columna, a ancho completo.
   const stackHubSections = !isStrip && branchId === 'finanzas';
 
@@ -355,26 +342,6 @@ export default function CajaBranchSectionNav({
             </Box>
           ))}
         </Box>
-      ) : splitComingSoonHub ? (
-        <>
-          {renderSectionGroup(activePages)}
-          <Divider sx={{ my: 2.5 }} />
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{
-              display: 'block',
-              mb: 1.25,
-              fontWeight: 600,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              fontSize: '0.6875rem',
-            }}
-          >
-            Próximamente
-          </Typography>
-          {renderSectionGroup(comingSoonPages)}
-        </>
       ) : (
         renderSectionGroup(hubPages)
       )}

@@ -3,6 +3,7 @@ import { Button, Alert, Box } from '@mui/material';
 import { FORM_HEIGHTS } from '@shared/config/uiConstants';
 import { useMercadoPago } from '@shared/hooks/useMercadoPago';
 import { isMercadoPagoEnabled, getRedirectURI } from '@shared/config/mercadopago';
+import { FONT_SIZE } from '@shared/tipografia';
 
 // Intentar importar el logo de diferentes maneras
 let mercadopagoLogo;
@@ -53,7 +54,7 @@ export default function MercadoPagoConnectButton({ onSuccess, onError, fullWidth
         <Alert severity="warning">
           MercadoPago está deshabilitado en desarrollo.
         </Alert>
-        <Box sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
+        <Box sx={{ color: 'text.secondary', fontSize: FONT_SIZE.base }}>
           Para habilitar:
           <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
             <li>Agrega <code>?mpdev=1</code> a la URL</li>

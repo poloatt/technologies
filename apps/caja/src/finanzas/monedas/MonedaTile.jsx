@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -26,7 +25,7 @@ import {
   monedaSymbolSx,
   monedaValueSx,
 } from './monedaConstants';
-import { monedaDetailPath } from '../finanzasDeepLink';
+import { useCajaSetup } from '../../atta/useCajaSetup';
 import { useMonedaBalance } from './useMonedaBalance';
 
 function formatBalance(balance, showValues, loading) {
@@ -53,7 +52,7 @@ function MonedaTile({
   onDelete,
   onToggleActive,
 }) {
-  const navigate = useNavigate();
+  const { openSetup } = useCajaSetup();
   const { isMobile } = useResponsive();
   const { showValues } = useValuesVisibility();
   const monedaId = moneda.id || moneda._id;
@@ -72,7 +71,7 @@ function MonedaTile({
     e.stopPropagation();
     if (!isSelectable) return;
     if (onSelect) onSelect(monedaId);
-    else navigate(monedaDetailPath(monedaId));
+    else openSetup('monedas');
   };
 
   return (

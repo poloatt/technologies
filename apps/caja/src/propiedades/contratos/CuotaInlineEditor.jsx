@@ -2,6 +2,8 @@ import React from 'react';
 import { Box, Typography, Checkbox, InputBase } from '@mui/material';
 import { StyledCuotasChip } from '@shared/components/common/CommonFormStyles';
 import { calcularEstadoCuota } from '@shared/utils/contratoUtils';
+import { NEGATIVE_COLOR } from '@shared/config/uiConstants';
+import { FONT_SIZE } from '@shared/tipografia';
 
 const CuotaInlineEditor = ({
   cuota,
@@ -34,7 +36,7 @@ const CuotaInlineEditor = ({
   const colorVisual = cuota.estado === 'PAGADO'
     ? '#4caf50'
     : calcularEstadoCuota(cuota, formData) === 'VENCIDA'
-      ? '#f44336'
+      ? NEGATIVE_COLOR
       : '#ff9800';
 
   if (tipo === 'monto') {
@@ -47,7 +49,7 @@ const CuotaInlineEditor = ({
         type="number"
         disabled={!editable}
         inputProps={{ min: 0, step: 0.01, style: { width: 70, textAlign: 'right' } }}
-        sx={{ fontSize: '0.85rem', borderRadius: 0, border: editable ? '1px solid #444' : 'none', bgcolor: editable ? '#333' : 'transparent', color: 'white', px: 1, height: 28, ...sx }}
+        sx={{ fontSize: FONT_SIZE.base, borderRadius: 0, border: editable ? '1px solid #444' : 'none', bgcolor: editable ? '#333' : 'transparent', color: 'white', px: 1, height: 28, ...sx }}
       />
     );
   }
@@ -93,7 +95,7 @@ const CuotaInlineEditor = ({
         type="number"
         disabled={!editable}
         inputProps={{ min: 0, step: 0.01, style: { width: 70, textAlign: 'right' } }}
-        sx={{ fontSize: '0.85rem', borderRadius: 0, border: editable ? '1px solid #444' : 'none', bgcolor: editable ? '#333' : 'transparent', color: 'white', px: 1, height: 28 }}
+        sx={{ fontSize: FONT_SIZE.base, borderRadius: 0, border: editable ? '1px solid #444' : 'none', bgcolor: editable ? '#333' : 'transparent', color: 'white', px: 1, height: 28 }}
       />
       <StyledCuotasChip
         label={estadoVisual}

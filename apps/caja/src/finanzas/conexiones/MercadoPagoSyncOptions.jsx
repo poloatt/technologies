@@ -23,6 +23,8 @@ const HISTORIAL_MAX_TRAMOS = 120;
 const HISTORY_DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_SYNC_DAYS = 90;
 const HISTORY_CHUNK_DAYS = 58;
+/** Tope de tramos sin retiros que se vuelven a pedir en una corrida (cada uno es un reporte MP). */
+const REVISIONES_MAX = 3;
 
 function historyTarget(since = HISTORIAL_DESDE) {
   if (since && since !== HISTORIAL_DESDE) {
@@ -88,6 +90,11 @@ function formatDay(value) {
 
 function describeRun(historial) {
   if (!historial) return null;
+  if (historial.revision?.beginDate) {
+    return historial.revision.pendiente || historial.revision.cuotaAgotada
+      ? `Quedó pendiente la revisión de ${historial.revision.mesLabel} (sin retiros a CBU). Reintentá más tarde.`
+      : `Se volvió a importar ${historial.revision.mesLabel}, que había quedado sin retiros a CBU.`;
+  }
   if (historial.cuotaAgotada) {
     return `Cupo de Mercado Pago agotado en ${historial.mesLabel || 'el último mes'}. Se puede retomar.`;
   }
@@ -240,11 +247,14 @@ export default function MercadoPagoSyncOptions({
       last = recent;
     }
     let done = progressDoneFrom(historial, span);
+    let revisando = false;
+    let revisiones = 0;
     let cursorTime = historial?.cubiertoHasta ? new Date(historial.cubiertoHasta).getTime() : null;
     if (cursorTime != null && Number.isNaN(cursorTime)) cursorTime = null;
 
-    for (let step = 0; step < span.total; step += 1) {
-      if (cancelRef.current || done >= span.total) break;
+    // Con el recorrido completo igual se pide una vez: el backend puede revisar tramos sin retiros.
+    for (let step = 0; step < span.total + REVISIONES_MAX; step += 1) {
+      if (cancelRef.current || (done >= span.total && step > 0 && !revisando)) break;
       const current = span.months[Math.min(done, span.total - 1)];
       if (!current) break;
       if (!cancelRef.current) {
@@ -258,10 +268,18 @@ export default function MercadoPagoSyncOptions({
       last = result;
       const chunk = result?.resultado?.historial;
       if (!cancelRef.current) onSynced?.(result);
-      const finished = Boolean(chunk?.completo || chunk?.quedaHistorial === false);
+      // Una revisión vuelve a pedir un tramo ya cubierto: no mueve el cursor y se sigue.
+      revisando = Boolean(chunk?.revision?.beginDate);
+      const finished = !revisando && Boolean(chunk?.completo || chunk?.quedaHistorial === false);
       const halted = !chunk || finished || chunk.cuotaAgotada || chunk.pendiente;
       const nextTime = chunk?.cubiertoHasta ? new Date(chunk.cubiertoHasta).getTime() : NaN;
       const movedBack = Number.isFinite(nextTime) && (cursorTime == null || nextTime < cursorTime);
+      if (revisando && !halted) {
+        revisiones += 1;
+        if (!cancelRef.current) setFlight({ label: `Revisión ${chunk.revision.mesLabel}`, done, active: false });
+        if (revisiones >= REVISIONES_MAX) break;
+        continue;
+      }
       if (!halted && !movedBack) break;
       if (movedBack) cursorTime = nextTime;
       const covered = finished ? span.total : coveredCount(span.months, chunk?.cubiertoHasta);
