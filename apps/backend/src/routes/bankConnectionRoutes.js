@@ -108,6 +108,14 @@ router.post('/mercadopago/procesar-datos/:conexionId',
   }
 );
 
+router.put('/mercadopago/ancla/:conexionId',
+  mercadopagoLimiter,
+  (req, res) => {
+    const controller = new BankConnectionController();
+    controller.setAnclaSaldoMercadoPago(req, res);
+  }
+);
+
 router.post('/mercadopago/importar-csv/:conexionId',
   mercadopagoLimiter,
   (req, res) => {

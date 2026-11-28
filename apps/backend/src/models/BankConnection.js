@@ -92,7 +92,28 @@ const bankConnectionSchema = createSchema({
     reportePendiente: {
       beginDate: String,
       endDate: String,
-      solicitadoEn: Date
+      solicitadoEn: Date,
+      // Id del reporte que MP está generando: la próxima sync lo completa en vez de pedir otro.
+      reportId: String
+    },
+    // Rangos con salidas a CBU validadas (reporte de confianza + conciliación contra el ledger).
+    // Intervalos ya fusionados; lo que no está acá no se considera completo.
+    coberturaRetiros: [{
+      _id: false,
+      beginDate: String,
+      endDate: String,
+      reportId: String,
+      fuente: String,
+      validadoEn: Date,
+      releaseValidado: { type: Boolean, default: false }
+    }],
+    // Saldos reales cargados a mano en una fecha: anclan la conciliación del ledger.
+    anclaSaldo: {
+      fecha: Date,
+      dineroEnCuenta: Number,
+      reservado: Number,
+      invertido: Number,
+      cargadoEn: Date
     },
     // Cursor del historial pedido a mano. Solo retrocede; la sync diaria no lo toca.
     historial: {
@@ -134,6 +155,38 @@ const bankConnectionSchema = createSchema({
       saldoMp: Number,
       saldoLedger: Number,
       gapSaldo: Number,
+      // Brecha entre el ledger y el saldo real cargado a mano (ancla) a la fecha de la ancla.
+      anclaGap: {
+        fecha: Date,
+        dineroEnCuenta: Number,
+        ledger: Number,
+        gap: Number,
+        ok: Boolean
+      },
+      // Última conciliación de salidas a CBU (reporte de confianza vs ledger).
+      retiros: {
+        actualizadoEn: Date,
+        beginDate: String,
+        endDate: String,
+        reportId: String,
+        esperados: Number,
+        conciliados: Number,
+        faltantes: Number,
+        montoEsperado: Number,
+        validado: Boolean,
+        motivo: String,
+        // ok: true = saldo corrido y payouts coinciden; false = discrepancia; null = sin verificar.
+        release: {
+          ok: Boolean,
+          motivo: String,
+          reportId: String,
+          beginDate: String,
+          endDate: String,
+          saltosSaldo: Number,
+          soloSettlement: Number,
+          soloRelease: Number
+        }
+      },
       coberturaP2P: {
         type: String,
         enum: ['OK', 'VACIA', 'DESCONOCIDA'],

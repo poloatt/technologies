@@ -1,5 +1,6 @@
 import { BaseController } from './BaseController.js';
-import { Transacciones, Cuentas, Contactos } from '../models/index.js';
+import { Transacciones, Cuentas, Contactos, BankConnection } from '../models/index.js';
+import { resumenCoberturaRetiros } from '../services/mercadoPagoRetiros.js';
 import mongoose from 'mongoose';
 import { arMonthBounds, formatArDateKey, parseArDay } from '../utils/arDate.js';
 import { buildEstadoFilter } from '../utils/transaccionEstado.js';
@@ -910,8 +911,43 @@ class TransaccionesController extends BaseController {
         fechaCorte,
       });
 
+      // Salidas a CBU del período (siempre incluidas en el flujo) + qué parte del historial
+      // tiene esas salidas validadas. No se ocultan números: el aviso acompaña a los saldos.
+      let salidasBancarias = null;
+      let cobertura = null;
+      if (cuentaId) {
+        try {
+          const matchSalidas = {
+            ...query,
+            tipo: 'EGRESO',
+            'origen.metadata.movementKind': 'EXTERNAL_TRANSFER',
+          };
+          if (inicioPeriodo) matchSalidas.fecha = { ...(query.fecha || {}), $gte: inicioPeriodo };
+          const [salidas] = await this.Model.aggregate([
+            { $match: matchSalidas },
+            { $group: { _id: null, total: { $sum: montoEfectivo }, cantidad: { $sum: 1 } } },
+          ]);
+          salidasBancarias = {
+            total: Math.round((salidas?.total || 0) * 100) / 100,
+            cantidad: salidas?.cantidad || 0,
+          };
+          const conexionMp = await BankConnection.findOne({
+            cuenta: cuentaId,
+            usuario,
+            tipo: 'MERCADOPAGO',
+          })
+            .select({ mercadopago: 1 })
+            .lean();
+          if (conexionMp) cobertura = resumenCoberturaRetiros(conexionMp.mercadopago || {});
+        } catch (error) {
+          console.warn('No se pudo calcular cobertura de salidas a CBU:', error.message);
+        }
+      }
+
       res.json({
         ...saldos,
+        salidasBancarias,
+        cobertura,
         dineroEnCuenta: dineroEnCuenta.valor,
         dineroEnCuentaLedger: dineroEnCuenta.ledger,
         dineroEnCuentaFuente: dineroEnCuenta.fuente,

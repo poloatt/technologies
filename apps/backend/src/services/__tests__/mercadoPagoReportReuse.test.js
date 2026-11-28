@@ -58,11 +58,11 @@ describe('findRecentCoveringReport', () => {
 });
 
 describe('fetchSettlementMovements: reuso parcial ante timeout', () => {
-  function serviceCon(reusedRows) {
+  function serviceCon(reused) {
     const service = new MercadoPagoReportService({ accessToken: 'x', userId: 1 });
-    service.configureReport = async () => null;
+    service.configureReport = async () => ({ include_withdraw: true });
     service.reuseRecentCoveringReport = async () => null;
-    service.reuseExistingReports = async () => ({ rows: reusedRows, strictMatch: false });
+    service.reuseExistingReports = async () => reused;
     service.createReport = async () => ({ data: { id: 99 } });
     service.completeReport = async () => {
       throw new SettlementReportTimeoutError('timeout', { beginDate, endDate });
@@ -70,18 +70,93 @@ describe('fetchSettlementMovements: reuso parcial ante timeout', () => {
     return service;
   }
 
-  it('marca missingWithdrawals cuando los CSV reutilizados no traen retiros', async () => {
-    const result = await serviceCon([{ transactionType: 'SETTLEMENT' }])
-      .fetchSettlementMovements(beginDate, endDate);
+  it('deja el tramo pendiente con el id del reporte cuando el reuso no es de confianza', async () => {
+    const result = await serviceCon({
+      rows: [{ transactionType: 'SETTLEMENT' }],
+      strictMatch: false,
+      trustedCoverage: false
+    }).fetchSettlementMovements(beginDate, endDate);
+    expect(result.pending).toBe(true);
+    expect(result.reportId).toBe('99');
     expect(result.partial).toBe(true);
     expect(result.missingWithdrawals).toBe(true);
   });
 
-  it('no marca missingWithdrawals si el reuso trae salidas a CBU', async () => {
-    const result = await serviceCon([{ transactionType: 'SETTLEMENT' }, { transactionType: 'PAYOUTS' }])
-      .fetchSettlementMovements(beginDate, endDate);
-    expect(result.partial).toBe(true);
-    expect(result.missingWithdrawals).toBe(false);
+  it('un reuso con filas de PAYOUTS pero sin cobertura de confianza sigue pendiente', async () => {
+    const result = await serviceCon({
+      rows: [{ transactionType: 'SETTLEMENT' }, { transactionType: 'PAYOUTS' }],
+      strictMatch: false,
+      trustedCoverage: false
+    }).fetchSettlementMovements(beginDate, endDate);
+    expect(result.pending).toBe(true);
+    expect(result.missingWithdrawals).toBe(true);
+  });
+
+  it('si los reportes de confianza cubren el rango, devuelve resultado completo y validado', async () => {
+    const ventanas = [{ beginDate, endDate, reportId: '5', fuente: 'settlement' }];
+    const result = await serviceCon({
+      rows: [{ transactionType: 'PAYOUTS' }],
+      strictMatch: false,
+      trustedCoverage: true,
+      ventanas
+    }).fetchSettlementMovements(beginDate, endDate);
+    expect(result.pending).toBeUndefined();
+    expect(result.trusted).toBe(true);
+    expect(result.ventanasValidadas).toEqual(ventanas);
+  });
+
+  it('un reporte nuevo manual reciente se marca de confianza y valida su ventana', async () => {
+    const service = serviceCon(null);
+    service.completeReport = async () => ({
+      rows: [{ transactionType: 'PAYOUTS' }],
+      fileName: 'r.csv',
+      total: 1,
+      report: {
+        id: 99,
+        created_from: 'manual',
+        begin_date: beginDate,
+        end_date: endDate,
+        date_created: new Date().toISOString()
+      }
+    });
+    const result = await service.fetchSettlementMovements(beginDate, endDate);
+    expect(result.trusted).toBe(true);
+    expect(result.ventanasValidadas).toHaveLength(1);
+  });
+
+  it('sin include_withdraw activo un reporte nuevo no es de confianza', async () => {
+    const service = serviceCon(null);
+    service.configureReport = async () => ({ include_withdraw: false });
+    service.completeReport = async () => ({
+      rows: [],
+      fileName: 'r.csv',
+      total: 0,
+      report: {
+        id: 99,
+        created_from: 'manual',
+        begin_date: beginDate,
+        end_date: endDate,
+        date_created: new Date().toISOString()
+      }
+    });
+    const result = await service.fetchSettlementMovements(beginDate, endDate);
+    expect(result.trusted).toBe(false);
+    expect(result.ventanasValidadas).toEqual([]);
+  });
+
+  it('completa un pendiente usando su reportId guardado', async () => {
+    const service = serviceCon(null);
+    let recibido = null;
+    service.completeReport = async (b, e, opts) => {
+      recibido = opts;
+      return { rows: [], fileName: 'r.csv', total: 0, report: null };
+    };
+    const result = await service.fetchSettlementMovements(beginDate, endDate, {
+      pending: { beginDate, endDate, reportId: '104349442', solicitadoEn: new Date().toISOString() }
+    });
+    expect(recibido.reportId).toBe('104349442');
+    expect(result.fromPending).toBe(true);
+    expect(result.trusted).toBe(false);
   });
 });
 

@@ -30,6 +30,7 @@ import {
 } from './transaccionesPeriodUtils';
 import { useTransaccionesPeriodStats } from './useTransaccionesPeriodStats';
 import PeriodControl from './PeriodPicker';
+import AvisoSalidasCbu from './AvisoSalidasCbu';
 
 const EMPTY_MONEDA = {
   monedaId: null,
@@ -292,6 +293,14 @@ export default function TransaccionesFlujoVisual({
         </Box>
       )}
       {body}
+      {dense ? (
+        <AvisoSalidasCbu
+          cobertura={saldos?.cobertura}
+          salidasBancarias={saldos?.salidasBancarias}
+          simbolo={simbolo}
+          showValues={showValues}
+        />
+      ) : null}
     </Box>
   );
 }

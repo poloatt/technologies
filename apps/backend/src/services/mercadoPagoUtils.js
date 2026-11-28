@@ -2003,56 +2003,6 @@ function startOfArDay(date) {
  * Si llega un `pendingRange` (tramo pendiente anterior), lo reintenta con sus mismas fechas.
  * Null cuando el objetivo ya está adentro de lo cubierto.
  */
-/** Días sin una sola salida a CBU, con entradas bancarias en el medio, para sospechar un hueco. */
-export const HUECO_RETIROS_MIN_DIAS = 45;
-
-function mismoTramo(a, b) {
-  return a?.beginDate && b?.beginDate
-    && new Date(a.beginDate).getTime() === new Date(b.beginDate).getTime()
-    && new Date(a.endDate).getTime() === new Date(b.endDate).getTime();
-}
-
-/**
- * Tramos ya cubiertos que probablemente se importaron sin retiros (CVU→CBU): entre dos
- * salidas bancarias pasan más de `minDias` y en el medio sí entraron transferencias.
- * Pasa cuando un CSV reutilizado no traía `include_withdraw`. Cada hueco se parte en
- * tramos iguales de hasta `chunkDays` (lo máximo que arma MP) y se omiten los ya `revisados`.
- * movimientos: [{ fecha, tipo: 'INGRESO' | 'EGRESO' }] de transferencias bancarias.
- */
-export function tramosSinRetiros(movimientos = [], {
-  minDias = HUECO_RETIROS_MIN_DIAS,
-  chunkDays = HISTORY_CHUNK_DAYS,
-  revisados = [],
-} = {}) {
-  const movs = (movimientos || [])
-    .map((m) => ({ t: new Date(m.fecha).getTime(), tipo: m.tipo }))
-    .filter((m) => Number.isFinite(m.t))
-    .sort((a, b) => a.t - b.t);
-  const salidas = movs.filter((m) => m.tipo === 'EGRESO').map((m) => m.t);
-  const tramos = [];
-  for (let i = 1; i < salidas.length; i += 1) {
-    const desde = salidas[i - 1];
-    const hasta = salidas[i];
-    if (hasta - desde < minDias * HISTORY_DAY_MS) continue;
-    const huboEntradas = movs.some((m) => m.tipo === 'INGRESO' && m.t > desde && m.t < hasta);
-    if (!huboEntradas) continue;
-    // Partes iguales: un hueco de 63 días son dos reportes de ~32, no uno de 58 y otro de 5.
-    const partes = Math.ceil((hasta - desde) / (chunkDays * HISTORY_DAY_MS));
-    const paso = Math.ceil((hasta - desde) / partes);
-    for (let begin = desde; begin < hasta; begin += paso) {
-      const end = Math.min(hasta, begin + paso);
-      const tramo = {
-        beginDate: new Date(begin).toISOString(),
-        endDate: new Date(end).toISOString(),
-        mesLabel: `${formatHistoryDay(new Date(begin))} – ${formatHistoryDay(new Date(end))}`,
-      };
-      if (!(revisados || []).some((r) => mismoTramo(r, tramo))) tramos.push(tramo);
-    }
-  }
-  // El más reciente primero: es el que más pesa en el saldo de hoy.
-  return tramos.reverse();
-}
-
 export function nextHistoryChunk({
   targetSince,
   coveredUntil = null,

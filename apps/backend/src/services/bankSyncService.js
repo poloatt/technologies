@@ -15,7 +15,6 @@ import {
   dailySyncSince,
   nextHistoryChunk,
   parseHistorySince,
-  tramosSinRetiros,
   normalizeAccountMovement,
   esTipoTransferenciaMovimiento,
   esTransferenciaPago,
@@ -33,6 +32,18 @@ import {
   tipoDeCambioUsd
 } from './mercadoPagoUtils.js';
 import { MercadoPagoReportService } from './mercadoPagoReportService.js';
+import { calcularAnclaGap } from './mercadoPagoAnclaService.js';
+import {
+  MercadoPagoReleaseReportService,
+  validarRangoConRelease
+} from './mercadoPagoReleaseReportService.js';
+import {
+  tramosSinCobertura,
+  inicioSettlementRapido,
+  extraerRetiros,
+  conciliarRetiros,
+  agregarCobertura
+} from './mercadoPagoRetiros.js';
 import { MercadoPagoActivitiesService } from './mercadoPagoActivitiesService.js';
 import {
   createContactoSyncCache,
@@ -51,6 +62,9 @@ function pendingInsideWindow(pending, beginDate, endDate) {
   if (to < windowFrom || from > windowTo) return undefined;
   return pending;
 }
+
+// Un tramo revisado que no se pudo validar no se vuelve a pedir enseguida (evita trabar el historial).
+const REVISION_REINTENTO_MS = 12 * 60 * 60 * 1000;
 
 function revisadosDe(historial) {
   return (historial?.revisados || [])
@@ -437,18 +451,180 @@ export class BankSyncService {
     return data.access_token;
   }
 
-  /** Próximo tramo ya importado que quedó sin salidas a CBU (ver `tramosSinRetiros`), o null. */
-  async siguienteTramoSinRetirosMp(cuenta, historial = {}) {
-    if (!cuenta?._id) return null;
-    const transferencias = await Transacciones.find({
-      cuenta: cuenta._id,
-      estado: { $in: ['PAGADO', 'COMPLETADA'] },
-      'origen.metadata.movementKind': 'EXTERNAL_TRANSFER',
+  /**
+   * Próximo tramo ya importado cuyas salidas a CBU nunca se validaron (fuera de la cobertura
+   * registrada), o null. El más reciente primero. Un tramo revisado hace poco sin lograr validarlo
+   * se saltea un rato para no trabar el recorrido hacia atrás.
+   */
+  siguienteTramoSinCoberturaMp(bankConnection, historial = {}, { now = new Date(), minDesde = null } = {}) {
+    const cobertura = bankConnection?.mercadopago?.coberturaRetiros || [];
+    let desde = historial.cubiertoHasta ? new Date(historial.cubiertoHasta) : dailySyncSince(now);
+    if (minDesde && new Date(minDesde).getTime() > desde.getTime()) desde = new Date(minDesde);
+    const recientes = revisadosDe(historial).filter(
+      (r) => r.revisadoEn && now.getTime() - new Date(r.revisadoEn).getTime() < REVISION_REINTENTO_MS
+    );
+    const tramos = tramosSinCobertura(cobertura, { desde, hasta: now }).filter(
+      (t) =>
+        !recientes.some(
+          (r) =>
+            new Date(r.beginDate).getTime() < new Date(t.endDate).getTime() &&
+            new Date(r.endDate).getTime() > new Date(t.beginDate).getTime()
+        )
+    );
+    return tramos[0] || null;
+  }
+
+  /** Ids (transaccionId o paymentId) de Mercado Pago presentes en el ledger de la cuenta. */
+  async idsMpEnLedger(cuentaId, ids = []) {
+    const keys = idsMp(ids);
+    if (!cuentaId || !keys.length) return new Set();
+    const numeric = keys.filter((key) => /^\d+$/.test(key)).map((key) => Number(key));
+    const docs = await Transacciones.find({
+      cuenta: cuentaId,
+      'origen.tipo': { $in: MP_ORIGEN_TIPOS },
+      $or: [
+        { 'origen.transaccionId': { $in: keys } },
+        { 'origen.metadata.paymentId': { $in: [...keys, ...numeric] } },
+      ],
     })
-      .select({ fecha: 1, tipo: 1 })
+      .select({ 'origen.transaccionId': 1, 'origen.metadata.paymentId': 1 })
       .lean();
-    const [tramo] = tramosSinRetiros(transferencias, { revisados: revisadosDe(historial) });
-    return tramo || null;
+    const presentes = new Set();
+    for (const doc of docs) {
+      if (doc.origen?.transaccionId) presentes.add(String(doc.origen.transaccionId));
+      if (doc.origen?.metadata?.paymentId) presentes.add(String(doc.origen.metadata.paymentId));
+    }
+    return presentes;
+  }
+
+  /**
+   * Concilia los retiros (CVU→CBU) del reporte de confianza contra el ledger y, si todo coincide,
+   * suma las ventanas del reporte a la cobertura validada. Si falta alguno reingesta una vez.
+   * Nunca registra cobertura con un reporte que no es de confianza ni con faltantes.
+   */
+  /**
+   * Segunda fuente independiente (reporte de liberaciones): saldo corrido sin saltos y cada
+   * payout del settlement cruzado con uno de la liberación. Detrás de MP_RELEASE_VALIDACION.
+   * ok=true valida, ok=false es discrepancia, ok=null no se pudo verificar (sin penalizar).
+   */
+  async validarConRelease({ accessToken, bankConnection, desde, hasta, retiros }) {
+    if (process.env.MP_RELEASE_VALIDACION !== 'true') return null;
+    try {
+      const prev = bankConnection.mercadopago?.diagnostico?.retiros?.release;
+      const mismoRango =
+        prev?.reportId && prev.ok == null && prev.beginDate === desde && prev.endDate === hasta;
+      const service = new MercadoPagoReleaseReportService({ accessToken });
+      const res = await service.fetchRange(desde, hasta, {
+        reportId: mismoRango ? prev.reportId : null,
+        maxPollAttempts: 8
+      });
+      if (res.pending) {
+        return {
+          ok: null,
+          motivo: 'Reporte de liberaciones en generación',
+          reportId: res.reportId != null ? String(res.reportId) : null,
+          beginDate: desde,
+          endDate: hasta
+        };
+      }
+      const v = validarRangoConRelease({ releaseRows: res.rows, retirosSettlement: retiros });
+      const motivo = v.ok
+        ? null
+        : !v.saldo.ok
+          ? `Saldo corrido con ${v.saldo.saltos?.length || 0} saltos (${v.saldo.motivo || 'inconsistente'})`
+          : `Payouts sin cruzar: ${v.cruce.soloSettlement?.length || 0} solo en settlement, ${v.cruce.soloRelease?.length || 0} solo en liberaciones`;
+      return {
+        ok: v.ok,
+        motivo,
+        reportId: res.reportId != null ? String(res.reportId) : null,
+        beginDate: desde,
+        endDate: hasta,
+        saltosSaldo: v.saldo.saltos?.length || 0,
+        soloSettlement: v.cruce.soloSettlement?.length || 0,
+        soloRelease: v.cruce.soloRelease?.length || 0
+      };
+    } catch (error) {
+      console.warn('[MP] Validación con reporte de liberaciones no disponible:', error.message);
+      return { ok: null, motivo: error.message, beginDate: desde, endDate: hasta };
+    }
+  }
+
+  async conciliarYRegistrarRetiros({ bankConnection, cuenta, settlementReport, movimientos, movimientosMerged, mpUserId, accessToken }) {
+    const actual = bankConnection.mercadopago?.coberturaRetiros;
+    const coberturaActual = (actual?.toObject?.() || actual || []).map((t) => ({ ...t }));
+    if (!settlementReport?.trusted || !(settlementReport.ventanasValidadas || []).length) {
+      return {
+        validado: false,
+        cobertura: coberturaActual,
+        motivo: settlementReport?.pending
+          ? 'Reporte en generación'
+          : 'El reporte usado no es de confianza (puede no incluir retiros)'
+      };
+    }
+
+    const retiros = extraerRetiros(movimientos);
+    let conciliacion = conciliarRetiros(retiros, await this.idsMpEnLedger(cuenta._id, retiros.map((r) => r.id)));
+    if (!conciliacion.ok) {
+      const faltantes = new Set(conciliacion.faltantes.map((f) => String(f.id)));
+      const filas = (movimientosMerged || []).filter((m) => faltantes.has(String(m.sourceId || m.id)));
+      console.warn(`[MP] Retiros del reporte sin ledger: ${faltantes.size}; reingestando`);
+      await this.procesarMovimientosReporte(filas, bankConnection, cuenta, mpUserId);
+      conciliacion = conciliarRetiros(retiros, await this.idsMpEnLedger(cuenta._id, retiros.map((r) => r.id)));
+    }
+
+    const ventanas = settlementReport.ventanasValidadas;
+    const desde = ventanas.map((v) => v.beginDate).sort()[0];
+    const hasta = ventanas.map((v) => v.endDate).sort().slice(-1)[0];
+    const diagnostico = {
+      actualizadoEn: new Date(),
+      beginDate: desde,
+      endDate: hasta,
+      reportId: settlementReport.report?.id != null ? String(settlementReport.report.id) : ventanas[0]?.reportId || null,
+      esperados: conciliacion.esperados,
+      conciliados: conciliacion.conciliados,
+      faltantes: conciliacion.faltantes.length,
+      montoEsperado: conciliacion.montoEsperado,
+      validado: conciliacion.ok,
+      motivo: conciliacion.ok
+        ? null
+        : `Faltan en el ledger ${conciliacion.faltantes.length} retiros: ${conciliacion.faltantes
+            .slice(0, 5)
+            .map((f) => f.id)
+            .join(', ')}`
+    };
+
+    if (!conciliacion.ok) {
+      return { validado: false, cobertura: coberturaActual, diagnostico, motivo: diagnostico.motivo, conciliacion };
+    }
+
+    // Segunda fuente (opcional): una discrepancia con el reporte de liberaciones bloquea la
+    // validación; si no se pudo verificar, queda anotado y se valida solo por settlement.
+    const release = await this.validarConRelease({
+      accessToken,
+      bankConnection,
+      desde,
+      hasta,
+      retiros: retiros.filter((r) => !r.cancel)
+    });
+    if (release) diagnostico.release = release;
+    if (release?.ok === false) {
+      diagnostico.validado = false;
+      diagnostico.motivo = `El reporte de liberaciones no coincide: ${release.motivo}`;
+      return { validado: false, cobertura: coberturaActual, diagnostico, motivo: diagnostico.motivo, conciliacion };
+    }
+
+    let cobertura = coberturaActual;
+    for (const v of ventanas) {
+      cobertura = agregarCobertura(cobertura, {
+        beginDate: v.beginDate,
+        endDate: v.endDate,
+        reportId: v.reportId || diagnostico.reportId,
+        fuente: v.fuente || 'settlement',
+        validadoEn: new Date(),
+        releaseValidado: release?.ok === true
+      });
+    }
+    return { validado: true, cobertura, diagnostico, conciliacion };
   }
 
   // Sincronizar transacciones usando MercadoPago (wallet personal AR)
@@ -525,8 +701,9 @@ export class BankSyncService {
         } else if (storedHist.inicioActividad) {
           inicioActividadIso = storedHist.inicioActividad;
         }
-        // Antes de seguir hacia atrás, volver a pedir los tramos ya cubiertos que quedaron sin retiros.
-        const revision = await this.siguienteTramoSinRetirosMp(cuenta, storedHist);
+        // Antes de seguir hacia atrás, volver a pedir los tramos ya importados cuyas salidas a CBU
+        // nunca se validaron (fuera de la cobertura registrada).
+        const revision = this.siguienteTramoSinCoberturaMp(bankConnection, storedHist, { minDesde: parsed });
         historyChunk = revision
           ? {
             objetivo: parsed.toISOString(),
@@ -654,12 +831,21 @@ export class BankSyncService {
       }
 
       let settlementPending = false;
+      let settlementReport = null;
       try {
         const reportService = new MercadoPagoReportService({
           accessToken: userAccessToken,
           userId
         });
-        const beginDate = fechaDesde.toISOString();
+        // Sync rápida: si la cobertura validada ya llega casi hasta ahora, el reporte pide solo la
+        // cola (con un día de solape) en vez de 90 días. Pagos y movimientos de cuenta mantienen
+        // la ventana completa.
+        const beginDate = historialMode
+          ? fechaDesde.toISOString()
+          : inicioSettlementRapido(bankConnection.mercadopago?.coberturaRetiros || [], {
+              windowBegin: fechaDesde,
+              now: fechaHasta
+            });
         const endDate = fechaHasta.toISOString();
         const storedPending = bankConnection.mercadopago?.reportePendiente;
         const pending = pendingInsideWindow(storedPending, beginDate, endDate);
@@ -673,21 +859,22 @@ export class BankSyncService {
             : {}),
         });
 
+        settlementReport = report;
         totalCsvRows = report.total || report.rows?.length || 0;
 
         if (report.quotaExceeded) {
           rememberHistory({ pendiente: true, cuotaAgotada: true });
           movimientos = report.rows || [];
-          const missingW = report.missingWithdrawals === true;
+          const missingW = report.missingWithdrawals !== false;
           const quotaMsg = missingW
-            ? 'Cupo de reportes MP agotado: los CSV reutilizados se generaron sin retiros (include_withdraw). Reintentá mañana o importá CSV Account Money con retiros desde MP.'
+            ? 'Cupo de reportes MP agotado: no hay un reporte con salidas a CBU que cubra este tramo (los reutilizados pueden no incluirlas). Reintentá mañana: el tramo queda sin validar.'
             : movimientos.length > 0
               ? `Cupo de reportes MP agotado: se reutilizaron ${movimientos.length} movimientos ya generados. Podés importar CSV o reintentar más tarde.`
               : 'Cupo de reportes MP agotado (máximo de reportes). Importá el CSV desde Mercado Pago o reintentá más tarde.';
           bankConnection.mercadopago = {
             ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
             syncParcial: true,
-            reportePendiente: undefined,
+            // No se pierde el reporte que MP ya está generando: la próxima sync lo completa.
             ultimoErrorSettlement: quotaMsg
           };
           await bankConnection.save();
@@ -708,7 +895,8 @@ export class BankSyncService {
             reportePendiente: {
               beginDate: report.beginDate || beginDate,
               endDate: report.endDate || endDate,
-              solicitadoEn: pending?.solicitadoEn || new Date()
+              solicitadoEn: pending?.solicitadoEn || new Date(),
+              reportId: report.reportId || pending?.reportId || undefined
             },
             ultimoErrorSettlement:
               'Reporte Account Money en generación. Se completará en la próxima sincronización o podés importar CSV manual.'
@@ -722,16 +910,19 @@ export class BankSyncService {
           console.warn(`⚠️ Reporte settlement pendiente; importados parcialmente: ${movimientos.length}`);
         } else {
           movimientos = report.rows || [];
-          // Reutilizar CSV viejos sin retiros deja el tramo sin salidas a CBU: no darlo por cubierto.
-          const sinRetiros = Boolean(report.partial && report.missingWithdrawals);
+          // Solo un reporte de confianza valida las salidas a CBU del tramo. Cualquier otro caso
+          // (reporte sin retiros, reuso viejo) se importa pero el tramo queda sin validar.
+          const sinRetiros = report.trusted !== true;
           const partialMsg = sinRetiros
-            ? 'Settlement parcial: los reportes reutilizados no traen retiros (CBU). El tramo queda pendiente.'
+            ? 'Settlement sin validar: el reporte usado no garantiza las salidas a CBU. El tramo queda sin validar.'
             : 'Settlement parcial: se reutilizaron reportes existentes.';
+          const cur = bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {};
           bankConnection.mercadopago = {
-            ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
-            syncParcial: Boolean(report.partial),
-            ultimoErrorSettlement: report.partial ? partialMsg : undefined,
-            reportePendiente: undefined
+            ...cur,
+            syncParcial: Boolean(report.partial) || sinRetiros,
+            ultimoErrorSettlement: report.partial || sinRetiros ? partialMsg : undefined,
+            // Solo se descarta el puntero si esta corrida lo resolvió (o venció).
+            ...(pending ? { reportePendiente: undefined } : {})
           };
           await bankConnection.save();
           if (sinRetiros) {
@@ -776,7 +967,10 @@ export class BankSyncService {
       // En modo histórico normalmente el settlement con include_withdraw ya trae retiros.
       // Pero si dio 429 y reutilizó CSV viejo sin retiros, usamos activities_withdraw como respaldo
       // para recuperar las transferencias salientes CVU→CBU del tramo.
-      const runActivitiesWithdraw = !historialMode || settlementQuotaMissingW;
+      // activities_withdraw ya no está en el camino crítico: las salidas a CBU salen del settlement
+      // de confianza y se concilian contra el ledger. Queda opt-in (MP_ACTIVITIES_WITHDRAW=true)
+      // solo para enriquecer con el CBU destino.
+      const runActivitiesWithdraw = process.env.MP_ACTIVITIES_WITHDRAW === 'true';
       if (!runActivitiesWithdraw) {
         if (settlementBlocked) {
           console.warn('[MP] Historial: settlement pendiente/error; el tramo queda pendiente.');
@@ -865,6 +1059,32 @@ export class BankSyncService {
       );
       transaccionesNuevas += movResult.nuevas;
       transaccionesActualizadas += movResult.actualizadas;
+
+      // Salidas a CBU: conciliar reporte de confianza vs ledger y registrar el tramo validado.
+      let validacionRetiros = { validado: false, cobertura: [], motivo: 'Sin reporte de confianza' };
+      try {
+        validacionRetiros = await this.conciliarYRegistrarRetiros({
+          bankConnection,
+          cuenta,
+          settlementReport,
+          movimientos,
+          movimientosMerged,
+          mpUserId,
+          accessToken: userAccessToken
+        });
+      } catch (error) {
+        console.error('⚠️ Conciliación de retiros falló:', error.message);
+        validacionRetiros = { validado: false, cobertura: [], motivo: error.message };
+      }
+      if (validacionRetiros.validado) {
+        console.log('✅ Salidas a CBU validadas:', {
+          desde: validacionRetiros.diagnostico?.beginDate,
+          hasta: validacionRetiros.diagnostico?.endDate,
+          retiros: validacionRetiros.conciliacion?.esperados
+        });
+      } else {
+        console.warn('⚠️ Salidas a CBU sin validar:', validacionRetiros.motivo);
+      }
 
       // Solo actualizar el saldo reportado de la cuenta en sync rápido cuando la API
       // de balance responde OK. Nunca pisarlo con sumas parciales de ventana ni en sync histórico.
@@ -964,7 +1184,7 @@ export class BankSyncService {
       const coberturaP2P =
         transferenciasP2P > 0 || (movementKinds.P2P_TRANSFER || 0) > 0 ? 'OK' : 'VACIA';
       // Salidas CVU→CBU = PAYOUTS/WITHDRAWAL en settlement (no confundir con Debin ingreso)
-      const coberturaBancarias = settlementHasBankOut || transferenciasActivities > 0
+      const coberturaBancarias = settlementHasBankOut || transferenciasActivities > 0 || validacionRetiros.validado
         ? 'OK'
         : transferenciasBancarias > 0
           ? 'SOLO_ENTRADA'
@@ -985,13 +1205,37 @@ export class BankSyncService {
           ? ` Posible hueco de ledger ≈ ${gapSaldo} (saldo MP ${balance.available} vs flujo ${saldoLedger}).`
           : '';
 
+      // Ancla de saldo real: la brecha contra el ledger a esa fecha delata movimientos faltantes.
+      let anclaGap = bankConnection.mercadopago?.diagnostico?.anclaGap || null;
+      const ancla = bankConnection.mercadopago?.anclaSaldo;
+      if (ancla?.dineroEnCuenta != null && ancla?.fecha) {
+        try {
+          const calculada = await calcularAnclaGap({
+            usuarioId: bankConnection.usuario,
+            cuentaId: bankConnection.cuenta,
+            ancla: ancla.toObject?.() || ancla
+          });
+          if (calculada) anclaGap = calculada;
+        } catch (error) {
+          console.warn('⚠️ No se pudo calcular la brecha del ancla de saldo:', error.message);
+        }
+      }
+      const anclaDesalineada = Boolean(anclaGap && anclaGap.ok === false);
+
       const syncParcial =
         settlementPending ||
         errores.some((e) => e.tipo === 'settlement_report') ||
         (coberturaP2P === 'VACIA' && gapSaldo != null && Math.abs(gapSaldo) >= 50) ||
-        (coberturaBancarias === 'VACIA' && !settlementHasBankOut);
+        !validacionRetiros.validado ||
+        anclaDesalineada;
 
       let ultimoError = bankConnection.mercadopago?.ultimoErrorSettlement;
+      if (!validacionRetiros.validado && !ultimoError) {
+        ultimoError = `Salidas a CBU sin validar en este tramo: ${validacionRetiros.motivo || 'sin detalle'}.`;
+      }
+      if (anclaDesalineada && !ultimoError) {
+        ultimoError = `El ledger difiere ${anclaGap.gap} del saldo real anclado al ${new Date(anclaGap.fecha).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}.`;
+      }
       if (settlementHasBankOut || coberturaBancarias === 'OK') {
         if (ultimoError && /activities_withdraw/i.test(String(ultimoError))) {
           ultimoError = undefined;
@@ -1027,11 +1271,23 @@ export class BankSyncService {
         sinMovimientos: sinMovimientosEnTramo,
       });
 
+      const mpActual = bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {};
+      const diagPrev = mpActual.diagnostico || {};
       bankConnection.mercadopago = {
-        ...(bankConnection.mercadopago?.toObject?.() || bankConnection.mercadopago || {}),
+        ...mpActual,
         syncParcial,
         ultimoErrorSettlement: syncParcial ? ultimoError : undefined,
+        ...(validacionRetiros.validado ? { coberturaRetiros: validacionRetiros.cobertura } : {}),
         diagnostico: {
+          ...(anclaGap ? { anclaGap } : {}),
+          retiros:
+            validacionRetiros.diagnostico ||
+            {
+              ...(diagPrev.retiros || {}),
+              actualizadoEn: new Date(),
+              validado: false,
+              motivo: validacionRetiros.motivo || null
+            },
           actualizadoEn: new Date(),
           transferenciasP2P,
           transferenciasBancarias,
@@ -1092,6 +1348,7 @@ export class BankSyncService {
           balance,
           errores,
           reportePendiente: bankConnection.mercadopago?.reportePendiente || null,
+          retiros: validacionRetiros.diagnostico || null,
           diagnostico: bankConnection.mercadopago?.diagnostico || null
         }
       };

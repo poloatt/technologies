@@ -317,9 +317,12 @@ class BankConnectionController extends BaseController {
             })
           : 'la fecha pedida';
         if (historial.revision?.beginDate) {
+          const retirosDiag = resultado?.detalles?.retiros;
           message = historial.revision.pendiente
-            ? `La revisión de ${historial.revision.mesLabel} (tramo sin retiros a CBU) quedó pendiente. Reintentá más tarde.`
-            : `Se volvió a importar ${historial.revision.mesLabel}, que había quedado sin retiros a CBU.`;
+            ? `La validación de salidas a CBU de ${historial.revision.mesLabel} quedó pendiente (reporte en generación o cupo). Reintentá más tarde.`
+            : retirosDiag?.validado
+              ? `Salidas a CBU de ${historial.revision.mesLabel} validadas (${retirosDiag.conciliados}/${retirosDiag.esperados} retiros conciliados).`
+              : `Se revisó ${historial.revision.mesLabel} pero sus salidas a CBU siguen sin validar${retirosDiag?.motivo ? `: ${retirosDiag.motivo}` : ''}.`;
         } else if (resultado.historialCompleto || historial.completo) {
           message = `El historial ya llega hasta el ${objetivoTxt}.`;
         } else if (historial.cuotaAgotada) {
@@ -878,6 +881,59 @@ class BankConnectionController extends BaseController {
   }
 
   // POST /api/bankconnections/mercadopago/procesar-datos/:conexionId
+  // PUT /api/bankconnections/mercadopago/ancla/:conexionId
+  // Carga el saldo real de un día (dinero en cuenta, reservado, invertido) como punto fijo para
+  // detectar movimientos faltantes en el ledger. Devuelve la brecha contra el ledger a esa fecha.
+  async setAnclaSaldoMercadoPago(req, res) {
+    try {
+      const { conexionId } = req.params;
+      const conexion = await BankConnection.findOne({
+        _id: conexionId,
+        usuario: req.user.id,
+        tipo: 'MERCADOPAGO'
+      });
+      if (!conexion) {
+        return res.status(404).json({ message: 'Conexión no encontrada' });
+      }
+
+      const { normalizarAncla, calcularAnclaGap } = await import('../services/mercadoPagoAnclaService.js');
+      const { ancla, error } = normalizarAncla(req.body || {});
+      if (error) {
+        return res.status(400).json({ message: error });
+      }
+
+      const anclaGap = await calcularAnclaGap({
+        usuarioId: req.user.id,
+        cuentaId: conexion.cuenta,
+        ancla
+      });
+
+      const actual = conexion.mercadopago?.toObject?.() || conexion.mercadopago || {};
+      conexion.mercadopago = {
+        ...actual,
+        anclaSaldo: ancla,
+        diagnostico: {
+          ...(actual.diagnostico || {}),
+          ...(anclaGap ? { anclaGap } : {})
+        }
+      };
+      await conexion.save();
+
+      res.json({
+        message: anclaGap
+          ? anclaGap.ok
+            ? 'Ancla guardada: el ledger coincide con el saldo real.'
+            : `Ancla guardada: el ledger difiere ${anclaGap.gap} del saldo real. Probablemente falten movimientos.`
+          : 'Ancla guardada; no se pudo calcular la brecha todavía.',
+        anclaSaldo: ancla,
+        anclaGap
+      });
+    } catch (error) {
+      console.error('Error guardando ancla de saldo MP:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  }
+
   async procesarDatosMercadoPago(req, res) {
     try {
       const { conexionId } = req.params;

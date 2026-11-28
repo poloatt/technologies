@@ -1,6 +1,13 @@
 import fetch from 'node-fetch';
 import { mpAuthHeaders } from './mercadoPagoUtils.js';
 import { parseSettlementCsv } from './mercadoPagoCsvParser.js';
+import {
+  esReporteConfiable,
+  fusionarCobertura,
+  coberturaCubre,
+  ventanaValidada,
+  esTipoRetiro
+} from './mercadoPagoRetiros.js';
 
 const MP_BASE = 'https://api.mercadopago.com';
 
@@ -65,6 +72,37 @@ function reportMatchesRange(report, beginDate, endDate) {
 
 function reportGeneratedAt(report) {
   return new Date(report?.generation_date || report?.last_modified || 0).getTime() || 0;
+}
+
+/** Subconjunto del metadato de MP que necesitan la sync y los tests. */
+export function reportMeta(report) {
+  if (!report) return null;
+  return {
+    id: report.id != null ? String(report.id) : null,
+    file_name: reportFileName(report),
+    created_from: report.created_from || null,
+    begin_date: report.begin_date || null,
+    end_date: report.end_date || null,
+    date_created: report.date_created || report.generation_date || report.last_modified || null
+  };
+}
+
+const REUSE_BEGIN_TOLERANCE_MS = 24 * 60 * 60 * 1000;
+const MAX_REUSE_REPORTS = 40;
+
+/**
+ * Ventanas que un conjunto de reportes valida (solo los de confianza), ya fusionadas.
+ * Cada ventana llega hasta cuando se generó el reporte, nunca más allá de su fin.
+ */
+export function ventanasDeConfianza(reports = [], { trustedSince, trustedIds, now = Date.now() } = {}) {
+  const opciones = { ...(trustedSince ? { trustedSince } : {}), ...(trustedIds ? { trustedIds } : {}) };
+  const tramos = [];
+  for (const report of reports || []) {
+    if (!esReporteConfiable(report, opciones)) continue;
+    const ventana = ventanaValidada(report, { now });
+    if (ventana) tramos.push({ ...ventana, reportId: report.id != null ? String(report.id) : null, fuente: 'settlement' });
+  }
+  return fusionarCobertura(tramos);
 }
 
 /** Preferir el reporte más reciente del rango (include_withdraw cambia el contenido). */
@@ -351,7 +389,8 @@ export class MercadoPagoReportService {
     return response.text();
   }
 
-  async waitForReportFile(beginDate, endDate, options = {}) {
+  /** Espera el reporte y devuelve su metadato (id, fechas, file_name). */
+  async waitForReport(beginDate, endDate, options = {}) {
     const {
       pollIntervalMs,
       maxPollAttempts,
@@ -380,7 +419,7 @@ export class MercadoPagoReportService {
             typesHint: 'download next'
           });
         }
-        return fileName;
+        return match;
       }
     }
 
@@ -391,10 +430,11 @@ export class MercadoPagoReportService {
   }
 
   async completeReport(beginDate, endDate, pollOptions = {}) {
-    const fileName = await this.waitForReportFile(beginDate, endDate, pollOptions);
+    const report = await this.waitForReport(beginDate, endDate, pollOptions);
+    const fileName = reportFileName(report);
     const csvText = await this.downloadReport(fileName);
     const rows = parseSettlementCsv(csvText);
-    return { rows, fileName, total: rows.length };
+    return { rows, fileName, total: rows.length, report: reportMeta(report) };
   }
 
   /**
@@ -403,7 +443,15 @@ export class MercadoPagoReportService {
   async reuseExistingReports(beginDate, endDate) {
     const reports = await this.listReports();
     const strict = findStrictReportMatch(reports, beginDate, endDate);
-    const candidates = strict ? [strict] : findOverlappingReports(reports, beginDate, endDate);
+    const overlapping = findOverlappingReports(reports, beginDate, endDate);
+    // Los reportes de confianza primero: son los únicos que traen retiros. Tope para no bajar
+    // un centenar de diarios cuando el rango es largo.
+    const ordenados = [
+      ...(strict ? [strict] : []),
+      ...overlapping.filter((r) => esReporteConfiable(r)),
+      ...overlapping.filter((r) => !esReporteConfiable(r))
+    ];
+    const candidates = ordenados.filter((r, i) => ordenados.findIndex((x) => x.id === r.id) === i).slice(0, MAX_REUSE_REPORTS);
 
     if (!candidates.length) {
       return null;
@@ -411,6 +459,7 @@ export class MercadoPagoReportService {
 
     const byId = new Map();
     const fileNames = [];
+    const usados = [];
     for (const report of candidates) {
       const fileName = reportFileName(report);
       if (!fileName || fileNames.includes(fileName)) continue;
@@ -418,6 +467,7 @@ export class MercadoPagoReportService {
         const csvText = await this.downloadReport(fileName);
         const rows = parseSettlementCsv(csvText);
         fileNames.push(fileName);
+        usados.push(report);
         for (const row of rows) {
           const key = String(row.sourceId || row.id || '');
           if (key && !byId.has(key)) byId.set(key, row);
@@ -429,11 +479,19 @@ export class MercadoPagoReportService {
 
     if (!fileNames.length) return null;
 
+    // Solo cuenta como cobertura de retiros la unión de los reportes de confianza.
+    const ventanas = ventanasDeConfianza(usados);
+    const trustedCoverage = coberturaCubre(ventanas, beginDate, endDate, {
+      toleranciaInicioMs: REUSE_BEGIN_TOLERANCE_MS,
+      toleranciaFinMs: getSettlementReuseMaxAgeMs()
+    });
+
     console.log('[MP Report] Reutilizando reportes existentes:', {
       beginDate,
       endDate,
       files: fileNames,
-      rows: byId.size
+      rows: byId.size,
+      trustedCoverage
     });
 
     return {
@@ -442,30 +500,46 @@ export class MercadoPagoReportService {
       fileNames,
       total: byId.size,
       reused: true,
-      strictMatch: Boolean(strict)
+      strictMatch: Boolean(strict),
+      trustedCoverage,
+      ventanas
     };
   }
 
   /**
-   * Reutiliza un reporte generado en las últimas horas que cubra el rango y traiga retiros.
+   * Reutiliza un reporte de confianza generado en las últimas horas que cubra el rango.
    * No consume cupo de creación. Devuelve null si no hay candidato apto.
    */
   async reuseRecentCoveringReport(beginDate, endDate, options = {}) {
     const reports = await this.listReports();
-    const recent = findRecentCoveringReport(reports, beginDate, endDate, options);
+    const recent = findRecentCoveringReport(
+      (reports || []).filter((r) => esReporteConfiable(r)),
+      beginDate,
+      endDate,
+      options
+    );
     if (!recent) return null;
 
     const fileName = reportFileName(recent);
     const rows = parseSettlementCsv(await this.downloadReport(fileName));
-    if (!this.settlementHasBankTransfers(rows)) return null;
 
-    console.log('[MP Report] Reutilizando reporte reciente con retiros (sin crear nuevo):', {
+    console.log('[MP Report] Reutilizando reporte de confianza reciente (sin crear nuevo):', {
       beginDate,
       endDate,
       fileName,
       rows: rows.length
     });
-    return { rows, fileName, total: rows.length, reused: true, strictMatch: false, recent: true };
+    return {
+      rows,
+      fileName,
+      total: rows.length,
+      reused: true,
+      strictMatch: false,
+      recent: true,
+      report: reportMeta(recent),
+      trusted: true,
+      ventanasValidadas: ventanasDeConfianza([recent])
+    };
   }
 
   async requestReport(beginDate, endDate) {
@@ -487,7 +561,10 @@ export class MercadoPagoReportService {
     }
 
     try {
-      const result = await this.completeReport(pending.beginDate, pending.endDate, pollOptions);
+      const result = await this.completeReport(pending.beginDate, pending.endDate, {
+        ...pollOptions,
+        reportId: pending.reportId ?? pollOptions.reportId ?? null
+      });
       return { ...result, completed: true };
     } catch (error) {
       if (error instanceof SettlementReportTimeoutError) {
@@ -497,51 +574,51 @@ export class MercadoPagoReportService {
     }
   }
 
-  settlementHasBankTransfers(rows = []) {
-    return (rows || []).some((row) => {
-      const t = String(row.transactionType || row.TRANSACTION_TYPE || '').toUpperCase();
-      return t === 'WITHDRAWAL' || t === 'WITHDRAWAL_CANCEL' || t === 'PAYOUT' || t === 'PAYOUTS';
-    });
-  }
-
   async fetchSettlementMovements(beginDate, endDate, options = {}) {
     const pollOptions = options.pollOptions || {};
 
-    // Siempre asegurar include_withdraw antes de crear/reusar
-    await this.configureReport();
+    // Siempre asegurar include_withdraw antes de crear/reusar. Sin retiros activos, un reporte
+    // nuevo no es de confianza: el rango no se puede dar por validado.
+    const config = await this.configureReport();
+    const retirosActivos = config?.include_withdraw === true;
 
     if (options.pending) {
       const pendingResult = await this.tryCompletePendingReport(options.pending, pollOptions);
       if (pendingResult?.completed) {
-        return {
-          rows: pendingResult.rows,
-          fileName: pendingResult.fileName,
-          total: pendingResult.total,
-          fromPending: true
-        };
+        return this.marcarConfianza(
+          {
+            rows: pendingResult.rows,
+            fileName: pendingResult.fileName,
+            total: pendingResult.total,
+            report: pendingResult.report,
+            fromPending: true
+          },
+          retirosActivos
+        );
       }
       if (pendingResult?.expired) {
         console.log('[MP Report] Reporte pendiente expirado, solicitando uno nuevo...');
       } else if (pendingResult && !pendingResult.completed) {
-        // Ante pendiente, intentar reutilizar lo que ya exista en el cupo
+        // MP sigue generándolo. Si ya hay reportes de confianza que cubren el rango, alcanza;
+        // si no, el tramo queda pendiente CON el id del reporte para completarlo en la próxima sync.
         const reusedPending = await this.reuseExistingReports(beginDate, endDate);
-        if (reusedPending?.rows?.length) {
-          return {
-            ...reusedPending,
-            partial: true,
-            missingWithdrawals: !this.settlementHasBankTransfers(reusedPending.rows)
-          };
+        if (reusedPending?.trustedCoverage) {
+          return { ...reusedPending, trusted: true, ventanasValidadas: reusedPending.ventanas };
         }
+        const rowsPending = reusedPending?.rows || [];
         return {
-          rows: [],
+          rows: rowsPending,
           pending: true,
+          partial: rowsPending.length > 0,
+          missingWithdrawals: true,
+          reportId: options.pending.reportId ?? null,
           beginDate: options.pending.beginDate,
           endDate: options.pending.endDate
         };
       }
     }
 
-    // Reporte generado hace poco que cubre el rango y trae retiros: reutilizarlo sin crear otro.
+    // Reporte de confianza generado hace poco que cubre el rango: reutilizarlo sin crear otro.
     try {
       const recentReuse = await this.reuseRecentCoveringReport(beginDate, endDate);
       if (recentReuse) return recentReuse;
@@ -549,19 +626,19 @@ export class MercadoPagoReportService {
       console.warn('[MP Report] Reuso de reporte reciente falló:', error.message);
     }
 
-    // Si ya existe un reporte procesado que cubre exactamente este rango Y trae retiros
-    // (include_withdraw), reutilizarlo directo sin quemar el cupo diario de MP (429).
+    // Si los reportes de confianza ya existentes cubren el rango, reutilizarlos sin quemar el
+    // cupo diario de MP (429). Los reportes sin retiros nunca alcanzan.
     let reusedFallback = null;
     try {
       reusedFallback = await this.reuseExistingReports(beginDate, endDate);
-      if (reusedFallback?.strictMatch && this.settlementHasBankTransfers(reusedFallback.rows)) {
-        console.log('[MP Report] Reutilizando reporte estricto con retiros (sin crear nuevo):', {
+      if (reusedFallback?.trustedCoverage) {
+        console.log('[MP Report] Reutilizando reportes de confianza que cubren el rango (sin crear nuevo):', {
           beginDate,
           endDate,
-          fileName: reusedFallback.fileName,
+          files: reusedFallback.fileNames,
           rows: reusedFallback.rows.length
         });
-        return reusedFallback;
+        return { ...reusedFallback, trusted: true, ventanasValidadas: reusedFallback.ventanas };
       }
     } catch (error) {
       console.warn('[MP Report] Reuso previo falló:', error.message);
@@ -582,12 +659,15 @@ export class MercadoPagoReportService {
         console.warn('[MP Report] Cupo de reportes agotado (429). Reutilizando existentes...');
         const reused =
           reusedFallback || (await this.reuseExistingReports(beginDate, endDate));
+        if (reused?.trustedCoverage) {
+          return { ...reused, trusted: true, ventanasValidadas: reused.ventanas };
+        }
         if (reused?.rows?.length) {
           return {
             ...reused,
             partial: true,
             quotaExceeded: true,
-            missingWithdrawals: !this.settlementHasBankTransfers(reused.rows)
+            missingWithdrawals: true
           };
         }
         // Sin CSV reutilizable: seguir con payments/account movements
@@ -609,31 +689,29 @@ export class MercadoPagoReportService {
         reportId: createdMeta?.data?.id || null,
         createdAfterMs
       });
-      const withdrawals = (result.rows || []).filter((r) =>
-        ['WITHDRAWAL', 'WITHDRAWAL_CANCEL', 'PAYOUT', 'PAYOUTS'].includes(
-          String(r.transactionType || '').toUpperCase()
-        )
-      ).length;
+      const withdrawals = (result.rows || []).filter((r) => esTipoRetiro(r.transactionType)).length;
       console.log('[MP Report] CSV nuevo', {
         fileName: result.fileName,
         rows: result.rows?.length,
         withdrawals
       });
-      return result;
+      return this.marcarConfianza(result, retirosActivos);
     } catch (error) {
       if (error instanceof SettlementReportTimeoutError) {
+        // El reporte existe en MP pero todavía no está listo: se guarda su id para completarlo
+        // en la próxima sync. Nunca se da por bueno un reuso sin retiros.
         const reused =
           reusedFallback || (await this.reuseExistingReports(beginDate, endDate));
-        if (reused?.rows?.length) {
-          return {
-            ...reused,
-            partial: true,
-            missingWithdrawals: !this.settlementHasBankTransfers(reused.rows)
-          };
+        if (reused?.trustedCoverage) {
+          return { ...reused, trusted: true, ventanasValidadas: reused.ventanas };
         }
+        const rowsTimeout = reused?.rows || [];
         return {
-          rows: [],
+          rows: rowsTimeout,
           pending: true,
+          partial: rowsTimeout.length > 0,
+          missingWithdrawals: true,
+          reportId: createdMeta?.data?.id != null ? String(createdMeta.data.id) : null,
           beginDate,
           endDate
         };
@@ -642,86 +720,15 @@ export class MercadoPagoReportService {
     }
   }
 
-  /**
-   * Solicita reportes en chunks mensuales y deduplica filas por SOURCE_ID.
-   * Ante cupo 429 reutiliza reportes existentes y no sigue creando.
-   */
-  async fetchAllSettlementMovements(beginDate, endDate, options = {}) {
-    const chunks = splitDateRangeIntoMonthlyChunks(beginDate, endDate);
-    const byId = new Map();
-    let pendingInfo = null;
-    let pendingConsumed = false;
-    let quotaExceeded = false;
-
-    for (const chunk of chunks) {
-      const chunkOptions = {
-        ...options,
-        pending: !pendingConsumed ? options.pending : undefined
-      };
-
-      const result = await this.fetchSettlementMovements(
-        chunk.beginDate,
-        chunk.endDate,
-        chunkOptions
-      );
-
-      if (options.pending && !pendingConsumed) {
-        pendingConsumed = true;
-      }
-
-      for (const row of result.rows || []) {
-        const key = String(row.sourceId || row.id || '');
-        if (key && !byId.has(key)) {
-          byId.set(key, row);
-        }
-      }
-
-      if (result.quotaExceeded) {
-        quotaExceeded = true;
-        // No intentar más creates; mergear overlap del resto del rango una sola vez
-        const rest = await this.reuseExistingReports(chunk.beginDate, endDate);
-        for (const row of rest?.rows || []) {
-          const key = String(row.sourceId || row.id || '');
-          if (key && !byId.has(key)) byId.set(key, row);
-        }
-        break;
-      }
-
-      if (result.pending) {
-        pendingInfo = {
-          pending: true,
-          beginDate: result.beginDate || chunk.beginDate,
-          endDate,
-          chunksProcessed: chunks.indexOf(chunk)
-        };
-        break;
-      }
-    }
-
-    const rows = Array.from(byId.values());
-    if (pendingInfo) {
-      return {
-        rows,
-        total: rows.length,
-        pending: true,
-        beginDate: pendingInfo.beginDate,
-        endDate: pendingInfo.endDate,
-        partial: rows.length > 0
-      };
-    }
-
-    if (quotaExceeded) {
-      return {
-        rows,
-        total: rows.length,
-        partial: true,
-        quotaExceeded: true,
-        beginDate,
-        endDate
-      };
-    }
-
-    return { rows, total: rows.length };
+  /** Marca el resultado como de confianza y calcula las ventanas que valida. */
+  marcarConfianza(result, retirosActivos = true) {
+    const meta = result?.report || null;
+    const trusted = Boolean(meta) && retirosActivos && esReporteConfiable(meta);
+    return {
+      ...result,
+      trusted,
+      ventanasValidadas: trusted ? ventanasDeConfianza([meta]) : []
+    };
   }
 
   parseCsvContent(csvText) {
