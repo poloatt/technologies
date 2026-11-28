@@ -25,7 +25,6 @@ import { parseSettlementCsv } from '../src/services/mercadoPagoCsvParser.js';
 import { extraerRetiros } from '../src/services/mercadoPagoRetiros.js';
 import {
   MercadoPagoReleaseReportService,
-  parseReleaseCsv,
   validarRangoConRelease,
 } from '../src/services/mercadoPagoReleaseReportService.js';
 

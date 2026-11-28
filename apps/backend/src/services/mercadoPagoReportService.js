@@ -30,27 +30,6 @@ function dateWithinTolerance(reportDate, targetDate, toleranceDays = 1) {
   return diffDays <= toleranceDays;
 }
 
-export function splitDateRangeIntoMonthlyChunks(beginDate, endDate) {
-  const chunks = [];
-  let start = new Date(beginDate);
-  const end = new Date(endDate);
-
-  while (start < end) {
-    const chunkEnd = new Date(start);
-    chunkEnd.setMonth(chunkEnd.getMonth() + 1);
-    if (chunkEnd > end) {
-      chunkEnd.setTime(end.getTime());
-    }
-    chunks.push({
-      beginDate: start.toISOString(),
-      endDate: chunkEnd.toISOString()
-    });
-    start = new Date(chunkEnd.getTime() + 1);
-  }
-
-  return chunks;
-}
-
 function reportFileName(report) {
   return report?.file_name || report?.filename || report?.fileName || null;
 }
@@ -138,6 +117,18 @@ function findOverlappingReports(reports, beginDate, endDate) {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SETTLEMENT_REUSE_MAX_AGE_MS_DEFAULT = 6 * 60 * 60 * 1000;
+const SETTLEMENT_RAPIDO_REUSE_MAX_AGE_MS_DEFAULT = 12 * 60 * 60 * 1000;
+
+/**
+ * Antigüedad máxima de un reporte de confianza que la sync rápida reutiliza en vez de crear otro.
+ * Más larga que la general: cada reporte creado gasta cupo diario de Mercado Pago, y los syncs
+ * automáticos (diario, semanal, mensual) no deberían crear uno nuevo por corrida.
+ * Lo que quede entre el último reporte y ahora se ve como "tramo sin validar" hasta la próxima sync.
+ */
+export function getSettlementRapidoReuseMaxAgeMs() {
+  const raw = parseInt(process.env.MP_SYNC_RAPIDO_REUSE_MAX_AGE_MS || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : SETTLEMENT_RAPIDO_REUSE_MAX_AGE_MS_DEFAULT;
+}
 
 /**
  * Antigüedad máxima de un reporte para reutilizarlo sin pedir uno nuevo.
@@ -620,7 +611,11 @@ export class MercadoPagoReportService {
 
     // Reporte de confianza generado hace poco que cubre el rango: reutilizarlo sin crear otro.
     try {
-      const recentReuse = await this.reuseRecentCoveringReport(beginDate, endDate);
+      const recentReuse = await this.reuseRecentCoveringReport(
+        beginDate,
+        endDate,
+        options.reuseMaxAgeMs ? { maxAgeMs: options.reuseMaxAgeMs } : {}
+      );
       if (recentReuse) return recentReuse;
     } catch (error) {
       console.warn('[MP Report] Reuso de reporte reciente falló:', error.message);

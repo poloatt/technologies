@@ -2,6 +2,7 @@ import {
   MercadoPagoReportService,
   SettlementReportTimeoutError,
   findRecentCoveringReport,
+  getSettlementRapidoReuseMaxAgeMs,
   getSettlementReuseMaxAgeMs
 } from '../mercadoPagoReportService.js';
 
@@ -157,6 +158,31 @@ describe('fetchSettlementMovements: reuso parcial ante timeout', () => {
     expect(recibido.reportId).toBe('104349442');
     expect(result.fromPending).toBe(true);
     expect(result.trusted).toBe(false);
+  });
+});
+
+describe('sync rápida: reuso de reportes de confianza', () => {
+  const original = process.env.MP_SYNC_RAPIDO_REUSE_MAX_AGE_MS;
+  afterEach(() => {
+    if (original === undefined) delete process.env.MP_SYNC_RAPIDO_REUSE_MAX_AGE_MS;
+    else process.env.MP_SYNC_RAPIDO_REUSE_MAX_AGE_MS = original;
+  });
+
+  it('usa 12 horas por defecto', () => {
+    delete process.env.MP_SYNC_RAPIDO_REUSE_MAX_AGE_MS;
+    expect(getSettlementRapidoReuseMaxAgeMs()).toBe(12 * HOUR);
+  });
+
+  it('reutiliza un reporte de hace 10 horas (no de 6) cuando la sync rápida lo pide', () => {
+    const viejo = report({
+      id: 'diez-horas',
+      generation_date: new Date(NOW - 10 * HOUR).toISOString(),
+      end_date: new Date(NOW - 10 * HOUR).toISOString()
+    });
+    expect(findRecentCoveringReport([viejo], beginDate, endDate, { maxAgeMs: 6 * HOUR, now: NOW })).toBeNull();
+    expect(
+      findRecentCoveringReport([viejo], beginDate, endDate, { maxAgeMs: getSettlementRapidoReuseMaxAgeMs(), now: NOW })?.id
+    ).toBe('diez-horas');
   });
 });
 

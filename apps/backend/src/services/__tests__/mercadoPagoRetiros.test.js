@@ -210,7 +210,19 @@ describe('resumenCoberturaRetiros', () => {
     const r = resumenCoberturaRetiros({ historial: { inicioActividad: '2025-01-01T00:00:00Z' } }, { now });
     expect(r.completa).toBe(false);
     expect(r.advertencia).toBe(true);
-    expect(r.avisos[0]).toMatch(/todavía no se validaron/i);
+    expect(r.avisos[0]).toMatch(/todavía no hay salidas a CBU validadas/i);
+  });
+
+  it('sin cobertura pero con conciliación fallida muestra el motivo real, no un paso genérico', () => {
+    const r = resumenCoberturaRetiros(
+      {
+        historial: { inicioActividad: '2026-01-01T00:00:00Z' },
+        diagnostico: { retiros: { validado: false, motivo: 'Faltan en el ledger 3 retiros: 1, 2, 3' } }
+      },
+      { now }
+    );
+    expect(r.avisos[0]).toBe('Última sincronización sin validar: Faltan en el ledger 3 retiros: 1, 2, 3');
+    expect(r.avisos.some((a) => /Sincronizar/.test(a))).toBe(false);
   });
 
   it('cobertura completa desde el inicio de actividad no advierte', () => {

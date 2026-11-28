@@ -254,15 +254,18 @@ export function resumenCoberturaRetiros(mp = {}, { now = new Date() } = {}) {
   const completa = !sinCobertura && sinValidar.length === 0 && Boolean(desdeStr);
 
   const avisos = [];
+  // El motivo de la última sync va primero: es lo que el usuario puede corregir.
+  if (retiros && retiros.validado === false && retiros.motivo) {
+    avisos.push(`Última sincronización sin validar: ${retiros.motivo}`);
+  }
   if (sinCobertura) {
-    avisos.push('Las salidas a CBU todavía no se validaron: corré Sincronizar y luego Histórico.');
+    if (!avisos.length) {
+      avisos.push('Todavía no hay salidas a CBU validadas. Se validan en la próxima sincronización.');
+    }
   } else if (sinValidar.length) {
     avisos.push(
       `Hay ${sinValidar.length} tramo${sinValidar.length === 1 ? '' : 's'} sin validar (salidas a CBU posiblemente incompletas); el más reciente termina el ${formatDia(aMs(sinValidar[0].endDate))}.`
     );
-  }
-  if (retiros && retiros.validado === false && retiros.motivo) {
-    avisos.push(`Última conciliación fallida: ${retiros.motivo}`);
   }
   if (ancla && ancla.ok === false) {
     avisos.push(

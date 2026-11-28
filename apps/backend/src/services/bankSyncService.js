@@ -31,7 +31,10 @@ import {
   deduplicarPagosInversionMp,
   tipoDeCambioUsd
 } from './mercadoPagoUtils.js';
-import { MercadoPagoReportService } from './mercadoPagoReportService.js';
+import {
+  MercadoPagoReportService,
+  getSettlementRapidoReuseMaxAgeMs
+} from './mercadoPagoReportService.js';
 import { calcularAnclaGap } from './mercadoPagoAnclaService.js';
 import {
   MercadoPagoReleaseReportService,
@@ -856,7 +859,7 @@ export class BankSyncService {
           pending,
           ...(historialMode
             ? { pollOptions: { maxPollAttempts: 20, pollIntervalMs: 3000 } }
-            : {}),
+            : { reuseMaxAgeMs: getSettlementRapidoReuseMaxAgeMs() }),
         });
 
         settlementReport = report;
@@ -960,13 +963,7 @@ export class BankSyncService {
       }
 
       let activitiesWithdraw = [];
-      const settlementQuotaMissingW = errores.some(
-        (e) => e.tipo === 'settlement_report' && (e.quotaExceeded || e.missingWithdrawals)
-      );
       const settlementBlocked = errores.some((e) => e.tipo === 'settlement_report');
-      // En modo histórico normalmente el settlement con include_withdraw ya trae retiros.
-      // Pero si dio 429 y reutilizó CSV viejo sin retiros, usamos activities_withdraw como respaldo
-      // para recuperar las transferencias salientes CVU→CBU del tramo.
       // activities_withdraw ya no está en el camino crítico: las salidas a CBU salen del settlement
       // de confianza y se concilian contra el ledger. Queda opt-in (MP_ACTIVITIES_WITHDRAW=true)
       // solo para enriquecer con el CBU destino.
@@ -1250,24 +1247,17 @@ export class BankSyncService {
           `Cobertura incompleta: no hay transferencias P2P y el saldo MP difiere del ledger (${gapSaldo}).`;
       }
 
-      const recoveredViaActivities =
-        settlementQuotaMissingW &&
-        movimientos.length > 0 &&
-        activitiesWithdraw.length > 0;
+      // El cursor no avanza si el tramo no quedó validado por un reporte de confianza:
+      // activities_withdraw ya no "recupera" un tramo, solo el settlement de confianza lo valida.
       const blockCursor =
         historialMode &&
         (settlementPending ||
-          errores.some(
-            (e) =>
-              e.tipo === 'pagos' ||
-              (e.tipo === 'settlement_report' && !recoveredViaActivities) ||
-              (e.quotaExceeded && !recoveredViaActivities)
-          ));
+          errores.some((e) => e.tipo === 'pagos' || e.tipo === 'settlement_report' || e.quotaExceeded));
       const sinMovimientosEnTramo =
         !blockCursor && pagos.length === 0 && movimientosMerged.length === 0;
       const historialGuardado = rememberHistory({
         pendiente: blockCursor,
-        cuotaAgotada: errores.some((e) => e.quotaExceeded) && !recoveredViaActivities,
+        cuotaAgotada: errores.some((e) => e.quotaExceeded),
         sinMovimientos: sinMovimientosEnTramo,
       });
 
